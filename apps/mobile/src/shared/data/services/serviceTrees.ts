@@ -1,0 +1,77 @@
+import { treeColors } from '@/shared/theme/colors';
+import { ServiceTree } from './serviceTypes';
+
+export const serviceTrees: ServiceTree[] = [
+  {
+    id: 'health',
+    name: 'Health',
+    description: 'Care for your health, all in one place.',
+    icon: 'health',
+    serviceCount: 9,
+    accent: treeColors.health.accent,
+  },
+  {
+    id: 'fitness',
+    name: 'Fitness',
+    description: 'Gyms, trainers, and classes near you.',
+    icon: 'fitness',
+    serviceCount: 9,
+    accent: treeColors.fitness.accent,
+  },
+  {
+    id: 'sports',
+    name: 'Sports',
+    description: 'Play, train, and compete across sports.',
+    icon: 'activity',
+    serviceCount: 9,
+    accent: treeColors.sports.accent,
+  },
+  {
+    id: 'wellness',
+    name: 'Wellness',
+    description: 'Mind, body, and holistic care.',
+    icon: 'leaf',
+    serviceCount: 9,
+    accent: treeColors.wellness.accent,
+  },
+  {
+    id: 'tours_events',
+    name: 'Tours & Events',
+    description: 'Trips, adventures, and celebrations.',
+    icon: 'globe',
+    serviceCount: 9,
+    accent: treeColors.tours_events.accent,
+  },
+  {
+    id: 'beauty_spa',
+    name: 'Beauty & Spa',
+    description: 'Salons, spa, and beauty professionals.',
+    icon: 'sparkles',
+    serviceCount: 9,
+    accent: treeColors.beauty_spa.accent,
+  },
+  {
+    id: 'course_training',
+    name: 'Course & Training',
+    description: 'Learn skills from trusted instructors.',
+    icon: 'graduation-cap',
+    serviceCount: 9,
+    accent: treeColors.course_training.accent,
+  },
+  {
+    id: 'home_services',
+    name: 'Home Need Services',
+    description: 'On-demand help for your home.',
+    icon: 'home',
+    serviceCount: 9,
+    accent: treeColors.home_services.accent,
+  },
+  {
+    id: 'ecommerce',
+    name: 'E-commerce & Products',
+    description: 'Shop health, fitness, and lifestyle products.',
+    icon: 'shopping-bag',
+    serviceCount: 9,
+    accent: treeColors.ecommerce.accent,
+  },
+];

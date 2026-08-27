@@ -1,0 +1,95 @@
+# Anticlock local stack — Postgres + API + Admin
+# Mobile (React Native) stays on the host: pnpm dev:mobile
+
+name: anticlock
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: anticlock
+      POSTGRES_PASSWORD: anticlock
+      POSTGRES_DB: anticlock
+    volumes:
+      - anticlock_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U anticlock -d anticlock']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '4000:4000'
+    environment:
+      NODE_ENV: production
+      API_PORT: '4000'
+      DATABASE_URL: postgres://anticlock:anticlock@postgres:5432/anticlock
+      JWT_SECRET: anticlock-dev-jwt-secret-change-me
+      ADMIN_ORIGIN: http://localhost:3000
+      # URLs the browser / Admin can reach (host ports, not Docker DNS)
+      API_PUBLIC_URL: http://localhost:4000
+      MEDIA_STORAGE: local
+      MEDIA_LOCAL_DIR: /app/apps/api/.media
+      STREAM_ACCOUNT_ID: ${STREAM_ACCOUNT_ID:-}
+      STREAM_API_TOKEN: ${STREAM_API_TOKEN:-}
+      STREAM_CUSTOMER_SUBDOMAIN: ${STREAM_CUSTOMER_SUBDOMAIN:-}
+      STREAM_WEBHOOK_SECRET: ${STREAM_WEBHOOK_SECRET:-}
+      STREAM_MAX_DURATION_SECONDS: ${STREAM_MAX_DURATION_SECONDS:-90}
+    volumes:
+      - anticlock_media:/app/apps/api/.media
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '-qO-',
+          'http://127.0.0.1:4000/health',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:4000
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      HOSTNAME: 0.0.0.0
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '-qO-',
+          'http://127.0.0.1:3000/login',
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  anticlock_pg:
+  anticlock_media:

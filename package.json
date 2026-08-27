@@ -1,55 +1,29 @@
 {
-  "name": "Anticlock",
-  "version": "0.0.1",
+  "name": "anticlock",
   "private": true,
+  "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "android": "react-native run-android",
-    "ios": "react-native run-ios",
-    "lint": "eslint .",
-    "start": "react-native start",
-    "test": "jest"
+    "dev:api": "pnpm --filter @anticlock/api dev",
+    "dev:admin": "pnpm --filter @anticlock/admin dev",
+    "dev:mobile": "pnpm --filter @anticlock/mobile start",
+    "db:generate": "pnpm --filter @anticlock/api db:generate",
+    "db:migrate": "pnpm --filter @anticlock/api db:migrate",
+    "db:seed": "pnpm --filter @anticlock/api db:seed",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "docker:ps": "docker compose ps",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck"
   },
-  "dependencies": {
-    "@react-native/new-app-screen": "0.86.0",
-    "@react-navigation/bottom-tabs": "^7.18.17",
-    "@react-navigation/native": "^7.3.17",
-    "@react-navigation/native-stack": "^7.18.9",
-    "@tanstack/react-query": "^5.101.4",
-    "babel-plugin-module-resolver": "^5.0.3",
-    "react": "19.2.3",
-    "react-native": "0.86.0",
-    "react-native-gesture-handler": "^3.2.1",
-    "react-native-mmkv": "^4.3.2",
-    "react-native-nitro-modules": "^0.37.0",
-    "react-native-reanimated": "^4.5.3",
-    "react-native-safe-area-context": "^5.5.2",
-    "react-native-screens": "^4.27.0",
-    "react-native-svg": "^15.15.5",
-    "react-native-video": "^6.19.2",
-    "react-native-worklets": "^0.11.4",
-    "zustand": "^5.0.15"
+  "pnpm": {
+    "overrides": {
+      "react-native-worklets": "0.12.1"
+    }
   },
   "devDependencies": {
-    "@babel/core": "^7.25.2",
-    "@babel/preset-env": "^7.25.3",
-    "@babel/runtime": "^7.25.0",
-    "@react-native-community/cli": "20.1.0",
-    "@react-native-community/cli-platform-android": "20.1.0",
-    "@react-native-community/cli-platform-ios": "20.1.0",
-    "@react-native/babel-preset": "0.86.0",
-    "@react-native/eslint-config": "0.86.0",
-    "@react-native/metro-config": "0.86.0",
-    "@react-native/typescript-config": "0.86.0",
-    "@types/jest": "^29.5.13",
-    "@types/react": "^19.2.0",
-    "@types/react-test-renderer": "^19.1.0",
-    "eslint": "^8.19.0",
-    "jest": "^29.6.3",
-    "prettier": "2.8.8",
-    "react-test-renderer": "19.2.3",
+    "turbo": "^2.5.4",
     "typescript": "^5.8.3"
-  },
-  "engines": {
-    "node": ">= 22.11.0"
   }
 }

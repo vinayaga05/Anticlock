@@ -1,0 +1,37 @@
+{
+  "name": "@anticlock/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:seed": "tsx src/seed/run.ts"
+  },
+  "dependencies": {
+    "@anticlock/contracts": "workspace:*",
+    "@aws-sdk/client-s3": "^3.1116.0",
+    "@aws-sdk/s3-request-presigner": "^3.1116.0",
+    "@hono/node-server": "^1.14.4",
+    "bcryptjs": "^3.0.2",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.44.2",
+    "hono": "^4.8.3",
+    "image-size": "^2.0.2",
+    "jose": "^6.0.11",
+    "postgres": "^3.4.7",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/image-size": "^0.8.0",
+    "@types/node": "^22.15.30",
+    "drizzle-kit": "^0.31.1",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

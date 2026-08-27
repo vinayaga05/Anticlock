@@ -1,0 +1,272 @@
+import 'dotenv/config';
+import bcrypt from 'bcryptjs';
+import { eq } from 'drizzle-orm';
+import {
+  PermissionSchema,
+  ROLE_PERMISSIONS,
+  RoleSchema,
+} from '@anticlock/contracts';
+import { db, sql } from '../db/client.js';
+import {
+  permissions,
+  rolePermissions,
+  roles,
+  serviceCategories,
+  serviceTrees,
+  stubBanners,
+  stubProducts,
+  stubProviders,
+  userRoles,
+  users,
+  mediaAssets,
+  reels,
+} from '../db/schema.js';
+import catalog from './catalog.json' with { type: 'json' };
+
+async function seed() {
+  const roleValues = RoleSchema.options.map(id => ({
+    id,
+    name: id
+      .split('_')
+      .map(p => p[0]!.toUpperCase() + p.slice(1))
+      .join(' '),
+    description: `${id} role`,
+  }));
+
+  for (const role of roleValues) {
+    await db.insert(roles).values(role).onConflictDoNothing();
+  }
+
+  for (const id of PermissionSchema.options) {
+    await db
+      .insert(permissions)
+      .values({ id, description: id })
+      .onConflictDoNothing();
+  }
+
+  for (const [roleId, perms] of Object.entries(ROLE_PERMISSIONS)) {
+    for (const permissionId of perms) {
+      await db
+        .insert(rolePermissions)
+        .values({ roleId, permissionId })
+        .onConflictDoNothing();
+    }
+  }
+
+  const adminEmail = 'admin@anticlock.app';
+  const existing = await db.select().from(users).where(eq(users.email, adminEmail));
+  let adminId = existing[0]?.id;
+  if (!adminId) {
+    const passwordHash = await bcrypt.hash('admin123', 10);
+    const [created] = await db
+      .insert(users)
+      .values({
+        email: adminEmail,
+        name: 'Anticlock Admin',
+        passwordHash,
+      })
+      .returning();
+    adminId = created!.id;
+  }
+
+  await db
+    .insert(userRoles)
+    .values({ userId: adminId, roleId: 'super_admin' })
+    .onConflictDoNothing();
+
+  for (const tree of catalog.trees) {
+    await db
+      .insert(serviceTrees)
+      .values({
+        id: tree.id,
+        slug: tree.id,
+        name: tree.name,
+        description: tree.description ?? null,
+        icon: tree.icon ?? null,
+        accentColor: tree.accentColor ?? null,
+        sortOrder: tree.sortOrder,
+        status: 'published',
+      })
+      .onConflictDoUpdate({
+        target: serviceTrees.id,
+        set: {
+          name: tree.name,
+          description: tree.description ?? null,
+          icon: tree.icon ?? null,
+          accentColor: tree.accentColor ?? null,
+          sortOrder: tree.sortOrder,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  for (const cat of catalog.categories) {
+    await db
+      .insert(serviceCategories)
+      .values({
+        id: cat.id,
+        treeId: cat.treeId,
+        name: cat.name,
+        sortOrder: cat.sortOrder,
+        status: 'published',
+      })
+      .onConflictDoUpdate({
+        target: serviceCategories.id,
+        set: {
+          name: cat.name,
+          treeId: cat.treeId,
+          sortOrder: cat.sortOrder,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  const providerSeeds = [
+    { id: 'prov-ananya', name: 'Dr. Ananya Rao', status: 'active' },
+    { id: 'prov-vikram', name: 'Coach Vikram Singh', status: 'active' },
+  ];
+  for (const p of providerSeeds) {
+    await db.insert(stubProviders).values(p).onConflictDoNothing();
+  }
+
+  const productSeeds = [
+    { id: 'prod-protein', name: 'Whey Protein 1kg', status: 'published' },
+    { id: 'prod-mat', name: 'Yoga Mat Pro', status: 'draft' },
+  ];
+  for (const p of productSeeds) {
+    await db.insert(stubProducts).values(p).onConflictDoNothing();
+  }
+
+  const bannerSeeds = [
+    { id: 'ban-physio', title: 'Physiotherapy Campaign', status: 'published' },
+    { id: 'ban-summer', title: 'Summer Fitness Push', status: 'draft' },
+  ];
+  for (const b of bannerSeeds) {
+    await db.insert(stubBanners).values(b).onConflictDoNothing();
+  }
+
+  const sampleVideos = [
+    {
+      key: 'seed-reel-1',
+      title: 'Morning mobility',
+      creatorName: 'coach.sathish',
+      caption: '5-minute warm-up before sports training',
+      category: 'Fitness',
+      url: 'https://filesamples.com/samples/video/mp4/sample_640x360.mp4',
+      likes: 1280,
+      comments: 42,
+      saves: 84,
+      order: 1,
+    },
+    {
+      key: 'seed-reel-2',
+      title: 'GP tips',
+      creatorName: 'dr.remya',
+      caption: 'When to book an online consult vs clinic visit',
+      category: 'Health',
+      url: 'https://filesamples.com/samples/video/mp4/sample_640x360.mp4',
+      likes: 890,
+      comments: 31,
+      saves: 40,
+      order: 2,
+    },
+    {
+      key: 'seed-reel-3',
+      title: 'Strength session',
+      creatorName: 'fit.ananya',
+      caption: 'Dumbbell circuit you can do at home',
+      category: 'Fitness',
+      url: 'https://samplelib.com/lib/preview/mp4/sample-5s.mp4',
+      likes: 2100,
+      comments: 88,
+      saves: 120,
+      order: 3,
+    },
+    {
+      key: 'seed-reel-4',
+      title: 'Weekend trek',
+      creatorName: 'trailblaze.tours',
+      caption: 'Yercaud adventure seats filling fast',
+      category: 'Tours',
+      url: 'https://www.learningcontainer.com/wp-content/uploads/2020/05/sample-mp4-file.mp4',
+      likes: 420,
+      comments: 12,
+      saves: 28,
+      order: 4,
+    },
+    {
+      key: 'seed-reel-5',
+      title: 'Mindful minute',
+      creatorName: 'wellness.mira',
+      caption: 'One-minute breath reset between meetings',
+      category: 'Wellness',
+      url: 'https://filesamples.com/samples/video/mp4/sample_640x360.mp4',
+      likes: 980,
+      comments: 37,
+      saves: 65,
+      order: 5,
+    },
+  ];
+
+  for (const sample of sampleVideos) {
+    const existingMedia = await db
+      .select()
+      .from(mediaAssets)
+      .where(eq(mediaAssets.storageKey, sample.url))
+      .limit(1);
+
+    let mediaId = existingMedia[0]?.id;
+    if (!mediaId) {
+      const [asset] = await db
+        .insert(mediaAssets)
+        .values({
+          kind: 'video',
+          storageProvider: 'external',
+          storageKey: sample.url,
+          bucket: 'external',
+          mimeType: 'video/mp4',
+          accessLevel: 'public',
+          processingStatus: 'ready',
+          moderationStatus: 'not_required',
+          originalFilename: `${sample.key}.mp4`,
+          createdBy: adminId,
+        })
+        .returning();
+      mediaId = asset!.id;
+    }
+
+    const existingReel = await db
+      .select()
+      .from(reels)
+      .where(eq(reels.title, sample.title))
+      .limit(1);
+
+    if (!existingReel[0]) {
+      await db.insert(reels).values({
+        title: sample.title,
+        caption: sample.caption,
+        creatorName: sample.creatorName,
+        category: sample.category,
+        status: 'published',
+        isSample: true,
+        likeCount: sample.likes,
+        commentCount: sample.comments,
+        saveCount: sample.saves,
+        displayOrder: sample.order,
+        mediaId,
+        createdBy: adminId,
+        publishedAt: new Date(),
+      });
+    }
+  }
+
+  console.log(
+    `Seeded admin ${adminEmail} / admin123 · ${catalog.trees.length} trees · ${catalog.categories.length} categories · stubs · ${sampleVideos.length} sample reels`,
+  );
+  await sql.end({ timeout: 5 });
+}
+
+seed().catch(err => {
+  console.error(err);
+  process.exit(1);
+});

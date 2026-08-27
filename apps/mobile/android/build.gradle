@@ -1,0 +1,76 @@
+buildscript {
+    ext {
+        buildToolsVersion = "36.0.0"
+        minSdkVersion = 24
+        compileSdkVersion = 36
+        targetSdkVersion = 36
+        ndkVersion = "27.1.12297006"
+        kotlinVersion = "2.1.20"
+        REACT_NATIVE_NODE_MODULES_DIR = file("../../../node_modules/react-native")
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+    }
+}
+
+apply plugin: "com.facebook.react.rootproject"
+
+/**
+ * AGP prefab bug with react-native-nitro-modules:
+ * MMKV's ninja looks for `NitroModules.so` under cxx/refs, but the prefab
+ * package only ships `libNitroModules.so` and the copy into refs is incomplete.
+ * Copy/symlink both names before MMKV's CMake link step.
+ */
+def patchNitroPrefabForMmkv = { Project mmkvProject ->
+    def nitroPrefabRoot = new File(
+        mmkvProject.rootProject.projectDir,
+        "../../../node_modules/react-native-nitro-modules/android/build/intermediates/prefab_package"
+    )
+    def refsRoot = new File(
+        mmkvProject.projectDir,
+        "build/intermediates/cxx/refs/react-native-nitro-modules"
+    )
+    if (!refsRoot.exists() || !nitroPrefabRoot.exists()) {
+        return
+    }
+    refsRoot.eachDir { hashDir ->
+        def libsDir = new File(hashDir, "modules/NitroModules/libs")
+        if (!libsDir.exists()) return
+        libsDir.eachDir { abiDir ->
+            def abiName = abiDir.name // android.arm64-v8a
+            ["debug", "release"].each { variant ->
+                def src = new File(
+                    nitroPrefabRoot,
+                    "${variant}/prefab/modules/NitroModules/libs/${abiName}/libNitroModules.so"
+                )
+                if (!src.exists()) return
+                def libNamed = new File(abiDir, "libNitroModules.so")
+                def plainNamed = new File(abiDir, "NitroModules.so")
+                if (!libNamed.exists() || libNamed.lastModified() < src.lastModified()) {
+                    ant.copy(file: src, tofile: libNamed, overwrite: true)
+                }
+                if (!plainNamed.exists() || plainNamed.lastModified() < src.lastModified()) {
+                    ant.copy(file: src, tofile: plainNamed, overwrite: true)
+                }
+            }
+        }
+    }
+}
+
+gradle.projectsEvaluated {
+    def mmkv = rootProject.subprojects.find { it.name == "react-native-mmkv" }
+    if (mmkv == null) return
+    mmkv.tasks.configureEach { task ->
+        if (task.name.startsWith("buildCMake")) {
+            task.doFirst {
+                patchNitroPrefabForMmkv(mmkv)
+            }
+        }
+    }
+}

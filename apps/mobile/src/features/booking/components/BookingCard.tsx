@@ -1,7 +1,15 @@
 import React from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  Image,
+  ImageBackground,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useTheme } from '@/shared/hooks/useTheme';
-import { Button } from '@/shared/components/Button';
+import { AppIcon } from '@/shared/components/AppIcon';
+import { PressableScale } from '@/shared/components/PressableScale';
 import {
   BOOKING_ACTION_LABELS,
   BookingAction,
@@ -10,168 +18,434 @@ import {
 
 type Props = {
   booking: ConsolidatedBooking;
-  onViewDetails?: (booking: ConsolidatedBooking) => void;
+  onPress?: (booking: ConsolidatedBooking) => void;
+  onAction?: (booking: ConsolidatedBooking, action: BookingAction) => void;
 };
 
-function statusColor(status: string, theme: ReturnType<typeof useTheme>) {
-  if (status === 'confirmed' || status === 'booked') return theme.colors.success;
-  if (status === 'provider_assigned' || status === 'upcoming') return theme.colors.primary;
-  if (status === 'cancelled') return theme.colors.error;
-  if (status === 'completed') return theme.colors.textSecondary;
-  return theme.colors.textSecondary;
+function ActionPill({
+  label,
+  filled,
+  onPress,
+}: {
+  label: string;
+  filled?: boolean;
+  onPress?: () => void;
+}) {
+  return (
+    <PressableScale onPress={onPress} accessibilityLabel={label}>
+      <View
+        style={[
+          styles.actionPill,
+          filled ? styles.actionPillFilled : styles.actionPillOutline,
+        ]}>
+        <Text
+          style={[
+            styles.actionPillText,
+            { color: filled ? '#FFFFFF' : '#0F766E' },
+          ]}
+          numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
+    </PressableScale>
+  );
 }
 
-export function BookingCard({ booking, onViewDetails }: Props) {
-  const theme = useTheme();
+function DoctorCard({ booking, onPress, onAction }: Props) {
+  const lines = booking.detailLines ?? [];
 
-  const handleAction = (action: BookingAction) => {
-    if (action === 'view_details') {
-      onViewDetails?.(booking);
+  return (
+    <PressableScale onPress={() => onPress?.(booking)} accessibilityLabel={booking.providerName}>
+      <View style={styles.doctorCard}>
+        <View style={styles.doctorLeft}>
+          <Image
+            source={{ uri: booking.imageUrl }}
+            style={styles.doctorAvatar}
+          />
+          {booking.experienceYears ? (
+            <View style={styles.expBadge}>
+              <Text style={styles.expBadgeText}>{booking.experienceYears} YEARS</Text>
+            </View>
+          ) : null}
+          <View style={styles.starRow}>
+            <AppIcon name="star" size={12} color="#FBBF24" fill="#FBBF24" />
+            <AppIcon name="star" size={12} color="#FBBF24" fill="#FBBF24" />
+          </View>
+        </View>
+
+        <View style={styles.doctorCenter}>
+          <Text style={styles.doctorName}>{booking.providerName}</Text>
+          {booking.subtitle ? (
+            <Text style={styles.doctorSub}>{booking.subtitle}</Text>
+          ) : null}
+          {lines.map(line => (
+            <Text key={line} style={styles.doctorLine} numberOfLines={2}>
+              {line}
+            </Text>
+          ))}
+        </View>
+
+        <View style={styles.doctorRight}>
+          {booking.isLive ? (
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>ON</Text>
+            </View>
+          ) : null}
+          <View style={styles.doctorActions}>
+            <ActionPill label="consultation" />
+            <ActionPill label={booking.whenLabel.replace(' · ', '\n')} />
+            <ActionPill
+              label={BOOKING_ACTION_LABELS.join_now}
+              filled
+              onPress={() => onAction?.(booking, 'join_now')}
+            />
+          </View>
+        </View>
+      </View>
+    </PressableScale>
+  );
+}
+
+function ClassCard({ booking, onPress, onAction }: Props) {
+  return (
+    <PressableScale onPress={() => onPress?.(booking)} accessibilityLabel={booking.serviceTitle}>
+      <View style={styles.classCard}>
+        <ImageBackground
+          source={{ uri: booking.imageUrl }}
+          style={styles.classImage}
+          imageStyle={styles.classImageRadius}>
+          <View style={styles.classGradient}>
+            <View style={styles.classMeta}>
+              <Text style={styles.classTitle}>{booking.serviceTitle}</Text>
+              <Text style={styles.classSub}>
+                Coach: {booking.providerName}
+              </Text>
+              <Text style={styles.classSub}>{booking.scheduleLabel ?? booking.whenLabel}</Text>
+            </View>
+            <PressableScale
+              onPress={() => onAction?.(booking, 'join_now')}
+              accessibilityLabel="Book now">
+              <View style={styles.classCta}>
+                <Text style={styles.classCtaText}>Book Now</Text>
+              </View>
+            </PressableScale>
+          </View>
+        </ImageBackground>
+      </View>
+    </PressableScale>
+  );
+}
+
+function LabCard({ booking, onPress, onAction }: Props) {
+  const lines = booking.detailLines ?? [];
+  const statusAction = booking.actions.includes('cancel')
+    ? 'Booked'
+    : BOOKING_ACTION_LABELS[booking.actions[0] ?? 'view_details'];
+
+  return (
+    <PressableScale onPress={() => onPress?.(booking)} accessibilityLabel={booking.providerName}>
+      <View style={styles.labCard}>
+        <View style={styles.labLeft}>
+          <Image source={{ uri: booking.imageUrl }} style={styles.labLogo} />
+          {booking.experienceYears ? (
+            <View style={styles.expBadge}>
+              <Text style={styles.expBadgeText}>{booking.experienceYears} YEARS</Text>
+            </View>
+          ) : null}
+          <View style={styles.starRow}>
+            <AppIcon name="star" size={12} color="#FBBF24" fill="#FBBF24" />
+            <AppIcon name="star" size={12} color="#FBBF24" fill="#FBBF24" />
+          </View>
+        </View>
+
+        <View style={styles.labCenter}>
+          <Text style={styles.labName}>{booking.providerName}</Text>
+          {lines.map(line => (
+            <Text key={line} style={styles.labLine}>
+              {line}
+            </Text>
+          ))}
+        </View>
+
+        <View style={styles.labActions}>
+          <ActionPill label="Blood Collect" />
+          <ActionPill label={booking.whenLabel.replace(' · ', '\n')} />
+          <ActionPill
+            label={statusAction}
+            filled={statusAction === 'Booked'}
+            onPress={() =>
+              onAction?.(booking, booking.actions[0] ?? 'view_details')
+            }
+          />
+        </View>
+      </View>
+    </PressableScale>
+  );
+}
+
+function DefaultCard({ booking, onPress, onAction }: Props) {
+  const theme = useTheme();
+  const primary = booking.actions.find(a => a === 'join_now' || a === 'book_again');
+
+  return (
+    <PressableScale onPress={() => onPress?.(booking)}>
+      <View style={[styles.defaultCard, { backgroundColor: theme.colors.surface }]}>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={[styles.doctorName, { color: theme.colors.textPrimary }]}>
+            {booking.serviceTitle}
+          </Text>
+          <Text style={{ color: theme.colors.textSecondary, fontSize: 14 }}>
+            {booking.providerName}
+          </Text>
+          <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>
+            {booking.whenLabel}
+          </Text>
+          <Text style={{ color: theme.colors.primary, fontWeight: '600', fontSize: 13 }}>
+            {booking.statusLabel}
+          </Text>
+        </View>
+        {primary ? (
+          <ActionPill
+            label={BOOKING_ACTION_LABELS[primary]}
+            filled
+            onPress={() => onAction?.(booking, primary)}
+          />
+        ) : null}
+      </View>
+    </PressableScale>
+  );
+}
+
+export function BookingCard({ booking, onPress, onAction }: Props) {
+  const handleAction = (b: ConsolidatedBooking, action: BookingAction) => {
+    if (onAction) {
+      onAction(b, action);
       return;
     }
     if (action === 'join_now') {
-      Alert.alert('Join session', `Opening ${booking.serviceTitle}…`);
+      Alert.alert('Join session', `Opening ${b.serviceTitle}…`);
       return;
     }
-    if (action === 'reschedule') {
-      Alert.alert('Reschedule', 'Pick a new slot for this booking.');
-      return;
-    }
-    if (action === 'cancel') {
-      Alert.alert('Cancel booking', 'Are you sure you want to cancel?', [
-        { text: 'Keep', style: 'cancel' },
-        { text: 'Cancel booking', style: 'destructive' },
-      ]);
-      return;
-    }
-    if (action === 'book_again') {
-      Alert.alert('Book again', 'Opening booking flow…');
-    }
+    onPress?.(b);
   };
 
-  const primaryAction = booking.actions.find(
-    a => a === 'join_now' || a === 'book_again',
-  );
-  const secondaryActions = booking.actions.filter(a => a !== primaryAction);
-
-  const primaryLine = booking.isClass || booking.category === 'home_service'
-    ? booking.serviceTitle
-    : booking.providerName;
-  const secondaryLine = booking.isClass || booking.category === 'home_service'
-    ? booking.providerName
-    : booking.serviceTitle;
-
+  if (booking.category === 'appointment' && booking.isOnline) {
+    return (
+      <DoctorCard booking={booking} onPress={onPress} onAction={handleAction} />
+    );
+  }
+  if (booking.category === 'class' || booking.isClass) {
+    return (
+      <ClassCard booking={booking} onPress={onPress} onAction={handleAction} />
+    );
+  }
+  if (booking.category === 'lab') {
+    return <LabCard booking={booking} onPress={onPress} onAction={handleAction} />;
+  }
   return (
-    <View style={styles.wrap}>
-      <View style={styles.body}>
-        <Text style={[styles.provider, { color: theme.colors.textPrimary }]}>
-          {primaryLine}
-        </Text>
-        <Text style={[styles.service, { color: theme.colors.textPrimary }]}>
-          {secondaryLine}
-        </Text>
-        <Text style={[styles.when, { color: theme.colors.textSecondary }]}>
-          {booking.whenLabel}
-        </Text>
-        {booking.locationLabel ? (
-          <View style={styles.metaRow}>
-            {booking.isOnline ? (
-              <View style={[styles.badge, { backgroundColor: theme.colors.primarySoft }]}>
-                <Text style={[styles.badgeText, { color: theme.colors.primary }]}>
-                  {booking.locationLabel}
-                </Text>
-              </View>
-            ) : (
-              <Text style={[styles.location, { color: theme.colors.textSecondary }]}>
-                {booking.locationLabel}
-              </Text>
-            )}
-          </View>
-        ) : null}
-        <Text style={[styles.status, { color: statusColor(booking.status, theme) }]}>
-          {booking.statusLabel}
-        </Text>
-      </View>
-
-      {booking.actions.length > 0 ? (
-        <View style={styles.actions}>
-          {secondaryActions.map(action => (
-            <Button
-              key={action}
-              title={BOOKING_ACTION_LABELS[action]}
-              variant="secondary"
-              onPress={() => handleAction(action)}
-              style={styles.actionBtn}
-            />
-          ))}
-          {primaryAction ? (
-            <Button
-              title={BOOKING_ACTION_LABELS[primaryAction]}
-              variant="primary"
-              onPress={() => handleAction(primaryAction)}
-              style={styles.actionBtn}
-            />
-          ) : null}
-        </View>
-      ) : null}
-
-      <View style={[styles.divider, { backgroundColor: theme.colors.borderSoft }]} />
-    </View>
+    <DefaultCard booking={booking} onPress={onPress} onAction={handleAction} />
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    gap: 12,
+  doctorCard: {
+    flexDirection: 'row',
+    backgroundColor: '#E0F2FE',
+    borderRadius: 20,
+    padding: 12,
+    gap: 10,
+    alignItems: 'flex-start',
   },
-  body: {
-    gap: 4,
+  doctorLeft: {
+    width: 72,
+    alignItems: 'center',
+    gap: 6,
   },
-  provider: {
+  doctorAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 14,
+    backgroundColor: '#CBD5E1',
+  },
+  expBadge: {
+    backgroundColor: '#14B8A6',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    width: '100%',
+    alignItems: 'center',
+  },
+  expBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  starRow: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  doctorCenter: {
+    flex: 1,
+    gap: 2,
+    paddingTop: 2,
+  },
+  doctorName: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: '#0F172A',
   },
-  service: {
-    fontSize: 15,
-    fontWeight: '500',
+  doctorSub: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
   },
-  when: {
-    fontSize: 14,
-    marginTop: 2,
+  doctorLine: {
+    fontSize: 12,
+    color: '#475569',
+    lineHeight: 16,
   },
-  metaRow: {
+  doctorRight: {
+    alignItems: 'flex-end',
+    gap: 8,
+    minWidth: 96,
+  },
+  liveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 2,
-  },
-  location: {
-    fontSize: 14,
-  },
-  badge: {
-    paddingHorizontal: 10,
+    gap: 4,
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
   },
-  badgeText: {
-    fontSize: 12,
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#22C55E',
+  },
+  liveText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#15803D',
+  },
+  doctorActions: {
+    gap: 6,
+    alignItems: 'stretch',
+    width: 96,
+  },
+  actionPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    borderRadius: 999,
+    alignItems: 'center',
+  },
+  actionPillOutline: {
+    backgroundColor: '#99F6E4',
+  },
+  actionPillFilled: {
+    backgroundColor: '#0D9488',
+  },
+  actionPillText: {
+    fontSize: 10,
     fontWeight: '700',
+    textAlign: 'center',
   },
-  status: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 4,
+  classCard: {
+    borderRadius: 22,
+    overflow: 'hidden',
+    height: 168,
   },
-  actions: {
+  classImage: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  classImageRadius: {
+    borderRadius: 22,
+  },
+  classGradient: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    padding: 14,
+    backgroundColor: 'rgba(0,0,0,0.42)',
+    gap: 10,
   },
-  actionBtn: {
-    flexGrow: 1,
-    minWidth: 120,
+  classMeta: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 14,
+    padding: 10,
+    gap: 2,
   },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    marginTop: 4,
+  classTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  classSub: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  classCta: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+  },
+  classCtaText: {
+    color: '#059669',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  labCard: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 12,
+    gap: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E2E8F0',
+  },
+  labLeft: {
+    width: 72,
+    alignItems: 'center',
+    gap: 6,
+  },
+  labLogo: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: '#FCE7F3',
+  },
+  labCenter: {
+    flex: 1,
+    gap: 2,
+    paddingTop: 2,
+  },
+  labName: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  labLine: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 16,
+  },
+  labActions: {
+    gap: 6,
+    width: 96,
+    justifyContent: 'center',
+  },
+  defaultCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 20,
+    gap: 12,
   },
 });

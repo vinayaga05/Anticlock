@@ -123,7 +123,7 @@ export function HomeScreen() {
             Communities
           </Text>
           <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>
-            Clubs, challenges, and friends
+            Teams, challenges, and friends
           </Text>
         </View>
         <AppIcon name="chevron-right" size={18} color={theme.colors.textTertiary} />

@@ -10,6 +10,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { useThemeStore } from '@/shared/store/themeStore';
+import { useAuth } from '@/shared/context/AuthProvider';
 import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { CURRENT_USER, getProfileMeta } from '@/shared/data/flash';
@@ -52,7 +53,7 @@ const SHORTCUTS: Shortcut[] = [
   },
   {
     id: 's4',
-    label: 'Trail Club',
+    label: 'Trail Team',
     imageUrl: 'https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&w=200&h=200&q=80',
   },
 ];
@@ -90,7 +91,11 @@ export function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const setMode = useThemeStore(s => s.setMode);
   const mode = useThemeStore(s => s.mode);
-  const meta = getProfileMeta(CURRENT_USER.id);
+  const { user, logout } = useAuth();
+  const displayName = user?.displayName ?? CURRENT_USER.name;
+  const avatarUrl = user?.avatarUrl ?? CURRENT_USER.avatarUrl;
+  const profileId = user?.id ?? CURRENT_USER.id;
+  const meta = getProfileMeta(profileId);
 
   const [showMore, setShowMore] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -189,6 +194,12 @@ export function ProfileScreen() {
           },
           { label: 'Privacy', onPress: () => navigation.navigate('ComingSoon', { title: 'Privacy' }) },
           { label: 'Notifications', onPress: () => navigation.navigate('ComingSoon', { title: 'Notifications' }) },
+          {
+            label: 'Log out',
+            onPress: () => {
+              void logout();
+            },
+          },
         ],
       },
       {
@@ -201,7 +212,7 @@ export function ProfileScreen() {
         ],
       },
     ],
-    [mode, navigation, setMode],
+    [mode, navigation, setMode, logout],
   );
 
   const visibleItems = showMore ? [...primaryItems, ...moreItems] : primaryItems;
@@ -241,9 +252,9 @@ export function ProfileScreen() {
               ...theme.shadows.soft,
             },
           ]}>
-          <Image source={{ uri: CURRENT_USER.avatarUrl }} style={styles.profileAvatar} />
+          <Image source={{ uri: avatarUrl ?? CURRENT_USER.avatarUrl }} style={styles.profileAvatar} />
           <Text style={[styles.profileName, { color: theme.colors.textPrimary }]}>
-            {CURRENT_USER.name}
+            {displayName}
           </Text>
           <View style={styles.profileActions}>
             <View style={[styles.switcherBtn, { backgroundColor: theme.colors.surfaceMuted }]}>

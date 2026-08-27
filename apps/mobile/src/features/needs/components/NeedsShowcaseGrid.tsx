@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '@/shared/hooks/useTheme';
@@ -8,6 +8,18 @@ import {
   type NeedsShowcaseItem,
 } from '@/shared/data/services';
 import { PressableScale } from '@/shared/components/PressableScale';
+
+const COLS = 3;
+const GAP = 6;
+const ICON_SIZE = 64;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    rows.push(items.slice(i, i + size));
+  }
+  return rows;
+}
 
 function SubIcon({
   item,
@@ -80,11 +92,22 @@ export function NeedsShowcaseGrid({
 }: {
   cards?: NeedsShowcaseCard[];
 }) {
+  const rows = useMemo(() => chunk(cards, COLS), [cards]);
+
   return (
     <View style={styles.grid}>
-      {cards.map(card => (
-        <View key={card.id} style={styles.cell}>
-          <NeedsShowcaseCardView card={card} />
+      {rows.map((row, rowIndex) => (
+        <View key={`row-${rowIndex}`} style={styles.row}>
+          {row.map(card => (
+            <View key={card.id} style={styles.cell}>
+              <NeedsShowcaseCardView card={card} />
+            </View>
+          ))}
+          {row.length < COLS
+            ? Array.from({ length: COLS - row.length }).map((_, i) => (
+                <View key={`empty-${rowIndex}-${i}`} style={styles.cell} />
+              ))
+            : null}
         </View>
       ))}
     </View>
@@ -93,40 +116,46 @@ export function NeedsShowcaseGrid({
 
 const styles = StyleSheet.create({
   grid: {
+    gap: GAP,
+  },
+  row: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
+    gap: GAP,
   },
   cell: {
-    width: '31%',
+    flex: 1,
+    minWidth: 0,
   },
   card: {
     width: '100%',
-    paddingTop: 10,
-    paddingHorizontal: 6,
-    paddingBottom: 8,
+    paddingTop: 8,
+    paddingHorizontal: 2,
+    paddingBottom: 6,
     borderWidth: StyleSheet.hairlineWidth,
-    gap: 8,
+    gap: 6,
   },
   cardTitle: {
     fontSize: 11,
     fontWeight: '700',
     lineHeight: 14,
+    textAlign: 'center',
+    paddingHorizontal: 4,
   },
   iconsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 2,
+    justifyContent: 'space-around',
+    gap: 0,
   },
   subCol: {
     flex: 1,
     alignItems: 'center',
     gap: 4,
+    minWidth: 0,
   },
   iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: ICON_SIZE,
+    height: ICON_SIZE,
+    borderRadius: ICON_SIZE / 2,
     overflow: 'hidden',
     backgroundColor: '#F3F2EE',
   },

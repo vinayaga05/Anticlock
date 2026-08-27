@@ -441,7 +441,7 @@ export const serviceCategories: ServiceCategory[] = [
     treeId: 'tours_events',
     order: 38,
     name: 'Cycling',
-    description: 'Cycling tours and clubs',
+    description: 'Cycling tours and teams',
     icon: 'bike',
     actionType: 'event_booking',
     features: [...eventFeatures],

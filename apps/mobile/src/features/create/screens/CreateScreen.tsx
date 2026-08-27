@@ -23,7 +23,7 @@ const ACTIONS: {
     subtitle: 'Share a health or fitness clip',
     icon: 'reels',
     color: '#F472B6',
-    onPress: nav => nav.navigate('Main', { screen: 'Play' }),
+    onPress: nav => nav.navigate('Main', { screen: 'PlayFeed' }),
   },
   {
     id: 'service',
@@ -39,7 +39,7 @@ const ACTIONS: {
     subtitle: 'Sell on Anticlock Shop',
     icon: 'shopping-bag',
     color: '#F59E0B',
-    onPress: nav => nav.navigate('ComingSoon', { title: 'Add Product' }),
+    onPress: nav => nav.navigate('CreateExploreProduct'),
   },
   {
     id: 'event',
@@ -47,7 +47,7 @@ const ACTIONS: {
     subtitle: 'Publish a trip or meetup',
     icon: 'globe',
     color: '#FB923C',
-    onPress: nav => nav.navigate('ComingSoon', { title: 'Create Event' }),
+    onPress: nav => nav.navigate('CreateExploreEvent'),
   },
   {
     id: 'course',

@@ -15,7 +15,7 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 export const TAB_BAR_VISIBLE_HEIGHT = 66;
 
 const TAB_ICONS: Record<string, IconName> = {
-  Play: 'reels',
+  PlayFeed: 'reels',
   Flash: 'zap',
   Needs: 'clipboard',
   Community: 'community',
@@ -35,7 +35,7 @@ export function FloatingPillTabBar({
   const requestClose = useCommentsSheetStore(s => s.requestClose);
 
   const focusedRoute = state.routes[state.index]?.name;
-  const onPlay = focusedRoute === 'Play';
+  const onPlayFeed = focusedRoute === 'PlayFeed';
   const bottomPad = Math.max(insets.bottom, 8) + 8;
   const layoutHeight = TAB_BAR_VISIBLE_HEIGHT + bottomPad;
 
@@ -50,8 +50,8 @@ export function FloatingPillTabBar({
           style={[
             styles.bar,
             {
-              backgroundColor: onPlay ? 'rgba(12,11,10,0.94)' : theme.colors.tabBar,
-              borderColor: onPlay ? 'rgba(255,255,255,0.12)' : theme.colors.borderSoft,
+              backgroundColor: onPlayFeed ? 'rgba(12,11,10,0.94)' : theme.colors.tabBar,
+              borderColor: onPlayFeed ? 'rgba(255,255,255,0.12)' : theme.colors.borderSoft,
               ...theme.shadows.float,
             },
           ]}>
@@ -59,10 +59,11 @@ export function FloatingPillTabBar({
             const focused = state.index === index;
             const { options } = descriptors[route.key];
             const icon = TAB_ICONS[route.name] ?? 'home';
-            const label =
+            const label = String(
               typeof options.tabBarAccessibilityLabel === 'string'
                 ? options.tabBarAccessibilityLabel
-                : route.name;
+                : route.name,
+            );
 
             const onPress = () => {
               const go = () => {
@@ -86,10 +87,10 @@ export function FloatingPillTabBar({
               go();
             };
 
-            const inactiveColor = onPlay
+            const inactiveColor = onPlayFeed
               ? 'rgba(255,255,255,0.55)'
               : theme.colors.tabIcon;
-            const activeColor = onPlay ? '#FFFFFF' : theme.colors.tabIconActive;
+            const activeColor = onPlayFeed ? '#FFFFFF' : theme.colors.tabIconActive;
 
             return (
               <PressableScale
@@ -98,7 +99,7 @@ export function FloatingPillTabBar({
                 accessibilityLabel={label}
                 scaleTo={0.96}
                 style={
-                  focused && !onPlay
+                  focused && !onPlayFeed
                     ? [
                         styles.item,
                         {

@@ -4,6 +4,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { MainNavigator } from '@/shared/navigation/MainNavigator';
 import { RootStackParamList } from '@/shared/navigation/types';
 import { useTheme } from '@/shared/hooks/useTheme';
+import { useAuth } from '@/shared/context/AuthProvider';
+import { AuthLoadingScreen, LoginScreen } from '@/features/auth/screens/LoginScreen';
 import { SearchScreen } from '@/features/booking/screens/SearchScreen';
 import { ProfileScreen } from '@/features/booking/screens/ProfileScreen';
 import { UserProfileScreen } from '@/features/profile/screens/UserProfileScreen';
@@ -19,6 +21,19 @@ import { ScheduleScreen } from '@/features/booking/screens/ScheduleScreen';
 import { BookingConfirmScreen } from '@/features/booking/screens/BookingConfirmScreen';
 import { MyBookingsScreen } from '@/features/booking/screens/MyBookingsScreen';
 import { CommunitiesScreen } from '@/features/community/screens/CommunitiesScreen';
+import { ExploreCreateScreen } from '@/features/community/screens/ExploreCreateScreen';
+import {
+  CreateExploreEventScreen,
+  CreateExploreProductScreen,
+} from '@/features/community/screens/ExploreComposeScreen';
+import { ExploreSubmissionDetailScreen } from '@/features/community/screens/ExploreSubmissionDetailScreen';
+import { ClubDetailScreen } from '@/features/community/screens/ClubDetailScreen';
+import { ClubRosterScreen } from '@/features/community/screens/ClubRosterScreen';
+import { ClubPlayerFormScreen } from '@/features/community/screens/ClubPlayerFormScreen';
+import { CreateClubScreen } from '@/features/community/screens/CreateClubScreen';
+import { ClubJoinRequestsScreen } from '@/features/community/screens/ClubJoinRequestsScreen';
+import { ChallengeDetailScreen } from '@/features/community/screens/ChallengeDetailScreen';
+import { ChallengeParticipateScreen } from '@/features/community/screens/ChallengeParticipateScreen';
 import { InboxScreen } from '@/features/messages/screens/InboxScreen';
 import { ThreadScreen } from '@/features/messages/screens/ThreadScreen';
 import { ServiceTreeScreen } from '@/features/services/screens/ServiceTreeScreen';
@@ -42,6 +57,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function RootNavigator() {
   const theme = useTheme();
+  const { user, loading } = useAuth();
 
   const navigationTheme =
     theme.mode === 'dark'
@@ -68,6 +84,10 @@ export function RootNavigator() {
           },
         };
 
+  if (loading) {
+    return <AuthLoadingScreen />;
+  }
+
   return (
     <NavigationContainer theme={navigationTheme}>
       <Stack.Navigator
@@ -80,6 +100,14 @@ export function RootNavigator() {
           headerBackTitle: '',
           contentStyle: { backgroundColor: theme.colors.background },
         }}>
+        {!user ? (
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
+            options={{ headerShown: false }}
+          />
+        ) : (
+          <>
         <Stack.Screen
           name="Main"
           component={MainNavigator}
@@ -218,6 +246,63 @@ export function RootNavigator() {
           component={SavedHubScreen}
           options={{ title: 'Saved' }}
         />
+        <Stack.Screen
+          name="ExploreCreate"
+          component={ExploreCreateScreen}
+          options={{ title: 'Create', headerShown: false }}
+        />
+        <Stack.Screen
+          name="CreateExploreEvent"
+          component={CreateExploreEventScreen}
+          options={{ title: 'Create Event', headerShown: false }}
+        />
+        <Stack.Screen
+          name="CreateExploreProduct"
+          component={CreateExploreProductScreen}
+          options={{ title: 'Post Product', headerShown: false }}
+        />
+        <Stack.Screen
+          name="ExploreSubmissionDetail"
+          component={ExploreSubmissionDetailScreen}
+          options={{ title: 'Submission', headerShown: false }}
+        />
+        <Stack.Screen
+          name="ClubDetail"
+          component={ClubDetailScreen}
+          options={{ title: 'Club', headerShown: false }}
+        />
+        <Stack.Screen
+          name="ClubRoster"
+          component={ClubRosterScreen}
+          options={{ title: 'Roster', headerShown: false }}
+        />
+        <Stack.Screen
+          name="ClubPlayerForm"
+          component={ClubPlayerFormScreen}
+          options={{ title: 'Player', headerShown: false }}
+        />
+        <Stack.Screen
+          name="CreateClub"
+          component={CreateClubScreen}
+          options={{ title: 'Create Club', headerShown: false }}
+        />
+        <Stack.Screen
+          name="ClubJoinRequests"
+          component={ClubJoinRequestsScreen}
+          options={{ title: 'Join Requests', headerShown: false }}
+        />
+        <Stack.Screen
+          name="ChallengeDetail"
+          component={ChallengeDetailScreen}
+          options={{ title: 'Challenge', headerShown: false }}
+        />
+        <Stack.Screen
+          name="ChallengeParticipate"
+          component={ChallengeParticipateScreen}
+          options={{ title: 'Participate', headerShown: false }}
+        />
+          </>
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );

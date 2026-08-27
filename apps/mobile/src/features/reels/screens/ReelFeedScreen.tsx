@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import {
   Dimensions,
   FlatList,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
@@ -24,6 +25,7 @@ import { TAB_BAR_VISIBLE_HEIGHT } from '@/shared/navigation/FloatingPillTabBar';
 const { height: WINDOW_HEIGHT, width: WINDOW_WIDTH } = Dimensions.get('window');
 
 function formatCount(n: number) {
+  if (!Number.isFinite(n) || n < 0) return '0';
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
 }
@@ -63,7 +65,9 @@ function SideAction({
             strokeWidth={active ? 2.2 : 1.85}
           />
         </View>
-        {label ? <Text style={styles.sideLabel}>{label}</Text> : null}
+        {label != null && label !== '' ? (
+          <Text style={styles.sideLabel}>{String(label)}</Text>
+        ) : null}
       </View>
     </PressableScale>
   );
@@ -120,7 +124,7 @@ function VerticalFade({
               key={s.offset}
               offset={s.offset}
               stopColor="#000"
-              stopOpacity={s.opacity}
+              stopOpacity={parseFloat(s.opacity)}
             />
           ))}
         </LinearGradient>
@@ -144,7 +148,8 @@ export function ReelFeedScreen() {
   );
   const playbackActive = useCommentsSheetStore(s => s.playbackActive);
   const openComments = useCommentsSheetStore(s => s.openComments);
-  const { data: reels = mockReels } = useReelsQuery(mockReels);
+  const { data: reels = mockReels, refetch, isRefetching } =
+    useReelsQuery(mockReels);
 
   const bottomSafe =
     TAB_BAR_VISIBLE_HEIGHT + Math.max(insets.bottom, 8) + 20;
@@ -372,6 +377,17 @@ export function ReelFeedScreen() {
         })}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={{ itemVisiblePercentThreshold: 80 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => {
+              void refetch();
+            }}
+            tintColor="#FFFFFF"
+            colors={[theme.colors.primary]}
+            progressViewOffset={insets.top + 8}
+          />
+        }
       />
     </View>
   );

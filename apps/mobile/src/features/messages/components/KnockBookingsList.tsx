@@ -1,15 +1,16 @@
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { FilterPills } from '@/shared/components/FilterPills';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { BookingCard } from '@/features/booking/components/BookingCard';
+import { BookingFilterBar } from '@/features/booking/components/BookingFilterBar';
 import {
   BookingFilter,
   ConsolidatedBooking,
   filterBookings,
   getConsolidatedBookings,
+  navigateBookingTarget,
 } from '@/shared/data/bookings';
 
 type Props = {
@@ -26,8 +27,8 @@ export function KnockBookingsList({ showHeading = true }: Props) {
     return filterBookings(all, filter);
   }, [filter]);
 
-  const onViewDetails = (_booking: ConsolidatedBooking) => {
-    navigation.navigate('MyBookings');
+  const onPress = (booking: ConsolidatedBooking) => {
+    navigateBookingTarget(navigation, booking);
   };
 
   return (
@@ -35,27 +36,19 @@ export function KnockBookingsList({ showHeading = true }: Props) {
       {showHeading ? (
         <Text style={[styles.heading, { color: theme.colors.textPrimary }]}>Bookings</Text>
       ) : null}
-      <FilterPills
-        activeId={filter}
-        onChange={id => setFilter(id as BookingFilter)}
-        pills={[
-          { id: 'all', label: 'All' },
-          { id: 'online', label: 'Online' },
-          { id: 'all_class', label: 'All Class' },
-        ]}
-      />
+      <BookingFilterBar active={filter} onChange={setFilter} />
       {items.length === 0 ? (
         <EmptyState
           icon="calendar"
           title="No bookings in this filter"
-          description="Try All to see every booking, or book a new session."
+          description="Try My Booking to see everything, or book a new session."
           actionLabel="Find services"
           onAction={() => navigation.navigate('Doctors')}
         />
       ) : (
         <View style={styles.list}>
           {items.map(item => (
-            <BookingCard key={item.id} booking={item} onViewDetails={onViewDetails} />
+            <BookingCard key={item.id} booking={item} onPress={onPress} />
           ))}
         </View>
       )}

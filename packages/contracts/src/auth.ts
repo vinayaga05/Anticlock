@@ -62,3 +62,36 @@ export const MobileTokenRequestSchema = z.object({
   displayName: z.string().optional(),
 });
 export type MobileTokenRequest = z.infer<typeof MobileTokenRequestSchema>;
+
+export const MobileUserSchema = z.object({
+  id: z.string().uuid(),
+  phone: z.string().min(8),
+  displayName: z.string(),
+  avatarUrl: z.string().url().nullable().optional(),
+});
+export type MobileUser = z.infer<typeof MobileUserSchema>;
+
+export const MobileOtpSendRequestSchema = z.object({
+  phone: z.string().min(8),
+});
+export type MobileOtpSendRequest = z.infer<typeof MobileOtpSendRequestSchema>;
+
+export const MobileOtpSendResponseSchema = z.object({
+  requestId: z.string().uuid(),
+  expiresInSeconds: z.number().int().positive(),
+});
+export type MobileOtpSendResponse = z.infer<typeof MobileOtpSendResponseSchema>;
+
+export const MobileOtpVerifyRequestSchema = z.object({
+  phone: z.string().min(8),
+  code: z.string().length(6),
+  requestId: z.string().uuid(),
+});
+export type MobileOtpVerifyRequest = z.infer<typeof MobileOtpVerifyRequestSchema>;
+
+export const MobileLoginResponseSchema = z.object({
+  user: MobileUserSchema,
+  token: z.string(),
+  expiresAt: z.string().datetime(),
+});
+export type MobileLoginResponse = z.infer<typeof MobileLoginResponseSchema>;

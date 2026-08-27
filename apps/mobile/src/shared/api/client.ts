@@ -12,6 +12,7 @@ export class ApiError extends Error {
 }
 
 let bearerToken: string | null = null;
+let onUnauthorized: (() => void) | null = null;
 
 export function setApiToken(token: string | null) {
   bearerToken = token;
@@ -19,6 +20,10 @@ export function setApiToken(token: string | null) {
 
 export function getApiToken() {
   return bearerToken;
+}
+
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  onUnauthorized = handler;
 }
 
 export async function apiRequest<T>(
@@ -49,6 +54,9 @@ export async function apiRequest<T>(
       message = body.error?.message ?? message;
     } catch {
       /* ignore */
+    }
+    if (res.status === 401 && bearerToken) {
+      onUnauthorized?.();
     }
     throw new ApiError(res.status, code, message);
   }

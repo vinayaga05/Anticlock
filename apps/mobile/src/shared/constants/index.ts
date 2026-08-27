@@ -1,6 +1,7 @@
 export const STORAGE_KEYS = {
   THEME_MODE: 'theme_mode',
   CART_COUNT: 'cart_count',
+  AUTH_SESSION: 'auth_session',
 } as const;
 
 export const APP_NAME = 'Anticlock';

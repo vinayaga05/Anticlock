@@ -1,6 +1,6 @@
 export type MainTabParamList = {
   Flash: undefined;
-  Play: undefined;
+  PlayFeed: undefined;
   Needs: undefined;
   Community: undefined;
   Knock: undefined;
@@ -8,6 +8,7 @@ export type MainTabParamList = {
 };
 
 export type RootStackParamList = {
+  Login: undefined;
   Main: undefined | { screen: keyof MainTabParamList };
   Search: undefined;
   Profile: { userId?: string } | undefined;
@@ -59,6 +60,17 @@ export type RootStackParamList = {
   FlashComposer: undefined;
   FlashComments: { postId: string };
   SavedHub: undefined;
+  ExploreCreate: undefined;
+  CreateExploreEvent: { challengeId?: string } | undefined;
+  CreateExploreProduct: undefined;
+  ExploreSubmissionDetail: { itemId: string };
+  ClubDetail: { clubId: string };
+  ClubRoster: { clubId: string };
+  ClubPlayerForm: { clubId: string; playerId?: string };
+  CreateClub: undefined;
+  ClubJoinRequests: { clubId: string };
+  ChallengeDetail: { challengeId: string };
+  ChallengeParticipate: { challengeId: string };
 };
 
 declare global {

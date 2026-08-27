@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiRequest, setApiToken } from './client';
+import { apiRequest, ApiError } from './client';
 import { isApiEnabled } from './config';
+import { readStoredSession } from '@/shared/services/auth/authService';
 import { loadClipsReels } from '@/shared/data/cloudflareVideos';
 import type { ReelItem } from '@/shared/types';
 
@@ -44,19 +45,11 @@ export type ApiReelFeedItem = {
   } | null;
 };
 
-async function ensureMobileToken() {
-  const deviceId = 'dev-device-anticlock';
-  const session = await apiRequest<{
-    userId: string;
-    displayName: string;
-    token: string;
-    expiresAt: string;
-  }>('/auth/mobile/token', {
-    method: 'POST',
-    body: JSON.stringify({ deviceId, displayName: 'Mobile Dev' }),
-  });
-  setApiToken(session.token);
-  return session;
+function ensureAuthToken() {
+  const session = readStoredSession();
+  if (!session?.token) {
+    throw new ApiError(401, 'unauthorized', 'Not authenticated');
+  }
 }
 
 export function mapApiReelToItem(r: ApiReelFeedItem): ReelItem {
@@ -96,7 +89,7 @@ export function useServiceTreesQuery(fallback: ApiServiceTree[]) {
     queryKey: ['catalog', 'trees', isApiEnabled ? 'api' : 'mock'],
     queryFn: async () => {
       if (!isApiEnabled) return fallback;
-      await ensureMobileToken();
+      await ensureAuthToken();
       const res = await apiRequest<{ data: ApiServiceTree[] }>(
         '/v1/catalog/trees',
       );
@@ -120,7 +113,7 @@ export function useServiceCategoriesQuery(
     ],
     queryFn: async () => {
       if (!isApiEnabled) return fallback;
-      await ensureMobileToken();
+      await ensureAuthToken();
       const qs = treeId ? `?treeId=${encodeURIComponent(treeId)}` : '';
       const res = await apiRequest<{ data: ApiServiceCategory[] }>(
         `/v1/catalog/categories${qs}`,
@@ -137,11 +130,12 @@ export function useReelsQuery(fallback: ReelItem[]) {
     queryKey: ['reels', 'feed', isApiEnabled ? 'api' : 'r2'],
     queryFn: async () => {
       if (isApiEnabled) {
-        await ensureMobileToken();
+        await ensureAuthToken();
         const res = await apiRequest<{ data: ApiReelFeedItem[] }>('/v1/reels');
         if (res.data.length) return res.data.map(mapApiReelToItem);
       }
-      return loadClipsReels(fallback);
+      // Always bypass CDN/browser cache so pull-to-refresh gets new R2 uploads.
+      return loadClipsReels(fallback, { bustCache: true });
     },
     initialData: fallback,
     staleTime: 30_000,

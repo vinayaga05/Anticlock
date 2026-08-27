@@ -99,18 +99,28 @@ export function buildClipsReelsFromManifest(
 
     return {
       ...meta,
-      id: entry.id || `r2-reel-${index + 1}`,
-      title: entry.title || meta.title,
+      id: String(entry.id || `r2-reel-${index + 1}`),
+      title: String(entry.title || meta.title || 'Video'),
+      author: String(meta.author || 'anticlock'),
+      caption: String(meta.caption || ''),
       videoUrl,
-      posterUrl: entry.thumbnailUrl ?? meta.posterUrl,
+      posterUrl: entry.thumbnailUrl ?? meta.posterUrl ?? '',
     };
   });
 }
 
-export async function fetchR2ReelsManifest(): Promise<CloudflareVideoManifest | null> {
+export async function fetchR2ReelsManifest(
+  opts?: { bustCache?: boolean },
+): Promise<CloudflareVideoManifest | null> {
   try {
-    const res = await fetch(R2_REELS_MANIFEST_URL, {
-      headers: { 'Cache-Control': 'no-cache' },
+    const url = opts?.bustCache
+      ? `${R2_REELS_MANIFEST_URL}?t=${Date.now()}`
+      : R2_REELS_MANIFEST_URL;
+    const res = await fetch(url, {
+      headers: {
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+      },
     });
     if (!res.ok) return null;
     const data = (await res.json()) as CloudflareVideoManifest;
@@ -121,8 +131,11 @@ export async function fetchR2ReelsManifest(): Promise<CloudflareVideoManifest | 
   }
 }
 
-export async function loadClipsReels(templates: ReelItem[]): Promise<ReelItem[]> {
-  const remote = await fetchR2ReelsManifest();
+export async function loadClipsReels(
+  templates: ReelItem[],
+  opts?: { bustCache?: boolean },
+): Promise<ReelItem[]> {
+  const remote = await fetchR2ReelsManifest(opts);
   if (remote) return buildClipsReelsFromManifest(remote, templates);
 
   const local = getLocalManifest();

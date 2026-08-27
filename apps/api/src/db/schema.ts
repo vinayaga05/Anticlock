@@ -102,6 +102,16 @@ export const mobileDevices = pgTable('mobile_devices', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const mobileUsers = pgTable('mobile_users', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  phone: text('phone').notNull().unique(),
+  displayName: text('display_name').notNull(),
+  avatarUrl: text('avatar_url'),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const mediaAssets = pgTable('media_assets', {
   id: uuid('id').defaultRandom().primaryKey(),
   kind: text('kind').notNull(), // image | document | video

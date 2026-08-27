@@ -19,7 +19,7 @@ export function MainNavigator() {
         headerShown: false,
       }}>
       <Tab.Screen
-        name="Play"
+        name="PlayFeed"
         component={ReelFeedScreen}
         options={{ tabBarAccessibilityLabel: 'Play' }}
       />

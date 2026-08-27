@@ -99,6 +99,18 @@ async function migrate() {
   `;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS mobile_users (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      phone text NOT NULL UNIQUE,
+      display_name text NOT NULL,
+      avatar_url text,
+      is_active boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS media_assets (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       kind text NOT NULL,

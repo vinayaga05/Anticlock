@@ -37,7 +37,7 @@ export function SavedHubScreen() {
         navigation.navigate('Main', { screen: 'Flash' });
         break;
       case 'clip':
-        navigation.navigate('Main', { screen: 'Play' });
+        navigation.navigate('Main', { screen: 'PlayFeed' });
         break;
       case 'product':
         navigation.navigate('ProductDetail', { productId: refId });

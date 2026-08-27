@@ -4,6 +4,7 @@ import {
   Conversation,
   Doctor,
   FitnessClass,
+  KnockNotification,
   LabProvider,
   LabTest,
   Message,
@@ -12,6 +13,8 @@ import {
   ServiceTile,
   ShopProduct,
 } from '@/shared/types';
+import { buildClipsReelsFromManifest } from '@/shared/data/cloudflareVideos';
+import manifest from '@/shared/data/cloudflare-videos.manifest.json';
 
 const img = (id: string, w = 800, h = 1000) =>
   `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${w}&h=${h}&q=80`;
@@ -175,7 +178,7 @@ export const fitnessClasses: FitnessClass[] = [
   },
 ];
 
-export const reels: ReelItem[] = [
+const baseReels: ReelItem[] = [
   {
     id: 'reel-1',
     title: 'Morning mobility',
@@ -282,6 +285,12 @@ export const reels: ReelItem[] = [
   },
 ];
 
+/** Clips feed — R2 bucket videos when manifest remoteEnabled, else bundled fallbacks. */
+export const reels: ReelItem[] = buildClipsReelsFromManifest(
+  manifest as import('@/shared/data/cloudflareVideos').CloudflareVideoManifest,
+  baseReels,
+);
+
 export const communities: Community[] = [
   {
     id: 'com-sports',
@@ -334,6 +343,41 @@ export const shopProducts: ShopProduct[] = [
     price: 699,
     imageUrl: img('photo-1584308666744-24d5c474f2ae', 600, 600),
     category: 'Pharmacy',
+  },
+];
+
+export const knockNotifications: KnockNotification[] = [
+  {
+    id: 'kn-1',
+    title: 'Booking confirmed',
+    body: 'Dr. Ananya · Physiotherapy · Today 6:30 PM',
+    time: '2h ago',
+    read: false,
+    icon: 'calendar',
+  },
+  {
+    id: 'kn-2',
+    title: 'Provider assigned',
+    body: 'QuickFix Home accepted your AC Repair request.',
+    time: '5h ago',
+    read: false,
+    icon: 'home',
+  },
+  {
+    id: 'kn-3',
+    title: 'Class reminder',
+    body: 'Sports Fitness Training starts tomorrow at 5:30 AM.',
+    time: 'Yesterday',
+    read: true,
+    icon: 'fitness',
+  },
+  {
+    id: 'kn-4',
+    title: 'New message',
+    body: 'Coach Sathish: See you at 5:30 AM tomorrow.',
+    time: 'Yesterday',
+    read: true,
+    icon: 'messages',
   },
 ];
 

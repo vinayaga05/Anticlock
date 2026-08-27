@@ -46,10 +46,8 @@ export function FlashFeedScreen() {
         scrollEnabled={!commentsOpen}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingHorizontal: 16,
           paddingTop: insets.top + 10,
           paddingBottom: bottomPad,
-          gap: 16,
         }}
         ListHeaderComponent={
           <View style={styles.headerBlock}>
@@ -73,7 +71,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerBlock: {
-    gap: 16,
-    marginBottom: 0,
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
   },
 });

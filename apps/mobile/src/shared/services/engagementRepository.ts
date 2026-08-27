@@ -25,6 +25,7 @@ type EngagementState = {
 
   getFeed: (tab: FeedTab) => FlashPost[];
   getPost: (postId: string) => FlashPost | undefined;
+  getPostsByAuthor: (authorId: string) => FlashPost[];
   getComments: (postId: string) => FlashComment[];
 
   setReaction: (postId: string, reaction: ReactionType | null) => void;
@@ -95,6 +96,9 @@ export const useEngagementStore = create<EngagementState>((set, get) => ({
   },
 
   getPost: postId => get().posts.find(p => p.id === postId),
+
+  getPostsByAuthor: authorId =>
+    get().posts.filter(p => p.author.id === authorId && !p.hidden),
 
   getComments: postId => get().comments.filter(c => c.postId === postId),
 

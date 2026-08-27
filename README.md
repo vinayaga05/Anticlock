@@ -77,6 +77,18 @@ Mocks remain the default fallback.
 On Android emulator, Metro must be reachable for debug assets/videos. `pnpm
 dev:mobile` / `android` run `adb reverse tcp:8081 tcp:8081` automatically.
 
+### Canva test videos → Cloudflare R2
+
+Export MP4 clips from Canva into `assets/canva-exports/`, enable **R2** on your Cloudflare account, add credentials to `apps/api/.env`, then upload:
+
+```bash
+pnpm --filter @anticlock/api r2:upload-canva
+```
+
+For adaptive HLS instead of MP4, use Cloudflare Stream: `pnpm --filter @anticlock/api stream:upload-canva`
+
+See [assets/canva-exports/README.md](assets/canva-exports/README.md). Until upload completes, the mobile app plays bundled Canva-export MP4s in **Clips** and the yoga **Flash** video post.
+
 ### Android release APK (R8)
 
 Release builds enable **R8** shrinking + obfuscation and resource shrinking

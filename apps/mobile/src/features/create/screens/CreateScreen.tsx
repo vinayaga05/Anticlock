@@ -23,7 +23,7 @@ const ACTIONS: {
     subtitle: 'Share a health or fitness clip',
     icon: 'reels',
     color: '#F472B6',
-    onPress: nav => nav.navigate('Main', { screen: 'Clips' }),
+    onPress: nav => nav.navigate('Main', { screen: 'Play' }),
   },
   {
     id: 'service',

@@ -1,6 +1,6 @@
 export type MainTabParamList = {
   Flash: undefined;
-  Clips: undefined;
+  Play: undefined;
   Needs: undefined;
   Community: undefined;
   Knock: undefined;
@@ -10,7 +10,8 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   Main: undefined | { screen: keyof MainTabParamList };
   Search: undefined;
-  Profile: undefined;
+  Profile: { userId?: string } | undefined;
+  AccountSettings: undefined;
   Doctors: undefined;
   DoctorProfile: { doctorId: string };
   DiagnosticsHub: undefined;

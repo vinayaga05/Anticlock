@@ -15,7 +15,7 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 export const TAB_BAR_VISIBLE_HEIGHT = 66;
 
 const TAB_ICONS: Record<string, IconName> = {
-  Clips: 'reels',
+  Play: 'reels',
   Flash: 'zap',
   Needs: 'clipboard',
   Community: 'community',
@@ -35,7 +35,7 @@ export function FloatingPillTabBar({
   const requestClose = useCommentsSheetStore(s => s.requestClose);
 
   const focusedRoute = state.routes[state.index]?.name;
-  const onClips = focusedRoute === 'Clips';
+  const onPlay = focusedRoute === 'Play';
   const bottomPad = Math.max(insets.bottom, 8) + 8;
   const layoutHeight = TAB_BAR_VISIBLE_HEIGHT + bottomPad;
 
@@ -50,8 +50,8 @@ export function FloatingPillTabBar({
           style={[
             styles.bar,
             {
-              backgroundColor: onClips ? 'rgba(12,11,10,0.94)' : theme.colors.tabBar,
-              borderColor: onClips ? 'rgba(255,255,255,0.12)' : theme.colors.borderSoft,
+              backgroundColor: onPlay ? 'rgba(12,11,10,0.94)' : theme.colors.tabBar,
+              borderColor: onPlay ? 'rgba(255,255,255,0.12)' : theme.colors.borderSoft,
               ...theme.shadows.float,
             },
           ]}>
@@ -86,10 +86,10 @@ export function FloatingPillTabBar({
               go();
             };
 
-            const inactiveColor = onClips
+            const inactiveColor = onPlay
               ? 'rgba(255,255,255,0.55)'
               : theme.colors.tabIcon;
-            const activeColor = onClips ? '#FFFFFF' : theme.colors.tabIconActive;
+            const activeColor = onPlay ? '#FFFFFF' : theme.colors.tabIconActive;
 
             return (
               <PressableScale
@@ -98,7 +98,7 @@ export function FloatingPillTabBar({
                 accessibilityLabel={label}
                 scaleTo={0.96}
                 style={
-                  focused && !onClips
+                  focused && !onPlay
                     ? [
                         styles.item,
                         {

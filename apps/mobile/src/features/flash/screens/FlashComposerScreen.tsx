@@ -19,6 +19,9 @@ import {
 } from '@/shared/data/flash/types';
 import { useEngagementStore } from '@/shared/services/engagementRepository';
 import { CURRENT_USER } from '@/shared/data/flash';
+import { getFlashCloudflareVideo } from '@/shared/data/cloudflareVideos';
+
+const canvaSampleVideo = getFlashCloudflareVideo();
 
 const VISIBILITY: { id: PostVisibility; label: string }[] = [
   { id: 'public', label: 'Public' },
@@ -37,8 +40,11 @@ const SAMPLE_MEDIA: PostMedia[] = [
   {
     id: 'sample-vid',
     type: 'video',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    url:
+      canvaSampleVideo?.url ??
+      require('@/shared/assets/videos/canva/yoga-flow.mp4'),
     posterUrl:
+      canvaSampleVideo?.posterUrl ??
       'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=800&h=600&q=80',
   },
 ];
@@ -132,7 +138,17 @@ export function FlashComposerScreen() {
                   },
                 ]}>
                 <Image
-                  source={{ uri: m.posterUrl ?? m.url }}
+                  source={
+                    typeof m.url === 'number' && !m.posterUrl
+                      ? m.url
+                      : {
+                          uri:
+                            m.posterUrl ??
+                            (typeof m.url === 'string'
+                              ? m.url
+                              : Image.resolveAssetSource(m.url)?.uri ?? ''),
+                        }
+                  }
                   style={styles.mediaThumb}
                 />
                 <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>

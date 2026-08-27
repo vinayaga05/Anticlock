@@ -120,6 +120,15 @@ export interface Conversation {
   avatarColor: string;
 }
 
+export interface KnockNotification {
+  id: string;
+  title: string;
+  body: string;
+  time: string;
+  read: boolean;
+  icon: string;
+}
+
 export interface Message {
   id: string;
   conversationId: string;

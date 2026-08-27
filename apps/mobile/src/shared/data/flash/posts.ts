@@ -3,18 +3,21 @@ import {
   FlashPost,
   PostAuthor,
 } from '@/shared/data/flash/types';
+import { getFlashCloudflareVideo } from '@/shared/data/cloudflareVideos';
+
+const flashVideo = getFlashCloudflareVideo();
 
 const img = (id: string, w = 800, h = 600) =>
   `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${w}&h=${h}&q=80`;
 
 export const CURRENT_USER: PostAuthor = {
   id: 'user-me',
-  name: 'Guest User',
+  name: 'Vinay',
   avatarUrl: img('photo-1535713875002-d1d0cf377fde', 200, 200),
   verified: false,
 };
 
-const authors: Record<string, PostAuthor> = {
+export const flashAuthors: Record<string, PostAuthor> = {
   ananya: {
     id: 'user-ananya',
     name: 'Dr. Ananya',
@@ -61,7 +64,7 @@ const authors: Record<string, PostAuthor> = {
 export const seedFlashPosts: FlashPost[] = [
   {
     id: 'post-1',
-    author: authors.ravi,
+    author: flashAuthors.ravi,
     createdAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
     timeLabel: '10 minutes ago',
     visibility: 'public',
@@ -81,7 +84,7 @@ export const seedFlashPosts: FlashPost[] = [
   },
   {
     id: 'post-2',
-    author: authors.ananya,
+    author: flashAuthors.ananya,
     createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
     timeLabel: '2 hours ago',
     visibility: 'public',
@@ -106,7 +109,7 @@ export const seedFlashPosts: FlashPost[] = [
   },
   {
     id: 'post-3',
-    author: authors.shop,
+    author: flashAuthors.shop,
     createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
     timeLabel: '5 hours ago',
     visibility: 'public',
@@ -121,6 +124,11 @@ export const seedFlashPosts: FlashPost[] = [
         id: 'm3b',
         type: 'image',
         url: img('photo-1576678927484-cc907957088c'),
+      },
+      {
+        id: 'm3c',
+        type: 'image',
+        url: img('photo-1534438327276-14e5300c3a48'),
       },
     ],
     attachment: {
@@ -142,7 +150,7 @@ export const seedFlashPosts: FlashPost[] = [
   },
   {
     id: 'post-4',
-    author: authors.yoga,
+    author: flashAuthors.yoga,
     createdAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
     timeLabel: '8 hours ago',
     visibility: 'followers',
@@ -151,8 +159,8 @@ export const seedFlashPosts: FlashPost[] = [
       {
         id: 'm4',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-        posterUrl: img('photo-1544367567-0f2fcb009e0b'),
+        url: flashVideo?.url ?? require('@/shared/assets/videos/canva/yoga-flow.mp4'),
+        posterUrl: flashVideo?.posterUrl ?? img('photo-1544367567-0f2fcb009e0b'),
       },
     ],
     attachment: {
@@ -174,7 +182,7 @@ export const seedFlashPosts: FlashPost[] = [
   },
   {
     id: 'post-5',
-    author: authors.trek,
+    author: flashAuthors.trek,
     createdAt: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(),
     timeLabel: 'Yesterday',
     visibility: 'public',
@@ -201,7 +209,7 @@ export const seedFlashPosts: FlashPost[] = [
   },
   {
     id: 'post-6',
-    author: authors.home,
+    author: flashAuthors.home,
     createdAt: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
     timeLabel: 'Yesterday',
     visibility: 'public',
@@ -226,7 +234,7 @@ export const seedFlashPosts: FlashPost[] = [
   },
   {
     id: 'post-7',
-    author: authors.ravi,
+    author: flashAuthors.ravi,
     createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
     timeLabel: '2 days ago',
     visibility: 'friends',
@@ -258,13 +266,71 @@ export const seedFlashPosts: FlashPost[] = [
     shareCount: 3,
     isOwn: true,
   },
+  {
+    id: 'post-me-1',
+    author: CURRENT_USER,
+    createdAt: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(),
+    timeLabel: '2 weeks ago',
+    visibility: 'public',
+    text: 'Weekend cricket with the crew.',
+    media: [
+      {
+        id: 'me-m1',
+        type: 'image',
+        url: img('photo-1531418760879-8657786d1c4b'),
+      },
+    ],
+    feedTabs: ['forYou', 'following'],
+    reactionCounts: { like: 88, celebrate: 24 },
+    commentCount: 12,
+    shareCount: 4,
+    isOwn: true,
+  },
+  {
+    id: 'post-me-2',
+    author: CURRENT_USER,
+    createdAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
+    timeLabel: '3 weeks ago',
+    visibility: 'public',
+    media: [
+      {
+        id: 'me-m2',
+        type: 'image',
+        url: img('photo-1546069901-ba9599a7e63c'),
+      },
+    ],
+    feedTabs: ['forYou', 'following'],
+    reactionCounts: { like: 56, love: 18 },
+    commentCount: 9,
+    shareCount: 2,
+    isOwn: true,
+  },
+  {
+    id: 'post-me-3',
+    author: CURRENT_USER,
+    createdAt: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString(),
+    timeLabel: '1 month ago',
+    visibility: 'public',
+    media: [
+      {
+        id: 'me-m3',
+        type: 'image',
+        url: img('photo-1608038797223-9f01a509a4b2'),
+      },
+    ],
+    feedTabs: ['forYou', 'following'],
+    reactionCounts: { like: 72, useful: 11 },
+    commentCount: 6,
+    shareCount: 1,
+    isOwn: true,
+  },
 ];
 
 export const seedFlashComments: FlashComment[] = [
   {
     id: 'c1',
     postId: 'post-1',
-    author: authors.yoga,
+    author: flashAuthors.yoga,
     text: 'I’m in! Sunday long run?',
     createdAt: new Date(Date.now() - 8 * 60 * 1000).toISOString(),
     likeCount: 14,
@@ -272,7 +338,7 @@ export const seedFlashComments: FlashComment[] = [
   {
     id: 'c2',
     postId: 'post-1',
-    author: authors.ananya,
+    author: flashAuthors.ananya,
     text: 'Stretch well after — calves love you for it.',
     createdAt: new Date(Date.now() - 6 * 60 * 1000).toISOString(),
     likeCount: 22,
@@ -281,7 +347,7 @@ export const seedFlashComments: FlashComment[] = [
     id: 'c1r1',
     postId: 'post-1',
     parentId: 'c1',
-    author: authors.ravi,
+    author: flashAuthors.ravi,
     text: 'Yes — 6 AM Marina loop.',
     createdAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
     likeCount: 5,
@@ -290,7 +356,7 @@ export const seedFlashComments: FlashComment[] = [
   {
     id: 'c3',
     postId: 'post-2',
-    author: authors.ravi,
+    author: flashAuthors.ravi,
     text: 'Booked. Thank you!',
     createdAt: new Date(Date.now() - 50 * 60 * 1000).toISOString(),
     likeCount: 3,

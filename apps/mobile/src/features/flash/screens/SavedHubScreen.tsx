@@ -12,7 +12,7 @@ import { useEngagementStore } from '@/shared/services/engagementRepository';
 const BUCKETS: { id: SavedContentKind | 'all'; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'flash', label: 'Flash Posts' },
-  { id: 'clip', label: 'Clips' },
+  { id: 'clip', label: 'Play' },
   { id: 'service', label: 'Services' },
   { id: 'product', label: 'Products' },
   { id: 'course', label: 'Courses' },
@@ -37,7 +37,7 @@ export function SavedHubScreen() {
         navigation.navigate('Main', { screen: 'Flash' });
         break;
       case 'clip':
-        navigation.navigate('Main', { screen: 'Clips' });
+        navigation.navigate('Main', { screen: 'Play' });
         break;
       case 'product':
         navigation.navigate('ProductDetail', { productId: refId });
@@ -70,7 +70,7 @@ export function SavedHubScreen() {
             <EmptyState
               icon="save"
               title="Nothing saved yet"
-              description="Save Flash posts, Clips, and marketplace items to find them here."
+              description="Save Flash posts, Play videos, and marketplace items to find them here."
             />
           }
           renderItem={({ item }) => (

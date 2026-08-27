@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "updatedAt": "2026-08-27T15:01:04.985Z",
+  "source": "r2-reels-bucket",
+  "remoteEnabled": true,
+  "publicBaseUrl": "https://pub-27960762dc094de6aef7fc922fec002a.r2.dev",
+  "videos": [
+    {
+      "id": "r2-document-810w-1dc3hisyaai",
+      "title": "document 810w 1dC3hISYAaI",
+      "objectKey": "document_810w-1dC3hISYAaI.mp4",
+      "localFile": "document_810w-1dC3hISYAaI.mp4",
+      "streamUid": null,
+      "playbackUrl": "https://pub-27960762dc094de6aef7fc922fec002a.r2.dev/document_810w-1dC3hISYAaI.mp4",
+      "thumbnailUrl": null
+    },
+    {
+      "id": "r2-document-810w-5nc-qnyvqg8",
+      "title": "document 810w 5NC QNYvqG8",
+      "objectKey": "document_810w-5NC-QNYvqG8.mp4",
+      "localFile": "document_810w-5NC-QNYvqG8.mp4",
+      "streamUid": null,
+      "playbackUrl": "https://pub-27960762dc094de6aef7fc922fec002a.r2.dev/document_810w-5NC-QNYvqG8.mp4",
+      "thumbnailUrl": null
+    },
+    {
+      "id": "r2-document-810w-cvt2jwcvv2w",
+      "title": "document 810w cvt2jWCvV2w",
+      "objectKey": "document_810w-cvt2jWCvV2w.mp4",
+      "localFile": "document_810w-cvt2jWCvV2w.mp4",
+      "streamUid": null,
+      "playbackUrl": "https://pub-27960762dc094de6aef7fc922fec002a.r2.dev/document_810w-cvt2jWCvV2w.mp4",
+      "thumbnailUrl": null
+    },
+    {
+      "id": "r2-document-810w-mt7z4rfblqo",
+      "title": "document 810w mT7z4rFblqo",
+      "objectKey": "document_810w-mT7z4rFblqo.mp4",
+      "localFile": "document_810w-mT7z4rFblqo.mp4",
+      "streamUid": null,
+      "playbackUrl": "https://pub-27960762dc094de6aef7fc922fec002a.r2.dev/document_810w-mT7z4rFblqo.mp4",
+      "thumbnailUrl": null
+    },
+    {
+      "id": "r2-document-810w-wj4l-fz6isy",
+      "title": "document 810w wJ4l fz6iSY",
+      "objectKey": "document_810w-wJ4l-fz6iSY.mp4",
+      "localFile": "document_810w-wJ4l-fz6iSY.mp4",
+      "streamUid": null,
+      "playbackUrl": "https://pub-27960762dc094de6aef7fc922fec002a.r2.dev/document_810w-wJ4l-fz6iSY.mp4",
+      "thumbnailUrl": null
+    }
+  ]
+}

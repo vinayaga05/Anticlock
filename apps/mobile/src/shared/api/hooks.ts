@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest, setApiToken } from './client';
 import { isApiEnabled } from './config';
+import { loadClipsReels } from '@/shared/data/cloudflareVideos';
 import type { ReelItem } from '@/shared/types';
 
 export type ApiServiceTree = {
@@ -133,15 +134,16 @@ export function useServiceCategoriesQuery(
 
 export function useReelsQuery(fallback: ReelItem[]) {
   return useQuery({
-    queryKey: ['reels', 'feed', isApiEnabled ? 'api' : 'mock'],
+    queryKey: ['reels', 'feed', isApiEnabled ? 'api' : 'r2'],
     queryFn: async () => {
-      if (!isApiEnabled) return fallback;
-      await ensureMobileToken();
-      const res = await apiRequest<{ data: ApiReelFeedItem[] }>('/v1/reels');
-      if (!res.data.length) return fallback;
-      return res.data.map(mapApiReelToItem);
+      if (isApiEnabled) {
+        await ensureMobileToken();
+        const res = await apiRequest<{ data: ApiReelFeedItem[] }>('/v1/reels');
+        if (res.data.length) return res.data.map(mapApiReelToItem);
+      }
+      return loadClipsReels(fallback);
     },
-    initialData: isApiEnabled ? undefined : fallback,
+    initialData: fallback,
     staleTime: 30_000,
   });
 }

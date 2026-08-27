@@ -19,9 +19,9 @@ export function MainNavigator() {
         headerShown: false,
       }}>
       <Tab.Screen
-        name="Clips"
+        name="Play"
         component={ReelFeedScreen}
-        options={{ tabBarAccessibilityLabel: 'Clips' }}
+        options={{ tabBarAccessibilityLabel: 'Play' }}
       />
       <Tab.Screen
         name="Flash"

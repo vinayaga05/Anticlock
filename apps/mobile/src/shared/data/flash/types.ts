@@ -39,10 +39,28 @@ export interface PostAuthor {
   followed?: boolean;
 }
 
+export interface ProfileHighlight {
+  id: string;
+  label: string;
+  imageUrl?: string;
+  isNew?: boolean;
+}
+
+export interface UserProfileMeta {
+  username: string;
+  bio?: string;
+  location?: string;
+  followerCount: number;
+  followingCount: number;
+  isPrivate?: boolean;
+  highlights?: ProfileHighlight[];
+}
+
 export interface PostMedia {
   id: string;
   type: 'image' | 'video';
-  url: string;
+  /** Remote URL or Metro `require()` asset id for bundled Canva / Stream clips. */
+  url: string | number;
   posterUrl?: string;
 }
 

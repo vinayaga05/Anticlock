@@ -9,16 +9,19 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '@/shared/hooks/useTheme';
-import { Card } from '@/shared/components/Card';
 import { AppIcon } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { FlashPost, PostVisibility } from '@/shared/data/flash/types';
 import { useEngagementStore } from '@/shared/services/engagementRepository';
 import { FlashActionRow } from '@/features/flash/components/FlashActionRow';
-import { ReactionPicker, REACTION_META } from '@/features/flash/components/ReactionPicker';
+import { FlashMediaCarousel } from '@/features/flash/components/FlashMediaCarousel';
+import { PostEndDivider } from '@/features/flash/components/PostEndDivider';
+import { ReactionPicker } from '@/features/flash/components/ReactionPicker';
 import { FlashShareSheet } from '@/features/flash/components/FlashShareSheet';
 import { conversations } from '@/shared/data/mocks';
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
+
+const CONTENT_PAD = 12;
 
 const VISIBILITY_LABEL: Record<PostVisibility, string> = {
   public: 'Public',
@@ -27,11 +30,6 @@ const VISIBILITY_LABEL: Record<PostVisibility, string> = {
   community: 'Community',
   only_me: 'Only me',
 };
-
-function formatCount(n: number) {
-  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}K`;
-  return String(n);
-}
 
 type Props = {
   post: FlashPost;
@@ -54,13 +52,8 @@ export function FlashPostCard({ post }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [reactionsOpen, setReactionsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [mediaReady, setMediaReady] = useState<Record<string, boolean>>({});
 
   const total = Object.values(post.reactionCounts).reduce((a, b) => a + (b ?? 0), 0);
-  const topReactions = REACTION_META.filter(r => (post.reactionCounts[r.id] ?? 0) > 0).slice(
-    0,
-    3,
-  );
   const longText = (post.text?.length ?? 0) > 160;
   const displayText =
     longText && !expanded ? `${post.text!.slice(0, 160)}…` : post.text;
@@ -125,134 +118,108 @@ export function FlashPostCard({ post }: Props) {
     }
   };
 
+  const openAuthorProfile = () =>
+    navigation.navigate('Profile', { userId: post.author.id });
+
   return (
-    <Card style={styles.card} elevated>
-      <View style={styles.header}>
-        <Image source={{ uri: post.author.avatarUrl }} style={styles.avatar} />
-        <View style={styles.headerMeta}>
-          <View style={styles.nameRow}>
+    <View style={[styles.post, { backgroundColor: theme.colors.background }]}>
+      <View style={styles.contentPad}>
+        <View style={styles.header}>
+          <PressableScale onPress={openAuthorProfile} accessibilityLabel={`Open ${post.author.name} profile`}>
+            <Image source={{ uri: post.author.avatarUrl }} style={styles.avatar} />
+          </PressableScale>
+          <View style={styles.headerMeta}>
+            <PressableScale onPress={openAuthorProfile} accessibilityLabel={`Open ${post.author.name} profile`}>
+              <View style={styles.nameRow}>
+                <Text
+                  style={[styles.authorName, { color: theme.colors.textPrimary }]}
+                  numberOfLines={1}>
+                  {post.author.name}
+                </Text>
+                {post.author.verified ? (
+                  <AppIcon name="verified" size={14} color={theme.colors.primary} strokeWidth={2} />
+                ) : null}
+              </View>
+            </PressableScale>
             <Text
-              style={[styles.authorName, { color: theme.colors.textPrimary }]}
+              style={[styles.metaText, { color: theme.colors.textTertiary }]}
               numberOfLines={1}>
-              {post.author.name}
+              {post.timeLabel} · {VISIBILITY_LABEL[post.visibility]}
+              {post.pinned ? ' · Pinned' : ''}
             </Text>
-            {post.author.verified ? (
-              <AppIcon name="verified" size={16} color={theme.colors.primary} strokeWidth={2} />
+            {post.communityName ? (
+              <PressableScale
+                onPress={() => navigation.navigate('Main', { screen: 'Community' })}
+                accessibilityLabel={`Open ${post.communityName}`}>
+                <Text style={[styles.metaText, { color: theme.colors.primary }]}>
+                  {post.communityName}
+                </Text>
+              </PressableScale>
             ) : null}
           </View>
-          <Text
-            style={[styles.metaText, { color: theme.colors.textTertiary }]}
-            numberOfLines={1}>
-            {post.timeLabel} · {VISIBILITY_LABEL[post.visibility]}
-            {post.pinned ? ' · Pinned' : ''}
-          </Text>
-          {post.communityName ? (
+          {!post.isOwn && !post.author.followed ? (
             <PressableScale
-              onPress={() => navigation.navigate('Main', { screen: 'Community' })}
-              accessibilityLabel={`Open ${post.communityName}`}>
-              <Text style={[styles.metaText, { color: theme.colors.primary }]}>
-                {post.communityName}
-              </Text>
+              onPress={() => followAuthor(post.author.id, true)}
+              scaleTo={0.96}
+              style={[
+                styles.follow,
+                {
+                  borderColor: theme.colors.primary,
+                  borderRadius: theme.radius.pill,
+                },
+              ]}>
+              <Text style={[styles.followLabel, { color: theme.colors.primary }]}>Follow</Text>
             </PressableScale>
           ) : null}
-        </View>
-        {!post.isOwn && !post.author.followed ? (
           <PressableScale
-            onPress={() => followAuthor(post.author.id, true)}
+            onPress={openMenu}
+            accessibilityLabel="Post menu"
             scaleTo={0.96}
+            style={styles.menuHit}>
+            <AppIcon name="more" size={20} color={theme.colors.textTertiary} strokeWidth={2} />
+          </PressableScale>
+        </View>
+
+        {displayText ? (
+          <Pressable onPress={() => longText && setExpanded(e => !e)} style={styles.bodyBlock}>
+            <Text style={[theme.typography.body, { color: theme.colors.textPrimary }]}>
+              {displayText}
+            </Text>
+            {longText ? (
+              <Text style={[styles.seeMore, { color: theme.colors.primary }]}>
+                {expanded ? 'Show less' : 'See more'}
+              </Text>
+            ) : null}
+          </Pressable>
+        ) : null}
+
+        {post.sharedClipTitle ? (
+          <View
             style={[
-              styles.follow,
+              styles.clipShare,
               {
-                borderColor: theme.colors.primary,
-                borderRadius: theme.radius.pill,
+                backgroundColor: theme.colors.surfaceMuted,
+                borderRadius: 8,
               },
             ]}>
-            <Text style={[styles.followLabel, { color: theme.colors.primary }]}>Follow</Text>
-          </PressableScale>
+            <AppIcon name="reels" size={18} color={theme.colors.primary} strokeWidth={2} />
+            <Text
+              style={[theme.typography.bodySmall, { color: theme.colors.textPrimary, flex: 1 }]}
+              numberOfLines={1}>
+              {post.sharedClipTitle}
+            </Text>
+          </View>
         ) : null}
-        <PressableScale
-          onPress={openMenu}
-          accessibilityLabel="Post menu"
-          scaleTo={0.96}
-          style={styles.menuHit}>
-          <AppIcon name="more" size={22} color={theme.colors.textTertiary} strokeWidth={2} />
-        </PressableScale>
       </View>
 
-      {displayText ? (
-        <Pressable onPress={() => longText && setExpanded(e => !e)} style={styles.bodyBlock}>
-          <Text style={[theme.typography.body, { color: theme.colors.textPrimary }]}>
-            {displayText}
-          </Text>
-          {longText ? (
-            <Text style={[styles.seeMore, { color: theme.colors.primary }]}>
-              {expanded ? 'Show less' : 'See more'}
-            </Text>
-          ) : null}
-        </Pressable>
-      ) : null}
-
-      {post.sharedClipTitle ? (
-        <View
-          style={[
-            styles.clipShare,
-            {
-              backgroundColor: theme.colors.surfaceMuted,
-              borderRadius: 18,
-            },
-          ]}>
-          <AppIcon name="reels" size={20} color={theme.colors.primary} strokeWidth={2} />
-          <Text
-            style={[theme.typography.bodySmall, { color: theme.colors.textPrimary, flex: 1 }]}
-            numberOfLines={1}>
-            {post.sharedClipTitle}
-          </Text>
-        </View>
-      ) : null}
-
-      {post.media.length > 0 ? (
-        <View style={styles.mediaRow}>
-          {post.media.slice(0, 2).map((m, idx) => (
-            <View
-              key={m.id}
-              style={[
-                styles.mediaItem,
-                post.media.length === 1 ? styles.mediaSingle : null,
-                { backgroundColor: theme.colors.surfaceMuted },
-              ]}>
-              <Image
-                source={{ uri: m.type === 'video' ? m.posterUrl ?? m.url : m.url }}
-                style={[styles.mediaImage, { opacity: mediaReady[m.id] ? 1 : 0 }]}
-                onLoad={() => setMediaReady(prev => ({ ...prev, [m.id]: true }))}
-              />
-              {m.type === 'video' ? (
-                <View style={styles.playBadge}>
-                  <AppIcon name="play" size={20} color="#fff" strokeWidth={2} fill="#fff" />
-                </View>
-              ) : null}
-              {idx === 1 && post.media.length > 2 ? (
-                <View style={styles.moreOverlay}>
-                  <Text style={styles.moreText}>+{post.media.length - 2}</Text>
-                </View>
-              ) : null}
-            </View>
-          ))}
-        </View>
-      ) : null}
+      {post.media.length > 0 ? <FlashMediaCarousel media={post.media} /> : null}
 
       {post.linkPreview ? (
-        <View
-          style={[
-            styles.link,
-            {
-              borderColor: theme.colors.border,
-              backgroundColor: theme.colors.surfaceMuted,
-            },
-          ]}>
+        <View style={[styles.link, { borderColor: theme.colors.border }]}>
           {post.linkPreview.imageUrl ? (
             <Image source={{ uri: post.linkPreview.imageUrl }} style={styles.linkImage} />
           ) : null}
-          <View style={styles.linkBody}>
+          <View style={[styles.linkBody, styles.contentPad]}>
             <Text style={[styles.metaText, { color: theme.colors.textTertiary }]} numberOfLines={1}>
               {post.linkPreview.url.replace(/^https?:\/\//, '')}
             </Text>
@@ -270,47 +237,12 @@ export function FlashPostCard({ post }: Props) {
         </View>
       ) : null}
 
-      <View style={styles.summary}>
-        <View style={styles.reactSummary}>
-          <View style={styles.reactStack}>
-            {topReactions.map((r, index) => (
-              <View
-                key={r.id}
-                style={[
-                  styles.reactBubble,
-                  {
-                    backgroundColor: theme.colors.surface,
-                    borderColor: theme.colors.background,
-                    marginLeft: index === 0 ? 0 : -6,
-                    zIndex: topReactions.length - index,
-                  },
-                ]}>
-                <AppIcon
-                  name={r.icon}
-                  size={11}
-                  color={r.color}
-                  strokeWidth={1.75}
-                  fill={r.id === 'like' || r.id === 'love' ? r.color : 'none'}
-                />
-              </View>
-            ))}
-          </View>
-          <Text
-            style={[styles.summaryText, { color: theme.colors.textSecondary }]}
-            numberOfLines={1}>
-            {formatCount(total)} reactions
-          </Text>
-        </View>
-        <Text
-          style={[styles.summaryRight, { color: theme.colors.textSecondary }]}
-          numberOfLines={1}>
-          {formatCount(post.commentCount)} comments
-        </Text>
-      </View>
-
       <FlashActionRow
         viewerReaction={post.viewerReaction}
         saved={post.saved}
+        likeCount={total}
+        commentCount={post.commentCount}
+        shareCount={post.shareCount}
         onLikePress={() => toggleLike(post.id)}
         onLikeLongPress={() => setReactionsOpen(true)}
         onComment={() =>
@@ -324,6 +256,8 @@ export function FlashPostCard({ post }: Props) {
         onShare={() => setShareOpen(true)}
         onSave={() => toggleSavePost(post.id)}
       />
+
+      <PostEndDivider id={post.id} />
 
       <ReactionPicker
         visible={reactionsOpen}
@@ -341,26 +275,30 @@ export function FlashPostCard({ post }: Props) {
           })
         }
       />
-    </Card>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    gap: 14,
-    borderRadius: 24,
-    padding: 16,
+  post: {
+    width: '100%',
+    paddingTop: 10,
+    gap: 8,
+  },
+  contentPad: {
+    paddingHorizontal: CONTENT_PAD,
+    gap: 8,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 48,
-    gap: 12,
+    minHeight: 40,
+    gap: 10,
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   headerMeta: {
     flex: 1,
@@ -374,12 +312,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   authorName: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '600',
     flexShrink: 1,
   },
   metaText: {
-    fontSize: 14,
+    fontSize: 13,
   },
   follow: {
     borderWidth: 1,
@@ -391,107 +329,37 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   menuHit: {
-    width: 44,
-    height: 44,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   bodyBlock: {
-    gap: 4,
+    gap: 2,
   },
   seeMore: {
     fontSize: 13,
     fontWeight: '600',
     marginTop: 2,
   },
-  mediaRow: {
-    flexDirection: 'row',
-    gap: 8,
-    width: '100%',
-  },
-  mediaItem: {
-    flex: 1,
-    aspectRatio: 16 / 9,
-    borderRadius: 18,
-    overflow: 'hidden',
-  },
-  mediaSingle: {
-    flex: 1,
-  },
-  mediaImage: {
-    width: '100%',
-    height: '100%',
-  },
-  playBadge: {
-    ...StyleSheet.absoluteFill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.28)',
-  },
-  moreOverlay: {
-    ...StyleSheet.absoluteFill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  moreText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 18,
-  },
   link: {
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 18,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   linkImage: {
     width: '100%',
-    aspectRatio: 16 / 9,
+    aspectRatio: 4 / 5,
   },
   linkBody: {
-    padding: 12,
+    paddingVertical: 10,
     gap: 2,
+    backgroundColor: 'transparent',
   },
   clipShare: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    padding: 12,
-  },
-  summary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginTop: -2,
-    paddingTop: 0,
-  },
-  reactSummary: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
-    flexShrink: 1,
-    minWidth: 0,
-  },
-  reactStack: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  reactBubble: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  summaryText: {
-    fontSize: 13,
-    flexShrink: 1,
-  },
-  summaryRight: {
-    fontSize: 13,
-    flexShrink: 1,
-    textAlign: 'right',
+    padding: 10,
   },
 });

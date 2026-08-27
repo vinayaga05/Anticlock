@@ -6,6 +6,7 @@ import { RootStackParamList } from '@/shared/navigation/types';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { SearchScreen } from '@/features/booking/screens/SearchScreen';
 import { ProfileScreen } from '@/features/booking/screens/ProfileScreen';
+import { UserProfileScreen } from '@/features/profile/screens/UserProfileScreen';
 import { DoctorsScreen } from '@/features/booking/screens/DoctorsScreen';
 import { DoctorProfileScreen } from '@/features/booking/screens/DoctorProfileScreen';
 import { DiagnosticsHubScreen } from '@/features/booking/screens/DiagnosticsHubScreen';
@@ -85,7 +86,16 @@ export function RootNavigator() {
           options={{ headerShown: false }}
         />
         <Stack.Screen name="Search" component={SearchScreen} options={{ title: 'Search' }} />
-        <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
+        <Stack.Screen
+          name="Profile"
+          component={UserProfileScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="AccountSettings"
+          component={ProfileScreen}
+          options={{ headerShown: false }}
+        />
         <Stack.Screen name="Doctors" component={DoctorsScreen} options={{ title: 'Doctors' }} />
         <Stack.Screen
           name="DoctorProfile"

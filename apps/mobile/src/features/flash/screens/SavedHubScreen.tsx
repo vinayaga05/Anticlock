@@ -12,7 +12,7 @@ import { useEngagementStore } from '@/shared/services/engagementRepository';
 const BUCKETS: { id: SavedContentKind | 'all'; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'flash', label: 'Flash Posts' },
-  { id: 'clip', label: 'Play' },
+  { id: 'clip', label: 'Clips' },
   { id: 'service', label: 'Services' },
   { id: 'product', label: 'Products' },
   { id: 'course', label: 'Courses' },

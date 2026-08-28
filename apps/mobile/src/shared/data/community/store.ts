@@ -1,56 +1,64 @@
 import { create } from 'zustand';
 import {
   seedChallenges,
-  seedClubs,
   seedJoinRequests,
   seedParticipations,
   seedPlayers,
+  seedTeams,
   eventChallengeLinks,
 } from './seed';
 import type {
   Challenge,
   ChallengeParticipation,
-  Club,
-  ClubJoinRequest,
-  ClubPlayer,
-  ClubPlayerRole,
+  Team,
+  TeamEligibility,
+  TeamJoinRequest,
+  TeamPlayer,
+  TeamPlayerRole,
 } from './types';
 import { CURRENT_USER_ID, CURRENT_USER_NAME } from './types';
 
 type CommunityState = {
-  clubs: Club[];
-  players: ClubPlayer[];
+  teams: Team[];
+  players: TeamPlayer[];
   challenges: Challenge[];
   participations: ChallengeParticipation[];
-  joinRequests: ClubJoinRequest[];
+  joinRequests: TeamJoinRequest[];
   eventChallengeMap: Record<string, string>;
 
-  getClub: (id: string) => Club | undefined;
+  getTeam: (id: string) => Team | undefined;
   getChallenge: (id: string) => Challenge | undefined;
-  getPlayersForClub: (clubId: string) => ClubPlayer[];
-  getChallengesForClub: (clubId: string) => Challenge[];
+  getPlayersForTeam: (teamId: string) => TeamPlayer[];
+  getChallengesForTeam: (teamId: string) => Challenge[];
+  getMyTeams: (userId?: string) => Team[];
+  getDiscoverTeams: (opts?: { sportTag?: string | null }) => Team[];
+  getPlayerCountForTeam: (teamId: string) => number;
   getParticipation: (
     challengeId: string,
     userId?: string,
   ) => ChallengeParticipation | undefined;
+  getParticipationsForChallenge: (challengeId: string) => ChallengeParticipation[];
+  getTeamsForChallenge: (challengeId: string) => Team[];
+  getEligibleTeamsForChallenge: (challengeId: string, userId?: string) => Team[];
+  getTeamEligibility: (teamId: string, challengeId: string) => TeamEligibility;
   getChallengeForEvent: (eventId: string) => Challenge | undefined;
-  isMember: (clubId: string, userId?: string) => boolean;
-  isClubAdmin: (clubId: string, userId?: string) => boolean;
+  isMember: (teamId: string, userId?: string) => boolean;
+  isTeamAdmin: (teamId: string, userId?: string) => boolean;
 
-  joinClub: (clubId: string) => 'joined' | 'requested' | 'already';
+  joinTeam: (teamId: string) => 'joined' | 'requested' | 'already';
   resolveJoinRequest: (requestId: string, accept: boolean) => void;
-  createClub: (input: {
+  createTeam: (input: {
     name: string;
     sport: string;
     location: string;
     description: string;
-  }) => Club;
+  }) => Team;
   upsertPlayer: (
-    clubId: string,
+    teamId: string,
     input: {
       id?: string;
       name: string;
-      role: ClubPlayerRole;
+      role: TeamPlayerRole;
       position?: string;
       jerseyNumber?: number;
       ageGroup?: string;
@@ -58,12 +66,12 @@ type CommunityState = {
       isCaptain?: boolean;
       isActive?: boolean;
     },
-  ) => ClubPlayer;
+  ) => TeamPlayer;
   removePlayer: (playerId: string) => void;
-  setCaptain: (clubId: string, playerId: string) => void;
+  setCaptain: (teamId: string, playerId: string) => void;
   joinChallenge: (
     challengeId: string,
-    opts?: { eventId?: string; clubId?: string },
+    opts?: { eventId?: string; teamId?: string },
   ) => ChallengeParticipation;
   linkEventToChallenge: (eventId: string, challengeId: string) => void;
 };
@@ -72,51 +80,120 @@ function uid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 }
 
+function sportMatches(team: Team, challenge: Challenge): boolean {
+  const tags = [team.sport, ...team.sportTags].map(t => t.toLowerCase());
+  const challengeTags = [challenge.category, ...challenge.sportTags].map(t =>
+    t.toLowerCase(),
+  );
+  return challengeTags.some(ct => tags.includes(ct));
+}
+
 export const useCommunityStore = create<CommunityState>((set, get) => ({
-  clubs: [...seedClubs],
+  teams: [...seedTeams],
   players: [...seedPlayers],
   challenges: [...seedChallenges],
   participations: [...seedParticipations],
   joinRequests: [...seedJoinRequests],
   eventChallengeMap: { ...eventChallengeLinks },
 
-  getClub: id => get().clubs.find(c => c.id === id),
+  getTeam: id => get().teams.find(t => t.id === id),
   getChallenge: id => get().challenges.find(c => c.id === id),
-  getPlayersForClub: clubId =>
-    get().players.filter(p => p.clubId === clubId && p.isActive !== false),
-  getChallengesForClub: clubId => {
-    const club = get().getClub(clubId);
-    if (!club) return [];
-    return get().challenges.filter(c => club.challengeIds.includes(c.id));
+  getPlayersForTeam: teamId =>
+    get().players.filter(p => p.teamId === teamId && p.isActive !== false),
+  getChallengesForTeam: teamId => {
+    const team = get().getTeam(teamId);
+    if (!team) return [];
+    return get().challenges.filter(c => team.challengeIds.includes(c.id));
   },
+  getMyTeams: (userId = CURRENT_USER_ID) =>
+    get().teams.filter(t => t.memberIds.includes(userId)),
+  getDiscoverTeams: ({ sportTag } = {}) => {
+    const mine = new Set(get().getMyTeams().map(t => t.id));
+    return get().teams.filter(t => {
+      if (mine.has(t.id)) return false;
+      if (!sportTag || sportTag === 'More') return true;
+      return (
+        t.sport.toLowerCase() === sportTag.toLowerCase() ||
+        t.sportTags.some(tag => tag.toLowerCase() === sportTag.toLowerCase())
+      );
+    });
+  },
+  getPlayerCountForTeam: teamId => get().getPlayersForTeam(teamId).length,
   getParticipation: (challengeId, userId = CURRENT_USER_ID) =>
     get().participations.find(
       p => p.challengeId === challengeId && p.userId === userId && p.status !== 'withdrawn',
     ),
+  getParticipationsForChallenge: challengeId =>
+    get().participations.filter(
+      p => p.challengeId === challengeId && p.status !== 'withdrawn',
+    ),
+  getTeamsForChallenge: challengeId => {
+    const teamIds = [
+      ...new Set(
+        get()
+          .getParticipationsForChallenge(challengeId)
+          .map(p => p.teamId)
+          .filter((id): id is string => !!id),
+      ),
+    ];
+    return teamIds.map(id => get().getTeam(id)).filter((t): t is Team => !!t);
+  },
+  getEligibleTeamsForChallenge: (challengeId, userId = CURRENT_USER_ID) =>
+    get()
+      .getMyTeams(userId)
+      .filter(t => get().getTeamEligibility(t.id, challengeId).eligible),
+  getTeamEligibility: (teamId, challengeId) => {
+    const team = get().getTeam(teamId);
+    const challenge = get().getChallenge(challengeId);
+    if (!team || !challenge) return { eligible: false, reason: 'Not found' };
+
+    if (!sportMatches(team, challenge)) {
+      return {
+        eligible: false,
+        reason: `Sport mismatch — needs ${challenge.category}`,
+      };
+    }
+
+    const count = get().getPlayerCountForTeam(teamId);
+    if (challenge.minTeamSize != null && count < challenge.minTeamSize) {
+      return {
+        eligible: false,
+        reason: `Not eligible — minimum ${challenge.minTeamSize} players`,
+      };
+    }
+    if (challenge.maxTeamSize != null && count > challenge.maxTeamSize) {
+      return {
+        eligible: false,
+        reason: `Not eligible — maximum ${challenge.maxTeamSize} players`,
+      };
+    }
+
+    return { eligible: true };
+  },
   getChallengeForEvent: eventId => {
     const challengeId = get().eventChallengeMap[eventId];
     if (!challengeId) return undefined;
     return get().getChallenge(challengeId);
   },
-  isMember: (clubId, userId = CURRENT_USER_ID) => {
-    const club = get().getClub(clubId);
-    return !!club?.memberIds.includes(userId);
+  isMember: (teamId, userId = CURRENT_USER_ID) => {
+    const team = get().getTeam(teamId);
+    return !!team?.memberIds.includes(userId);
   },
-  isClubAdmin: (clubId, userId = CURRENT_USER_ID) => {
-    const club = get().getClub(clubId);
-    if (!club) return false;
-    return club.ownerId === userId || club.adminIds.includes(userId);
+  isTeamAdmin: (teamId, userId = CURRENT_USER_ID) => {
+    const team = get().getTeam(teamId);
+    if (!team) return false;
+    return team.ownerId === userId || team.adminIds.includes(userId);
   },
 
-  joinClub: clubId => {
-    const club = get().getClub(clubId);
-    if (!club) return 'already';
-    if (club.memberIds.includes(CURRENT_USER_ID)) return 'already';
+  joinTeam: teamId => {
+    const team = get().getTeam(teamId);
+    if (!team) return 'already';
+    if (team.memberIds.includes(CURRENT_USER_ID)) return 'already';
 
-    if (club.joinPolicy === 'request') {
+    if (team.joinPolicy === 'request') {
       const exists = get().joinRequests.some(
         r =>
-          r.clubId === clubId &&
+          r.teamId === teamId &&
           r.userId === CURRENT_USER_ID &&
           r.status === 'pending',
       );
@@ -126,7 +203,7 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
           ...state.joinRequests,
           {
             id: uid('jr'),
-            clubId,
+            teamId,
             userId: CURRENT_USER_ID,
             userName: CURRENT_USER_NAME,
             requestedAt: new Date().toISOString().slice(0, 10),
@@ -138,14 +215,14 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
     }
 
     set(state => ({
-      clubs: state.clubs.map(c =>
-        c.id === clubId
+      teams: state.teams.map(t =>
+        t.id === teamId
           ? {
-              ...c,
-              memberIds: [...c.memberIds, CURRENT_USER_ID],
-              memberCount: c.memberCount + 1,
+              ...t,
+              memberIds: [...t.memberIds, CURRENT_USER_ID],
+              memberCount: t.memberCount + 1,
             }
-          : c,
+          : t,
       ),
     }));
     return 'joined';
@@ -161,27 +238,28 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
           ? { ...r, status: accept ? 'accepted' : 'rejected' }
           : r,
       ),
-      clubs: accept
-        ? state.clubs.map(c =>
-            c.id === req.clubId && !c.memberIds.includes(req.userId)
+      teams: accept
+        ? state.teams.map(t =>
+            t.id === req.teamId && !t.memberIds.includes(req.userId)
               ? {
-                  ...c,
-                  memberIds: [...c.memberIds, req.userId],
-                  memberCount: c.memberCount + 1,
+                  ...t,
+                  memberIds: [...t.memberIds, req.userId],
+                  memberCount: t.memberCount + 1,
                 }
-              : c,
+              : t,
           )
-        : state.clubs,
+        : state.teams,
     }));
   },
 
-  createClub: input => {
-    const club: Club = {
-      id: uid('club'),
+  createTeam: input => {
+    const team: Team = {
+      id: uid('team'),
       name: input.name,
-      logoUrl: seedClubs[0].logoUrl,
-      coverUrl: seedClubs[0].coverUrl,
+      logoUrl: seedTeams[0].logoUrl,
+      coverUrl: seedTeams[0].coverUrl,
       sport: input.sport,
+      sportTags: [input.sport],
       location: input.location,
       description: input.description,
       ownerId: CURRENT_USER_ID,
@@ -192,13 +270,13 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
       challengeIds: [],
       memberCount: 1,
     };
-    set(state => ({ clubs: [club, ...state.clubs] }));
-    return club;
+    set(state => ({ teams: [team, ...state.teams] }));
+    return team;
   },
 
-  upsertPlayer: (clubId, input) => {
+  upsertPlayer: (teamId, input) => {
     if (input.id) {
-      let updated!: ClubPlayer;
+      let updated!: TeamPlayer;
       set(state => ({
         players: state.players.map(p => {
           if (p.id !== input.id) return p;
@@ -215,19 +293,19 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
           };
           return updated;
         }),
-        clubs:
+        teams:
           input.isCaptain === true
-            ? state.clubs.map(c =>
-                c.id === clubId ? { ...c, captainPlayerId: input.id } : c,
+            ? state.teams.map(t =>
+                t.id === teamId ? { ...t, captainPlayerId: input.id } : t,
               )
-            : state.clubs,
+            : state.teams,
       }));
       return updated;
     }
 
-    const player: ClubPlayer = {
+    const player: TeamPlayer = {
       id: uid('pl'),
-      clubId,
+      teamId,
       name: input.name,
       role: input.role,
       position: input.position,
@@ -239,11 +317,11 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
     };
     set(state => ({
       players: [...state.players, player],
-      clubs: player.isCaptain
-        ? state.clubs.map(c =>
-            c.id === clubId ? { ...c, captainPlayerId: player.id } : c,
+      teams: player.isCaptain
+        ? state.teams.map(t =>
+            t.id === teamId ? { ...t, captainPlayerId: player.id } : t,
           )
-        : state.clubs,
+        : state.teams,
     }));
     return player;
   },
@@ -256,15 +334,13 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
     }));
   },
 
-  setCaptain: (clubId, playerId) => {
+  setCaptain: (teamId, playerId) => {
     set(state => ({
-      clubs: state.clubs.map(c =>
-        c.id === clubId ? { ...c, captainPlayerId: playerId } : c,
+      teams: state.teams.map(t =>
+        t.id === teamId ? { ...t, captainPlayerId: playerId } : t,
       ),
       players: state.players.map(p =>
-        p.clubId === clubId
-          ? { ...p, isCaptain: p.id === playerId }
-          : p,
+        p.teamId === teamId ? { ...p, isCaptain: p.id === playerId } : p,
       ),
     }));
   },
@@ -273,17 +349,28 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
     const existing = get().getParticipation(challengeId);
     if (existing) return existing;
 
+    const challenge = get().getChallenge(challengeId);
+    if (challenge?.requiresTeam && !opts?.teamId) {
+      throw new Error('Team required for this challenge');
+    }
+
     const participation: ChallengeParticipation = {
       id: uid('part'),
       challengeId,
       userId: CURRENT_USER_ID,
-      clubId: opts?.clubId,
+      teamId: opts?.teamId,
       eventId: opts?.eventId,
       joinedAt: new Date().toISOString().slice(0, 10),
       progress: 0,
       progressLabel: 'Just started',
       status: 'active',
     };
+
+    const teamAlreadyJoined =
+      opts?.teamId &&
+      get()
+        .getParticipationsForChallenge(challengeId)
+        .some(p => p.teamId === opts.teamId);
 
     set(state => ({
       participations: [...state.participations, participation],
@@ -292,6 +379,7 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
           ? {
               ...c,
               participantCount: c.participantCount + 1,
+              teamCount: teamAlreadyJoined ? c.teamCount : c.teamCount + (opts?.teamId ? 1 : 0),
               linkedEventIds:
                 opts?.eventId && !c.linkedEventIds.includes(opts.eventId)
                   ? [...c.linkedEventIds, opts.eventId]
@@ -299,10 +387,17 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
             }
           : c,
       ),
-      eventChallengeMap:
-        opts?.eventId
-          ? { ...state.eventChallengeMap, [opts.eventId]: challengeId }
-          : state.eventChallengeMap,
+      teams:
+        opts?.teamId && !teamAlreadyJoined
+          ? state.teams.map(t =>
+              t.id === opts.teamId && !t.challengeIds.includes(challengeId)
+                ? { ...t, challengeIds: [...t.challengeIds, challengeId] }
+                : t,
+            )
+          : state.teams,
+      eventChallengeMap: opts?.eventId
+        ? { ...state.eventChallengeMap, [opts.eventId]: challengeId }
+        : state.eventChallengeMap,
     }));
     return participation;
   },

@@ -10,7 +10,9 @@ import {
 import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { IconBadge } from '@/shared/components/IconBadge';
 import { PressableScale } from '@/shared/components/PressableScale';
+import { Glass } from '@/shared/components/Glass';
 import { softFill, treeColors, TreeColorId } from '@/shared/theme/colors';
+import { healthTheme } from '@/shared/theme/healthTheme';
 
 function CategoryVisual({
   category,
@@ -62,8 +64,40 @@ export function ServiceCategoryCard({
   const navigation = useNavigation<any>();
   const treeKey = (treeId in treeColors ? treeId : 'health') as TreeColorId;
   const accent = treeColors[treeKey].accent;
+  const isHealth = treeId === 'health';
 
   if (compact) {
+    const cardBody = (
+      <>
+        <CategoryVisual category={category} accent={accent} size={64} />
+        <Text
+          style={[
+            styles.compactTitle,
+            { color: isHealth ? healthTheme.text : theme.colors.textPrimary },
+          ]}
+          numberOfLines={2}>
+          {category.name}
+        </Text>
+      </>
+    );
+
+    if (isHealth) {
+      return (
+        <PressableScale
+          accessibilityLabel={category.name}
+          onPress={() =>
+            navigation.navigate('ServiceCategory', {
+              treeId,
+              categoryId: category.id,
+            })
+          }>
+          <Glass variant="health" intensity="medium" radius={healthTheme.radiusMd} elevated style={styles.compactHealth}>
+            {cardBody}
+          </Glass>
+        </PressableScale>
+      );
+    }
+
     return (
       <PressableScale
         accessibilityLabel={category.name}
@@ -82,12 +116,7 @@ export function ServiceCategoryCard({
             ...(theme.shadows.soft as object),
           },
         ]}>
-        <CategoryVisual category={category} accent={accent} size={64} />
-        <Text
-          style={[styles.compactTitle, { color: theme.colors.textPrimary }]}
-          numberOfLines={2}>
-          {category.name}
-        </Text>
+        {cardBody}
       </PressableScale>
     );
   }
@@ -141,9 +170,11 @@ export function ServiceCategoryGrid({
   compact?: boolean;
 }) {
   return (
-    <View style={styles.grid}>
+    <View style={[styles.grid, treeId === 'health' && styles.gridHealth]}>
       {categories.map(cat => (
-        <View key={cat.id} style={{ width: compact ? '31%' : '100%' }}>
+        <View
+          key={cat.id}
+          style={{ width: compact ? (treeId === 'health' ? '48%' : '31%') : '100%' }}>
           <ServiceCategoryCard
             category={cat}
             treeId={treeId as ServiceTreeId}
@@ -183,6 +214,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     lineHeight: 14,
+  },
+  compactHealth: {
+    width: '100%',
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    gap: 8,
+  },
+  gridHealth: {
+    gap: 12,
   },
   imageRing: {
     overflow: 'hidden',

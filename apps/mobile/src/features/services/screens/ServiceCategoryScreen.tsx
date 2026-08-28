@@ -2,6 +2,8 @@ import React, { useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
+import { HealthScreenShell } from '@/shared/components/HealthScreenShell';
+import { healthTheme } from '@/shared/theme/healthTheme';
 import { SearchBar } from '@/shared/components/SearchBar';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { FilterPills } from '@/shared/components/FilterPills';
@@ -30,7 +32,9 @@ export function ServiceCategoryScreen() {
   const treeKey = (
     treeId in treeColors ? treeId : category?.treeId ?? 'health'
   ) as TreeColorId;
-  const accent = treeColors[treeKey].accent;
+  const accent = treeKey === 'health' ? healthTheme.navy : treeColors[treeKey].accent;
+  const isHealth = treeKey === 'health';
+  const Shell = isHealth ? HealthScreenShell : ScreenContainer;
 
   useLayoutEffect(() => {
     if (category) navigation.setOptions({ title: category.name });
@@ -43,9 +47,9 @@ export function ServiceCategoryScreen() {
 
   if (!category) {
     return (
-      <ScreenContainer tabAware={false}>
+      <Shell tabAware={false}>
         <EmptyState icon="search" title="Category not found" illustration="search" />
-      </ScreenContainer>
+      </Shell>
     );
   }
 
@@ -61,7 +65,7 @@ export function ServiceCategoryScreen() {
     category.actionType === 'service_request';
 
   return (
-    <ScreenContainer scrollable tabAware={false}>
+    <Shell scrollable tabAware={false}>
       <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>
         {category.description}
       </Text>
@@ -142,6 +146,7 @@ export function ServiceCategoryScreen() {
           <ProviderCard
             key={provider.id}
             provider={provider}
+            health={isHealth}
             onPress={() => {
               if (category.legacyRoute === 'Doctors' && provider.id === 'prov-doc-remya') {
                 navigation.navigate('DoctorProfile', { doctorId: 'doc-remya' });
@@ -170,7 +175,7 @@ export function ServiceCategoryScreen() {
           />
         ))
       )}
-    </ScreenContainer>
+    </Shell>
   );
 }
 

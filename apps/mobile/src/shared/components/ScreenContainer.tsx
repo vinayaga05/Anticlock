@@ -1,7 +1,9 @@
 import React, { PropsWithChildren } from 'react';
 import { ScrollView, StyleSheet, View, ViewStyle } from 'react-native';
-import { SafeAreaView, Edge } from 'react-native-safe-area-context';
+import { SafeAreaView, Edge, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/shared/hooks/useTheme';
+import { healthTheme } from '@/shared/theme/healthTheme';
+import { getTabBarBottomInset } from '@/shared/navigation/tabBarInset';
 
 interface ScreenContainerProps extends PropsWithChildren {
   scrollable?: boolean;
@@ -10,6 +12,8 @@ interface ScreenContainerProps extends PropsWithChildren {
   edges?: Edge[];
   /** When false (stack screens with a nav header), skip top safe-area inset. */
   tabAware?: boolean;
+  /** Clinical soft-blue backdrop for health flows. */
+  variant?: 'default' | 'health';
 }
 
 export function ScreenContainer({
@@ -19,9 +23,12 @@ export function ScreenContainer({
   contentStyle,
   edges,
   tabAware = true,
+  variant = 'default',
 }: ScreenContainerProps) {
   const theme = useTheme();
-  const bottomPad = tabAware ? 100 : theme.spacing.lg;
+  const insets = useSafeAreaInsets();
+  const isHealth = variant === 'health';
+  const bottomPad = tabAware ? getTabBarBottomInset(insets.bottom) : theme.spacing.lg;
 
   // Stack screens already get top inset from the native header — don't double it.
   const resolvedEdges: Edge[] =
@@ -46,7 +53,12 @@ export function ScreenContainer({
   return (
     <SafeAreaView
       edges={resolvedEdges}
-      style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
+      style={[
+        styles.safeArea,
+        {
+          backgroundColor: isHealth ? healthTheme.background : theme.colors.background,
+        },
+      ]}>
       {scrollable ? (
         <ScrollView
           keyboardShouldPersistTaps="handled"

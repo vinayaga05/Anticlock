@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Alert, Image, StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+import { useShallow } from 'zustand/react/shallow';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { AppHeader } from '@/shared/components/AppHeader';
 import { Button } from '@/shared/components/Button';
@@ -23,42 +24,43 @@ import { RootStackParamList } from '@/shared/navigation/types';
 export function ClubDetailScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
-  const route = useRoute<RouteProp<RootStackParamList, 'ClubDetail'>>();
-  const { clubId } = route.params;
+  const route = useRoute<RouteProp<RootStackParamList, 'TeamDetail'>>();
+  const { teamId } = route.params;
 
-  const club = useCommunityStore(s => s.getClub(clubId));
-  const players = useCommunityStore(s => s.getPlayersForClub(clubId));
-  const challenges = useCommunityStore(s => s.getChallengesForClub(clubId));
-  const isMember = useCommunityStore(s => s.isMember(clubId));
-  const isAdmin = useCommunityStore(s => s.isClubAdmin(clubId));
-  const joinClub = useCommunityStore(s => s.joinClub);
+  const team = useCommunityStore(s => s.getTeam(teamId));
+  const players = useCommunityStore(useShallow(s => s.getPlayersForTeam(teamId)));
+  const playerCount = useCommunityStore(s => s.getPlayerCountForTeam(teamId));
+  const challenges = useCommunityStore(useShallow(s => s.getChallengesForTeam(teamId)));
+  const isMember = useCommunityStore(s => s.isMember(teamId));
+  const isAdmin = useCommunityStore(s => s.isTeamAdmin(teamId));
+  const joinTeam = useCommunityStore(s => s.joinTeam);
   const joinRequests = useCommunityStore(s => s.joinRequests);
 
   const pendingRequest = useMemo(
     () =>
       joinRequests.find(
         r =>
-          r.clubId === clubId &&
+          r.teamId === teamId &&
           r.userId === CURRENT_USER_ID &&
           r.status === 'pending',
       ),
-    [joinRequests, clubId],
+    [joinRequests, teamId],
   );
 
   const pendingCount = useMemo(
     () =>
-      joinRequests.filter(r => r.clubId === clubId && r.status === 'pending').length,
-    [joinRequests, clubId],
+      joinRequests.filter(r => r.teamId === teamId && r.status === 'pending').length,
+    [joinRequests, teamId],
   );
 
-  const coach = players.find(p => p.id === club?.coachPlayerId);
-  const captain = players.find(p => p.id === club?.captainPlayerId);
-  const rosterPreview = players.slice(0, 3);
-  const events = (club?.eventIds ?? [])
+  const coach = players.find(p => p.id === team?.coachPlayerId);
+  const captain = players.find(p => p.id === team?.captainPlayerId);
+  const rosterPreview = players.slice(0, 4);
+  const events = (team?.eventIds ?? [])
     .map(id => getEvent(id))
     .filter((e): e is NonNullable<typeof e> => !!e);
 
-  if (!club) {
+  if (!team) {
     return (
       <ScreenContainer tabAware={false}>
         <AppHeader title="Team" showBrand={false} showActions={false} />
@@ -68,9 +70,9 @@ export function ClubDetailScreen() {
   }
 
   const onJoin = () => {
-    const result = joinClub(clubId);
+    const result = joinTeam(teamId);
     if (result === 'joined') {
-      Alert.alert('Joined', `Welcome to ${club.name}.`);
+      Alert.alert('Joined', `Welcome to ${team.name}.`);
     } else if (result === 'requested') {
       Alert.alert('Request sent', 'An admin will review your join request.');
     }
@@ -80,30 +82,41 @@ export function ClubDetailScreen() {
     ? 'Joined'
     : pendingRequest
       ? 'Request pending'
-      : club.joinPolicy === 'request'
+      : team.joinPolicy === 'request'
         ? 'Request to join'
         : 'Join team';
 
   return (
     <ScreenContainer scrollable tabAware={false} contentStyle={{ gap: 14 }}>
-      <AppHeader title={club.name} showBrand={false} showActions={false} />
+      <AppHeader title={team.name} showBrand={false} showActions={false} />
 
       <View style={styles.heroWrap}>
-        <Image source={{ uri: club.coverUrl }} style={styles.cover} />
-        <Image source={{ uri: club.logoUrl }} style={styles.logo} />
+        <Image source={{ uri: team.coverUrl }} style={styles.cover} />
+        <Image source={{ uri: team.logoUrl }} style={styles.logo} />
       </View>
 
       <View style={{ gap: 4 }}>
         <Text style={[theme.typography.largeTitle, { color: theme.colors.textPrimary }]}>
-          {club.name}
+          {team.name}
         </Text>
         <Text style={[theme.typography.body, { color: theme.colors.textSecondary }]}>
-          {club.sport} · {club.location}
+          {team.sport} · {team.location}
         </Text>
+        <View style={styles.tagRow}>
+          {team.sportTags.map(tag => (
+            <View
+              key={tag}
+              style={[styles.tag, { backgroundColor: theme.colors.primarySoft, borderRadius: theme.radius.pill }]}>
+              <Text style={[theme.typography.caption, { color: theme.colors.primary, fontWeight: '700' }]}>
+                {tag}
+              </Text>
+            </View>
+          ))}
+        </View>
         <View style={styles.metaRow}>
           <AppIcon name="users" size={14} color={theme.colors.primary} />
           <Text style={[theme.typography.caption, { color: theme.colors.textTertiary }]}>
-            {club.memberCount} members
+            {playerCount} players · {team.memberCount} members
           </Text>
         </View>
       </View>
@@ -125,7 +138,7 @@ export function ClubDetailScreen() {
               }
               variant="secondary"
               icon="users"
-              onPress={() => navigation.navigate('ClubJoinRequests', { clubId })}
+              onPress={() => navigation.navigate('TeamJoinRequests', { teamId })}
             />
           </View>
           <View style={{ flex: 1 }}>
@@ -133,7 +146,7 @@ export function ClubDetailScreen() {
               title="Add player"
               icon="plus"
               variant="secondary"
-              onPress={() => navigation.navigate('ClubPlayerForm', { clubId })}
+              onPress={() => navigation.navigate('TeamPlayerForm', { teamId })}
             />
           </View>
         </View>
@@ -144,7 +157,7 @@ export function ClubDetailScreen() {
           About
         </Text>
         <Text style={[theme.typography.body, { color: theme.colors.textSecondary }]}>
-          {club.description}
+          {team.description}
         </Text>
         {coach || captain ? (
           <View style={{ gap: 6, marginTop: 4 }}>
@@ -164,9 +177,9 @@ export function ClubDetailScreen() {
 
       <View style={{ gap: 10 }}>
         <SectionHeader
-          title="Roster"
+          title="Player roster"
           actionLabel="See all"
-          onAction={() => navigation.navigate('ClubRoster', { clubId })}
+          onAction={() => navigation.navigate('TeamRoster', { teamId })}
         />
         {rosterPreview.length === 0 ? (
           <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>
@@ -180,8 +193,8 @@ export function ClubDetailScreen() {
               onPress={
                 isAdmin
                   ? () =>
-                      navigation.navigate('ClubPlayerForm', {
-                        clubId,
+                      navigation.navigate('TeamPlayerForm', {
+                        teamId,
                         playerId: player.id,
                       })
                   : undefined
@@ -191,9 +204,24 @@ export function ClubDetailScreen() {
         )}
       </View>
 
+      {challenges.length > 0 ? (
+        <View style={{ gap: 10 }}>
+          <SectionHeader title="Upcoming challenges" />
+          {challenges.map(challenge => (
+            <ChallengeCard
+              key={challenge.id}
+              challenge={challenge}
+              onPress={() =>
+                navigation.navigate('ChallengeDetail', { challengeId: challenge.id })
+              }
+            />
+          ))}
+        </View>
+      ) : null}
+
       {events.length > 0 ? (
         <View style={{ gap: 10 }}>
-          <SectionHeader title="Events" />
+          <SectionHeader title="Team activity" />
           {events.map(event => (
             <Card
               key={event.id}
@@ -215,21 +243,6 @@ export function ClubDetailScreen() {
           ))}
         </View>
       ) : null}
-
-      {challenges.length > 0 ? (
-        <View style={{ gap: 10 }}>
-          <SectionHeader title="Challenges" />
-          {challenges.map(challenge => (
-            <ChallengeCard
-              key={challenge.id}
-              challenge={challenge}
-              onPress={() =>
-                navigation.navigate('ChallengeDetail', { challengeId: challenge.id })
-              }
-            />
-          ))}
-        </View>
-      ) : null}
     </ScreenContainer>
   );
 }
@@ -248,6 +261,8 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
     backgroundColor: '#EEE',
   },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  tag: { paddingHorizontal: 10, paddingVertical: 4 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   adminRow: { flexDirection: 'row', gap: 10 },
   eventRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },

@@ -42,3 +42,22 @@ export const glassDark = {
   },
   blurAmount: 20,
 };
+
+export const healthGlass = {
+  light: {
+    background: 'rgba(255, 255, 255, 0.42)',
+    border: 'rgba(255, 255, 255, 0.62)',
+    highlight: 'rgba(255, 255, 255, 0.72)',
+  },
+  medium: {
+    background: 'rgba(255, 255, 255, 0.62)',
+    border: 'rgba(255, 255, 255, 0.78)',
+    highlight: '#fff',
+  },
+  heavy: {
+    background: 'rgba(255, 255, 255, 0.84)',
+    border: 'rgba(255, 255, 255, 0.92)',
+    highlight: '#fff',
+  },
+  blurAmount: 20,
+};

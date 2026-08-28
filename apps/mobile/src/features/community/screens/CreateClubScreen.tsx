@@ -11,7 +11,7 @@ import { useCommunityStore } from '@/shared/data/community';
 export function CreateClubScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
-  const createClub = useCommunityStore(s => s.createClub);
+  const createTeam = useCommunityStore(s => s.createTeam);
 
   const [name, setName] = useState('');
   const [sport, setSport] = useState('');
@@ -33,13 +33,13 @@ export function CreateClubScreen() {
       Alert.alert('Missing details', 'Name, sport, and location are required.');
       return;
     }
-    const club = createClub({
+    const team = createTeam({
       name: name.trim(),
       sport: sport.trim(),
       location: location.trim(),
       description: description.trim() || `${sport.trim()} team in ${location.trim()}.`,
     });
-    navigation.replace('ClubDetail', { clubId: club.id });
+    navigation.replace('TeamDetail', { teamId: team.id });
   };
 
   return (
@@ -47,11 +47,11 @@ export function CreateClubScreen() {
       <AppHeader title="Create team" showBrand={false} showActions={false} />
 
       <Card style={{ gap: 12 }}>
-        <Field label="Name">
+        <Field label="Team name">
           <TextInput
             value={name}
             onChangeText={setName}
-            placeholder="Coastal Runners"
+            placeholder="Chennai Strikers"
             placeholderTextColor={theme.colors.textTertiary}
             style={inputStyle}
           />
@@ -60,7 +60,7 @@ export function CreateClubScreen() {
           <TextInput
             value={sport}
             onChangeText={setSport}
-            placeholder="Running"
+            placeholder="Cricket"
             placeholderTextColor={theme.colors.textTertiary}
             style={inputStyle}
           />

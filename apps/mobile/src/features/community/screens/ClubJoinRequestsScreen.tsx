@@ -12,19 +12,19 @@ import { RootStackParamList } from '@/shared/navigation/types';
 
 export function ClubJoinRequestsScreen() {
   const theme = useTheme();
-  const route = useRoute<RouteProp<RootStackParamList, 'ClubJoinRequests'>>();
-  const { clubId } = route.params;
+  const route = useRoute<RouteProp<RootStackParamList, 'TeamJoinRequests'>>();
+  const { teamId } = route.params;
 
-  const club = useCommunityStore(s => s.getClub(clubId));
+  const team = useCommunityStore(s => s.getTeam(teamId));
   const joinRequests = useCommunityStore(s => s.joinRequests);
   const resolveJoinRequest = useCommunityStore(s => s.resolveJoinRequest);
 
   const pending = useMemo(
-    () => joinRequests.filter(r => r.clubId === clubId && r.status === 'pending'),
-    [joinRequests, clubId],
+    () => joinRequests.filter(r => r.teamId === teamId && r.status === 'pending'),
+    [joinRequests, teamId],
   );
 
-  if (!club) {
+  if (!team) {
     return (
       <ScreenContainer tabAware={false}>
         <AppHeader title="Join requests" showBrand={false} showActions={false} />
@@ -37,7 +37,7 @@ export function ClubJoinRequestsScreen() {
     <ScreenContainer scrollable tabAware={false} contentStyle={{ gap: 12 }}>
       <AppHeader title="Join requests" showBrand={false} showActions={false} />
       <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>
-        Pending requests for {club.name}
+        Pending requests for {team.name}
       </Text>
 
       {pending.length === 0 ? (

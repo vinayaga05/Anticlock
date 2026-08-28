@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+import { useShallow } from 'zustand/react/shallow';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { AppHeader } from '@/shared/components/AppHeader';
 import { Button } from '@/shared/components/Button';
@@ -24,6 +25,13 @@ export function ChallengeDetailScreen() {
 
   const challenge = useCommunityStore(s => s.getChallenge(challengeId));
   const participation = useCommunityStore(s => s.getParticipation(challengeId));
+  const eligibleTeams = useCommunityStore(
+    useShallow(s => s.getEligibleTeamsForChallenge(challengeId)),
+  );
+  const participatingTeams = useCommunityStore(
+    useShallow(s => s.getTeamsForChallenge(challengeId)),
+  );
+  const getTeam = useCommunityStore(s => s.getTeam);
 
   if (!challenge) {
     return (
@@ -45,6 +53,11 @@ export function ChallengeDetailScreen() {
     .map(id => getEvent(id))
     .filter((e): e is NonNullable<typeof e> => !!e);
 
+  const primaryEligible = eligibleTeams[0];
+  const participationTeam = participation?.teamId
+    ? getTeam(participation.teamId)
+    : undefined;
+
   return (
     <ScreenContainer scrollable tabAware={false} contentStyle={{ gap: 14 }}>
       <AppHeader title="Challenge" showBrand={false} showActions={false} />
@@ -62,24 +75,31 @@ export function ChallengeDetailScreen() {
           {challenge.title}
         </Text>
         <Text style={[theme.typography.body, { color: theme.colors.textSecondary }]}>
-          Organized by {challenge.organizerName}
+          {challenge.category} · Organized by {challenge.organizerName}
         </Text>
       </View>
 
       <Card style={{ gap: 8 }}>
         <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>
-          Goal
+          Schedule & location
         </Text>
         <Text style={[theme.typography.body, { color: theme.colors.textSecondary }]}>
-          {challenge.goalLabel}
-        </Text>
-        <Text style={[theme.typography.caption, { color: theme.colors.textTertiary }]}>
           {challenge.startDate} – {challenge.endDate}
         </Text>
+        <Text style={[theme.typography.caption, { color: theme.colors.textTertiary }]}>
+          {challenge.location}
+        </Text>
+        {challenge.minTeamSize != null && challenge.maxTeamSize != null ? (
+          <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
+            Team size: {challenge.minTeamSize}–{challenge.maxTeamSize}
+          </Text>
+        ) : null}
         <View style={styles.metaRow}>
           <AppIcon name="users" size={14} color={theme.colors.primary} />
           <Text style={[theme.typography.caption, { color: theme.colors.textTertiary }]}>
-            {challenge.participantCount.toLocaleString()} participants
+            {challenge.requiresTeam
+              ? `${challenge.teamCount} teams joined`
+              : `${challenge.participantCount.toLocaleString()} participants`}
           </Text>
         </View>
       </Card>
@@ -92,7 +112,7 @@ export function ChallengeDetailScreen() {
           {challenge.description}
         </Text>
         <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>
-          {challenge.rules}
+          Rules · {challenge.rules}
         </Text>
         <Text style={[theme.typography.caption, { color: theme.colors.textTertiary }]}>
           Eligibility · {challenge.eligibility}
@@ -112,6 +132,45 @@ export function ChallengeDetailScreen() {
             </Text>
           ))}
         </Card>
+      ) : null}
+
+      {primaryEligible && !participation ? (
+        <Card style={{ gap: 6, backgroundColor: theme.colors.primarySoft }}>
+          <Text style={[theme.typography.section, { color: theme.colors.primary }]}>
+            Your eligible team
+          </Text>
+          <Text style={[theme.typography.body, { color: theme.colors.textPrimary, fontWeight: '700' }]}>
+            {primaryEligible.name}
+          </Text>
+          <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
+            {primaryEligible.sport} · {primaryEligible.location}
+          </Text>
+        </Card>
+      ) : null}
+
+      {participatingTeams.length > 0 ? (
+        <View style={{ gap: 10 }}>
+          <SectionHeader title="Teams participating" />
+          {participatingTeams.map(team => (
+            <Card
+              key={team.id}
+              onPress={() => navigation.navigate('TeamDetail', { teamId: team.id })}
+              style={styles.teamRow}>
+              <Image source={{ uri: team.logoUrl }} style={styles.teamThumb} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text
+                  style={[theme.typography.body, { color: theme.colors.textPrimary, fontWeight: '700' }]}
+                  numberOfLines={1}>
+                  {team.name}
+                </Text>
+                <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
+                  {team.sport} · {team.location}
+                </Text>
+              </View>
+              <AppIcon name="chevron-right" size={18} color={theme.colors.textTertiary} />
+            </Card>
+          ))}
+        </View>
       ) : null}
 
       {linkedEvents.length > 0 ? (
@@ -147,6 +206,11 @@ export function ChallengeDetailScreen() {
           <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>
             Your participation
           </Text>
+          {participationTeam ? (
+            <Text style={[theme.typography.body, { color: theme.colors.textSecondary }]}>
+              Team · {participationTeam.name}
+            </Text>
+          ) : null}
           <Text style={[theme.typography.body, { color: theme.colors.textSecondary }]}>
             Status · {participation.status}
           </Text>
@@ -154,19 +218,12 @@ export function ChallengeDetailScreen() {
             <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>
               Progress · {participation.progressLabel} ({participation.progress}%)
             </Text>
-          ) : (
-            <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>
-              Progress · {participation.progress}%
-            </Text>
-          )}
+          ) : null}
           {participation.eventId ? (
             <Text style={[theme.typography.caption, { color: theme.colors.textTertiary }]}>
               Linked event · {getEvent(participation.eventId)?.title ?? participation.eventId}
             </Text>
           ) : null}
-          <Text style={[theme.typography.caption, { color: theme.colors.textTertiary }]}>
-            Joined {participation.joinedAt}
-          </Text>
         </Card>
       ) : challenge.status !== 'cancelled' && challenge.status !== 'completed' ? (
         <Button
@@ -191,6 +248,8 @@ const styles = StyleSheet.create({
   },
   statusChipText: { fontSize: 11, fontWeight: '800' },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  teamRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  teamThumb: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#EEE' },
   eventRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   eventThumb: { width: 52, height: 52, borderRadius: 12, backgroundColor: '#EEE' },
 });

@@ -8,6 +8,8 @@ import {
   type NeedsShowcaseItem,
 } from '@/shared/data/services';
 import { PressableScale } from '@/shared/components/PressableScale';
+import { Glass } from '@/shared/components/Glass';
+import { healthTheme } from '@/shared/theme/healthTheme';
 
 const COLS = 3;
 const GAP = 6;
@@ -50,21 +52,15 @@ function NeedsShowcaseCardView({ card }: { card: NeedsShowcaseCard }) {
   const theme = useTheme();
   const navigation = useNavigation<any>();
 
-  return (
-    <PressableScale
-      accessibilityLabel={card.title}
-      onPress={() => navigation.navigate('ServiceTree', { treeId: card.treeId })}
-      style={[
-        styles.card,
-        {
-          backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.borderSoft,
-          borderRadius: theme.radius.lg,
-          ...(theme.shadows.soft as object),
-        },
-      ]}>
+  const isHealth = card.treeId === 'health';
+
+  const inner = (
+    <>
       <Text
-        style={[styles.cardTitle, { color: theme.colors.textPrimary }]}
+        style={[
+          styles.cardTitle,
+          { color: isHealth ? healthTheme.navy : theme.colors.textPrimary },
+        ]}
         numberOfLines={2}>
         {card.title}
       </Text>
@@ -82,6 +78,35 @@ function NeedsShowcaseCardView({ card }: { card: NeedsShowcaseCard }) {
           />
         ))}
       </View>
+    </>
+  );
+
+  if (isHealth) {
+    return (
+      <PressableScale
+        accessibilityLabel={card.title}
+        onPress={() => navigation.navigate('ServiceTree', { treeId: card.treeId })}>
+        <Glass variant="health" intensity="heavy" radius={healthTheme.radiusMd} elevated style={styles.healthCard}>
+          {inner}
+        </Glass>
+      </PressableScale>
+    );
+  }
+
+  return (
+    <PressableScale
+      accessibilityLabel={card.title}
+      onPress={() => navigation.navigate('ServiceTree', { treeId: card.treeId })}
+      style={[
+        styles.card,
+        {
+          backgroundColor: theme.colors.surface,
+          borderColor: theme.colors.borderSoft,
+          borderRadius: theme.radius.lg,
+          ...(theme.shadows.soft as object),
+        },
+      ]}>
+      {inner}
     </PressableScale>
   );
 }
@@ -132,6 +157,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     paddingBottom: 6,
     borderWidth: StyleSheet.hairlineWidth,
+    gap: 6,
+  },
+  healthCard: {
+    width: '100%',
+    paddingTop: 8,
+    paddingHorizontal: 2,
+    paddingBottom: 6,
     gap: 6,
   },
   cardTitle: {

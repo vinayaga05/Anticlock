@@ -7,45 +7,56 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useTheme } from '@/shared/hooks/useTheme';
+import { healthTheme } from '@/shared/theme/healthTheme';
 
 type Intensity = 'light' | 'medium' | 'heavy';
+type GlassVariant = 'default' | 'health';
 
 type GlassProps = PropsWithChildren<
   ViewProps & {
     intensity?: Intensity;
+    variant?: GlassVariant;
     style?: ViewStyle | ViewStyle[];
     blur?: boolean;
     radius?: number;
+    elevated?: boolean;
   }
 >;
 
 /**
- * Soft translucent surface. BlurView is disabled by default because
- * @react-native-community/blur often renders "Unimplemented component"
- * under New Architecture — solid translucent fill keeps UI stable.
+ * Soft translucent surface. Health variant uses CliniQ-style frosted panels.
  */
 export function Glass({
   children,
   intensity = 'medium',
+  variant = 'default',
   style,
   blur: _blur = false,
   radius,
+  elevated = false,
   ...rest
 }: GlassProps) {
   const theme = useTheme();
-  const glass = theme.glass[intensity];
-  const borderRadius = radius ?? theme.radius.xl;
+  const tokens =
+    variant === 'health' ? theme.healthGlass[intensity] : theme.glass[intensity];
+  const borderRadius = radius ?? (variant === 'health' ? healthTheme.radiusMd : theme.radius.xl);
+  const shadow =
+    variant === 'health' && elevated
+      ? theme.shadows.healthSoft
+      : Platform.OS === 'ios'
+        ? theme.shadows.soft
+        : null;
 
   return (
     <View
       style={[
         styles.inner,
         {
-          backgroundColor: glass.background,
-          borderColor: glass.border,
+          backgroundColor: tokens.background,
+          borderColor: tokens.border,
           borderRadius,
         },
-        Platform.OS === 'ios' ? theme.shadows.soft : null,
+        shadow,
         style,
       ]}
       {...rest}>

@@ -3,7 +3,7 @@ import { spacing } from './spacing';
 import { radius } from './radius';
 import { typography } from './typography';
 import { shadows } from './shadows';
-import { glass, glassDark, motion } from './motion';
+import { glass, glassDark, motion, healthGlass } from './motion';
 
 const icons = {
   stroke: 1.75,
@@ -23,6 +23,7 @@ export const lightTheme = {
   typography,
   shadows,
   glass,
+  healthGlass,
   motion,
   icons,
 };
@@ -35,10 +36,12 @@ export const darkTheme = {
   typography,
   shadows,
   glass: glassDark,
+  healthGlass,
   motion,
   icons,
 };
 
 export type AppTheme = typeof lightTheme | typeof darkTheme;
 
-export { palette, softFill, treeColors, spacing, radius, typography, shadows, motion };
+export { palette, softFill, treeColors, spacing, radius, typography, shadows, motion, healthGlass };
+export { healthTheme } from './healthTheme';

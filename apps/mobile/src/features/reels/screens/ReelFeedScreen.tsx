@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import {
   Dimensions,
   FlatList,
+  Image,
   RefreshControl,
   StyleSheet,
   Text,
@@ -23,6 +24,13 @@ import { useReelsQuery } from '@/shared/api/hooks';
 import { TAB_BAR_VISIBLE_HEIGHT } from '@/shared/navigation/FloatingPillTabBar';
 
 const { height: WINDOW_HEIGHT, width: WINDOW_WIDTH } = Dimensions.get('window');
+
+const DEFAULT_AUTHOR_AVATAR =
+  'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&h=200&q=80';
+
+function getAuthorAvatar(item: ReelItem) {
+  return item.authorAvatarUrl ?? DEFAULT_AUTHOR_AVATAR;
+}
 
 function formatCount(n: number) {
   if (!Number.isFinite(n) || n < 0) return '0';
@@ -243,16 +251,11 @@ export function ReelFeedScreen() {
         </View>
         <View style={[styles.topBar, { paddingTop: insets.top + 6 }]}>
           <TopChromeButton
-            icon="profile"
-            accessibilityLabel="Profile"
-            onPress={() => navigation.navigate('Profile')}
+            icon="search"
+            accessibilityLabel="Search"
+            onPress={() => navigation.navigate('Search')}
           />
           <View style={styles.topRightCluster}>
-            <TopChromeButton
-              icon="search"
-              accessibilityLabel="Search"
-              onPress={() => navigation.navigate('Search')}
-            />
             <PressableScale
               accessibilityLabel="Coins"
               onPress={() => {}}
@@ -265,10 +268,15 @@ export function ReelFeedScreen() {
               accessibilityLabel="Create"
               onPress={() => navigation.navigate('FlashComposer')}
             />
+            <TopChromeButton
+              icon="profile"
+              accessibilityLabel="Profile"
+              onPress={() => navigation.navigate('Profile')}
+            />
           </View>
         </View>
 
-        {/* Right engagement only */}
+        {/* Right engagement */}
         <View style={[styles.sideActions, { bottom: bottomSafe + 72 }]}>
           <SideAction
             icon="heart"
@@ -300,7 +308,7 @@ export function ReelFeedScreen() {
           />
         </View>
 
-        {/* Bottom fade + meta + CTA */}
+        {/* Bottom fade + meta */}
         <View
           style={[styles.bottomFade, { height: bottomFadeH }]}
           pointerEvents="none">
@@ -311,8 +319,17 @@ export function ReelFeedScreen() {
             styles.meta,
             { bottom: bottomSafe, paddingRight: 78 },
           ]}>
-          <Text style={styles.creator}>@{item.author}</Text>
-          <Text style={styles.caption} numberOfLines={2}>
+          <PressableScale
+            accessibilityLabel={`Open ${item.author} profile`}
+          onPress={() => navigation.navigate('Profile')}
+          style={styles.creatorRow}>
+            <Image
+              source={{ uri: getAuthorAvatar(item) }}
+              style={styles.creatorAvatar}
+            />
+            <Text style={styles.creator}>@{item.author}</Text>
+          </PressableScale>
+          <Text style={styles.caption} numberOfLines={3}>
             {item.caption}
           </Text>
           <View style={styles.musicRow}>
@@ -321,40 +338,42 @@ export function ReelFeedScreen() {
               {musicLabel}
             </Text>
           </View>
-          {action ? (
-            <PressableScale
-              onPress={() => (action === 'cart' ? addProduct(item) : book(item))}
-              accessibilityLabel={
-                action === 'cart' ? 'Shop product' : 'Book related service'
-              }
-              style={[
-                styles.cta,
-                {
-                  backgroundColor: theme.colors.primary,
-                  borderRadius: theme.radius.pill,
-                },
-              ]}>
-              <AppIcon
-                name={
-                  action === 'cart'
-                    ? 'cart'
-                    : action === 'trip'
-                      ? 'globe'
-                      : 'calendar'
-                }
-                size={16}
-                color="#042F2E"
-              />
-              <Text style={styles.ctaLabel}>
-                {action === 'cart'
-                  ? 'Shop'
-                  : action === 'trip'
-                    ? 'Book trip'
-                    : 'Book'}
-              </Text>
-            </PressableScale>
-          ) : null}
         </View>
+        {action ? (
+          <PressableScale
+            onPress={() => (action === 'cart' ? addProduct(item) : book(item))}
+            accessibilityLabel={
+              action === 'cart' ? 'Shop product' : 'Book related service'
+            }
+            style={[
+              styles.cta,
+              styles.ctaCorner,
+              {
+                bottom: bottomSafe,
+                backgroundColor: theme.colors.primary,
+                borderRadius: theme.radius.pill,
+              },
+            ]}>
+            <AppIcon
+              name={
+                action === 'cart'
+                  ? 'cart'
+                  : action === 'trip'
+                    ? 'globe'
+                    : 'calendar'
+              }
+              size={16}
+              color="#042F2E"
+            />
+            <Text style={styles.ctaLabel}>
+              {action === 'cart'
+                ? 'Shop'
+                : action === 'trip'
+                  ? 'Book trip'
+                  : 'Book'}
+            </Text>
+          </PressableScale>
+        ) : null}
       </View>
     );
   };
@@ -449,6 +468,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
   },
+  meta: {
+    position: 'absolute',
+    left: 16,
+    gap: 6,
+  },
+  creatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    alignSelf: 'flex-start',
+  },
+  creatorAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  creator: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+    textShadowColor: 'rgba(0,0,0,0.55)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
   sideAction: {
     alignItems: 'center',
     gap: 4,
@@ -474,19 +520,6 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
-  meta: {
-    position: 'absolute',
-    left: 16,
-    gap: 6,
-  },
-  creator: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '800',
-    textShadowColor: 'rgba(0,0,0,0.55)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
   caption: {
     color: 'rgba(255,255,255,0.92)',
     fontSize: 14,
@@ -509,13 +542,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   cta: {
-    marginTop: 10,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 16,
+    flexShrink: 0,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  ctaCorner: {
+    position: 'absolute',
+    right: 12,
   },
   ctaLabel: {
     color: '#042F2E',

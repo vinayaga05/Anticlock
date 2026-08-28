@@ -21,7 +21,7 @@ export function MainNavigator() {
       <Tab.Screen
         name="PlayFeed"
         component={ReelFeedScreen}
-        options={{ tabBarAccessibilityLabel: 'Play' }}
+        options={{ tabBarAccessibilityLabel: 'Clips' }}
       />
       <Tab.Screen
         name="Flash"

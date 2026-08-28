@@ -51,6 +51,8 @@ import { MyOrdersScreen } from '@/features/services/screens/MyOrdersScreen';
 import { ComingSoonScreen } from '@/features/services/screens/ComingSoonScreen';
 import { FlashComposerScreen } from '@/features/flash/screens/FlashComposerScreen';
 import { FlashCommentsScreen } from '@/features/flash/screens/FlashCommentsScreen';
+import { StoryViewerScreen } from '@/features/flash/screens/StoryViewerScreen';
+import { StoryCreatorScreen } from '@/features/flash/screens/StoryCreatorScreen';
 import { SavedHubScreen } from '@/features/flash/screens/SavedHubScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -242,6 +244,16 @@ export function RootNavigator() {
           options={{ title: 'Comments' }}
         />
         <Stack.Screen
+          name="StoryViewer"
+          component={StoryViewerScreen}
+          options={{ headerShown: false, presentation: 'fullScreenModal' }}
+        />
+        <Stack.Screen
+          name="StoryCreator"
+          component={StoryCreatorScreen}
+          options={{ title: 'Create Story', headerShown: false }}
+        />
+        <Stack.Screen
           name="SavedHub"
           component={SavedHubScreen}
           options={{ title: 'Saved' }}
@@ -267,27 +279,27 @@ export function RootNavigator() {
           options={{ title: 'Submission', headerShown: false }}
         />
         <Stack.Screen
-          name="ClubDetail"
+          name="TeamDetail"
           component={ClubDetailScreen}
-          options={{ title: 'Club', headerShown: false }}
+          options={{ title: 'Team', headerShown: false }}
         />
         <Stack.Screen
-          name="ClubRoster"
+          name="TeamRoster"
           component={ClubRosterScreen}
           options={{ title: 'Roster', headerShown: false }}
         />
         <Stack.Screen
-          name="ClubPlayerForm"
+          name="TeamPlayerForm"
           component={ClubPlayerFormScreen}
           options={{ title: 'Player', headerShown: false }}
         />
         <Stack.Screen
-          name="CreateClub"
+          name="CreateTeam"
           component={CreateClubScreen}
-          options={{ title: 'Create Club', headerShown: false }}
+          options={{ title: 'Create Team', headerShown: false }}
         />
         <Stack.Screen
-          name="ClubJoinRequests"
+          name="TeamJoinRequests"
           component={ClubJoinRequestsScreen}
           options={{ title: 'Join Requests', headerShown: false }}
         />

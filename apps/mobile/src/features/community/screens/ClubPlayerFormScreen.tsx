@@ -9,12 +9,12 @@ import { FilterPills } from '@/shared/components/FilterPills';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { useTheme } from '@/shared/hooks/useTheme';
 import {
-  type ClubPlayerRole,
+  type TeamPlayerRole,
   useCommunityStore,
 } from '@/shared/data/community';
 import { RootStackParamList } from '@/shared/navigation/types';
 
-const ROLE_PILLS: { id: ClubPlayerRole; label: string }[] = [
+const ROLE_PILLS: { id: TeamPlayerRole; label: string }[] = [
   { id: 'player', label: 'Player' },
   { id: 'coach', label: 'Coach' },
   { id: 'staff', label: 'Staff' },
@@ -23,20 +23,20 @@ const ROLE_PILLS: { id: ClubPlayerRole; label: string }[] = [
 export function ClubPlayerFormScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
-  const route = useRoute<RouteProp<RootStackParamList, 'ClubPlayerForm'>>();
-  const { clubId, playerId } = route.params;
+  const route = useRoute<RouteProp<RootStackParamList, 'TeamPlayerForm'>>();
+  const { teamId, playerId } = route.params;
 
   const players = useCommunityStore(s => s.players);
   const existing = useMemo(
     () => (playerId ? players.find(p => p.id === playerId) : undefined),
     [players, playerId],
   );
-  const club = useCommunityStore(s => s.getClub(clubId));
+  const team = useCommunityStore(s => s.getTeam(teamId));
   const upsertPlayer = useCommunityStore(s => s.upsertPlayer);
   const removePlayer = useCommunityStore(s => s.removePlayer);
 
   const [name, setName] = useState(existing?.name ?? '');
-  const [role, setRole] = useState<ClubPlayerRole>(existing?.role ?? 'player');
+  const [role, setRole] = useState<TeamPlayerRole>(existing?.role ?? 'player');
   const [position, setPosition] = useState(existing?.position ?? '');
   const [jerseyNumber, setJerseyNumber] = useState(
     existing?.jerseyNumber != null ? String(existing.jerseyNumber) : '',
@@ -55,7 +55,7 @@ export function ClubPlayerFormScreen() {
     },
   ];
 
-  if (!club) {
+  if (!team) {
     return (
       <ScreenContainer tabAware={false}>
         <AppHeader title="Player" showBrand={false} showActions={false} />
@@ -85,7 +85,7 @@ export function ClubPlayerFormScreen() {
       return;
     }
 
-    upsertPlayer(clubId, {
+    upsertPlayer(teamId, {
       id: existing?.id,
       name: name.trim(),
       role,
@@ -138,7 +138,7 @@ export function ClubPlayerFormScreen() {
           </Text>
           <FilterPills
             activeId={role}
-            onChange={id => setRole(id as ClubPlayerRole)}
+            onChange={id => setRole(id as TeamPlayerRole)}
             pills={ROLE_PILLS}
           />
         </View>
@@ -147,7 +147,7 @@ export function ClubPlayerFormScreen() {
           <TextInput
             value={position}
             onChangeText={setPosition}
-            placeholder="Forward, Distance…"
+            placeholder="Forward, All-rounder…"
             placeholderTextColor={theme.colors.textTertiary}
             style={inputStyle}
           />
@@ -203,7 +203,7 @@ export function ClubPlayerFormScreen() {
       <View style={{ gap: 10 }}>
         <Button title="Save" icon="check" onPress={onSave} />
         {existing ? (
-          <Button title="Delete player" variant="destructive" onPress={onDelete} />
+          <Button title="Remove player" variant="destructive" onPress={onDelete} />
         ) : null}
       </View>
     </ScreenContainer>

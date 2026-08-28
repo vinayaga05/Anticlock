@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { StyleSheet, Text } from 'react-native';
-import { ScreenContainer } from '@/shared/components/ScreenContainer';
+import { Text } from 'react-native';
+import { HealthScreenShell } from '@/shared/components/HealthScreenShell';
 import { SearchBar } from '@/shared/components/SearchBar';
 import { LocationBar } from '@/shared/components/LocationBar';
 import { PartnerLogoRow } from '@/shared/components/PartnerLogoRow';
@@ -15,7 +15,7 @@ export function PhysioHubScreen() {
   const navigation = useNavigation<any>();
 
   return (
-    <ScreenContainer scrollable tabAware={false}>
+    <HealthScreenShell scrollable tabAware={false}>
       <SearchBar placeholder="Search physiotherapy" />
       <LocationBar />
       <PartnerLogoRow names={partners} />
@@ -55,10 +55,6 @@ export function PhysioHubScreen() {
         columns={5}
         onPress={() => navigation.navigate('Doctors')}
       />
-    </ScreenContainer>
+    </HealthScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  heading: { fontSize: 16, fontWeight: '700' },
-});

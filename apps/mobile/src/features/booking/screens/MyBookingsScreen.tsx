@@ -3,16 +3,20 @@ import { StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { Button } from '@/shared/components/Button';
-import { KnockBookingsList } from '@/features/messages/components/KnockBookingsList';
+import { BookingsTimeline } from '@/features/booking/components/BookingsTimeline';
 
 export function MyBookingsScreen() {
   const navigation = useNavigation<any>();
 
   return (
     <ScreenContainer scrollable tabAware={false}>
-      <KnockBookingsList showHeading={false} />
+      <BookingsTimeline />
       <View style={styles.footer}>
-        <Button title="Book again" icon="calendar" onPress={() => navigation.navigate('Doctors')} />
+        <Button
+          title="Book again"
+          icon="calendar"
+          onPress={() => navigation.navigate('Needs')}
+        />
       </View>
     </ScreenContainer>
   );

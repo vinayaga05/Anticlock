@@ -43,4 +43,14 @@ export const shadows = {
     android: { elevation: 4 },
     default: {},
   }),
+  healthSoft: Platform.select({
+    ios: {
+      shadowColor: '#1E3A5F',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.08,
+      shadowRadius: 18,
+    },
+    android: { elevation: 3 },
+    default: {},
+  }),
 };

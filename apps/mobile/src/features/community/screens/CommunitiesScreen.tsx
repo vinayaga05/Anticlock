@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useShallow } from 'zustand/react/shallow';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { AppHeader } from '@/shared/components/AppHeader';
 import { FilterPills } from '@/shared/components/FilterPills';
@@ -30,16 +31,19 @@ import {
 } from '@/features/community/components/ExploreCards';
 import {
   ChallengeCard,
-  ClubCard,
+  DiscoverTeamCard,
+  TeamCard,
 } from '@/features/community/components/ClubChallengeCards';
+import { SPORT_TAGS, CURRENT_USER_ID } from '@/shared/data/community';
 import { TAB_BAR_VISIBLE_HEIGHT } from '@/shared/navigation/FloatingPillTabBar';
 
 type HubFilter = 'all' | 'events' | 'products';
-type ModeTab = 'explore' | 'clubs' | 'challenges';
+type ModeTab = 'feed' | 'teams' | 'challenges';
+type TeamTab = 'mine' | 'discover';
 
 const MODE_TABS: { id: ModeTab; label: string }[] = [
-  { id: 'explore', label: 'Explore' },
-  { id: 'clubs', label: 'Clubs' },
+  { id: 'feed', label: 'Feed' },
+  { id: 'teams', label: 'Teams' },
   { id: 'challenges', label: 'Challenges' },
 ];
 
@@ -47,13 +51,22 @@ export function CommunitiesScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
-  const [mode, setMode] = useState<ModeTab>('explore');
+  const [mode, setMode] = useState<ModeTab>('feed');
+  const [teamTab, setTeamTab] = useState<TeamTab>('mine');
+  const [sportTag, setSportTag] = useState<string | null>(null);
   const [filter, setFilter] = useState<HubFilter>('all');
   const [quick, setQuick] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 
-  const clubs = useCommunityStore(s => s.clubs);
+  const myTeams = useCommunityStore(useShallow(s => s.getMyTeams()));
+  const discoverTeams = useCommunityStore(
+    useShallow(s => s.getDiscoverTeams({ sportTag })),
+  );
+  const joinTeam = useCommunityStore(s => s.joinTeam);
+  const isMember = useCommunityStore(s => s.isMember);
+  const joinRequests = useCommunityStore(s => s.joinRequests);
   const challenges = useCommunityStore(s => s.challenges);
+  const getEligibleTeamsForChallenge = useCommunityStore(s => s.getEligibleTeamsForChallenge);
 
   const quickPills = useMemo(
     () =>
@@ -147,46 +160,155 @@ export function CommunitiesScreen() {
           </View>
         </View>
 
-        {mode === 'clubs' ? (
+        {mode === 'teams' ? (
           <View style={[styles.padded, { gap: 14, marginTop: 12, paddingBottom: 24 }]}>
-            <View style={styles.rowBetween}>
-              <Text
-                style={[
-                  theme.typography.body,
-                  { color: theme.colors.textSecondary, flex: 1, paddingRight: 8 },
-                ]}>
-                Clubs and communities around a sport or activity.
-              </Text>
-              <Button title="Create" icon="plus" onPress={() => navigation.navigate('CreateClub')} />
-            </View>
-            {clubs.map(club => (
-              <ClubCard
-                key={club.id}
-                club={club}
-                onPress={() => navigation.navigate('ClubDetail', { clubId: club.id })}
+            <View style={styles.teamTabRow}>
+              {(['mine', 'discover'] as TeamTab[]).map(tab => {
+                const active = teamTab === tab;
+                return (
+                  <PressableScale
+                    key={tab}
+                    onPress={() => setTeamTab(tab)}
+                    style={[
+                      styles.teamTab,
+                      {
+                        backgroundColor: active ? theme.colors.surface : 'transparent',
+                        borderColor: active ? theme.colors.border : 'transparent',
+                        borderRadius: theme.radius.md,
+                      },
+                    ]}>
+                    <Text
+                      style={[
+                        theme.typography.caption,
+                        {
+                          color: active ? theme.colors.textPrimary : theme.colors.textSecondary,
+                          fontWeight: '700',
+                        },
+                      ]}>
+                      {tab === 'mine' ? 'My Teams' : 'Discover'}
+                    </Text>
+                  </PressableScale>
+                );
+              })}
+              <View style={{ flex: 1 }} />
+              <Button
+                title="Create Team"
+                icon="plus"
+                onPress={() => navigation.navigate('CreateTeam')}
               />
-            ))}
+            </View>
+
+            {teamTab === 'mine' ? (
+              myTeams.length === 0 ? (
+                <Text style={[theme.typography.body, { color: theme.colors.textSecondary }]}>
+                  You are not on any teams yet. Discover squads or create your own.
+                </Text>
+              ) : (
+                myTeams.map(team => (
+                  <TeamCard
+                    key={team.id}
+                    team={team}
+                    onPress={() => navigation.navigate('TeamDetail', { teamId: team.id })}
+                  />
+                ))
+              )
+            ) : (
+              <>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 8 }}>
+                  {[...SPORT_TAGS, 'More'].map(tag => {
+                    const active = sportTag === tag || (tag === 'More' && sportTag === 'More');
+                    return (
+                      <PressableScale
+                        key={tag}
+                        onPress={() => setSportTag(active ? null : tag)}
+                        style={[
+                          styles.sportChip,
+                          {
+                            backgroundColor: active
+                              ? theme.colors.primary
+                              : theme.colors.surfaceMuted,
+                            borderRadius: theme.radius.pill,
+                          },
+                        ]}>
+                        <Text
+                          style={{
+                            color: active ? '#fff' : theme.colors.textSecondary,
+                            fontSize: 12,
+                            fontWeight: '700',
+                          }}>
+                          {tag}
+                        </Text>
+                      </PressableScale>
+                    );
+                  })}
+                </ScrollView>
+
+                {discoverTeams.length === 0 ? (
+                  <Text style={[theme.typography.body, { color: theme.colors.textSecondary }]}>
+                    No teams match this filter.
+                  </Text>
+                ) : (
+                  discoverTeams.map(team => {
+                    const pending = joinRequests.some(
+                      r =>
+                        r.teamId === team.id &&
+                        r.userId === CURRENT_USER_ID &&
+                        r.status === 'pending',
+                    );
+                    const member = isMember(team.id);
+                    return (
+                      <DiscoverTeamCard
+                        key={team.id}
+                        team={team}
+                        onView={() => navigation.navigate('TeamDetail', { teamId: team.id })}
+                        onJoin={() => {
+                          const result = joinTeam(team.id);
+                          if (result === 'joined') {
+                            navigation.navigate('TeamDetail', { teamId: team.id });
+                          }
+                        }}
+                        joinLabel={
+                          member
+                            ? 'Joined'
+                            : pending
+                              ? 'Request pending'
+                              : undefined
+                        }
+                        joinDisabled={member || pending}
+                      />
+                    );
+                  })
+                )}
+              </>
+            )}
           </View>
         ) : null}
 
         {mode === 'challenges' ? (
           <View style={[styles.padded, { gap: 14, marginTop: 12, paddingBottom: 24 }]}>
             <Text style={[theme.typography.body, { color: theme.colors.textSecondary }]}>
-              Join challenges individually or with an event.
+              Join challenges with your team. Select an eligible squad to participate.
             </Text>
-            {challenges.map(challenge => (
-              <ChallengeCard
-                key={challenge.id}
-                challenge={challenge}
-                onPress={() =>
-                  navigation.navigate('ChallengeDetail', { challengeId: challenge.id })
-                }
-              />
-            ))}
+            {challenges.map(challenge => {
+              const eligible = getEligibleTeamsForChallenge(challenge.id)[0];
+              return (
+                <ChallengeCard
+                  key={challenge.id}
+                  challenge={challenge}
+                  eligibleTeam={eligible}
+                  onPress={() =>
+                    navigation.navigate('ChallengeDetail', { challengeId: challenge.id })
+                  }
+                />
+              );
+            })}
           </View>
         ) : null}
 
-        {mode === 'explore' ? (
+        {mode === 'feed' ? (
           <View style={{ gap: 20, marginTop: 12, paddingBottom: 24 }}>
             <View style={[styles.padded, { gap: 12 }]}>
               <View
@@ -351,7 +473,7 @@ export function CommunitiesScreen() {
         ) : null}
       </ScreenContainer>
 
-      {mode === 'explore' ? (
+      {mode === 'feed' ? (
         <PressableScale
           onPress={() => navigation.navigate('ExploreCreate')}
           accessibilityLabel="Create event or product"
@@ -380,6 +502,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderWidth: StyleSheet.hairlineWidth,
   },
+  teamTabRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  teamTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  sportChip: { paddingHorizontal: 12, paddingVertical: 8 },
   rowBetween: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   search: {
     flexDirection: 'row',

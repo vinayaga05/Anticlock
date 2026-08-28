@@ -9,10 +9,10 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BrandLogo } from '@/shared/components/BrandLogo';
 import { Button } from '@/shared/components/Button';
 import { useAuth } from '@/shared/context/AuthProvider';
 import { useTheme } from '@/shared/hooks/useTheme';
-import { APP_NAME } from '@/shared/constants';
 import { AuthError } from '@/shared/services/auth/types';
 import { ApiError } from '@/shared/api/client';
 
@@ -90,7 +90,7 @@ export function LoginScreen() {
             paddingBottom: insets.bottom + 24,
           },
         ]}>
-        <Text style={[styles.brand, { color: theme.colors.primary }]}>{APP_NAME}</Text>
+        <BrandLogo height={56} style={styles.logo} />
         <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
           {step === 'phone' ? 'Sign in with mobile' : 'Enter OTP'}
         </Text>
@@ -177,7 +177,8 @@ export function AuthLoadingScreen() {
   const theme = useTheme();
   return (
     <View style={[styles.loadingRoot, { backgroundColor: theme.colors.background }]}>
-      <ActivityIndicator size="large" color={theme.colors.primary} />
+      <BrandLogo height={64} />
+      <ActivityIndicator size="large" color={theme.colors.primary} style={styles.loadingSpinner} />
     </View>
   );
 }
@@ -192,11 +193,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 16,
   },
-  brand: {
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+  logo: {
+    alignSelf: 'center',
+    marginBottom: 8,
   },
   title: {
     fontSize: 28,
@@ -260,5 +259,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 24,
+  },
+  loadingSpinner: {
+    marginTop: 8,
   },
 });

@@ -26,7 +26,7 @@ type QueueItem = {
 
 type JoinRequest = {
   id: string;
-  clubName: string;
+  teamName: string;
   userName: string;
   requestedAt: string;
   status: 'pending' | 'accepted' | 'rejected';
@@ -77,18 +77,26 @@ const SAMPLE_QUEUE: QueueItem[] = [
   },
 ];
 
-const SAMPLE_CLUBS = [
-  { id: 'club-running', name: 'Anticlock Running Club', sport: 'Running', members: 186 },
-  { id: 'club-football', name: 'Guindy United FC', sport: 'Football', members: 42 },
-  { id: 'club-cycling', name: 'Coastal Cyclists', sport: 'Cycling', members: 94 },
+const SAMPLE_TEAMS = [
+  { id: 'team-strikers', name: 'Chennai Strikers', sport: 'Cricket', members: 12 },
+  { id: 'team-hawks', name: 'Blue Hawks', sport: 'Hockey', members: 9 },
+  { id: 'team-running', name: 'Anticlock Running Team', sport: 'Running', members: 186 },
+  { id: 'team-football', name: 'Guindy United FC', sport: 'Football', members: 42 },
 ];
 
 const SAMPLE_CHALLENGES: ChallengeRow[] = [
   {
+    id: 'chal-weekend-cricket',
+    title: 'Weekend Cricket Challenge',
+    status: 'upcoming',
+    organizer: 'Anticlock',
+    participants: 16,
+  },
+  {
     id: 'chal-30-run',
     title: '30 Day Running Challenge',
     status: 'active',
-    organizer: 'Anticlock Running Club',
+    organizer: 'Anticlock Running Team',
     participants: 1248,
   },
   {
@@ -110,14 +118,14 @@ const SAMPLE_CHALLENGES: ChallengeRow[] = [
 const SAMPLE_JOIN_REQUESTS: JoinRequest[] = [
   {
     id: 'jr-1',
-    clubName: 'Guindy United FC',
+    teamName: 'Blue Hawks',
     userName: 'Karthik',
     requestedAt: '2026-08-25',
     status: 'pending',
   },
   {
     id: 'jr-2',
-    clubName: 'Guindy United FC',
+    teamName: 'Blue Hawks',
     userName: 'You',
     requestedAt: '2026-08-26',
     status: 'pending',
@@ -141,7 +149,7 @@ function visibilityLabel(visibility: Visibility): string {
   return visibility === 'public' ? 'Public in Explore' : 'Followers only';
 }
 
-type Tab = 'explore' | 'clubs';
+type Tab = 'explore' | 'teams';
 
 export default function CommunityAdminPage() {
   const [tab, setTab] = useState<Tab>('explore');
@@ -187,7 +195,7 @@ export default function CommunityAdminPage() {
     <AdminShell>
       <h1 className="page-title">Community</h1>
       <p className="page-sub">
-        Moderate Explore submissions and review Clubs &amp; Challenges activity.
+        Moderate Explore submissions and review Teams &amp; Challenges activity.
       </p>
 
       <div className="toolbar" style={{ marginBottom: 16 }}>
@@ -200,9 +208,9 @@ export default function CommunityAdminPage() {
           </button>
           <button
             type="button"
-            className={tab === 'clubs' ? 'btn' : 'btn secondary'}
-            onClick={() => setTab('clubs')}>
-            Clubs &amp; Challenges
+            className={tab === 'teams' ? 'btn' : 'btn secondary'}
+            onClick={() => setTab('teams')}>
+            Teams &amp; Challenges
           </button>
         </div>
       </div>
@@ -330,11 +338,11 @@ export default function CommunityAdminPage() {
       ) : (
         <>
           <div className="card" style={{ marginBottom: 16 }}>
-            <h2 style={{ marginTop: 0 }}>Clubs overview</h2>
-            <p className="muted">{SAMPLE_CLUBS.length} clubs in catalog</p>
-            {SAMPLE_CLUBS.map(club => (
+            <h2 style={{ marginTop: 0 }}>Teams overview</h2>
+            <p className="muted">{SAMPLE_TEAMS.length} teams in catalog</p>
+            {SAMPLE_TEAMS.map(team => (
               <div
-                key={club.id}
+                key={team.id}
                 style={{
                   padding: '12px 0',
                   borderBottom: '1px solid var(--line)',
@@ -343,12 +351,12 @@ export default function CommunityAdminPage() {
                   gap: 12,
                 }}>
                 <div>
-                  <strong>{club.name}</strong>
+                  <strong>{team.name}</strong>
                   <div className="muted">
-                    {club.sport} · {club.members} members
+                    {team.sport} · {team.members} members
                   </div>
                 </div>
-                <span className="badge">{club.id}</span>
+                <span className="badge">{team.id}</span>
               </div>
             ))}
           </div>
@@ -374,7 +382,7 @@ export default function CommunityAdminPage() {
           </div>
 
           <div className="card">
-            <h2 style={{ marginTop: 0 }}>Pending club join requests</h2>
+            <h2 style={{ marginTop: 0 }}>Pending team join requests</h2>
             {pendingJoins.length === 0 ? (
               <p className="muted">No pending requests.</p>
             ) : null}
@@ -390,7 +398,7 @@ export default function CommunityAdminPage() {
                 <div style={{ flex: 1 }}>
                   <strong>{req.userName}</strong>
                   <div className="muted">
-                    wants to join {req.clubName} · {req.requestedAt}
+                    wants to join {req.teamName} · {req.requestedAt}
                   </div>
                 </div>
                 <button

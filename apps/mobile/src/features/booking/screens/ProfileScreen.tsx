@@ -13,7 +13,9 @@ import { useThemeStore } from '@/shared/store/themeStore';
 import { useAuth } from '@/shared/context/AuthProvider';
 import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
-import { CURRENT_USER, getProfileMeta } from '@/shared/data/flash';
+import { CURRENT_USER, getProfileMeta, getProfileShortcuts } from '@/shared/data/flash';
+import { useEngagementStore } from '@/shared/services/engagementRepository';
+import { useStoryStore } from '@/shared/data/flash/storyStore';
 
 type MenuItem = {
   id: string;
@@ -26,6 +28,7 @@ type Shortcut = {
   id: string;
   label: string;
   imageUrl: string;
+  onPress: () => void;
 };
 
 type AccordionSection = {
@@ -34,29 +37,6 @@ type AccordionSection = {
   icon: IconName;
   items: { label: string; onPress: () => void }[];
 };
-
-const SHORTCUTS: Shortcut[] = [
-  {
-    id: 's1',
-    label: 'Morning Run',
-    imageUrl: 'https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?auto=format&fit=crop&w=200&h=200&q=80',
-  },
-  {
-    id: 's2',
-    label: 'Yoga Flow',
-    imageUrl: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=200&h=200&q=80',
-  },
-  {
-    id: 's3',
-    label: 'FitStore',
-    imageUrl: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=200&h=200&q=80',
-  },
-  {
-    id: 's4',
-    label: 'Trail Team',
-    imageUrl: 'https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&w=200&h=200&q=80',
-  },
-];
 
 function MenuRow({
   icon,
@@ -96,6 +76,32 @@ export function ProfileScreen() {
   const avatarUrl = user?.avatarUrl ?? CURRENT_USER.avatarUrl;
   const profileId = user?.id ?? CURRENT_USER.id;
   const meta = getProfileMeta(profileId);
+  const saved = useEngagementStore(s => s.saved);
+  const storyRevision = useStoryStore(s => `${s.stories.length}-${s.archive.length}`);
+
+  const shortcuts: Shortcut[] = useMemo(() => {
+    return getProfileShortcuts(profileId).map(item => ({
+      id: item.id,
+      label: item.label,
+      imageUrl: item.imageUrl,
+      onPress: () => {
+        if (item.kind === 'team' && item.refId) {
+          navigation.navigate('TeamDetail', { teamId: item.refId });
+          return;
+        }
+        if (item.kind === 'saved') {
+          navigation.navigate('SavedHub');
+          return;
+        }
+        if (item.kind === 'story') {
+          navigation.navigate('StoryViewer', { authorId: profileId });
+          return;
+        }
+      },
+    }));
+  }, [navigation, profileId, saved.length, storyRevision]);
+
+  const savedBadge = saved.length > 9 ? '9+' : saved.length > 0 ? String(saved.length) : null;
 
   const [showMore, setShowMore] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -243,7 +249,7 @@ export function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}>
         <PressableScale
-          onPress={() => navigation.navigate('Profile')}
+          onPress={() => navigation.navigate('Profile', { userId: profileId })}
           style={[
             styles.profileCard,
             {
@@ -257,14 +263,16 @@ export function ProfileScreen() {
             {displayName}
           </Text>
           <View style={styles.profileActions}>
-            <View style={[styles.switcherBtn, { backgroundColor: theme.colors.surfaceMuted }]}>
+              <View style={[styles.switcherBtn, { backgroundColor: theme.colors.surfaceMuted }]}>
               <Image
-                source={{ uri: CURRENT_USER.avatarUrl }}
+                source={{ uri: avatarUrl ?? CURRENT_USER.avatarUrl }}
                 style={styles.switcherAvatar}
               />
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>9+</Text>
-              </View>
+              {savedBadge ? (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{savedBadge}</Text>
+                </View>
+              ) : null}
             </View>
             <View style={[styles.switcherBtn, { backgroundColor: theme.colors.surfaceMuted }]}>
               <AppIcon
@@ -277,27 +285,31 @@ export function ProfileScreen() {
           </View>
         </PressableScale>
 
-        <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-          Your shortcuts
-        </Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.shortcutsRow}>
-          {SHORTCUTS.map(item => (
-            <PressableScale
-              key={item.id}
-              onPress={() => navigation.navigate('Main', { screen: 'Community' })}
-              style={styles.shortcutItem}>
-              <Image source={{ uri: item.imageUrl }} style={styles.shortcutImage} />
-              <Text
-                style={[styles.shortcutLabel, { color: theme.colors.textPrimary }]}
-                numberOfLines={1}>
-                {item.label}
-              </Text>
-            </PressableScale>
-          ))}
-        </ScrollView>
+        {shortcuts.length > 0 ? (
+          <>
+            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
+              Your shortcuts
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.shortcutsRow}>
+              {shortcuts.map(item => (
+                <PressableScale
+                  key={item.id}
+                  onPress={item.onPress}
+                  style={styles.shortcutItem}>
+                  <Image source={{ uri: item.imageUrl }} style={styles.shortcutImage} />
+                  <Text
+                    style={[styles.shortcutLabel, { color: theme.colors.textPrimary }]}
+                    numberOfLines={1}>
+                    {item.label}
+                  </Text>
+                </PressableScale>
+              ))}
+            </ScrollView>
+          </>
+        ) : null}
 
         <View
           style={[

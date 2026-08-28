@@ -20,16 +20,21 @@ import {
   CURRENT_USER,
   FlashPost,
   formatProfileCount,
+  getProfileHighlights,
   getProfileMeta,
-  getUserById,
+  resolveProfileUser,
+  useProfileStore,
 } from '@/shared/data/flash';
+import { useStoryStore } from '@/shared/data/flash/storyStore';
 import { useEngagementStore } from '@/shared/services/engagementRepository';
+import { useAuth } from '@/shared/context/AuthProvider';
 
 type ProfileTab = 'posts' | 'reels' | 'tagged';
 
 type GridItem = {
   id: string;
-  uri: string;
+  postId: string;
+  uri: string | number;
   isVideo?: boolean;
 };
 
@@ -50,15 +55,27 @@ export function UserProfileScreen() {
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   const cellSize = (screenWidth - 2) / 3;
+  const { user: authUser } = useAuth();
 
   const userId = route.params?.userId ?? CURRENT_USER.id;
-  const user = getUserById(userId);
+  const baseUser = resolveProfileUser(userId);
+  const user =
+    userId === CURRENT_USER.id && baseUser
+      ? {
+          ...baseUser,
+          name: authUser?.displayName ?? baseUser.name,
+          avatarUrl: authUser?.avatarUrl ?? baseUser.avatarUrl,
+        }
+      : baseUser;
   const meta = getProfileMeta(userId);
   const allPosts = useEngagementStore(s => s.posts);
-  const followAuthor = useEngagementStore(s => s.followAuthor);
-  const isFollowing = useEngagementStore(
-    s => s.posts.find(p => p.author.id === userId)?.author.followed ?? false,
-  );
+  const followingIds = useProfileStore(s => s.followingIds);
+  const isFollowing = useProfileStore(s => s.isFollowing(userId));
+  const toggleFollow = useProfileStore(s => s.toggleFollow);
+  const getFollowerCount = useProfileStore(s => s.getFollowerCount);
+  const getFollowingCount = useProfileStore(s => s.getFollowingCount);
+  const getPostCount = useProfileStore(s => s.getPostCount);
+  const storyRevision = useStoryStore(s => `${s.stories.length}-${s.archive.length}`);
 
   const posts = useMemo(
     () => allPosts.filter(p => p.author.id === userId && !p.hidden),
@@ -68,7 +85,14 @@ export function UserProfileScreen() {
   const [tab, setTab] = useState<ProfileTab>('posts');
 
   const isOwnProfile = userId === CURRENT_USER.id;
-  const postCount = posts.length;
+  const postCount = getPostCount(userId);
+  const followerCount = getFollowerCount(userId);
+  const followingCount = getFollowingCount(userId);
+
+  const highlights = useMemo(
+    () => getProfileHighlights(userId),
+    [userId, storyRevision, followingIds],
+  );
 
   const gridItems = useMemo<GridItem[]>(() => {
     if (tab === 'tagged') return [];
@@ -77,6 +101,7 @@ export function UserProfileScreen() {
         const videos = post.media.filter(m => m.type === 'video');
         return videos.map(m => ({
           id: `${post.id}-${m.id}`,
+          postId: post.id,
           uri: m.posterUrl ?? m.url,
           isVideo: true,
         }));
@@ -84,7 +109,14 @@ export function UserProfileScreen() {
       const thumb = getPostThumbnail(post);
       if (!thumb) return [];
       const hasVideo = post.media.some(m => m.type === 'video');
-      return [{ id: post.id, uri: thumb, isVideo: hasVideo && post.media.length === 1 }];
+      return [
+        {
+          id: post.id,
+          postId: post.id,
+          uri: thumb,
+          isVideo: hasVideo && post.media.length === 1,
+        },
+      ];
     });
   }, [posts, tab]);
 
@@ -105,7 +137,26 @@ export function UserProfileScreen() {
   };
 
   const onFollowPress = () => {
-    followAuthor(user.id, !isFollowing);
+    toggleFollow(user.id);
+  };
+
+  const onHighlightPress = (highlightId: string) => {
+    if (highlightId === 'hl-new') {
+      navigation.navigate('StoryCreator');
+      return;
+    }
+    if (highlightId.startsWith('hl-story-') || highlightId === 'shortcut-story') {
+      navigation.navigate('StoryViewer', { authorId: userId });
+      return;
+    }
+    if (highlightId === 'hl-archive') {
+      navigation.navigate('ComingSoon', { title: 'Story Archive' });
+      return;
+    }
+  };
+
+  const openPost = (postId: string) => {
+    navigation.navigate('FlashComments', { postId });
   };
 
   const renderHeader = () => (
@@ -114,9 +165,11 @@ export function UserProfileScreen() {
         <View style={styles.avatarWrap}>
           <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
           {isOwnProfile ? (
-            <View style={[styles.avatarAdd, { backgroundColor: theme.colors.primary }]}>
+            <PressableScale
+              onPress={() => navigation.navigate('StoryCreator')}
+              style={[styles.avatarAdd, { backgroundColor: theme.colors.primary }]}>
               <AppIcon name="plus" size={14} color="#fff" strokeWidth={2.5} />
-            </View>
+            </PressableScale>
           ) : null}
         </View>
 
@@ -129,7 +182,7 @@ export function UserProfileScreen() {
           </View>
           <View style={styles.statItem}>
             <Text style={[styles.statNumber, { color: theme.colors.textPrimary }]}>
-              {formatProfileCount(meta.followerCount)}
+              {formatProfileCount(followerCount)}
             </Text>
             <Text style={[styles.statLabel, { color: theme.colors.textPrimary }]}>
               followers
@@ -137,7 +190,7 @@ export function UserProfileScreen() {
           </View>
           <View style={styles.statItem}>
             <Text style={[styles.statNumber, { color: theme.colors.textPrimary }]}>
-              {formatProfileCount(meta.followingCount)}
+              {formatProfileCount(followingCount)}
             </Text>
             <Text style={[styles.statLabel, { color: theme.colors.textPrimary }]}>
               following
@@ -179,6 +232,7 @@ export function UserProfileScreen() {
         {isOwnProfile ? (
           <>
             <PressableScale
+              onPress={() => navigation.navigate('AccountSettings')}
               style={[styles.actionBtn, { backgroundColor: theme.colors.surfaceMuted }]}>
               <Text style={[styles.actionBtnText, { color: theme.colors.textPrimary }]}>
                 Edit profile
@@ -215,7 +269,7 @@ export function UserProfileScreen() {
               </Text>
             </PressableScale>
             <PressableScale
-              onPress={() => navigation.navigate('Inbox')}
+              onPress={() => navigation.navigate('Thread', { conversationId: 'msg-1' })}
               style={[styles.actionBtn, { backgroundColor: theme.colors.surfaceMuted }]}>
               <Text style={[styles.actionBtnText, { color: theme.colors.textPrimary }]}>
                 Message
@@ -229,18 +283,23 @@ export function UserProfileScreen() {
         </PressableScale>
       </View>
 
-      {meta.highlights && meta.highlights.length > 0 ? (
+      {highlights.length > 0 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.highlightsRow}>
-          {meta.highlights.map(item => (
-            <View key={item.id} style={styles.highlightItem}>
+          {highlights.map(item => (
+            <PressableScale
+              key={item.id}
+              onPress={() => onHighlightPress(item.id)}
+              style={styles.highlightItem}>
               <View
                 style={[
                   styles.highlightRing,
                   {
-                    borderColor: theme.colors.border,
+                    borderColor: item.id.startsWith('hl-story-')
+                      ? theme.colors.primary
+                      : theme.colors.border,
                     backgroundColor: item.isNew
                       ? theme.colors.background
                       : theme.colors.surfaceMuted,
@@ -257,7 +316,7 @@ export function UserProfileScreen() {
                 numberOfLines={1}>
                 {item.label}
               </Text>
-            </View>
+            </PressableScale>
           ))}
         </ScrollView>
       ) : null}
@@ -277,7 +336,7 @@ export function UserProfileScreen() {
               onPress={() => setTab(item.id)}
               style={[
                 styles.tabItem,
-                active && { borderBottomColor: theme.colors.textPrimary },
+                active ? { borderBottomColor: theme.colors.textPrimary } : null,
               ]}>
               <AppIcon
                 name={item.icon}
@@ -381,14 +440,21 @@ export function UserProfileScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <View style={[styles.gridCell, { width: cellSize, height: cellSize }]}>
-            <Image source={{ uri: item.uri }} style={styles.gridImage} />
+          <PressableScale
+            onPress={() => openPost(item.postId)}
+            style={[styles.gridCell, { width: cellSize, height: cellSize }]}>
+            <Image
+              source={
+                typeof item.uri === 'number' ? item.uri : { uri: String(item.uri) }
+              }
+              style={styles.gridImage}
+            />
             {item.isVideo ? (
               <View style={styles.videoBadge}>
                 <AppIcon name="play" size={16} color="#fff" strokeWidth={2} fill="#fff" />
               </View>
             ) : null}
-          </View>
+          </PressableScale>
         )}
       />
     </View>

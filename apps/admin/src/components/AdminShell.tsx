@@ -26,8 +26,11 @@ export function AdminShell({ children }: { children: ReactNode }) {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          Anticlock
-          <span>Control center</span>
+          <img src="/brand/logo.png" alt="Anticlock" className="brand-logo" />
+          <div>
+            Anticlock
+            <span>Control center</span>
+          </div>
         </div>
         {visible.map(item => {
           const active =

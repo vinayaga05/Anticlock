@@ -1,4 +1,5 @@
 import { CURRENT_USER, flashAuthors } from '@/shared/data/flash/posts';
+import { seedStories } from '@/shared/data/flash/stories';
 import { PostAuthor, UserProfileMeta } from '@/shared/data/flash/types';
 
 const img = (id: string, w = 200, h = 200) =>
@@ -98,11 +99,41 @@ export const USER_PROFILES: Record<string, UserProfileMeta> = {
     followerCount: 980,
     followingCount: 120,
   },
+  'user-priya': {
+    username: 'priya.fit',
+    bio: 'Wellness & morning routines',
+    location: 'Chennai',
+    followerCount: 640,
+    followingCount: 280,
+    highlights: [
+      {
+        id: 'hl-1',
+        label: 'Wellness',
+        imageUrl: img('photo-1494790108377-be9c29b29330'),
+      },
+    ],
+  },
+  'user-arun': {
+    username: 'arun.cricket',
+    bio: 'Weekend cricket · Chennai Strikers',
+    location: 'Chennai',
+    followerCount: 1200,
+    followingCount: 390,
+    highlights: [
+      {
+        id: 'hl-1',
+        label: 'Cricket',
+        imageUrl: img('photo-1531415079145-90eeae4890e0'),
+      },
+    ],
+  },
 };
 
 export function getUserById(userId: string): PostAuthor | undefined {
   if (userId === CURRENT_USER.id) return CURRENT_USER;
-  return Object.values(flashAuthors).find(a => a.id === userId);
+  const fromAuthors = Object.values(flashAuthors).find(a => a.id === userId);
+  if (fromAuthors) return fromAuthors;
+  return seedStories.find(s => s.authorId === userId)?.author;
 }
 
 export function getProfileMeta(userId: string): UserProfileMeta {

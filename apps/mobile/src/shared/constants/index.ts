@@ -6,6 +6,8 @@ export const STORAGE_KEYS = {
 
 export const APP_NAME = 'Anticlock';
 
+export { BRAND_LOGO } from '@/shared/assets/brand';
+
 export const DEFAULT_LOCATION = {
   city: 'Chennai',
   pincode: '600017',

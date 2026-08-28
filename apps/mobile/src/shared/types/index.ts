@@ -20,6 +20,8 @@ export interface Doctor {
   online: boolean;
   modes: ServiceMode[];
   nextSlot?: string;
+  /** Display label e.g. "3.2k+" */
+  patientsServed?: string;
 }
 
 export interface LabProvider {
@@ -63,6 +65,8 @@ export interface ReelItem {
   id: string;
   title: string;
   author: string;
+  /** Creator profile image shown on the clip overlay. */
+  authorAvatarUrl?: string;
   caption: string;
   /** Remote HTTPS URL or local `require(...mp4)` asset id */
   videoUrl: string | number;

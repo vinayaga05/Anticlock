@@ -7,6 +7,7 @@ import { useTheme } from '@/shared/hooks/useTheme';
 import { FeedTab } from '@/shared/data/flash/types';
 import { useEngagementStore } from '@/shared/services/engagementRepository';
 import { FlashComposerBar } from '@/features/flash/components/FlashComposerBar';
+import { StoryTray } from '@/features/flash/components/StoryTray';
 import { FlashPostCard } from '@/features/flash/components/FlashPostCard';
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
 import { TAB_BAR_VISIBLE_HEIGHT } from '@/shared/navigation/FloatingPillTabBar';
@@ -52,6 +53,7 @@ export function FlashFeedScreen() {
         ListHeaderComponent={
           <View style={styles.headerBlock}>
             <AppHeader title="Flash" />
+            <StoryTray />
             <FilterPills
               activeId={tab}
               onChange={id => setTab(id as FeedTab)}

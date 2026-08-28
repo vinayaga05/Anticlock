@@ -37,6 +37,7 @@ export const doctors: Doctor[] = [
     online: true,
     modes: ['online', 'center', 'home'],
     nextSlot: '22 Oct 6:30 PM',
+    patientsServed: '3.2k+',
   },
   {
     id: 'doc-sathish',
@@ -55,6 +56,7 @@ export const doctors: Doctor[] = [
     online: true,
     modes: ['center', 'home', 'online'],
     nextSlot: '22 Oct 10:00 AM',
+    patientsServed: '2.1k+',
   },
 ];
 
@@ -178,11 +180,15 @@ export const fitnessClasses: FitnessClass[] = [
   },
 ];
 
+const reelAvatar = (id: string) =>
+  `https://images.unsplash.com/${id}?auto=format&fit=crop&w=200&h=200&q=80`;
+
 const baseReels: ReelItem[] = [
   {
     id: 'reel-1',
     title: 'Morning mobility',
     author: 'coach.sathish',
+    authorAvatarUrl: reelAvatar('photo-1507003211169-0a1dd7228f2d'),
     caption: '5-minute warm-up before sports training #anticlock #fitness',
     videoUrl: require('../assets/videos/clip-fitness.mp4'),
     posterUrl: '',
@@ -194,6 +200,7 @@ const baseReels: ReelItem[] = [
     id: 'reel-2',
     title: 'GP tips',
     author: 'dr.remya',
+    authorAvatarUrl: reelAvatar('photo-1559839734-2b71ea197ec2'),
     caption: 'When to book an online consult vs clinic visit',
     videoUrl: require('../assets/videos/clip-health.mp4'),
     posterUrl: '',
@@ -205,6 +212,7 @@ const baseReels: ReelItem[] = [
     id: 'reel-3',
     title: 'Lab prep',
     author: 'thyrocare.care',
+    authorAvatarUrl: reelAvatar('photo-1629909613654-28e377c37b09'),
     caption: 'How to prepare for Vitamin B12 fasting tests',
     videoUrl: require('../assets/videos/clip-short.mp4'),
     posterUrl: '',
@@ -216,6 +224,7 @@ const baseReels: ReelItem[] = [
     id: 'reel-4',
     title: 'Weekend trek',
     author: 'trailblaze.tours',
+    authorAvatarUrl: reelAvatar('photo-1551632811-561732d1e306'),
     caption: 'Yercaud adventure seats filling fast #tours',
     videoUrl: require('../assets/videos/clip-fitness.mp4'),
     posterUrl: '',
@@ -233,6 +242,7 @@ const baseReels: ReelItem[] = [
     id: 'reel-5',
     title: 'Strength session',
     author: 'fit.ananya',
+    authorAvatarUrl: reelAvatar('photo-1544367567-0f2fcb009e0b'),
     caption: 'Dumbbell circuit you can do at home #workout',
     videoUrl: require('../assets/videos/clip-short.mp4'),
     posterUrl: '',
@@ -244,6 +254,7 @@ const baseReels: ReelItem[] = [
     id: 'reel-6',
     title: 'Whey restock',
     author: 'shop.anticlock',
+    authorAvatarUrl: reelAvatar('photo-1527980965255-d3b416303d12'),
     caption: 'Clean protein for post-workout recovery #products',
     videoUrl: require('../assets/videos/clip-health.mp4'),
     posterUrl: '',
@@ -260,6 +271,7 @@ const baseReels: ReelItem[] = [
     id: 'reel-7',
     title: 'Match warm-up',
     author: 'sports.hub',
+    authorAvatarUrl: reelAvatar('photo-1517836357463-d25dfeac3438'),
     caption: 'Football drills before kickoff',
     videoUrl: require('../assets/videos/clip-fitness.mp4'),
     posterUrl: '',
@@ -271,6 +283,7 @@ const baseReels: ReelItem[] = [
     id: 'reel-8',
     title: 'Training tee drop',
     author: 'apparel.lab',
+    authorAvatarUrl: reelAvatar('photo-1494790108377-be9c29b29330'),
     caption: 'Breathable tee for summer sessions #apparel',
     videoUrl: require('../assets/videos/clip-short.mp4'),
     posterUrl: '',

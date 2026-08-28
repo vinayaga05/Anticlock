@@ -1,21 +1,22 @@
-export type ClubJoinPolicy = 'open' | 'request';
+export type TeamJoinPolicy = 'open' | 'request';
 
-export type ClubPlayerRole = 'player' | 'coach' | 'staff';
+export type TeamPlayerRole = 'player' | 'coach' | 'staff';
 
 export type ChallengeStatus = 'upcoming' | 'active' | 'completed' | 'cancelled';
 
-export type ChallengeOrganizerType = 'club' | 'user' | 'platform';
+export type ChallengeOrganizerType = 'team' | 'user' | 'platform';
 
 export type ParticipationStatus = 'active' | 'completed' | 'withdrawn';
 
-export type ClubJoinRequestStatus = 'pending' | 'accepted' | 'rejected';
+export type TeamJoinRequestStatus = 'pending' | 'accepted' | 'rejected';
 
-export type Club = {
+export type Team = {
   id: string;
   name: string;
   logoUrl: string;
   coverUrl: string;
   sport: string;
+  sportTags: string[];
   location: string;
   description: string;
   ownerId: string;
@@ -23,18 +24,18 @@ export type Club = {
   coachPlayerId?: string;
   captainPlayerId?: string;
   memberIds: string[];
-  joinPolicy: ClubJoinPolicy;
+  joinPolicy: TeamJoinPolicy;
   eventIds: string[];
   challengeIds: string[];
   memberCount: number;
 };
 
-export type ClubPlayer = {
+export type TeamPlayer = {
   id: string;
-  clubId: string;
+  teamId: string;
   name: string;
   imageUrl?: string;
-  role: ClubPlayerRole;
+  role: TeamPlayerRole;
   position?: string;
   jerseyNumber?: number;
   ageGroup?: string;
@@ -43,13 +44,13 @@ export type ClubPlayer = {
   isActive: boolean;
 };
 
-export type ClubJoinRequest = {
+export type TeamJoinRequest = {
   id: string;
-  clubId: string;
+  teamId: string;
   userId: string;
   userName: string;
   requestedAt: string;
-  status: ClubJoinRequestStatus;
+  status: TeamJoinRequestStatus;
 };
 
 export type Challenge = {
@@ -58,26 +59,33 @@ export type Challenge = {
   coverUrl: string;
   description: string;
   category: string;
+  sportTags: string[];
   rules: string;
   goalLabel: string;
   startDate: string;
   endDate: string;
+  location: string;
   organizerType: ChallengeOrganizerType;
   organizerId: string;
   organizerName: string;
   eligibility: string;
+  minTeamSize?: number;
+  maxTeamSize?: number;
   maxParticipants?: number;
   rewards: string[];
   status: ChallengeStatus;
   linkedEventIds: string[];
+  /** Teams that have joined (team-oriented challenges). */
+  teamCount: number;
   participantCount: number;
+  requiresTeam: boolean;
 };
 
 export type ChallengeParticipation = {
   id: string;
   challengeId: string;
   userId: string;
-  clubId?: string;
+  teamId?: string;
   eventId?: string;
   joinedAt: string;
   progress: number;
@@ -85,6 +93,20 @@ export type ChallengeParticipation = {
   status: ParticipationStatus;
   result?: string;
 };
+
+export type TeamEligibility = {
+  eligible: boolean;
+  reason?: string;
+};
+
+export const SPORT_TAGS = [
+  'Cricket',
+  'Football',
+  'Hockey',
+  'Badminton',
+  'Running',
+  'Cycling',
+] as const;
 
 export const CURRENT_USER_ID = 'user-me';
 export const CURRENT_USER_NAME = 'You';

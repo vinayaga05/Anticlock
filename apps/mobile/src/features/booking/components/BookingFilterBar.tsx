@@ -1,25 +1,25 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PressableScale } from '@/shared/components/PressableScale';
+import { AppIcon } from '@/shared/components/AppIcon';
+import { useTheme } from '@/shared/hooks/useTheme';
 import { BookingFilter } from '@/shared/data/bookings';
 
-const FILTERS: {
-  id: BookingFilter;
-  label: string;
-  activeBg: string;
-  activeText: string;
-}[] = [
-  { id: 'all', label: 'My Booking', activeBg: '#38BDF8', activeText: '#FFFFFF' },
-  { id: 'online', label: 'Online', activeBg: '#22C55E', activeText: '#FFFFFF' },
-  { id: 'all_class', label: 'All Class', activeBg: '#14B8A6', activeText: '#FFFFFF' },
+const FILTERS: { id: BookingFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'online', label: 'Online' },
+  { id: 'classes', label: 'Classes' },
 ];
 
 type Props = {
   active: BookingFilter;
   onChange: (filter: BookingFilter) => void;
+  onOpenFilters?: () => void;
 };
 
-export function BookingFilterBar({ active, onChange }: Props) {
+export function BookingFilterBar({ active, onChange, onOpenFilters }: Props) {
+  const theme = useTheme();
+
   return (
     <View style={styles.wrap}>
       <ScrollView
@@ -36,13 +36,16 @@ export function BookingFilterBar({ active, onChange }: Props) {
               style={[
                 styles.pill,
                 {
-                  backgroundColor: isActive ? item.activeBg : 'rgba(148,163,184,0.12)',
+                  backgroundColor: isActive
+                    ? theme.colors.primary
+                    : theme.colors.surfaceSecondary,
+                  borderColor: isActive ? theme.colors.primary : theme.colors.borderSoft,
                 },
               ]}>
               <Text
                 style={[
                   styles.label,
-                  { color: isActive ? item.activeText : '#64748B' },
+                  { color: isActive ? '#FFFFFF' : theme.colors.textSecondary },
                 ]}>
                 {item.label}
               </Text>
@@ -50,29 +53,46 @@ export function BookingFilterBar({ active, onChange }: Props) {
           );
         })}
       </ScrollView>
+      {onOpenFilters ? (
+        <PressableScale
+          onPress={onOpenFilters}
+          accessibilityLabel="Filters"
+          style={[styles.filterIcon, { borderColor: theme.colors.borderSoft }]}>
+          <AppIcon name="settings" size={18} color={theme.colors.textSecondary} />
+        </PressableScale>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    marginHorizontal: -2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   row: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     paddingVertical: 2,
+    flexGrow: 1,
   },
   pill: {
-    paddingHorizontal: 18,
-    paddingVertical: 11,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 999,
-    minWidth: 108,
-    alignItems: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
   },
   label: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
-    letterSpacing: 0.2,
+  },
+  filterIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });

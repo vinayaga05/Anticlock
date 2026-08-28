@@ -10,6 +10,7 @@ import { useTheme } from '@/shared/hooks/useTheme';
 import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { Glass } from '@/shared/components/Glass';
+import { healthTheme } from '@/shared/theme/healthTheme';
 
 export type ButtonVariant =
   | 'primary'
@@ -18,7 +19,8 @@ export type ButtonVariant =
   | 'ghost'
   | 'destructive'
   | 'icon'
-  | 'floating';
+  | 'floating'
+  | 'health';
 
 type Props = {
   title?: string;
@@ -73,6 +75,12 @@ export function Button({
           bg: theme.glass.medium.background,
           text: theme.colors.textPrimary,
           border: theme.glass.medium.border,
+        };
+      case 'health':
+        return {
+          bg: healthTheme.navy,
+          text: healthTheme.white,
+          border: 'transparent',
         };
       case 'icon':
         return {

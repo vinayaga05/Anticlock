@@ -56,7 +56,11 @@ export const palette = {
   green: '#84CC16',
   yellow: '#F59E0B',
   orange: '#FB923C',
-  navy: '#64748B',
+  /** Clinical blue for health tree (CliniQ-style). */
+  clinical: '#5BB8E8',
+  clinicalDeep: '#1E3A5F',
+  clinicalSoft: 'rgba(91, 184, 232, 0.18)',
+  clinicalNavy: '#1E3A5F',
 
   gray: {
     50: '#FAFAF8',
@@ -76,9 +80,9 @@ export const palette = {
 
 export const treeColors = {
   health: {
-    accent: palette.coral,
-    soft: palette.coralSoft,
-    deep: palette.coralDeep,
+    accent: palette.clinical,
+    soft: palette.clinicalSoft,
+    deep: palette.clinicalDeep,
   },
   fitness: {
     accent: palette.lime,

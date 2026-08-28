@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '@/shared/hooks/useTheme';
+import { BrandLogo } from '@/shared/components/BrandLogo';
 import { IconButton } from '@/shared/components/IconButton';
 import { APP_NAME } from '@/shared/constants';
 
@@ -35,9 +36,10 @@ export function AppHeader({
   return (
     <View style={[styles.wrap, { marginBottom: theme.spacing.sm }]}>
       <View style={styles.row}>
-        <View style={{ flex: 1, gap: 4 }}>
+        <View style={styles.lead}>
           {greeting ? (
             <>
+              <BrandLogo height={36} />
               <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>
                 {getGreeting()}, {name}
               </Text>
@@ -46,27 +48,7 @@ export function AppHeader({
               </Text>
             </>
           ) : showBrand ? (
-            <View style={styles.brandRow}>
-              <View
-                style={[
-                  styles.logo,
-                  {
-                    backgroundColor: theme.colors.primarySoft,
-                    borderRadius: theme.radius.md,
-                  },
-                ]}>
-                <View style={[styles.logoDot, { backgroundColor: theme.colors.secondary }]} />
-                <View
-                  style={[
-                    styles.logoDot,
-                    { backgroundColor: theme.colors.primary, marginLeft: -6 },
-                  ]}
-                />
-              </View>
-              <Text style={[theme.typography.brand, { color: theme.colors.textPrimary }]}>
-                {title ?? APP_NAME}
-              </Text>
-            </View>
+            <BrandLogo height={40} showName name={title ?? APP_NAME} />
           ) : (
             <Text style={[theme.typography.title, { color: theme.colors.textPrimary }]}>
               {title}
@@ -105,30 +87,19 @@ const styles = StyleSheet.create({
   wrap: {},
   row: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: 12,
   },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  logo: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
+  lead: {
+    flex: 1,
+    gap: 4,
     justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  logoDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    minHeight: 40,
   },
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    flexShrink: 0,
   },
 });

@@ -6,19 +6,24 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
+import { HealthScreenShell } from '@/shared/components/HealthScreenShell';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { Button } from '@/shared/components/Button';
-import { Card } from '@/shared/components/Card';
+import { Glass } from '@/shared/components/Glass';
 import { SoftIllustration } from '@/shared/components/illustrations/SoftIllustration';
 import { AppIcon } from '@/shared/components/AppIcon';
 import { useTheme } from '@/shared/hooks/useTheme';
+import { healthTheme } from '@/shared/theme/healthTheme';
 import { RootStackParamList } from '@/shared/navigation/types';
+
+const HEALTH_KINDS = new Set(['doctor', 'lab', 'appointment']);
 
 export function BookingConfirmScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<RootStackParamList, 'BookingConfirm'>>();
-  const { title, subtitle, when, place, fee, patientName } = route.params;
+  const { kind, title, subtitle, when, place, fee, patientName } = route.params;
+  const isHealth = HEALTH_KINDS.has(kind);
   const scale = useSharedValue(0.6);
 
   useEffect(() => {
@@ -29,75 +34,83 @@ export function BookingConfirmScreen() {
     transform: [{ scale: scale.value }],
   }));
 
+  const Shell = isHealth ? HealthScreenShell : ScreenContainer;
+  const accent = isHealth ? healthTheme.sky : theme.colors.primary;
+  const titleColor = isHealth ? healthTheme.navy : theme.colors.textPrimary;
+  const mutedColor = isHealth ? healthTheme.textMuted : theme.colors.textSecondary;
+
   return (
-    <ScreenContainer scrollable tabAware={false}>
+    <Shell scrollable tabAware={false}>
       <View style={styles.center}>
         <Animated.View style={animStyle}>
-          <SoftIllustration
-            variant="confirm"
-            accent={theme.colors.primary}
-            width={180}
-            height={130}
-          />
+          <SoftIllustration variant="confirm" accent={accent} width={180} height={130} />
         </Animated.View>
-        <Text style={[theme.typography.title, { color: theme.colors.textPrimary }]}>
+        <Text style={[theme.typography.title, { color: titleColor }]}>
           Booking confirmed
         </Text>
-        <Text
-          style={[
-            theme.typography.body,
-            { color: theme.colors.textSecondary, textAlign: 'center' },
-          ]}>
+        <Text style={[theme.typography.body, { color: mutedColor, textAlign: 'center' }]}>
           Your appointment is scheduled for {when}.
         </Text>
       </View>
 
-      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <View style={[styles.avatar, { backgroundColor: theme.colors.primary }]}>
-          <Text style={{ color: theme.colors.textInverse, fontWeight: '700' }}>
+      <Glass
+        variant={isHealth ? 'health' : undefined}
+        intensity="heavy"
+        radius={isHealth ? healthTheme.radiusMd : theme.radius.lg}
+        elevated={isHealth}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 }}>
+        <View
+          style={[
+            styles.avatar,
+            { backgroundColor: isHealth ? healthTheme.navy : theme.colors.primary },
+          ]}>
+          <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>
             {(patientName ?? 'U').slice(0, 1)}
           </Text>
         </View>
         <View>
-          <Text
-            style={[
-              theme.typography.body,
-              { color: theme.colors.textPrimary, fontWeight: '600' },
-            ]}>
+          <Text style={[theme.typography.body, { color: titleColor, fontWeight: '600' }]}>
             {patientName ?? 'Guest User'}
           </Text>
-          <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
-            Age 42
-          </Text>
+          <Text style={[theme.typography.caption, { color: mutedColor }]}>Age 42</Text>
         </View>
-      </Card>
+      </Glass>
 
-      <Card style={{ gap: 14 }}>
-        <Row label="Provider" value={title} />
-        <Row label="Service" value={subtitle} />
-        <Row label="Place" value={place} />
-        <Row label="When" value={when} />
+      <Glass
+        variant={isHealth ? 'health' : undefined}
+        intensity="heavy"
+        radius={isHealth ? healthTheme.radiusMd : theme.radius.lg}
+        elevated={isHealth}
+        style={{ gap: 14, padding: 16 }}>
+        <Row label="Provider" value={title} muted={mutedColor} title={titleColor} />
+        <Row label="Service" value={subtitle} muted={mutedColor} title={titleColor} />
+        <Row label="Place" value={place} muted={mutedColor} title={titleColor} />
+        <Row label="When" value={when} muted={mutedColor} title={titleColor} />
         <View
           style={[
             styles.paid,
             {
-              backgroundColor: theme.colors.primarySoft,
-              borderRadius: theme.radius.lg,
+              backgroundColor: isHealth ? healthTheme.skySoft : theme.colors.primarySoft,
+              borderRadius: isHealth ? healthTheme.radiusSm : theme.radius.lg,
             },
           ]}>
-          <AppIcon name="credit-card" size={16} color={theme.colors.primary} />
+          <AppIcon name="credit-card" size={16} color={isHealth ? healthTheme.navy : theme.colors.primary} />
           <Text
             style={[
               theme.typography.bodySmall,
-              { color: theme.colors.primary, fontWeight: '700' },
+              {
+                color: isHealth ? healthTheme.navy : theme.colors.primary,
+                fontWeight: '700',
+              },
             ]}>
             Amount paid Rs {fee}
           </Text>
         </View>
-      </Card>
+      </Glass>
 
       <Button
         title="View booking"
+        variant={isHealth ? 'health' : 'primary'}
         icon="clipboard"
         onPress={() => navigation.navigate('MyBookings')}
       />
@@ -106,21 +119,29 @@ export function BookingConfirmScreen() {
         variant="secondary"
         onPress={() => navigation.navigate('Main', { screen: 'Needs' })}
       />
-    </ScreenContainer>
+    </Shell>
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({
+  label,
+  value,
+  muted,
+  title,
+}: {
+  label: string;
+  value: string;
+  muted: string;
+  title: string;
+}) {
   const theme = useTheme();
   return (
     <View>
-      <Text style={[theme.typography.caption, { color: theme.colors.textTertiary }]}>
-        {label}
-      </Text>
+      <Text style={[theme.typography.caption, { color: muted }]}>{label}</Text>
       <Text
         style={[
           theme.typography.body,
-          { color: theme.colors.textPrimary, fontWeight: '600', marginTop: 2 },
+          { color: title, fontWeight: '600', marginTop: 2 },
         ]}>
         {value}
       </Text>

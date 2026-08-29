@@ -23,13 +23,26 @@ import {
   navigateBookingTarget,
 } from '@/shared/data/bookings';
 
-export function BookingsTimeline() {
+type BookingsTimelineProps = {
+  filterSheetOpen?: boolean;
+  onFilterSheetOpenChange?: (open: boolean) => void;
+  showFilterButton?: boolean;
+};
+
+export function BookingsTimeline({
+  filterSheetOpen,
+  onFilterSheetOpenChange,
+  showFilterButton = true,
+}: BookingsTimelineProps) {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const [filter, setFilter] = useState<BookingFilter>('all');
   const [advanced, setAdvanced] = useState<BookingAdvancedFilters>(DEFAULT_ADVANCED_FILTERS);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [internalSheetOpen, setInternalSheetOpen] = useState(false);
   const [pastExpanded, setPastExpanded] = useState(false);
+
+  const sheetOpen = filterSheetOpen ?? internalSheetOpen;
+  const setSheetOpen = onFilterSheetOpenChange ?? setInternalSheetOpen;
 
   const filtered = useMemo(() => {
     const all = getConsolidatedBookings();
@@ -72,7 +85,7 @@ export function BookingsTimeline() {
       <BookingFilterBar
         active={filter}
         onChange={setFilter}
-        onOpenFilters={() => setSheetOpen(true)}
+        onOpenFilters={showFilterButton ? () => setSheetOpen(true) : undefined}
       />
 
       {!hasUpcoming && past.length === 0 ? (

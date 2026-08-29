@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
+import type { ImageSourcePropType } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { AppHeader } from '@/shared/components/AppHeader';
@@ -18,41 +19,65 @@ import {
 } from '@/shared/data/services';
 import { ProductCard } from '@/features/services/components/ProductCard';
 import { useCartStore } from '@/shared/store/cartStore';
-import { IconName } from '@/shared/components/AppIcon';
-import { softFill } from '@/shared/theme/colors';
+import { AppIcon } from '@/shared/components/AppIcon';
+import { softFill, treeColors } from '@/shared/theme/colors';
+
+const shopCategoryImages: Record<string, ImageSourcePropType> = {
+  'ecom.sports': require('../../../shared/assets/categories/shop-sports-3d.png'),
+  'ecom.health': require('../../../shared/assets/categories/shop-health-3d.png'),
+  'ecom.fitness': require('../../../shared/assets/categories/shop-fitness-3d.png'),
+  'ecom.beauty': require('../../../shared/assets/categories/shop-beauty-3d.png'),
+  'ecom.garments': require('../../../shared/assets/categories/shop-garments-3d.png'),
+  'ecom.property': require('../../../shared/assets/categories/shop-property-3d.png'),
+  'ecom.kitchen': require('../../../shared/assets/categories/shop-kitchen-3d.png'),
+  'ecom.games': require('../../../shared/assets/categories/shop-games-3d.png'),
+  'ecom.electronics': require('../../../shared/assets/categories/shop-electronics-3d.png'),
+};
 
 export function ShopScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const { count } = useCartStore();
   const categories = getEcommerceCategories();
-  const [categoryId, setCategoryId] = useState('all');
+  const [categoryId, setCategoryId] = useState<string | null>(null);
 
-  const products = useMemo(() => {
-    if (categoryId === 'all') {
-      return marketplaceProducts.filter(p => !p.isProperty);
-    }
-    return getProductsForCategory(categoryId);
-  }, [categoryId]);
+  const products = useMemo(
+    () =>
+      categoryId
+        ? getProductsForCategory(categoryId)
+        : marketplaceProducts.filter(product => !product.isProperty),
+    [categoryId],
+  );
 
   const selectedName =
-    categoryId === 'all'
-      ? 'All products'
-      : categories.find(c => c.id === categoryId)?.name ?? 'Products';
+    categories.find(c => c.id === categoryId)?.name ?? 'All products';
 
   return (
     <ScreenContainer scrollable>
       <AppHeader title="Shop" />
       <SearchBar placeholder="Search products" />
 
-      <Card tint={softFill(theme.colors.ecommerce, 0.12)} style={styles.cartCard}>
+      <Card
+        tint={softFill(theme.colors.ecommerce, 0.12)}
+        style={styles.cartCard}
+      >
         <View style={styles.cartLeft}>
           <IconBadge name="cart" color={theme.colors.ecommerce} size="md" />
           <View style={{ flexShrink: 1 }}>
-            <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
+            <Text
+              style={[
+                theme.typography.caption,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
               Your cart
             </Text>
-            <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>
+            <Text
+              style={[
+                theme.typography.section,
+                { color: theme.colors.textPrimary },
+              ]}
+            >
               {count} items
             </Text>
           </View>
@@ -68,40 +93,6 @@ export function ShopScreen() {
       <SectionHeader title="Categories" subtitle="Browse by type" />
 
       <View style={styles.catGrid}>
-        <View style={styles.catCell}>
-          <PressableScale
-            accessibilityLabel="All categories"
-            onPress={() => setCategoryId('all')}
-            style={[
-              styles.catTile,
-              {
-                backgroundColor:
-                  categoryId === 'all'
-                    ? softFill(theme.colors.ecommerce, 0.18)
-                    : theme.colors.surface,
-                borderColor:
-                  categoryId === 'all'
-                    ? theme.colors.ecommerce
-                    : theme.colors.borderSoft,
-                borderRadius: theme.radius.lg,
-              },
-            ]}>
-            <IconBadge name="shopping-bag" color={theme.colors.ecommerce} size="md" />
-            <Text
-              style={[
-                theme.typography.caption,
-                {
-                  color: theme.colors.textPrimary,
-                  fontWeight: '600',
-                  textAlign: 'center',
-                },
-              ]}
-              numberOfLines={2}>
-              All
-            </Text>
-          </PressableScale>
-        </View>
-
         {categories.map(c => {
           const active = categoryId === c.id;
           return (
@@ -120,11 +111,14 @@ export function ShopScreen() {
                       : theme.colors.borderSoft,
                     borderRadius: theme.radius.lg,
                   },
-                ]}>
-                <IconBadge
-                  name={c.icon as IconName}
-                  color={theme.colors.ecommerce}
-                  size="md"
+                ]}
+              >
+                <Image
+                  source={shopCategoryImages[c.id]}
+                  style={styles.categoryImage}
+                  resizeMode="cover"
+                  accessible
+                  accessibilityLabel={`${c.name} product category image`}
                 />
                 <Text
                   style={[
@@ -135,16 +129,37 @@ export function ShopScreen() {
                       textAlign: 'center',
                     },
                   ]}
-                  numberOfLines={2}>
+                  numberOfLines={2}
+                >
                   {c.name}
                 </Text>
               </PressableScale>
+              {active ? (
+                <PressableScale
+                  accessibilityLabel={`Clear ${c.name} filter`}
+                  onPress={() => setCategoryId(null)}
+                  style={[
+                    styles.clearFilter,
+                    {
+                      backgroundColor: treeColors.ecommerce.deep,
+                      borderColor: treeColors.ecommerce.deep,
+                      borderRadius: theme.radius.pill,
+                      ...(theme.shadows.soft as object),
+                    },
+                  ]}
+                >
+                  <AppIcon name="x" size={11} color="#FFFFFF" />
+                </PressableScale>
+              ) : null}
             </View>
           );
         })}
       </View>
 
-      <SectionHeader title={selectedName} subtitle={`${products.length} items`} />
+      <SectionHeader
+        title={selectedName}
+        subtitle={`${products.length} items`}
+      />
 
       {products.length === 0 ? (
         <EmptyState
@@ -160,7 +175,9 @@ export function ShopScreen() {
               <ProductCard
                 product={product}
                 onPress={() =>
-                  navigation.navigate('ProductDetail', { productId: product.id })
+                  navigation.navigate('ProductDetail', {
+                    productId: product.id,
+                  })
                 }
               />
             </View>
@@ -198,6 +215,7 @@ const styles = StyleSheet.create({
   catCell: {
     width: '33.333%',
     padding: 6,
+    position: 'relative',
   },
   catTile: {
     alignItems: 'center',
@@ -205,8 +223,24 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
     paddingHorizontal: 8,
-    minHeight: 100,
+    minHeight: 118,
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  categoryImage: {
+    width: 62,
+    height: 62,
+    borderRadius: 16,
+  },
+  clearFilter: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    zIndex: 1,
   },
   productGrid: {
     flexDirection: 'row',

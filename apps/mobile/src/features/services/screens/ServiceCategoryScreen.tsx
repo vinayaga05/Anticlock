@@ -8,6 +8,7 @@ import { SearchBar } from '@/shared/components/SearchBar';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { FilterPills } from '@/shared/components/FilterPills';
 import { useTheme } from '@/shared/hooks/useTheme';
+import { useSearchScrollRestoration } from '@/shared/hooks/useSearchScrollRestoration';
 import {
   getCategory,
   getCoursesForCategory,
@@ -22,6 +23,10 @@ import { ProductCard } from '@/features/services/components/ProductCard';
 import { RootStackParamList } from '@/shared/navigation/types';
 import { treeColors, TreeColorId } from '@/shared/theme/colors';
 
+function matchesQuery(query: string, ...values: Array<string | undefined>) {
+  return !query || values.some(value => value?.toLowerCase().includes(query));
+}
+
 export function ServiceCategoryScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
@@ -29,10 +34,13 @@ export function ServiceCategoryScreen() {
   const { categoryId, treeId } = route.params;
   const category = getCategory(categoryId);
   const [sort, setSort] = useState('near');
+  const { searchQuery, onChangeText, scrollRef, onScroll } =
+    useSearchScrollRestoration();
   const treeKey = (
     treeId in treeColors ? treeId : category?.treeId ?? 'health'
   ) as TreeColorId;
-  const accent = treeKey === 'health' ? healthTheme.navy : treeColors[treeKey].accent;
+  const accent =
+    treeKey === 'health' ? healthTheme.navy : treeColors[treeKey].accent;
   const isHealth = treeKey === 'health';
   const Shell = isHealth ? HealthScreenShell : ScreenContainer;
 
@@ -40,15 +48,80 @@ export function ServiceCategoryScreen() {
     if (category) navigation.setOptions({ title: category.name });
   }, [category, navigation]);
 
-  const providers = useMemo(() => getProvidersForCategory(categoryId), [categoryId]);
+  const providers = useMemo(
+    () => getProvidersForCategory(categoryId),
+    [categoryId],
+  );
   const events = useMemo(() => getEventsForCategory(categoryId), [categoryId]);
-  const courses = useMemo(() => getCoursesForCategory(categoryId), [categoryId]);
-  const products = useMemo(() => getProductsForCategory(categoryId), [categoryId]);
+  const courses = useMemo(
+    () => getCoursesForCategory(categoryId),
+    [categoryId],
+  );
+  const products = useMemo(
+    () => getProductsForCategory(categoryId),
+    [categoryId],
+  );
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredProviders = useMemo(
+    () =>
+      providers.filter(provider =>
+        matchesQuery(
+          normalizedQuery,
+          provider.name,
+          provider.type,
+          provider.subtitle,
+          provider.location.city,
+          provider.location.area,
+          ...(provider.tags ?? []),
+        ),
+      ),
+    [providers, normalizedQuery],
+  );
+  const filteredEvents = useMemo(
+    () =>
+      events.filter(event =>
+        matchesQuery(
+          normalizedQuery,
+          event.title,
+          event.organizer,
+          event.destination,
+        ),
+      ),
+    [events, normalizedQuery],
+  );
+  const filteredCourses = useMemo(
+    () =>
+      courses.filter(course =>
+        matchesQuery(
+          normalizedQuery,
+          course.title,
+          course.instructor,
+          course.level,
+        ),
+      ),
+    [courses, normalizedQuery],
+  );
+  const filteredProducts = useMemo(
+    () =>
+      products.filter(product =>
+        matchesQuery(
+          normalizedQuery,
+          product.name,
+          product.seller,
+          product.description,
+        ),
+      ),
+    [products, normalizedQuery],
+  );
 
   if (!category) {
     return (
       <Shell tabAware={false}>
-        <EmptyState icon="search" title="Category not found" illustration="search" />
+        <EmptyState
+          icon="search"
+          title="Category not found"
+          illustration="search"
+        />
       </Shell>
     );
   }
@@ -65,11 +138,25 @@ export function ServiceCategoryScreen() {
     category.actionType === 'service_request';
 
   return (
-    <Shell scrollable tabAware={false}>
-      <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>
+    <Shell
+      scrollable
+      tabAware={false}
+      scrollRef={scrollRef}
+      onScroll={onScroll}
+    >
+      <Text
+        style={[
+          theme.typography.bodySmall,
+          { color: theme.colors.textSecondary },
+        ]}
+      >
         {category.description}
       </Text>
-      <SearchBar placeholder={`Search ${category.name}`} />
+      <SearchBar
+        placeholder={`Search ${category.name}`}
+        value={searchQuery}
+        onChangeText={onChangeText}
+      />
       <FilterPills
         activeId={sort}
         onChange={setSort}
@@ -82,53 +169,71 @@ export function ServiceCategoryScreen() {
       />
 
       {isEvent ? (
-        events.length === 0 ? (
+        filteredEvents.length === 0 ? (
           <EmptyState
             icon="globe"
-            title="No trips yet"
-            description="Check back soon for new dates."
+            title={normalizedQuery ? 'No matching trips' : 'No trips yet'}
+            description={
+              normalizedQuery
+                ? `No trips in ${category.name} match “${searchQuery.trim()}”.`
+                : 'Check back soon for new dates.'
+            }
           />
         ) : (
-          events.map(event => (
+          filteredEvents.map(event => (
             <EventCard
               key={event.id}
               event={event}
-              onPress={() => navigation.navigate('EventDetail', { eventId: event.id })}
+              onPress={() =>
+                navigation.navigate('EventDetail', { eventId: event.id })
+              }
             />
           ))
         )
       ) : isCourse ? (
-        courses.length === 0 ? (
-          <EmptyState icon="clipboard" title="No courses" />
+        filteredCourses.length === 0 ? (
+          <EmptyState
+            icon="clipboard"
+            title={normalizedQuery ? 'No matching courses' : 'No courses'}
+          />
         ) : (
-          courses.map(course => (
+          filteredCourses.map(course => (
             <CourseCard
               key={course.id}
               course={course}
-              onPress={() => navigation.navigate('CourseDetail', { courseId: course.id })}
+              onPress={() =>
+                navigation.navigate('CourseDetail', { courseId: course.id })
+              }
             />
           ))
         )
       ) : isProduct ? (
-        products.length === 0 ? (
-          <EmptyState icon="shopping-bag" title="No products" />
+        filteredProducts.length === 0 ? (
+          <EmptyState
+            icon="shopping-bag"
+            title={normalizedQuery ? 'No matching products' : 'No products'}
+          />
         ) : (
           <View style={styles.productGrid}>
-            {products.map(product => (
+            {filteredProducts.map(product => (
               <ProductCard
                 key={product.id}
                 product={product}
                 onPress={() =>
-                  navigation.navigate('ProductDetail', { productId: product.id })
+                  navigation.navigate('ProductDetail', {
+                    productId: product.id,
+                  })
                 }
               />
             ))}
           </View>
         )
-      ) : providers.length === 0 ? (
+      ) : filteredProviders.length === 0 ? (
         <EmptyState
           icon="search"
-          title="No providers nearby"
+          title={
+            normalizedQuery ? 'No matching providers' : 'No providers nearby'
+          }
           description={
             isRequest
               ? 'You can still submit a service request.'
@@ -142,13 +247,16 @@ export function ServiceCategoryScreen() {
           }
         />
       ) : (
-        providers.map(provider => (
+        filteredProviders.map(provider => (
           <ProviderCard
             key={provider.id}
             provider={provider}
             health={isHealth}
             onPress={() => {
-              if (category.legacyRoute === 'Doctors' && provider.id === 'prov-doc-remya') {
+              if (
+                category.legacyRoute === 'Doctors' &&
+                provider.id === 'prov-doc-remya'
+              ) {
                 navigation.navigate('DoctorProfile', { doctorId: 'doc-remya' });
                 return;
               }
@@ -163,7 +271,9 @@ export function ServiceCategoryScreen() {
                 category.legacyRoute === 'FitnessFeed' ||
                 category.legacyRoute === 'PhysioHub'
               ) {
-                navigation.navigate('ClassDetail', { classId: 'fit-sathish-am' });
+                navigation.navigate('ClassDetail', {
+                  classId: 'fit-sathish-am',
+                });
                 return;
               }
               navigation.navigate('UniversalDetail', {

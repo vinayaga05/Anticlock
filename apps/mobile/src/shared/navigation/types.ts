@@ -1,9 +1,11 @@
+export type KnockTab = 'notifications' | 'bookings' | 'chat';
+
 export type MainTabParamList = {
   Flash: undefined;
   PlayFeed: undefined;
   Needs: undefined;
   Community: undefined;
-  Knock: undefined;
+  Knock: { initialTab?: KnockTab } | undefined;
   Shop: undefined;
 };
 

@@ -25,26 +25,27 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 function SubIcon({
   item,
-  onPress,
 }: {
   item: NeedsShowcaseItem;
-  onPress: () => void;
 }) {
   const theme = useTheme();
   return (
-    <PressableScale
-      onPress={onPress}
-      accessibilityLabel={item.label}
-      style={styles.subCol}>
+    <View style={styles.subCol}>
       <View style={styles.iconCircle}>
-        <Image source={item.image} style={styles.iconImage} resizeMode="cover" />
+        <Image
+          source={item.image}
+          style={styles.iconImage}
+          resizeMode="cover"
+          accessible
+          accessibilityLabel={`${item.label} service image`}
+        />
       </View>
       <Text
         style={[styles.subLabel, { color: theme.colors.textSecondary }]}
         numberOfLines={2}>
         {item.label}
       </Text>
-    </PressableScale>
+    </View>
   );
 }
 
@@ -69,12 +70,6 @@ function NeedsShowcaseCardView({ card }: { card: NeedsShowcaseCard }) {
           <SubIcon
             key={item.categoryId}
             item={item}
-            onPress={() =>
-              navigation.navigate('ServiceCategory', {
-                treeId: item.treeId,
-                categoryId: item.categoryId,
-              })
-            }
           />
         ))}
       </View>

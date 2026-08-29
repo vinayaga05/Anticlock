@@ -195,18 +195,26 @@ export const stubBanners = pgTable('stub_banners', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-/** Clips / Reels — publish state lives here; video bytes live in Stream (or external URL). */
+/** Clips / Reels — publish state lives here; video bytes live in R2, Stream, or an external URL. */
 export const reels = pgTable('reels', {
   id: uuid('id').defaultRandom().primaryKey(),
   title: text('title').notNull(),
   caption: text('caption'),
   creatorName: text('creator_name').notNull(),
   category: text('category'),
-  status: text('status').notNull().default('draft'), // draft | published | archived
+  /** Draft → review → published lifecycle. */
+  status: text('status').notNull().default('draft'), // draft | in_review | published | archived
+  /** Editorial label. `test` content never enters the public feed. */
+  contentMode: text('content_mode').notNull().default('standard'), // standard | test | sample
+  /** Content safety outcome, separate from lifecycle status. */
+  moderationStatus: text('moderation_status').notNull().default('clear'), // clear | under_review | restricted | removed
   isSample: boolean('is_sample').notNull().default(true),
   likeCount: integer('like_count').notNull().default(0),
   commentCount: integer('comment_count').notNull().default(0),
   saveCount: integer('save_count').notNull().default(0),
+  viewCount: integer('view_count').notNull().default(0),
+  completionCount: integer('completion_count').notNull().default(0),
+  reportCount: integer('report_count').notNull().default(0),
   displayOrder: integer('display_order').notNull().default(0),
   mediaId: uuid('media_id').references(() => mediaAssets.id, {
     onDelete: 'set null',
@@ -221,4 +229,78 @@ export const reels = pgTable('reels', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   publishedAt: timestamp('published_at', { withTimezone: true }),
+  submittedForReviewAt: timestamp('submitted_for_review_at', {
+    withTimezone: true,
+  }),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  reviewedBy: uuid('reviewed_by').references(() => users.id, {
+    onDelete: 'set null',
+  }),
 });
+
+/** One immutable, idempotent playback-session measurement from a mobile client. */
+export const reelViewEvents = pgTable('reel_view_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  /** Client-generated UUID; unique so retries cannot inflate analytics. */
+  eventId: uuid('event_id').notNull().unique(),
+  reelId: uuid('reel_id')
+    .notNull()
+    .references(() => reels.id, { onDelete: 'cascade' }),
+  viewerKey: text('viewer_key').notNull(),
+  viewerKind: text('viewer_kind').notNull(), // mobile_user | device
+  sessionId: text('session_id'),
+  watchedMs: integer('watched_ms').notNull().default(0),
+  completed: boolean('completed').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Current like state per mobile account/device, not an unbounded event log. */
+export const reelLikes = pgTable(
+  'reel_likes',
+  {
+    reelId: uuid('reel_id')
+      .notNull()
+      .references(() => reels.id, { onDelete: 'cascade' }),
+    actorKey: text('actor_key').notNull(),
+    actorKind: text('actor_kind').notNull(), // mobile_user | device
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  t => [primaryKey({ columns: [t.reelId, t.actorKey] })],
+);
+
+export const reelComments = pgTable('reel_comments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  reelId: uuid('reel_id')
+    .notNull()
+    .references(() => reels.id, { onDelete: 'cascade' }),
+  actorKey: text('actor_key').notNull(),
+  actorKind: text('actor_kind').notNull(), // mobile_user | device
+  body: text('body').notNull(),
+  status: text('status').notNull().default('visible'), // visible | removed
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  removedAt: timestamp('removed_at', { withTimezone: true }),
+});
+
+/** Report queue owned by moderation; a reporter can have one report per Reel. */
+export const reelReports = pgTable(
+  'reel_reports',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    reelId: uuid('reel_id')
+      .notNull()
+      .references(() => reels.id, { onDelete: 'cascade' }),
+    reporterKey: text('reporter_key').notNull(),
+    reporterKind: text('reporter_kind').notNull(), // mobile_user | device
+    reason: text('reason').notNull(),
+    details: text('details'),
+    status: text('status').notNull().default('open'), // open | resolved | dismissed
+    resolutionAction: text('resolution_action'),
+    resolutionNote: text('resolution_note'),
+    resolvedBy: uuid('resolved_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  },
+  t => [unique('reel_reports_reporter_uid').on(t.reelId, t.reporterKey)],
+);

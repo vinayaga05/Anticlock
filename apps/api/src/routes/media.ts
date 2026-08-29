@@ -4,19 +4,31 @@ import {
   CompleteUploadRequestSchema,
   CreateUploadSessionRequestSchema,
   MediaListQuerySchema,
+  SetMediaModerationStatusRequestSchema,
 } from '@anticlock/contracts';
-import { requireAuth, requirePermission, type AppEnv } from '../middleware/auth.js';
+import {
+  requireAuth,
+  requirePermission,
+  type AppEnv,
+} from '../middleware/auth.js';
 import { mediaService } from '../media/MediaService.js';
 import { mediaAccessPolicy } from '../media/MediaAccessPolicy.js';
 
 function httpError(err: unknown) {
   const e = err as { status?: number; code?: string; message?: string };
-  const status = (e.status ?? 500) as 400 | 403 | 404 | 409 | 410 | 500;
+  const isValidationError = err instanceof Error && err.name === 'ZodError';
+  const status = (isValidationError ? 400 : e.status ?? 500) as
+    | 400
+    | 403
+    | 404
+    | 409
+    | 410
+    | 500;
   return {
     status,
     body: {
       error: {
-        code: e.code ?? 'error',
+        code: isValidationError ? 'validation_error' : e.code ?? 'error',
         message: e.message ?? 'Unexpected error',
       },
     },
@@ -33,7 +45,32 @@ mediaAdminRoutes.post(
   async c => {
     try {
       const body = CreateUploadSessionRequestSchema.parse(await c.req.json());
-      const result = await mediaService.createUploadSession(c.get('auth'), body);
+      const result = await mediaService.createUploadSession(
+        c.get('auth'),
+        body,
+      );
+      return c.json(result, 201);
+    } catch (err) {
+      const { status, body } = httpError(err);
+      return c.json(body, status);
+    }
+  },
+);
+
+/**
+ * Asset-first alias for direct R2 uploads. The upload session stays internal
+ * so existing image/document clients continue to work unchanged.
+ */
+mediaAdminRoutes.post(
+  '/upload-url',
+  requirePermission('media.write'),
+  async c => {
+    try {
+      const body = CreateUploadSessionRequestSchema.parse(await c.req.json());
+      const result = await mediaService.createUploadSession(
+        c.get('auth'),
+        body,
+      );
       return c.json(result, 201);
     } catch (err) {
       const { status, body } = httpError(err);
@@ -69,6 +106,27 @@ mediaAdminRoutes.post(
       const raw = await c.req.json().catch(() => ({}));
       const body = CompleteUploadRequestSchema.parse(raw);
       const result = await mediaService.completeUpload(
+        c.get('auth'),
+        c.req.param('id'),
+        body.checksumSha256,
+      );
+      return c.json(result);
+    } catch (err) {
+      const { status, body } = httpError(err);
+      return c.json(body, status);
+    }
+  },
+);
+
+/** Completes the latest active session for a media asset. */
+mediaAdminRoutes.post(
+  '/:id/complete',
+  requirePermission('media.write'),
+  async c => {
+    try {
+      const raw = await c.req.json().catch(() => ({}));
+      const body = CompleteUploadRequestSchema.parse(raw);
+      const result = await mediaService.completeUploadForMedia(
         c.get('auth'),
         c.req.param('id'),
         body.checksumSha256,
@@ -152,7 +210,10 @@ mediaAdminRoutes.get(
       const key = decodeURIComponent(c.req.param('key'));
       const asset = await mediaService.findAssetByKey(bucket, key);
       if (!asset) {
-        return c.json({ error: { code: 'not_found', message: 'Not found' } }, 404);
+        return c.json(
+          { error: { code: 'not_found', message: 'Not found' } },
+          404,
+        );
       }
       const buf = await mediaService.getFileBuffer(bucket, key);
       return new Response(new Uint8Array(buf), {
@@ -161,6 +222,27 @@ mediaAdminRoutes.get(
           'Cache-Control': 'private, max-age=60',
         },
       });
+    } catch (err) {
+      const { status, body } = httpError(err);
+      return c.json(body, status);
+    }
+  },
+);
+
+mediaAdminRoutes.post(
+  '/:id/moderation',
+  requirePermission('moderation.act'),
+  async c => {
+    try {
+      const body = SetMediaModerationStatusRequestSchema.parse(
+        await c.req.json(),
+      );
+      const asset = await mediaService.setModerationStatus(
+        c.get('auth'),
+        c.req.param('id'),
+        body,
+      );
+      return c.json({ asset });
     } catch (err) {
       const { status, body } = httpError(err);
       return c.json(body, status);
@@ -183,7 +265,10 @@ mediaAdminRoutes.post(
   requirePermission('media.write'),
   async c => {
     try {
-      const asset = await mediaService.archive(c.get('auth'), c.req.param('id'));
+      const asset = await mediaService.archive(
+        c.get('auth'),
+        c.req.param('id'),
+      );
       return c.json({ asset });
     } catch (err) {
       const { status, body } = httpError(err);
@@ -222,7 +307,10 @@ mediaPublicRoutes.get('/file/:bucket/:key{.+}', async c => {
         asset.processingStatus,
       )
     ) {
-      return c.json({ error: { code: 'not_found', message: 'Not found' } }, 404);
+      return c.json(
+        { error: { code: 'not_found', message: 'Not found' } },
+        404,
+      );
     }
     const buf = await mediaService.getFileBuffer(bucket, key);
     return new Response(new Uint8Array(buf), {
@@ -237,13 +325,27 @@ mediaPublicRoutes.get('/file/:bucket/:key{.+}', async c => {
   }
 });
 
+mediaPublicRoutes.get('/banners', async c => {
+  try {
+    const data = await mediaService.listPublicBanners();
+    return c.json({ data });
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
 export const stubDomainRoutes = new Hono<AppEnv>();
 stubDomainRoutes.use('*', requireAuth);
 
-stubDomainRoutes.get('/providers', requirePermission('provider.read'), async c => {
-  const data = await mediaService.listProviders(c.get('auth'));
-  return c.json({ data });
-});
+stubDomainRoutes.get(
+  '/providers',
+  requirePermission('provider.read'),
+  async c => {
+    const data = await mediaService.listProviders(c.get('auth'));
+    return c.json({ data });
+  },
+);
 
 stubDomainRoutes.put(
   '/providers/:id/profile-media',
@@ -266,10 +368,14 @@ stubDomainRoutes.put(
   },
 );
 
-stubDomainRoutes.get('/products', requirePermission('orders.manage'), async c => {
-  const data = await mediaService.listProducts(c.get('auth'));
-  return c.json({ data });
-});
+stubDomainRoutes.get(
+  '/products',
+  requirePermission('orders.manage'),
+  async c => {
+    const data = await mediaService.listProducts(c.get('auth'));
+    return c.json({ data });
+  },
+);
 
 stubDomainRoutes.put(
   '/products/:id/gallery',

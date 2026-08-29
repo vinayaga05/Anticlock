@@ -167,7 +167,7 @@ export function RootNavigator() {
         <Stack.Screen
           name="MyBookings"
           component={MyBookingsScreen}
-          options={{ title: 'My Bookings' }}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="Communities"

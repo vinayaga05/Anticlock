@@ -1,6 +1,17 @@
 import React, { PropsWithChildren } from 'react';
-import { ScrollView, StyleSheet, View, ViewStyle } from 'react-native';
-import { SafeAreaView, Edge, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  ScrollView,
+  StyleSheet,
+  View,
+  ViewStyle,
+} from 'react-native';
+import {
+  SafeAreaView,
+  Edge,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { healthTheme } from '@/shared/theme/healthTheme';
 import { getTabBarBottomInset } from '@/shared/navigation/tabBarInset';
@@ -14,6 +25,8 @@ interface ScreenContainerProps extends PropsWithChildren {
   tabAware?: boolean;
   /** Clinical soft-blue backdrop for health flows. */
   variant?: 'default' | 'health';
+  scrollRef?: React.Ref<ScrollView>;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 }
 
 export function ScreenContainer({
@@ -24,11 +37,15 @@ export function ScreenContainer({
   edges,
   tabAware = true,
   variant = 'default',
+  scrollRef,
+  onScroll,
 }: ScreenContainerProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const isHealth = variant === 'health';
-  const bottomPad = tabAware ? getTabBarBottomInset(insets.bottom) : theme.spacing.lg;
+  const bottomPad = tabAware
+    ? getTabBarBottomInset(insets.bottom)
+    : theme.spacing.lg;
 
   // Stack screens already get top inset from the native header — don't double it.
   const resolvedEdges: Edge[] =
@@ -45,7 +62,8 @@ export function ScreenContainer({
         },
         { paddingBottom: bottomPad },
         contentStyle,
-      ]}>
+      ]}
+    >
       {children}
     </View>
   );
@@ -56,14 +74,21 @@ export function ScreenContainer({
       style={[
         styles.safeArea,
         {
-          backgroundColor: isHealth ? healthTheme.background : theme.colors.background,
+          backgroundColor: isHealth
+            ? healthTheme.background
+            : theme.colors.background,
         },
-      ]}>
+      ]}
+    >
       {scrollable ? (
         <ScrollView
+          ref={scrollRef}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}>
+          contentContainerStyle={styles.scrollContent}
+        >
           {content}
         </ScrollView>
       ) : (

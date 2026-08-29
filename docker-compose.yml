@@ -45,17 +45,11 @@ services:
       STREAM_API_TOKEN: ${STREAM_API_TOKEN:-}
       STREAM_CUSTOMER_SUBDOMAIN: ${STREAM_CUSTOMER_SUBDOMAIN:-}
       STREAM_WEBHOOK_SECRET: ${STREAM_WEBHOOK_SECRET:-}
-      STREAM_MAX_DURATION_SECONDS: ${STREAM_MAX_DURATION_SECONDS:-90}
+      STREAM_MAX_DURATION_SECONDS: ${STREAM_MAX_DURATION_SECONDS:-180}
     volumes:
       - anticlock_media:/app/apps/api/.media
     healthcheck:
-      test:
-        [
-          'CMD',
-          'wget',
-          '-qO-',
-          'http://127.0.0.1:4000/health',
-        ]
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:4000/health']
       interval: 10s
       timeout: 5s
       retries: 10
@@ -78,13 +72,7 @@ services:
       PORT: '3000'
       HOSTNAME: 0.0.0.0
     healthcheck:
-      test:
-        [
-          'CMD',
-          'wget',
-          '-qO-',
-          'http://127.0.0.1:3000/login',
-        ]
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/login']
       interval: 15s
       timeout: 5s
       retries: 10

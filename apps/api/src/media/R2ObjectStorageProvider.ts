@@ -1,4 +1,5 @@
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
@@ -21,6 +22,12 @@ function bucketName(bucket: StorageBucket): string {
   return process.env.R2_BUCKET_PUBLIC ?? 'anticlock-public-media';
 }
 
+/** Public delivery URLs are only valid when this bucket has a configured CDN/custom domain. */
+export function r2PublicDeliveryUrl(key: string): string | null {
+  const base = process.env.R2_PUBLIC_BASE_URL?.trim().replace(/\/$/, '');
+  return base ? `${base}/${key}` : null;
+}
+
 export class R2ObjectStorageProvider implements ObjectStorageProvider {
   readonly name = 'r2' as const;
   private client: S3Client;
@@ -31,7 +38,11 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
     const endpoint =
       process.env.R2_ENDPOINT ??
       (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : undefined);
-    if (!endpoint || !process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY) {
+    if (
+      !endpoint ||
+      !process.env.R2_ACCESS_KEY_ID ||
+      !process.env.R2_SECRET_ACCESS_KEY
+    ) {
       throw new Error('R2 credentials are not configured');
     }
     this.client = new S3Client({
@@ -42,7 +53,7 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
         secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
       },
     });
-    this.publicBase = process.env.R2_PUBLIC_BASE_URL;
+    this.publicBase = process.env.R2_PUBLIC_BASE_URL?.trim();
   }
 
   async createUploadTarget(input: {
@@ -59,7 +70,9 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
       Key: input.key,
       ContentType: input.contentType,
     });
-    const uploadUrl = await getSignedUrl(this.client, command, { expiresIn: 900 });
+    const uploadUrl = await getSignedUrl(this.client, command, {
+      expiresIn: 900,
+    });
     return {
       method: 'PUT',
       uploadUrl,
@@ -96,6 +109,58 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
     const bytes = await res.Body?.transformToByteArray();
     if (!bytes) throw new Error('Empty object body');
     return Buffer.from(bytes);
+  }
+
+  async getObjectPrefix(input: {
+    bucket: StorageBucket;
+    key: string;
+    byteLength: number;
+  }): Promise<Buffer> {
+    const res = await this.client.send(
+      new GetObjectCommand({
+        Bucket: bucketName(input.bucket),
+        Key: input.key,
+        Range: `bytes=0-${Math.max(0, input.byteLength - 1)}`,
+      }),
+    );
+    const bytes = await res.Body?.transformToByteArray();
+    if (!bytes) throw new Error('Empty object body');
+    return Buffer.from(bytes);
+  }
+
+  async finalizeUpload(input: {
+    bucket: StorageBucket;
+    sourceKey: string;
+    destinationKey: string;
+    sourceEtag?: string;
+  }): Promise<void> {
+    const bucket = bucketName(input.bucket);
+    const encodedSourceKey = input.sourceKey
+      .split('/')
+      .map(part => encodeURIComponent(part))
+      .join('/');
+    await this.client.send(
+      new CopyObjectCommand({
+        Bucket: bucket,
+        Key: input.destinationKey,
+        CopySource: `/${bucket}/${encodedSourceKey}`,
+        ...(input.sourceEtag ? { CopySourceIfMatch: input.sourceEtag } : {}),
+      }),
+    );
+
+    // The client-visible presigned URL applies only to the staging source.
+    // A failed cleanup is non-fatal: the completed asset already uses the
+    // immutable destination key and lifecycle rules can clean leftovers.
+    try {
+      await this.client.send(
+        new DeleteObjectCommand({
+          Bucket: bucket,
+          Key: input.sourceKey,
+        }),
+      );
+    } catch {
+      /* Best-effort staging cleanup. */
+    }
   }
 
   async verifyObject(input: {
@@ -139,7 +204,7 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
     transform?: MediaTransform;
   }): Promise<string | null> {
     if (input.accessLevel === 'public' && this.publicBase) {
-      const base = `${this.publicBase.replace(/\/$/, '')}/${input.key}`;
+      const base = r2PublicDeliveryUrl(input.key)!;
       // Cloudflare Images transform hook when configured on the public base.
       if (input.transform) {
         return `${base}?transform=${input.transform}`;

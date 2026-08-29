@@ -3,6 +3,7 @@ import { db } from '../db/client.js';
 import {
   mediaAssets,
   mediaUsages,
+  reels,
   stubBanners,
   stubProducts,
   stubProviders,
@@ -24,7 +25,10 @@ export class MediaRepository {
     return row!;
   }
 
-  async updateAsset(id: string, values: Partial<typeof mediaAssets.$inferInsert>) {
+  async updateAsset(
+    id: string,
+    values: Partial<typeof mediaAssets.$inferInsert>,
+  ) {
     const [row] = await db
       .update(mediaAssets)
       .set(values)
@@ -105,6 +109,22 @@ export class MediaRepository {
     return row ?? null;
   }
 
+  /** The asset-oriented completion API resolves the latest open session. */
+  async findOpenSessionForMedia(mediaId: string) {
+    const [row] = await db
+      .select()
+      .from(uploadSessions)
+      .where(
+        and(
+          eq(uploadSessions.mediaId, mediaId),
+          eq(uploadSessions.status, 'open'),
+        ),
+      )
+      .orderBy(desc(uploadSessions.createdAt))
+      .limit(1);
+    return row ?? null;
+  }
+
   async updateSession(
     id: string,
     values: Partial<typeof uploadSessions.$inferInsert>,
@@ -118,15 +138,26 @@ export class MediaRepository {
   }
 
   async listUsages(mediaId: string) {
-    return db.select().from(mediaUsages).where(eq(mediaUsages.mediaId, mediaId));
+    return db
+      .select()
+      .from(mediaUsages)
+      .where(eq(mediaUsages.mediaId, mediaId));
   }
 
   async usageCount(mediaId: string) {
-    const [row] = await db
+    const [usageRow] = await db
       .select({ value: count() })
       .from(mediaUsages)
       .where(eq(mediaUsages.mediaId, mediaId));
-    return Number(row?.value ?? 0);
+    // Older Reels predate media_usages. Count their direct foreign keys too so
+    // deleting an asset can never silently detach a Reel.
+    const [reelRow] = await db
+      .select({ value: count() })
+      .from(reels)
+      .where(
+        or(eq(reels.mediaId, mediaId), eq(reels.thumbnailMediaId, mediaId)),
+      );
+    return Number(usageRow?.value ?? 0) + Number(reelRow?.value ?? 0);
   }
 
   async attachUsage(values: typeof mediaUsages.$inferInsert) {
@@ -155,7 +186,10 @@ export class MediaRepository {
   }
 
   async getUsage(id: string) {
-    const [row] = await db.select().from(mediaUsages).where(eq(mediaUsages.id, id));
+    const [row] = await db
+      .select()
+      .from(mediaUsages)
+      .where(eq(mediaUsages.id, id));
     return row ?? null;
   }
 
@@ -217,6 +251,13 @@ export class MediaRepository {
         .from(stubBanners)
         .where(eq(stubBanners.id, entityId));
       return b?.title ?? entityId;
+    }
+    if (entityType === 'REEL') {
+      const [reel] = await db
+        .select()
+        .from(reels)
+        .where(eq(reels.id, entityId));
+      return reel?.title ?? entityId;
     }
     return entityId;
   }

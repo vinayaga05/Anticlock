@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import Video, { OnLoadData, VideoRef } from 'react-native-video';
+import Video, { OnLoadData, OnProgressData, VideoRef } from 'react-native-video';
 
 export type VideoSource = string | number;
 
@@ -18,6 +18,10 @@ interface VideoPlayerProps {
   /** Feed autoplay works best muted on iOS. */
   muted?: boolean;
   poster?: string;
+  /** Optional, non-blocking playback signal for product analytics. */
+  onPlaybackProgress?: (currentTime: number, duration: number) => void;
+  /** Fired once each time native playback reaches the end. */
+  onPlaybackComplete?: (duration: number) => void;
 }
 
 /** Metro serves assets on the host; emulator localhost ≠ host without adb reverse. */
@@ -54,8 +58,11 @@ export function VideoPlayer({
   paused = false,
   muted = true,
   poster,
+  onPlaybackProgress,
+  onPlaybackComplete,
 }: VideoPlayerProps) {
   const ref = useRef<VideoRef>(null);
+  const durationRef = useRef(0);
   const [localPaused, setLocalPaused] = useState(false);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -70,7 +77,23 @@ export function VideoPlayer({
     setFailed(false);
     setErrorMsg(null);
     setLocalPaused(false);
+    durationRef.current = 0;
   }, [playbackUri]);
+
+  const handleLoad = (data: OnLoadData) => {
+    durationRef.current = Number.isFinite(data.duration) ? data.duration : 0;
+    setReady(true);
+    setFailed(false);
+    setErrorMsg(null);
+  };
+
+  const handleProgress = (data: OnProgressData) => {
+    if (isPaused) return;
+    onPlaybackProgress?.(
+      Math.max(0, data.currentTime),
+      Math.max(0, durationRef.current),
+    );
+  };
 
   return (
     <Pressable
@@ -98,18 +121,15 @@ export function VideoPlayer({
           ignoreSilentSwitch="ignore"
           mixWithOthers="mix"
           shutterColor="transparent"
-          onLoad={(_data: OnLoadData) => {
-            setReady(true);
-            setFailed(false);
-            setErrorMsg(null);
-          }}
+          onLoad={handleLoad}
+          onProgress={handleProgress}
+          onEnd={() => onPlaybackComplete?.(Math.max(0, durationRef.current))}
           onError={e => {
             const msg =
               e?.error?.errorString ||
               e?.error?.localizedDescription ||
               'Playback failed';
             if (__DEV__) {
-              // eslint-disable-next-line no-console
               console.warn('[VideoPlayer]', msg, playbackUri, e?.error);
             }
             setFailed(true);

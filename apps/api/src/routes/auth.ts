@@ -17,6 +17,7 @@ import { requireAuth, type AppEnv } from '../middleware/auth.js';
 
 export const authRoutes = new Hono<AppEnv>();
 const otpProvider = createOtpProvider();
+const secureCookie = process.env.NODE_ENV === 'production' ? '; Secure' : '';
 
 function displayNameFromPhone(phone: string) {
   const digits = phone.replace(/\D/g, '');
@@ -97,7 +98,7 @@ authRoutes.post('/admin/login', async c => {
   const maxAge = 7 * 24 * 60 * 60;
   c.header(
     'Set-Cookie',
-    `anticlock_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`,
+    `anticlock_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${secureCookie}; Max-Age=${maxAge}`,
   );
 
   return c.json({
@@ -123,7 +124,7 @@ authRoutes.post('/admin/logout', requireAuth, async c => {
   });
   c.header(
     'Set-Cookie',
-    'anticlock_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+    `anticlock_session=; Path=/; HttpOnly; SameSite=Lax${secureCookie}; Max-Age=0`,
   );
   return c.json({ ok: true });
 });

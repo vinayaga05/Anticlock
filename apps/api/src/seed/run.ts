@@ -23,7 +23,40 @@ import {
 } from '../db/schema.js';
 import catalog from './catalog.json' with { type: 'json' };
 
+const isProduction = process.env.NODE_ENV === 'production';
+
+function enabled(name: string, fallback: boolean) {
+  const value = process.env[name]?.trim().toLowerCase();
+  if (!value) return fallback;
+  return value === '1' || value === 'true' || value === 'yes';
+}
+
+function initialAdminCredentials() {
+  const email = process.env.INITIAL_ADMIN_EMAIL?.trim();
+  const password = process.env.INITIAL_ADMIN_PASSWORD;
+
+  if (!isProduction) {
+    return {
+      email: email || 'admin@anticlock.app',
+      password: password || 'admin123',
+    };
+  }
+
+  if (!email && !password) return null;
+  if (!email || !password) {
+    throw new Error(
+      'INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD are required when creating the first production admin',
+    );
+  }
+  if (password.length < 12) {
+    throw new Error('INITIAL_ADMIN_PASSWORD must be at least 12 characters');
+  }
+
+  return { email, password };
+}
+
 async function seed() {
+  const seedDemoData = enabled('SEED_DEMO_DATA', !isProduction);
   const roleValues = RoleSchema.options.map(id => ({
     id,
     name: id
@@ -53,20 +86,51 @@ async function seed() {
     }
   }
 
-  const adminEmail = 'admin@anticlock.app';
-  const existing = await db.select().from(users).where(eq(users.email, adminEmail));
-  let adminId = existing[0]?.id;
+  const credentials = initialAdminCredentials();
+  let adminId: string | undefined;
+
+  if (isProduction) {
+    const [existingAdmin] = await db
+      .select({ id: users.id })
+      .from(userRoles)
+      .innerJoin(users, eq(userRoles.userId, users.id))
+      .where(eq(userRoles.roleId, 'super_admin'))
+      .limit(1);
+    adminId = existingAdmin?.id;
+  } else if (credentials) {
+    const existing = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, credentials.email));
+    adminId = existing[0]?.id;
+  }
+
   if (!adminId) {
-    const passwordHash = await bcrypt.hash('admin123', 10);
-    const [created] = await db
-      .insert(users)
-      .values({
-        email: adminEmail,
-        name: 'Anticlock Admin',
-        passwordHash,
-      })
-      .returning();
-    adminId = created!.id;
+    if (!credentials) {
+      throw new Error(
+        'INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD are required when creating the first production admin',
+      );
+    }
+
+    const [existingUser] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, credentials.email));
+
+    if (existingUser) {
+      adminId = existingUser.id;
+    } else {
+      const passwordHash = await bcrypt.hash(credentials.password, 10);
+      const [created] = await db
+        .insert(users)
+        .values({
+          email: credentials.email,
+          name: 'Anticlock Admin',
+          passwordHash,
+        })
+        .returning();
+      adminId = created!.id;
+    }
   }
 
   await db
@@ -119,6 +183,14 @@ async function seed() {
           updatedAt: new Date(),
         },
       });
+  }
+
+  if (!seedDemoData) {
+    console.log(
+      `Seeded ${catalog.trees.length} trees and ${catalog.categories.length} categories.`,
+    );
+    await sql.end({ timeout: 5 });
+    return;
   }
 
   const providerSeeds = [
@@ -261,7 +333,7 @@ async function seed() {
   }
 
   console.log(
-    `Seeded admin ${adminEmail} / admin123 · ${catalog.trees.length} trees · ${catalog.categories.length} categories · stubs · ${sampleVideos.length} sample reels`,
+    `Seeded ${catalog.trees.length} trees and ${catalog.categories.length} categories, including demo data.`,
   );
   await sql.end({ timeout: 5 });
 }

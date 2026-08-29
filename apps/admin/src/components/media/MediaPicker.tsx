@@ -4,13 +4,13 @@ import { useQuery } from '@tanstack/react-query';
 import type { MediaAsset } from '@anticlock/contracts';
 import { useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/api';
-import { formatBytes } from '@/lib/mediaUpload';
+import { formatBytes, formatDuration } from '@/lib/mediaUpload';
 
 type Props = {
   open: boolean;
   onClose: () => void;
   onSelect: (asset: MediaAsset) => void;
-  kind?: 'image' | 'document';
+  kind?: 'image' | 'document' | 'video';
   multiple?: boolean;
   selectedIds?: string[];
   onConfirm?: () => void;
@@ -37,6 +37,9 @@ export function MediaPicker({
         status: 'ready',
         limit: '60',
       });
+      // A Reel is public only after an explicit publish action, but its media
+      // must already have a public delivery route when it is published.
+      if (kind === 'video') params.set('accessLevel', 'public');
       if (q) params.set('q', q);
       return apiFetch<{ data: MediaAsset[] }>(`/admin/media?${params}`);
     },
@@ -63,7 +66,10 @@ export function MediaPicker({
           />
         </div>
         {isLoading ? <p className="muted">Loading…</p> : null}
-        <div className="media-grid" style={{ maxHeight: 420, overflow: 'auto' }}>
+        <div
+          className="media-grid"
+          style={{ maxHeight: 420, overflow: 'auto' }}
+        >
           {items.map(asset => {
             const selected = selectedIds.includes(asset.id);
             return (
@@ -80,13 +86,29 @@ export function MediaPicker({
                   {asset.kind === 'image' && asset.deliveryUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={asset.deliveryUrl} alt="" />
+                  ) : asset.kind === 'video' && asset.deliveryUrl ? (
+                    <video
+                      src={asset.deliveryUrl}
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
                   ) : (
-                    <span className="muted">PDF</span>
+                    <span className="muted">
+                      {asset.kind === 'video' ? 'MP4' : 'PDF'}
+                    </span>
                   )}
                 </div>
                 <div className="media-meta">
-                  <strong>{asset.originalFilename ?? asset.id.slice(0, 8)}</strong>
-                  <span className="muted">{formatBytes(asset.byteSize)}</span>
+                  <strong>
+                    {asset.originalFilename ?? asset.id.slice(0, 8)}
+                  </strong>
+                  <span className="muted">
+                    {formatBytes(asset.byteSize)}
+                    {asset.kind === 'video'
+                      ? ` · ${formatDuration(asset.durationMs)}`
+                      : ''}
+                  </span>
                 </div>
               </button>
             );

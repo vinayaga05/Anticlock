@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { AppHeader } from '@/shared/components/AppHeader';
+import { SearchBar } from '@/shared/components/SearchBar';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { KnockBookingsList } from '@/features/messages/components/KnockBookingsList';
 import { KnockChatList } from '@/features/messages/components/KnockChatList';
 import { KnockNotificationsList } from '@/features/messages/components/KnockNotificationsList';
-
-type KnockTab = 'notifications' | 'bookings' | 'chat';
+import type { KnockTab, MainTabParamList } from '@/shared/navigation/types';
 
 const TABS: { id: KnockTab; label: string }[] = [
   { id: 'notifications', label: 'Notifications' },
@@ -18,13 +19,31 @@ const TABS: { id: KnockTab; label: string }[] = [
 
 export function InboxScreen() {
   const theme = useTheme();
+  const navigation = useNavigation<any>();
+  const route = useRoute<RouteProp<MainTabParamList, 'Knock'>>();
   const [tab, setTab] = useState<KnockTab>('bookings');
+
+  useEffect(() => {
+    const initialTab = route.params?.initialTab;
+    if (initialTab) {
+      setTab(initialTab);
+    }
+  }, [route.params?.initialTab]);
 
   return (
     <ScreenContainer scrollable>
-      <AppHeader title="Knock" />
+      <AppHeader
+        title="Knock"
+        onNotificationsPress={() => setTab('notifications')}
+        onMessagesPress={() => setTab('chat')}
+        onSettingsPress={() => navigation.navigate('AccountSettings')}
+      />
 
-      <View style={[styles.segmentRow, { backgroundColor: theme.colors.surfaceMuted, borderRadius: theme.radius.lg }]}>
+      <View
+        style={[
+          styles.segmentRow,
+          { backgroundColor: theme.colors.surfaceMuted, borderRadius: theme.radius.lg },
+        ]}>
         {TABS.map(item => {
           const active = tab === item.id;
           return (
@@ -53,6 +72,15 @@ export function InboxScreen() {
           );
         })}
       </View>
+
+      {tab === 'bookings' ? (
+        <SearchBar
+          placeholder="Search doctors, technicians, or classes..."
+          emphasized
+          showVoiceControls
+          compact
+        />
+      ) : null}
 
       <View style={styles.panel}>
         {tab === 'notifications' ? <KnockNotificationsList /> : null}

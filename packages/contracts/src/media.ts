@@ -34,11 +34,25 @@ export const MediaStorageProviderSchema = z.enum([
 ]);
 export type MediaStorageProvider = z.infer<typeof MediaStorageProviderSchema>;
 
-export const MediaEntityTypeSchema = z.enum(['PROVIDER', 'PRODUCT', 'BANNER']);
+export const MediaEntityTypeSchema = z.enum([
+  'PROVIDER',
+  'PRODUCT',
+  'BANNER',
+  'REEL',
+]);
 export type MediaEntityType = z.infer<typeof MediaEntityTypeSchema>;
 
-export const MediaUsageTypeSchema = z.enum(['PROFILE', 'GALLERY', 'HERO', 'ATTACHMENT']);
+export const MediaUsageTypeSchema = z.enum([
+  'PROFILE',
+  'GALLERY',
+  'HERO',
+  'ATTACHMENT',
+  'VIDEO',
+]);
 export type MediaUsageType = z.infer<typeof MediaUsageTypeSchema>;
+
+/** Maximum Reel source duration accepted by the Admin upload flow. */
+export const MAX_REEL_VIDEO_DURATION_MS = 3 * 60 * 1000;
 
 /** Approved transform names — avoid arbitrary size combinations. */
 export const MediaTransformSchema = z.enum([
@@ -90,14 +104,37 @@ export const MediaUsageSchema = z.object({
 });
 export type MediaUsage = z.infer<typeof MediaUsageSchema>;
 
-export const CreateUploadSessionRequestSchema = z.object({
-  kind: MediaKindSchema,
-  accessLevel: MediaAccessLevelSchema.default('public'),
-  filename: z.string().min(1).max(255),
-  contentType: z.string().min(1),
-  byteSize: z.number().int().positive(),
-  entityHint: z.string().max(64).optional(),
-});
+export const CreateUploadSessionRequestSchema = z
+  .object({
+    kind: MediaKindSchema,
+    accessLevel: MediaAccessLevelSchema.default('public'),
+    filename: z.string().min(1).max(255),
+    contentType: z.string().min(1),
+    byteSize: z.number().int().positive(),
+    /** Read from the browser's video metadata before requesting an R2 URL. */
+    durationMs: z.number().int().positive().optional(),
+    width: z.number().int().positive().max(10_000).optional(),
+    height: z.number().int().positive().max(10_000).optional(),
+    entityHint: z.string().max(64).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.kind !== 'video') return;
+    if (!value.durationMs) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['durationMs'],
+        message: 'Video duration is required',
+      });
+      return;
+    }
+    if (value.durationMs > MAX_REEL_VIDEO_DURATION_MS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['durationMs'],
+        message: 'Reel videos must be 3 minutes or shorter',
+      });
+    }
+  });
 export type CreateUploadSessionRequest = z.infer<
   typeof CreateUploadSessionRequestSchema
 >;
@@ -123,7 +160,20 @@ export const CompleteUploadResponseSchema = z.object({
   asset: MediaAssetSchema,
   duplicateOf: MediaAssetSchema.nullable().optional(),
 });
-export type CompleteUploadResponse = z.infer<typeof CompleteUploadResponseSchema>;
+export type CompleteUploadResponse = z.infer<
+  typeof CompleteUploadResponseSchema
+>;
+
+/** A moderator can clear, hold, or reject a ready asset without changing its bytes. */
+export const SetMediaModerationStatusRequestSchema = z
+  .object({
+    status: z.enum(['approved', 'manual_review', 'rejected']),
+    note: z.string().trim().max(1000).optional(),
+  })
+  .strict();
+export type SetMediaModerationStatusRequest = z.infer<
+  typeof SetMediaModerationStatusRequestSchema
+>;
 
 export const MediaListQuerySchema = z.object({
   q: z.string().optional(),

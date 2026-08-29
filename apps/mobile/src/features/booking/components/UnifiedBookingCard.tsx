@@ -7,7 +7,6 @@ import {
   BOOKING_ACTION_LABELS,
   BookingAction,
   ConsolidatedBooking,
-  getBookingSubtitle,
   getBookingWhenDisplay,
   navigateBookingTarget,
   resolveBookingActions,
@@ -24,7 +23,7 @@ type Props = {
 function BookingVisual({ booking }: { booking: ConsolidatedBooking }) {
   const isClassThumb = booking.visual === 'thumbnail';
   const size = isClassThumb ? styles.thumbVisual : styles.standardVisual;
-  const radius = isClassThumb ? 14 : 14;
+  const radius = booking.visual === 'avatar' ? 999 : 14;
 
   if (booking.imageUrl) {
     return (
@@ -82,7 +81,10 @@ export function UnifiedBookingCard({ booking, onPress, onAction, compact }: Prop
   const theme = useTheme();
   const { primary, secondary } = resolveBookingActions(booking);
   const when = getBookingWhenDisplay(booking);
-  const subtitle = getBookingSubtitle(booking);
+  const title = booking.isClass ? booking.serviceTitle : booking.providerName || booking.serviceTitle;
+  const subtitle = booking.isClass
+    ? [booking.providerName, booking.providerRole].filter(Boolean).join(' · ')
+    : [booking.providerRole, booking.serviceTitle].filter(Boolean).join(' · ');
 
   const handleAction = (action: BookingAction) => {
     if (onAction) {
@@ -123,6 +125,7 @@ export function UnifiedBookingCard({ booking, onPress, onAction, compact }: Prop
           {
             backgroundColor: theme.colors.surface,
             borderColor: theme.colors.borderSoft,
+            ...theme.shadows.float,
           },
           compact && styles.cardCompact,
         ]}>
@@ -133,7 +136,7 @@ export function UnifiedBookingCard({ booking, onPress, onAction, compact }: Prop
               <Text
                 style={[styles.title, { color: theme.colors.textPrimary }]}
                 numberOfLines={1}>
-                {booking.serviceTitle}
+                {title}
               </Text>
               <BookingStatusPill status={booking.status} label={booking.statusLabel} />
             </View>
@@ -195,13 +198,13 @@ export function handleBookingNavigation(
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 18,
+    borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 14,
+    padding: 16,
     gap: 12,
   },
   cardCompact: {
-    padding: 12,
+    padding: 14,
   },
   topRow: {
     flexDirection: 'row',
@@ -209,12 +212,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   standardVisual: {
-    width: 64,
-    height: 64,
+    width: 68,
+    height: 68,
     backgroundColor: '#E2E8F0',
   },
   thumbVisual: {
-    width: 88,
+    width: 78,
     height: 72,
     backgroundColor: '#E2E8F0',
   },

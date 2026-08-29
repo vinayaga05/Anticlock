@@ -12,6 +12,7 @@ import {
   MobileUser,
   OtpSendResult,
 } from './types';
+import { ensureUserAvatar } from './avatar';
 
 const otpProvider = createOtpProvider();
 
@@ -25,13 +26,19 @@ export async function verifyOtp(
   requestId: string,
 ): Promise<AuthSession> {
   const session = await otpProvider.verifyOtp(phone, code, requestId);
-  persistSession(session);
-  return session;
+  const sessionWithAvatar = { ...session, user: ensureUserAvatar(session.user) };
+  persistSession(sessionWithAvatar);
+  return sessionWithAvatar;
 }
 
 export function persistSession(session: AuthSession): void {
-  setStoredSession(session);
-  setApiToken(session.token);
+  const storedAvatarUrl = getStoredSession()?.user.avatarUrl;
+  const sessionWithAvatar = {
+    ...session,
+    user: ensureUserAvatar(session.user, storedAvatarUrl),
+  };
+  setStoredSession(sessionWithAvatar);
+  setApiToken(sessionWithAvatar.token);
 }
 
 export function clearSession(): void {
@@ -57,12 +64,12 @@ export async function validateSession(session: AuthSession): Promise<MobileUser 
   }
 
   if (!isApiEnabled || session.token.startsWith('dev-')) {
-    return session.user;
+    return ensureUserAvatar(session.user);
   }
 
   try {
     const res = await apiRequest<{ user: MobileUser }>('/auth/mobile/me');
-    return res.user;
+    return ensureUserAvatar(res.user, session.user.avatarUrl);
   } catch {
     clearSession();
     return null;

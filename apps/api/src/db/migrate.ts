@@ -221,10 +221,15 @@ async function migrate() {
       creator_name text NOT NULL,
       category text,
       status text NOT NULL DEFAULT 'draft',
+      content_mode text NOT NULL DEFAULT 'standard',
+      moderation_status text NOT NULL DEFAULT 'clear',
       is_sample boolean NOT NULL DEFAULT true,
       like_count integer NOT NULL DEFAULT 0,
       comment_count integer NOT NULL DEFAULT 0,
       save_count integer NOT NULL DEFAULT 0,
+      view_count integer NOT NULL DEFAULT 0,
+      completion_count integer NOT NULL DEFAULT 0,
+      report_count integer NOT NULL DEFAULT 0,
       display_order integer NOT NULL DEFAULT 0,
       media_id uuid REFERENCES media_assets(id) ON DELETE SET NULL,
       thumbnail_media_id uuid REFERENCES media_assets(id) ON DELETE SET NULL,
@@ -234,13 +239,160 @@ async function migrate() {
       created_by uuid REFERENCES users(id) ON DELETE SET NULL,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now(),
-      published_at timestamptz
+      published_at timestamptz,
+      submitted_for_review_at timestamptz,
+      reviewed_at timestamptz,
+      reviewed_by uuid REFERENCES users(id) ON DELETE SET NULL
     )
+  `;
+
+  // The first Reel control-center slice adds a strict lifecycle, moderation
+  // state, and server-owned engagement counters. Keep these upgrades
+  // idempotent because early environments may already have the reels table.
+  await sql`
+    ALTER TABLE reels ADD COLUMN IF NOT EXISTS content_mode text
+  `;
+  await sql`
+    UPDATE reels
+    SET content_mode = CASE WHEN is_sample THEN 'sample' ELSE 'standard' END
+    WHERE content_mode IS NULL
+  `;
+  await sql`
+    ALTER TABLE reels ALTER COLUMN content_mode SET DEFAULT 'standard'
+  `;
+  await sql`
+    ALTER TABLE reels ALTER COLUMN content_mode SET NOT NULL
+  `;
+  await sql`
+    ALTER TABLE reels ADD COLUMN IF NOT EXISTS moderation_status text NOT NULL DEFAULT 'clear'
+  `;
+  await sql`
+    ALTER TABLE reels ADD COLUMN IF NOT EXISTS view_count integer NOT NULL DEFAULT 0
+  `;
+  await sql`
+    ALTER TABLE reels ADD COLUMN IF NOT EXISTS completion_count integer NOT NULL DEFAULT 0
+  `;
+  await sql`
+    ALTER TABLE reels ADD COLUMN IF NOT EXISTS report_count integer NOT NULL DEFAULT 0
+  `;
+  await sql`
+    ALTER TABLE reels ADD COLUMN IF NOT EXISTS submitted_for_review_at timestamptz
+  `;
+  await sql`
+    ALTER TABLE reels ADD COLUMN IF NOT EXISTS reviewed_at timestamptz
+  `;
+  await sql`
+    ALTER TABLE reels ADD COLUMN IF NOT EXISTS reviewed_by uuid REFERENCES users(id) ON DELETE SET NULL
   `;
 
   await sql`
     CREATE INDEX IF NOT EXISTS reels_status_order_idx
       ON reels (status, display_order, created_at DESC)
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS reels_public_feed_idx
+      ON reels (status, moderation_status, content_mode, display_order, published_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS reel_view_events (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      event_id uuid NOT NULL UNIQUE,
+      reel_id uuid NOT NULL REFERENCES reels(id) ON DELETE CASCADE,
+      viewer_key text NOT NULL,
+      viewer_kind text NOT NULL,
+      session_id text,
+      watched_ms integer NOT NULL DEFAULT 0,
+      completed boolean NOT NULL DEFAULT false,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS reel_view_events_reel_created_idx
+      ON reel_view_events (reel_id, created_at DESC)
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS reel_view_events_reel_viewer_idx
+      ON reel_view_events (reel_id, viewer_key)
+  `;
+
+  // A mobile player reports an early view and a natural completion for the
+  // same session. Store those as one view so completion rate is sessions, not
+  // raw events. Session-less clients retain event_id idempotency instead.
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS reel_view_events_session_uid
+      ON reel_view_events (reel_id, viewer_key, session_id)
+      WHERE session_id IS NOT NULL
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS reel_likes (
+      reel_id uuid NOT NULL REFERENCES reels(id) ON DELETE CASCADE,
+      actor_key text NOT NULL,
+      actor_kind text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (reel_id, actor_key)
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS reel_comments (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      reel_id uuid NOT NULL REFERENCES reels(id) ON DELETE CASCADE,
+      actor_key text NOT NULL,
+      actor_kind text NOT NULL,
+      body text NOT NULL,
+      status text NOT NULL DEFAULT 'visible',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      removed_at timestamptz
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS reel_comments_reel_status_created_idx
+      ON reel_comments (reel_id, status, created_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS reel_reports (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      reel_id uuid NOT NULL REFERENCES reels(id) ON DELETE CASCADE,
+      reporter_key text NOT NULL,
+      reporter_kind text NOT NULL,
+      reason text NOT NULL,
+      details text,
+      status text NOT NULL DEFAULT 'open',
+      resolution_action text,
+      resolution_note text,
+      resolved_by uuid REFERENCES users(id) ON DELETE SET NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      resolved_at timestamptz,
+      UNIQUE (reel_id, reporter_key)
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS reel_reports_status_created_idx
+      ON reel_reports (status, created_at DESC)
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS reel_reports_reel_idx
+      ON reel_reports (reel_id, created_at DESC)
+  `;
+
+  // Reels existed before media_usages supported the REEL/VIDEO relationship.
+  // Backfill the link so existing assets are visible as in-use in the Media
+  // Library and cannot be deleted out from under a Reel.
+  await sql`
+    INSERT INTO media_usages (media_id, entity_type, entity_id, usage_type, sort_order)
+    SELECT media_id, 'REEL', id::text, 'VIDEO', 0
+    FROM reels
+    WHERE media_id IS NOT NULL
+    ON CONFLICT DO NOTHING
   `;
 
   console.log('Migrations applied.');

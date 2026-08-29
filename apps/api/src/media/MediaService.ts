@@ -5,6 +5,7 @@ import type {
   MediaAsset,
   MediaKind,
   MediaUsage,
+  SetMediaModerationStatusRequest,
 } from '@anticlock/contracts';
 import { writeAudit } from '../lib/audit.js';
 import type { AuthClaims } from '../lib/auth.js';
@@ -19,7 +20,9 @@ import {
 import { R2ObjectStorageProvider } from './R2ObjectStorageProvider.js';
 import {
   assertAllowedMime,
+  detectMimeFromMagic,
   maxBytesForKind,
+  validateVideoUploadMetadata,
   validateUploadedBytes,
 } from './validateUpload.js';
 
@@ -33,9 +36,30 @@ function toIso(d: Date | null | undefined) {
   return d ? d.toISOString() : null;
 }
 
+function finalStorageKeyFor(uploadKey: string) {
+  const match = uploadKey.match(/\/upload\.([a-z0-9]+)$/i);
+  if (!match) throw new Error('Invalid upload storage key');
+  return uploadKey.replace(/\/upload\.([a-z0-9]+)$/i, '/original.$1');
+}
+
 export class MediaService {
   private storage = createStorage();
   private repo = mediaRepository;
+
+  private requireSessionOwner(
+    auth: AuthClaims,
+    session: { createdBy: string | null },
+  ) {
+    if (session.createdBy !== auth.sub && !auth.roles.includes('super_admin')) {
+      throw Object.assign(
+        new Error('You cannot complete another admin’s upload'),
+        {
+          code: 'forbidden',
+          status: 403,
+        },
+      );
+    }
+  }
 
   private async mapAsset(
     row: NonNullable<Awaited<ReturnType<typeof mediaRepository.getAsset>>>,
@@ -81,7 +105,10 @@ export class MediaService {
     };
   }
 
-  async createUploadSession(auth: AuthClaims, body: CreateUploadSessionRequest) {
+  async createUploadSession(
+    auth: AuthClaims,
+    body: CreateUploadSessionRequest,
+  ) {
     mediaAccessPolicy.require(auth, 'media.write');
     assertAllowedMime(body.kind, body.contentType);
     const maxBytes = Math.min(body.byteSize, maxBytesForKind(body.kind));
@@ -89,6 +116,17 @@ export class MediaService {
       throw Object.assign(new Error('File exceeds max size'), {
         code: 'file_too_large',
         status: 400,
+      });
+    }
+    if (body.kind === 'video') {
+      // Route validation handles this too; keep the service safe for direct
+      // callers and make the duration gate happen before an R2 URL is minted.
+      validateVideoUploadMetadata({
+        expectedMime: body.contentType,
+        contentType: body.contentType,
+        maxBytes,
+        byteSize: body.byteSize,
+        durationMs: body.durationMs ?? null,
       });
     }
 
@@ -104,6 +142,9 @@ export class MediaService {
       bucket,
       mimeType: body.contentType,
       byteSize: body.byteSize,
+      width: body.width ?? null,
+      height: body.height ?? null,
+      durationMs: body.durationMs ?? null,
       originalFilename: body.filename,
       accessLevel,
       processingStatus: 'initiated',
@@ -111,7 +152,10 @@ export class MediaService {
       createdBy: auth.sub,
     });
 
-    const storageKey = `${accessLevel}/${hint}/${asset.id}/original.${ext}`;
+    // The signed PUT is deliberately scoped to a staging key. On successful
+    // confirmation we copy it to `original.*`, making a still-valid upload URL
+    // unable to overwrite a ready media asset.
+    const storageKey = `${accessLevel}/${hint}/${asset.id}/upload.${ext}`;
     await this.repo.updateAsset(asset.id, {
       storageKey,
       processingStatus: 'uploading',
@@ -154,6 +198,7 @@ export class MediaService {
         status: 404,
       });
     }
+    this.requireSessionOwner(auth, session);
     if (session.expiresAt.getTime() < Date.now()) {
       await this.repo.updateSession(sessionId, { status: 'expired' });
       throw Object.assign(new Error('Upload session expired'), {
@@ -197,9 +242,11 @@ export class MediaService {
         status: 404,
       });
     }
+    this.requireSessionOwner(auth, session);
     if (session.status === 'completed') {
       const existing = await this.repo.getAsset(session.mediaId);
-      if (!existing) throw Object.assign(new Error('Not found'), { status: 404 });
+      if (!existing)
+        throw Object.assign(new Error('Not found'), { status: 404 });
       return {
         asset: await this.mapAsset(existing),
         duplicateOf: null as MediaAsset | null,
@@ -236,6 +283,69 @@ export class MediaService {
 
     await this.repo.updateAsset(asset.id, { processingStatus: 'processing' });
 
+    if (asset.kind === 'video') {
+      try {
+        const prefix = await this.storage.getObjectPrefix({
+          bucket: asset.bucket as 'public-media' | 'private-documents',
+          key: asset.storageKey,
+          byteLength: 32,
+        });
+        if (detectMimeFromMagic(prefix) !== 'video/mp4') {
+          throw Object.assign(new Error('Uploaded file is not a valid MP4'), {
+            code: 'invalid_media',
+            status: 400,
+          });
+        }
+
+        const validated = validateVideoUploadMetadata({
+          expectedMime: session.expectedMime,
+          contentType: meta.contentType,
+          maxBytes: session.maxBytes,
+          byteSize: meta.byteSize,
+          durationMs: asset.durationMs,
+        });
+        const finalStorageKey = finalStorageKeyFor(asset.storageKey);
+        await this.storage.finalizeUpload({
+          bucket: asset.bucket as 'public-media' | 'private-documents',
+          sourceKey: asset.storageKey,
+          destinationKey: finalStorageKey,
+          sourceEtag: meta.etag,
+        });
+
+        const updated = await this.repo.updateAsset(asset.id, {
+          storageKey: finalStorageKey,
+          mimeType: validated.mimeType,
+          byteSize: validated.byteSize,
+          durationMs: validated.durationMs,
+          processingStatus: 'ready',
+          moderationStatus: 'approved',
+        });
+        await this.repo.updateSession(sessionId, { status: 'completed' });
+
+        await writeAudit({
+          actorId: auth.sub,
+          actorEmail: auth.email,
+          action: 'media.upload_complete',
+          entityType: 'media_asset',
+          entityId: asset.id,
+          metadata: {
+            durationMs: validated.durationMs,
+            byteSize: validated.byteSize,
+            checksum: null,
+          },
+        });
+
+        return {
+          asset: await this.mapAsset(updated!),
+          duplicateOf: null as MediaAsset | null,
+        };
+      } catch (err) {
+        await this.repo.updateAsset(asset.id, { processingStatus: 'failed' });
+        await this.repo.updateSession(sessionId, { status: 'failed' });
+        throw err;
+      }
+    }
+
     let body: Buffer;
     try {
       body = await this.storage.getObjectBuffer({
@@ -266,13 +376,23 @@ export class MediaService {
         });
       }
 
-      const duplicate = await this.repo.findByChecksum(validated.checksumSha256);
+      const duplicate = await this.repo.findByChecksum(
+        validated.checksumSha256,
+      );
       const duplicateOf =
         duplicate && duplicate.id !== asset.id
           ? await this.mapAsset(duplicate)
           : null;
+      const finalStorageKey = finalStorageKeyFor(asset.storageKey);
+      await this.storage.finalizeUpload({
+        bucket: asset.bucket as 'public-media' | 'private-documents',
+        sourceKey: asset.storageKey,
+        destinationKey: finalStorageKey,
+        sourceEtag: meta.etag,
+      });
 
       const updated = await this.repo.updateAsset(asset.id, {
+        storageKey: finalStorageKey,
         mimeType: validated.mimeType,
         byteSize: validated.byteSize,
         width: validated.width,
@@ -306,13 +426,45 @@ export class MediaService {
     }
   }
 
-  async list(auth: AuthClaims, filters: {
-    q?: string;
-    kind?: string;
-    status?: string;
-    accessLevel?: string;
-    limit: number;
-  }) {
+  /**
+   * Asset-first completion endpoint used by direct R2 uploads.  It leaves the
+   * session-based endpoint intact for existing image/document clients.
+   */
+  async completeUploadForMedia(
+    auth: AuthClaims,
+    mediaId: string,
+    clientChecksum?: string,
+  ) {
+    mediaAccessPolicy.require(auth, 'media.write');
+    const session = await this.repo.findOpenSessionForMedia(mediaId);
+    if (session) {
+      return this.completeUpload(auth, session.id, clientChecksum);
+    }
+
+    // Make a browser retry after a successful completion harmless.
+    const asset = await this.repo.getAsset(mediaId);
+    if (asset?.processingStatus === 'ready') {
+      return {
+        asset: await this.mapAsset(asset),
+        duplicateOf: null as MediaAsset | null,
+      };
+    }
+    throw Object.assign(new Error('Upload session not found'), {
+      code: 'session_not_found',
+      status: 404,
+    });
+  }
+
+  async list(
+    auth: AuthClaims,
+    filters: {
+      q?: string;
+      kind?: string;
+      status?: string;
+      accessLevel?: string;
+      limit: number;
+    },
+  ) {
     mediaAccessPolicy.require(auth, 'media.read');
     const rows = await this.repo.listAssets(filters);
     const data = await Promise.all(
@@ -348,7 +500,10 @@ export class MediaService {
         usageType: u.usageType as MediaUsage['usageType'],
         sortOrder: u.sortOrder,
         createdAt: u.createdAt.toISOString(),
-        entityLabel: await this.repo.resolveEntityLabel(u.entityType, u.entityId),
+        entityLabel: await this.repo.resolveEntityLabel(
+          u.entityType,
+          u.entityId,
+        ),
       })),
     );
     return {
@@ -374,6 +529,49 @@ export class MediaService {
     return this.mapAsset(updated!);
   }
 
+  /**
+   * Content safety is an independent gate from upload readiness. Changing this
+   * status does not create or publish a Reel; public feed queries enforce it
+   * for every Reel that reuses the asset.
+   */
+  async setModerationStatus(
+    auth: AuthClaims,
+    id: string,
+    body: SetMediaModerationStatusRequest,
+  ) {
+    mediaAccessPolicy.require(auth, 'moderation.act');
+    const asset = await this.repo.getAsset(id);
+    if (!asset) {
+      throw Object.assign(new Error('Not found'), {
+        code: 'not_found',
+        status: 404,
+      });
+    }
+    if (asset.processingStatus !== 'ready') {
+      throw Object.assign(new Error('Only ready media can be moderated'), {
+        code: 'media_not_ready',
+        status: 409,
+      });
+    }
+
+    const updated = await this.repo.updateAsset(id, {
+      moderationStatus: body.status,
+    });
+    await writeAudit({
+      actorId: auth.sub,
+      actorEmail: auth.email,
+      action: 'media.moderation_update',
+      entityType: 'media_asset',
+      entityId: id,
+      metadata: {
+        from: asset.moderationStatus,
+        to: body.status,
+        note: body.note ?? null,
+      },
+    });
+    return this.mapAsset(updated!);
+  }
+
   async delete(auth: AuthClaims, id: string) {
     mediaAccessPolicy.require(auth, 'media.delete');
     const asset = await this.repo.getAsset(id);
@@ -382,10 +580,10 @@ export class MediaService {
     }
     const usageCount = await this.repo.usageCount(id);
     if (usageCount > 0) {
-      throw Object.assign(
-        new Error('Cannot delete media while it is in use'),
-        { code: 'in_use', status: 409 },
-      );
+      throw Object.assign(new Error('Cannot delete media while it is in use'), {
+        code: 'in_use',
+        status: 409,
+      });
     }
     await this.storage.deleteObject({
       bucket: asset.bucket as 'public-media' | 'private-documents',
@@ -447,10 +645,17 @@ export class MediaService {
     for (const id of mediaIds) {
       const a = await this.repo.getAsset(id);
       if (!a || a.processingStatus !== 'ready') {
-        throw Object.assign(new Error(`Media ${id} not ready`), { status: 400 });
+        throw Object.assign(new Error(`Media ${id} not ready`), {
+          status: 400,
+        });
       }
     }
-    await this.repo.replaceEntityUsages('PRODUCT', productId, 'GALLERY', mediaIds);
+    await this.repo.replaceEntityUsages(
+      'PRODUCT',
+      productId,
+      'GALLERY',
+      mediaIds,
+    );
     await writeAudit({
       actorId: auth.sub,
       actorEmail: auth.email,
@@ -600,6 +805,34 @@ export class MediaService {
           heroMediaId,
           heroDeliveryUrl,
         };
+      }),
+    );
+  }
+
+  /** Published CMS banners intended for anonymous/mobile display. */
+  async listPublicBanners() {
+    const banners = await this.repo.listBanners();
+    const published = banners.filter(b => b.status === 'published');
+    return Promise.all(
+      published.map(async b => {
+        const usages = await this.repo.usagesForEntity('BANNER', b.id);
+        const hero = usages.find(u => u.usageType === 'HERO');
+        if (!hero) return { id: b.id, title: b.title, imageUrl: null };
+
+        const asset = await this.repo.getAsset(hero.mediaId);
+        if (
+          !asset ||
+          asset.accessLevel !== 'public' ||
+          asset.processingStatus !== 'ready'
+        ) {
+          return { id: b.id, title: b.title, imageUrl: null };
+        }
+        const imageUrl = await this.storage.createDownloadUrl({
+          bucket: asset.bucket as 'public-media' | 'private-documents',
+          key: asset.storageKey,
+          accessLevel: asset.accessLevel as MediaAccessLevel,
+        });
+        return { id: b.id, title: b.title, imageUrl };
       }),
     );
   }

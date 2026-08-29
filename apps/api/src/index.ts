@@ -15,16 +15,50 @@ import {
   streamWebhookRoutes,
 } from './routes/reels.js';
 
+const isProduction = process.env.NODE_ENV === 'production';
+
+function assertProductionConfiguration() {
+  if (!isProduction) return;
+
+  const required = ['DATABASE_URL', 'JWT_SECRET', 'ADMIN_ORIGIN', 'API_PUBLIC_URL'];
+  const missing = required.filter(name => !process.env[name]?.trim());
+  if (missing.length) {
+    throw new Error(
+      `Missing required production configuration: ${missing.join(', ')}`,
+    );
+  }
+
+  if ((process.env.JWT_SECRET?.trim().length ?? 0) < 32) {
+    throw new Error('JWT_SECRET must be at least 32 characters in production');
+  }
+
+  if ((process.env.MEDIA_STORAGE ?? 'local').toLowerCase() === 'r2') {
+    const r2Required = [
+      'R2_ACCOUNT_ID',
+      'R2_ACCESS_KEY_ID',
+      'R2_SECRET_ACCESS_KEY',
+    ];
+    const r2Missing = r2Required.filter(name => !process.env[name]?.trim());
+    if (r2Missing.length) {
+      throw new Error(`MEDIA_STORAGE=r2 requires: ${r2Missing.join(', ')}`);
+    }
+  }
+}
+
+function corsOrigins() {
+  const adminOrigin = process.env.ADMIN_ORIGIN ?? 'http://localhost:3000';
+  if (isProduction) return [adminOrigin];
+  return [adminOrigin, 'http://localhost:3001', 'http://127.0.0.1:3000'];
+}
+
+assertProductionConfiguration();
+
 const app = new Hono();
 
 app.use(
   '*',
   cors({
-    origin: [
-      process.env.ADMIN_ORIGIN ?? 'http://localhost:3000',
-      'http://localhost:3001',
-      'http://127.0.0.1:3000',
-    ],
+    origin: corsOrigins(),
     allowHeaders: ['Content-Type', 'Authorization'],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,

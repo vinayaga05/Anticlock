@@ -7,6 +7,7 @@ import { BookingFilter } from '@/shared/data/bookings';
 
 const FILTERS: { id: BookingFilter; label: string }[] = [
   { id: 'all', label: 'All' },
+  { id: 'on_site', label: 'On-site' },
   { id: 'online', label: 'Online' },
   { id: 'classes', label: 'Classes' },
 ];

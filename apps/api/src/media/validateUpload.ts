@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
 import { imageSize } from 'image-size';
-import type { MediaKind } from '@anticlock/contracts';
+import {
+  MAX_REEL_VIDEO_DURATION_MS,
+  type MediaKind,
+} from '@anticlock/contracts';
 
 const IMAGE_MIMES = new Set([
   'image/jpeg',
@@ -11,9 +14,19 @@ const IMAGE_MIMES = new Set([
 ]);
 
 const DOC_MIMES = new Set(['application/pdf']);
+const VIDEO_MIMES = new Set(['video/mp4']);
+
+function normalizeMime(mime: string) {
+  return mime.trim().toLowerCase().split(';', 1)[0] ?? '';
+}
 
 export function detectMimeFromMagic(buf: Buffer): string | null {
-  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) {
+  if (
+    buf.length >= 3 &&
+    buf[0] === 0xff &&
+    buf[1] === 0xd8 &&
+    buf[2] === 0xff
+  ) {
     return 'image/jpeg';
   }
   if (
@@ -32,10 +45,15 @@ export function detectMimeFromMagic(buf: Buffer): string | null {
   ) {
     return 'image/webp';
   }
-  if (buf.length >= 6 && buf.toString('ascii', 0, 6) === 'GIF87a') return 'image/gif';
-  if (buf.length >= 6 && buf.toString('ascii', 0, 6) === 'GIF89a') return 'image/gif';
+  if (buf.length >= 6 && buf.toString('ascii', 0, 6) === 'GIF87a')
+    return 'image/gif';
+  if (buf.length >= 6 && buf.toString('ascii', 0, 6) === 'GIF89a')
+    return 'image/gif';
   if (buf.length >= 5 && buf.toString('ascii', 0, 5) === '%PDF-') {
     return 'application/pdf';
+  }
+  if (buf.length >= 12 && buf.toString('ascii', 4, 8) === 'ftyp') {
+    return 'video/mp4';
   }
   return null;
 }
@@ -48,17 +66,30 @@ export function maxBytesForKind(kind: MediaKind): number {
   if (kind === 'image') {
     return Number(process.env.MEDIA_UPLOAD_MAX_IMAGE_BYTES ?? 10 * 1024 * 1024);
   }
+  if (kind === 'video') {
+    return Number(
+      process.env.MEDIA_UPLOAD_MAX_VIDEO_BYTES ?? 250 * 1024 * 1024,
+    );
+  }
   return Number(process.env.MEDIA_UPLOAD_MAX_DOC_BYTES ?? 20 * 1024 * 1024);
 }
 
 export function assertAllowedMime(kind: MediaKind, mime: string) {
+  const normalized = normalizeMime(mime);
   const ok =
-    kind === 'image' ? IMAGE_MIMES.has(mime) : DOC_MIMES.has(mime);
+    kind === 'image'
+      ? IMAGE_MIMES.has(normalized)
+      : kind === 'video'
+      ? VIDEO_MIMES.has(normalized)
+      : DOC_MIMES.has(normalized);
   if (!ok) {
-    throw Object.assign(new Error(`MIME type ${mime} not allowed for ${kind}`), {
-      code: 'invalid_mime',
-      status: 400,
-    });
+    throw Object.assign(
+      new Error(`MIME type ${mime} not allowed for ${kind}`),
+      {
+        code: 'invalid_mime',
+        status: 400,
+      },
+    );
   }
 }
 
@@ -69,6 +100,48 @@ export type ValidatedUpload = {
   width: number | null;
   height: number | null;
 };
+
+/**
+ * R2 gives us object headers without downloading a potentially large video
+ * through the API. The browser supplies duration metadata before it receives
+ * the signed URL; we enforce the same cap again on completion.
+ */
+export function validateVideoUploadMetadata(input: {
+  expectedMime: string;
+  maxBytes: number;
+  byteSize: number;
+  contentType?: string;
+  durationMs: number | null;
+}) {
+  if (!input.durationMs || input.durationMs > MAX_REEL_VIDEO_DURATION_MS) {
+    throw Object.assign(new Error('Reel videos must be 3 minutes or shorter'), {
+      code: 'video_too_long',
+      status: 400,
+    });
+  }
+  if (input.byteSize <= 0 || input.byteSize > input.maxBytes) {
+    throw Object.assign(new Error('File exceeds max size'), {
+      code: 'file_too_large',
+      status: 400,
+    });
+  }
+
+  const expected = normalizeMime(input.expectedMime);
+  const actual = normalizeMime(input.contentType ?? input.expectedMime);
+  assertAllowedMime('video', actual);
+  if (actual !== expected) {
+    throw Object.assign(
+      new Error(`Content-Type mismatch: expected ${expected}, got ${actual}`),
+      { code: 'mime_mismatch', status: 400 },
+    );
+  }
+
+  return {
+    mimeType: actual,
+    byteSize: input.byteSize,
+    durationMs: input.durationMs,
+  };
+}
 
 export function validateUploadedBytes(input: {
   kind: MediaKind;
@@ -100,9 +173,14 @@ export function validateUploadedBytes(input: {
 
   // Normalize jpeg aliases
   const expected =
-    input.expectedMime === 'image/jpg' ? 'image/jpeg' : input.expectedMime;
+    normalizeMime(input.expectedMime) === 'image/jpg'
+      ? 'image/jpeg'
+      : normalizeMime(input.expectedMime);
   const actual = detected === 'image/jpg' ? 'image/jpeg' : detected;
-  if (expected !== actual && !(expected === 'image/jpeg' && actual === 'image/jpeg')) {
+  if (
+    expected !== actual &&
+    !(expected === 'image/jpeg' && actual === 'image/jpeg')
+  ) {
     if (expected !== actual) {
       throw Object.assign(
         new Error(`Content-Type mismatch: expected ${expected}, got ${actual}`),

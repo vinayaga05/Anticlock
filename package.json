@@ -13,6 +13,9 @@
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
     "docker:ps": "docker compose ps",
+    "docker:prod:up": "docker compose --env-file .env.production -f docker-compose.production.yml up -d --build",
+    "docker:prod:down": "docker compose --env-file .env.production -f docker-compose.production.yml down",
+    "docker:prod:ps": "docker compose --env-file .env.production -f docker-compose.production.yml ps",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck"

@@ -14,6 +14,9 @@ packages/
   tsconfig/   # Shared TS base
 ```
 
+The Admin ownership boundaries and rollout plan are documented in
+[Admin Control Center](docs/admin-control-center.md).
+
 ## Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (recommended for backend stack)
@@ -49,6 +52,31 @@ pnpm docker:down    # stop stack
 
 React Native is **not** containerized — run it on the host (below).
 
+## Production — Hostinger VPS
+
+The production stack is intentionally separate from the local Compose file:
+
+```text
+Internet (HTTPS)
+       |
+     Caddy
+    /     \
+ Admin    API --- PostgreSQL (private Docker network)
+              \
+               Cloudflare R2 / Stream
+```
+
+- Caddy is the only container with public ports (`80`, `443`); it obtains and
+  renews TLS certificates automatically.
+- Admin and API are private Docker services behind `admin.anticlock.com` and
+  `api.anticlock.com`.
+- PostgreSQL has a persistent volume but no published host port.
+- Metro remains a local development tool. Release mobile builds call the
+  HTTPS API directly.
+
+See [the VPS deployment guide](deploy/hostinger-vps.md) before deploying. It
+covers DNS, secrets, first-time initialization, updates, backups, and rollback.
+
 ## Local override (without Docker apps)
 
 If you prefer host processes (API/Admin still need Postgres):
@@ -70,24 +98,39 @@ pnpm dev:mobile
 # or: pnpm --filter @anticlock/mobile ios|android
 ```
 
-To point mobile at the API, set `API_BASE_URL` in
-`apps/mobile/src/shared/api/config.ts` (e.g. `http://localhost:4000`).
-Mocks remain the default fallback.
+Debug builds keep mocks by default. Release builds use
+`https://api.anticlock.com`; update `PRODUCTION_API_BASE_URL` in
+`apps/mobile/src/shared/api/config.ts` if your deployed API uses a different
+domain. For a local API, set `DEVELOPMENT_API_BASE_URL` to a device-reachable
+URL (for example `http://10.0.2.2:4000` on an Android emulator).
 
 On Android emulator, Metro must be reachable for debug assets/videos. `pnpm
 dev:mobile` / `android` run `adb reverse tcp:8081 tcp:8081` automatically.
 
-### Canva test videos → Cloudflare R2
+### Reel videos → Cloudflare R2
 
-Export MP4 clips from Canva into `assets/canva-exports/`, enable **R2** on your Cloudflare account, add credentials to `apps/api/.env`, then upload:
+In the Admin, choose **Media** → **Upload** or **Reels** → **Upload MP4**.
+The browser reads the video metadata, requests a short-lived signed upload URL
+from the API, and uploads directly to R2. The completed asset is available in
+the Media Library, but it is not a Reel and it is not public in Clips until an
+editor attaches it to a draft Reel and explicitly publishes that Reel.
+
+Release mobile builds obtain Clips only from the published Reel API feed. An
+R2 object upload—whether through the Admin or a utility script—never creates a
+published Reel by itself.
+
+For legacy Canva test imports, export MP4 clips into `assets/canva-exports/`,
+enable **R2** on your Cloudflare account, add credentials to `apps/api/.env`,
+then upload:
 
 ```bash
 pnpm --filter @anticlock/api r2:upload-canva
 ```
 
-For adaptive HLS instead of MP4, use Cloudflare Stream: `pnpm --filter @anticlock/api stream:upload-canva`
+For adaptive HLS instead of MP4, use Cloudflare Stream:
+`pnpm --filter @anticlock/api stream:upload-canva`.
 
-See [assets/canva-exports/README.md](assets/canva-exports/README.md). Until upload completes, the mobile app plays bundled Canva-export MP4s in **Clips** and the yoga **Flash** video post.
+See [assets/canva-exports/README.md](assets/canva-exports/README.md).
 
 ### Android release APK (R8)
 

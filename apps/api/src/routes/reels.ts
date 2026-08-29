@@ -1,11 +1,22 @@
 import { Hono } from 'hono';
 import {
+  CreateReelCommentRequestSchema,
+  CreateReelReportRequestSchema,
   CreateReelRequestSchema,
   ImportStreamReelRequestSchema,
+  ReelAnalyticsEventRequestSchema,
   ReelListQuerySchema,
+  ReelReportListQuerySchema,
+  ResolveReelReportRequestSchema,
+  ReturnReelToDraftRequestSchema,
+  SetReelLikeRequestSchema,
   UpdateReelRequestSchema,
 } from '@anticlock/contracts';
-import { requireAuth, requirePermission, type AppEnv } from '../middleware/auth.js';
+import {
+  requireAuth,
+  requirePermission,
+  type AppEnv,
+} from '../middleware/auth.js';
 import { reelService } from '../reels/ReelService.js';
 import {
   applyStreamWebhook,
@@ -31,6 +42,40 @@ reelsAdminRoutes.use('*', requireAuth);
 
 reelsAdminRoutes.get('/meta', requirePermission('cms.read'), c =>
   c.json({ streamConfigured: reelService.streamEnabled() }),
+);
+
+reelsAdminRoutes.get(
+  '/reports',
+  requirePermission('moderation.act'),
+  async c => {
+    try {
+      const query = ReelReportListQuerySchema.parse(c.req.query());
+      const data = await reelService.listReports(c.get('auth'), query);
+      return c.json({ data });
+    } catch (err) {
+      const { status, body } = httpError(err);
+      return c.json(body, status);
+    }
+  },
+);
+
+reelsAdminRoutes.post(
+  '/reports/:reportId/resolve',
+  requirePermission('moderation.act'),
+  async c => {
+    try {
+      const body = ResolveReelReportRequestSchema.parse(await c.req.json());
+      const data = await reelService.resolveReport(
+        c.get('auth'),
+        c.req.param('reportId'),
+        body,
+      );
+      return c.json({ data });
+    } catch (err) {
+      const { status, body } = httpError(err);
+      return c.json(body, status);
+    }
+  },
 );
 
 reelsAdminRoutes.get('/', requirePermission('cms.read'), async c => {
@@ -117,7 +162,10 @@ reelsAdminRoutes.post(
   requirePermission('cms.write'),
   async c => {
     try {
-      const data = await reelService.syncMedia(c.get('auth'), c.req.param('id'));
+      const data = await reelService.syncMedia(
+        c.get('auth'),
+        c.req.param('id'),
+      );
       return c.json({ data });
     } catch (err) {
       const { status, body } = httpError(err);
@@ -128,7 +176,7 @@ reelsAdminRoutes.post(
 
 reelsAdminRoutes.post(
   '/:id/publish',
-  requirePermission('cms.write'),
+  requirePermission('cms.publish'),
   async c => {
     try {
       const data = await reelService.publish(c.get('auth'), c.req.param('id'));
@@ -141,11 +189,55 @@ reelsAdminRoutes.post(
 );
 
 reelsAdminRoutes.post(
-  '/:id/unpublish',
+  '/:id/submit-review',
   requirePermission('cms.write'),
   async c => {
     try {
-      const data = await reelService.unpublish(c.get('auth'), c.req.param('id'));
+      // The request has no writable fields. Do not require a body so a plain
+      // POST works from tools as well as the Admin UI.
+      const data = await reelService.submitForReview(
+        c.get('auth'),
+        c.req.param('id'),
+      );
+      return c.json({ data });
+    } catch (err) {
+      const { status, body } = httpError(err);
+      return c.json(body, status);
+    }
+  },
+);
+
+reelsAdminRoutes.post(
+  '/:id/return-to-draft',
+  requirePermission('cms.write'),
+  async c => {
+    try {
+      const raw = await c.req.text();
+      const body = ReturnReelToDraftRequestSchema.parse(
+        raw ? JSON.parse(raw) : {},
+      );
+      const data = await reelService.returnToDraft(
+        c.get('auth'),
+        c.req.param('id'),
+        body,
+      );
+      return c.json({ data });
+    } catch (err) {
+      const { status, body } = httpError(err);
+      return c.json(body, status);
+    }
+  },
+);
+
+reelsAdminRoutes.post(
+  '/:id/unpublish',
+  requirePermission('cms.publish'),
+  async c => {
+    try {
+      const data = await reelService.unpublish(
+        c.get('auth'),
+        c.req.param('id'),
+      );
       return c.json({ data });
     } catch (err) {
       const { status, body } = httpError(err);
@@ -168,13 +260,81 @@ reelsAdminRoutes.post(
   },
 );
 
+reelsAdminRoutes.get(
+  '/:id/analytics',
+  requirePermission('cms.read'),
+  async c => {
+    try {
+      const data = await reelService.analytics(c.get('auth'), c.req.param('id'));
+      return c.json({ data });
+    } catch (err) {
+      const { status, body } = httpError(err);
+      return c.json(body, status);
+    }
+  },
+);
+
 /** Public feed for mobile Clips */
-export const reelsPublicRoutes = new Hono();
+export const reelsPublicRoutes = new Hono<AppEnv>();
 
 reelsPublicRoutes.get('/', async c => {
   try {
     const data = await reelService.listFeed();
     return c.json({ data });
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
+/**
+ * Mobile-only engagement endpoints. They intentionally live under `/v1` for
+ * the app but require a signed mobile session and only accept live Reels.
+ */
+reelsPublicRoutes.post('/:id/analytics-events', requireAuth, async c => {
+  try {
+    const body = ReelAnalyticsEventRequestSchema.parse(await c.req.json());
+    return c.json(
+      await reelService.recordAnalyticsEvent(c.get('auth'), c.req.param('id'), body),
+    );
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
+reelsPublicRoutes.put('/:id/like', requireAuth, async c => {
+  try {
+    const body = SetReelLikeRequestSchema.parse(await c.req.json());
+    return c.json(
+      await reelService.setMobileLike(c.get('auth'), c.req.param('id'), body),
+    );
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
+reelsPublicRoutes.post('/:id/comments', requireAuth, async c => {
+  try {
+    const body = CreateReelCommentRequestSchema.parse(await c.req.json());
+    return c.json(
+      await reelService.createMobileComment(c.get('auth'), c.req.param('id'), body),
+      201,
+    );
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
+reelsPublicRoutes.post('/:id/reports', requireAuth, async c => {
+  try {
+    const body = CreateReelReportRequestSchema.parse(await c.req.json());
+    return c.json(
+      await reelService.createMobileReport(c.get('auth'), c.req.param('id'), body),
+      201,
+    );
   } catch (err) {
     const { status, body } = httpError(err);
     return c.json(body, status);

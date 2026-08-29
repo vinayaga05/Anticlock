@@ -45,7 +45,13 @@ export function ServiceTreeCard({
               backgroundColor: softFill(tree.accent, 0.18),
             },
           ]}>
-          <Image source={cover} style={styles.image} resizeMode="cover" />
+          <Image
+            source={cover}
+            style={styles.image}
+            resizeMode="cover"
+            accessible
+            accessibilityLabel={`${tree.name} service image`}
+          />
         </View>
       ) : (
         <IconBadge

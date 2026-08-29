@@ -19,11 +19,16 @@ type Props = {
   onAction?: (booking: ConsolidatedBooking, action: BookingAction) => void;
 };
 
-export function NextUpBookingCard({ booking, onPress, onAction }: Props) {
+export function NextUpBookingCard({ booking, onPress: _onPress, onAction }: Props) {
   const theme = useTheme();
   const when = getBookingWhenDisplay(booking);
   const relative = formatRelativeStart(booking.startsAt);
   const { primary, secondary } = resolveBookingActions(booking);
+  const actionLabel = (action: BookingAction) => {
+    if (action === 'contact') return 'Message';
+    if (action === 'track') return 'Track Provider';
+    return BOOKING_ACTION_LABELS[action];
+  };
 
   const runAction = (action: BookingAction) => {
     onAction?.(booking, action);
@@ -40,7 +45,7 @@ export function NextUpBookingCard({ booking, onPress, onAction }: Props) {
           {
             backgroundColor: theme.colors.surface,
             borderColor: theme.colors.borderSoft,
-            ...theme.shadows.soft,
+            ...theme.shadows.float,
           },
         ]}>
         <View style={styles.metaRow}>
@@ -84,9 +89,9 @@ export function NextUpBookingCard({ booking, onPress, onAction }: Props) {
           {secondary ? (
             <PressableScale
               onPress={() => runAction(secondary)}
-              style={[styles.secondaryBtn, { borderColor: theme.colors.borderSoft }]}>
-              <Text style={[styles.secondaryText, { color: theme.colors.textPrimary }]}>
-                {BOOKING_ACTION_LABELS[secondary]}
+              style={[styles.secondaryBtn, { borderColor: theme.colors.primary }]}>
+              <Text style={[styles.secondaryText, { color: theme.colors.primary }]}>
+                {actionLabel(secondary)}
               </Text>
             </PressableScale>
           ) : null}
@@ -94,7 +99,7 @@ export function NextUpBookingCard({ booking, onPress, onAction }: Props) {
             <PressableScale
               onPress={() => runAction(primary)}
               style={[styles.primaryBtn, { backgroundColor: theme.colors.primary }]}>
-              <Text style={styles.primaryText}>{BOOKING_ACTION_LABELS[primary]}</Text>
+              <Text style={styles.primaryText}>{actionLabel(primary)}</Text>
             </PressableScale>
           ) : null}
         </View>

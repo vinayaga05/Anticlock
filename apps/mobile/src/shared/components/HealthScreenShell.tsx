@@ -1,5 +1,12 @@
 import React, { PropsWithChildren } from 'react';
-import { StyleSheet, View, ViewStyle } from 'react-native';
+import {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  ScrollView,
+  StyleSheet,
+  View,
+  ViewStyle,
+} from 'react-native';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { healthTheme } from '@/shared/theme/healthTheme';
 
@@ -8,6 +15,8 @@ type HealthScreenShellProps = PropsWithChildren<{
   padded?: boolean;
   contentStyle?: ViewStyle;
   tabAware?: boolean;
+  scrollRef?: React.Ref<ScrollView>;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 }>;
 
 /** Soft clinical backdrop for health booking and service flows. */
@@ -17,6 +26,8 @@ export function HealthScreenShell({
   padded = true,
   contentStyle,
   tabAware = false,
+  scrollRef,
+  onScroll,
 }: HealthScreenShellProps) {
   return (
     <View style={styles.root}>
@@ -27,7 +38,10 @@ export function HealthScreenShell({
         padded={padded}
         contentStyle={contentStyle}
         tabAware={tabAware}
-        variant="health">
+        scrollRef={scrollRef}
+        onScroll={onScroll}
+        variant="health"
+      >
         {children}
       </ScreenContainer>
     </View>

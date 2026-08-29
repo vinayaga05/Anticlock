@@ -1,9 +1,11 @@
-import { and, asc, desc, eq, ilike, isNull, or } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, isNull, lte, ne, or } from 'drizzle-orm';
+import { MAX_REEL_VIDEO_DURATION_MS } from '@anticlock/contracts';
 import { db } from '../db/client.js';
 import { mediaAssets, reels } from '../db/schema.js';
 
 export type ReelListFilters = {
   status?: string;
+  contentMode?: string;
   isSample?: boolean;
   q?: string;
   limit: number;
@@ -56,6 +58,9 @@ export class ReelRepository {
   async list(filters: ReelListFilters) {
     const conditions = [];
     if (filters.status) conditions.push(eq(reels.status, filters.status));
+    if (filters.contentMode) {
+      conditions.push(eq(reels.contentMode, filters.contentMode));
+    }
     if (filters.isSample !== undefined) {
       conditions.push(eq(reels.isSample, filters.isSample));
     }
@@ -92,12 +97,64 @@ export class ReelRepository {
       .where(
         and(
           eq(reels.status, 'published'),
+          eq(reels.moderationStatus, 'clear'),
+          ne(reels.contentMode, 'test'),
+          eq(mediaAssets.kind, 'video'),
+          eq(mediaAssets.mimeType, 'video/mp4'),
+          eq(mediaAssets.accessLevel, 'public'),
           eq(mediaAssets.processingStatus, 'ready'),
+          or(
+            eq(mediaAssets.moderationStatus, 'approved'),
+            eq(mediaAssets.moderationStatus, 'not_required'),
+          ),
           isNull(mediaAssets.deletedAt),
+          isNull(mediaAssets.archivedAt),
+          lte(mediaAssets.durationMs, MAX_REEL_VIDEO_DURATION_MS),
         ),
       )
       .orderBy(asc(reels.displayOrder), desc(reels.publishedAt))
       .limit(limit);
+  }
+
+  /**
+   * Resolves a Reel only when it is still safely published and playable. This
+   * gates all mobile engagement writes so drafts, review items, restricted
+   * items, and arbitrary R2 objects can never acquire public engagement.
+   */
+  async getPublishedForEngagement(id: string, allowUnderReview = false) {
+    return (
+      (
+        await db
+          .select({ reel: reels, media: mediaAssets })
+          .from(reels)
+          .innerJoin(mediaAssets, eq(reels.mediaId, mediaAssets.id))
+          .where(
+            and(
+              eq(reels.id, id),
+              eq(reels.status, 'published'),
+              ne(reels.contentMode, 'test'),
+              allowUnderReview
+                ? or(
+                    eq(reels.moderationStatus, 'clear'),
+                    eq(reels.moderationStatus, 'under_review'),
+                  )
+                : eq(reels.moderationStatus, 'clear'),
+              eq(mediaAssets.kind, 'video'),
+              eq(mediaAssets.mimeType, 'video/mp4'),
+              eq(mediaAssets.accessLevel, 'public'),
+              eq(mediaAssets.processingStatus, 'ready'),
+              or(
+                eq(mediaAssets.moderationStatus, 'approved'),
+                eq(mediaAssets.moderationStatus, 'not_required'),
+              ),
+              isNull(mediaAssets.deletedAt),
+              isNull(mediaAssets.archivedAt),
+              lte(mediaAssets.durationMs, MAX_REEL_VIDEO_DURATION_MS),
+            ),
+          )
+          .limit(1)
+      )[0] ?? null
+    );
   }
 
   async findMediaByExternalId(externalId: string) {

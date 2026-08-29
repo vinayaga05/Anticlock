@@ -35,8 +35,17 @@ function item(
  */
 export const needsShowcaseCards: NeedsShowcaseCard[] = [
   {
+    id: 'my-activity',
+    title: 'My Activity',
+    treeId: 'fitness',
+    items: [
+      item('fitness.yoga', 'fitness', 'My Classes'),
+      item('sports.outdoor', 'sports', 'My Sports'),
+    ],
+  },
+  {
     id: 'health',
-    title: 'Health Services',
+    title: 'Health',
     treeId: 'health',
     items: [
       item('health.doctors', 'health', 'Doctor Consultation'),
@@ -44,12 +53,39 @@ export const needsShowcaseCards: NeedsShowcaseCard[] = [
     ],
   },
   {
+    id: 'services',
+    title: 'Services',
+    treeId: 'home_services',
+    items: [
+      item('home.plumber', 'home_services', 'Home Repairs'),
+      item('home.cleaning', 'home_services', 'Home Cleaning'),
+    ],
+  },
+  {
+    id: 'courses-training',
+    title: 'Courses & Training',
+    treeId: 'course_training',
+    items: [
+      item('course.health_fitness', 'course_training', 'Fitness Courses'),
+      item('course.music', 'course_training', 'Music & Dance'),
+    ],
+  },
+  {
     id: 'fitness',
-    title: 'Fitness & Yoga',
+    title: 'Fitness',
     treeId: 'fitness',
     items: [
       item('fitness.yoga', 'fitness', 'Yoga Classes'),
       item('fitness.bodybuilding', 'fitness', 'Workout Routines'),
+    ],
+  },
+  {
+    id: 'travel-events',
+    title: 'Travel & Events',
+    treeId: 'tours_events',
+    items: [
+      item('tours.adventure', 'tours_events', 'Adventure Activities'),
+      item('tours.india', 'tours_events', 'Tours & Expeditions'),
     ],
   },
   {
@@ -62,24 +98,6 @@ export const needsShowcaseCards: NeedsShowcaseCard[] = [
     ],
   },
   {
-    id: 'events',
-    title: 'Events',
-    treeId: 'tours_events',
-    items: [
-      item('tours.adventure', 'tours_events', 'Adventure Activities'),
-      item('tours.india', 'tours_events', 'Tours & Expeditions'),
-    ],
-  },
-  {
-    id: 'products',
-    title: 'Products',
-    treeId: 'ecommerce',
-    items: [
-      item('ecom.sports', 'ecommerce', 'Apparel & T-shirts'),
-      item('ecom.fitness', 'ecommerce', 'Protein & Supplements'),
-    ],
-  },
-  {
     id: 'wellness',
     title: 'Wellness',
     treeId: 'wellness',
@@ -89,30 +107,12 @@ export const needsShowcaseCards: NeedsShowcaseCard[] = [
     ],
   },
   {
-    id: 'natural',
-    title: 'Natural Medicine',
-    treeId: 'wellness',
+    id: 'beauty-spa',
+    title: 'Beauty & Spa',
+    treeId: 'beauty_spa',
     items: [
-      item('wellness.acupuncture', 'wellness', 'Siddha Medicine'),
-      item('wellness.alternate_medicine', 'wellness', 'Ayurveda & Herbal'),
-    ],
-  },
-  {
-    id: 'traditional',
-    title: 'Traditional Sports',
-    treeId: 'sports',
-    items: [
-      item('sports.traditional', 'sports', 'Silambam'),
-      item('sports.mma', 'sports', 'Mallakhamb'),
-    ],
-  },
-  {
-    id: 'devotional',
-    title: 'Devotional',
-    treeId: 'tours_events',
-    items: [
-      item('tours.devotional', 'tours_events', 'Meditation & Chanting'),
-      item('course.music', 'course_training', 'Music, Dance & Kirtan'),
+      item('beauty.parlour_female', 'beauty_spa', 'Beauty Parlour'),
+      item('beauty.massage', 'beauty_spa', 'Massage & Spa'),
     ],
   },
 ];

@@ -38,15 +38,33 @@ export interface ObjectStorageProvider {
     key: string;
   }): Promise<Buffer>;
 
+  /**
+   * Read a small leading range for container-signature validation.  This keeps
+   * direct R2 video confirmation from proxying an entire upload through API.
+   */
+  getObjectPrefix(input: {
+    bucket: StorageBucket;
+    key: string;
+    byteLength: number;
+  }): Promise<Buffer>;
+
+  /**
+   * Promotes an upload-only object to its immutable delivery key. The signed
+   * PUT targets the source key, so it cannot overwrite a completed asset.
+   */
+  finalizeUpload(input: {
+    bucket: StorageBucket;
+    sourceKey: string;
+    destinationKey: string;
+    sourceEtag?: string;
+  }): Promise<void>;
+
   verifyObject(input: {
     bucket: StorageBucket;
     key: string;
   }): Promise<ObjectMetadata | null>;
 
-  deleteObject(input: {
-    bucket: StorageBucket;
-    key: string;
-  }): Promise<void>;
+  deleteObject(input: { bucket: StorageBucket; key: string }): Promise<void>;
 
   createDownloadUrl(input: {
     bucket: StorageBucket;
@@ -69,6 +87,8 @@ export function extensionForMime(mime: string): string {
     'image/webp': 'webp',
     'image/gif': 'gif',
     'application/pdf': 'pdf',
+    'video/mp4': 'mp4',
   };
-  return map[mime] ?? 'bin';
+  const normalized = mime.trim().toLowerCase().split(';', 1)[0] ?? '';
+  return map[normalized] ?? 'bin';
 }

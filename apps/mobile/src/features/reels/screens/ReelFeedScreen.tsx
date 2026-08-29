@@ -21,12 +21,17 @@ import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
 import { useReelsQuery } from '@/shared/api/hooks';
+import {
+  createAnalyticsEventId,
+  recordReelAnalyticsEvent,
+} from '@/shared/api/reelAnalytics';
 import { TAB_BAR_VISIBLE_HEIGHT } from '@/shared/navigation/FloatingPillTabBar';
 
 const { height: WINDOW_HEIGHT, width: WINDOW_WIDTH } = Dimensions.get('window');
 
 const DEFAULT_AUTHOR_AVATAR =
   'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&h=200&q=80';
+const MINIMUM_VIEW_WATCH_MS = 2_000;
 
 function getAuthorAvatar(item: ReelItem) {
   return item.authorAvatarUrl ?? DEFAULT_AUTHOR_AVATAR;
@@ -151,18 +156,60 @@ export function ReelFeedScreen() {
   const [liked, setLiked] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [coins] = useState(120);
+  const viewedReelIds = useRef(new Set<string>());
+  const completedReelIds = useRef(new Set<string>());
+  const analyticsSessionId = useRef<string | null>(null);
+  if (!analyticsSessionId.current) {
+    analyticsSessionId.current = createAnalyticsEventId();
+  }
   const commentsOpen = useCommentsSheetStore(
     s => (s.open || s.closing) && s.sourceType === 'clip',
   );
   const playbackActive = useCommentsSheetStore(s => s.playbackActive);
   const openComments = useCommentsSheetStore(s => s.openComments);
-  const { data: reels = mockReels, refetch, isRefetching } =
+  const { data: queriedReels, refetch, isRefetching } =
     useReelsQuery(mockReels);
+  // `useReelsQuery` supplies demo data only when the API is deliberately
+  // disabled for local development. Do not use the bundled/R2 demo list as a
+  // production fallback: the public feed endpoint is the publication gate.
+  const reels = queriedReels ?? [];
 
   const bottomSafe =
     TAB_BAR_VISIBLE_HEIGHT + Math.max(insets.bottom, 8) + 20;
   const topFadeH = insets.top + 96;
   const bottomFadeH = bottomSafe + 160;
+
+  const trackPlayback = useCallback(
+    (reelId: string, watchedMs: number, completed: boolean) => {
+      if (!Number.isFinite(watchedMs) || watchedMs < 0) return;
+
+      const shouldRecordView =
+        !viewedReelIds.current.has(reelId) &&
+        (watchedMs >= MINIMUM_VIEW_WATCH_MS || completed);
+      if (shouldRecordView) {
+        viewedReelIds.current.add(reelId);
+        // Intentionally fire-and-forget. This endpoint only records mobile
+        // analytics; it has no publishing, review, or media mutation path.
+        recordReelAnalyticsEvent(reelId, {
+          eventType: 'view',
+          watchedMs,
+          completed: false,
+          sessionId: analyticsSessionId.current ?? undefined,
+        }).catch(() => undefined);
+      }
+
+      if (completed && !completedReelIds.current.has(reelId)) {
+        completedReelIds.current.add(reelId);
+        recordReelAnalyticsEvent(reelId, {
+          eventType: 'view',
+          watchedMs,
+          completed: true,
+          sessionId: analyticsSessionId.current ?? undefined,
+        }).catch(() => undefined);
+      }
+    },
+    [],
+  );
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
@@ -243,6 +290,22 @@ export function ReelFeedScreen() {
           paused={
             index !== activeIndex || (commentsOpen && !playbackActive)
           }
+          onPlaybackProgress={(currentTime, _duration) => {
+            if (index !== activeIndex || (commentsOpen && !playbackActive)) {
+              return;
+            }
+            trackPlayback(item.id, currentTime * 1_000, false);
+          }}
+          onPlaybackComplete={duration => {
+            if (
+              index !== activeIndex ||
+              (commentsOpen && !playbackActive) ||
+              duration <= 0
+            ) {
+              return;
+            }
+            trackPlayback(item.id, duration * 1_000, true);
+          }}
         />
 
         {/* Top fade + chrome */}
@@ -317,7 +380,7 @@ export function ReelFeedScreen() {
         <View
           style={[
             styles.meta,
-            { bottom: bottomSafe, paddingRight: 78 },
+            { bottom: bottomSafe },
           ]}>
           <PressableScale
             accessibilityLabel={`Open ${item.author} profile`}
@@ -400,7 +463,7 @@ export function ReelFeedScreen() {
           <RefreshControl
             refreshing={isRefetching}
             onRefresh={() => {
-              void refetch();
+              refetch().catch(() => undefined);
             }}
             tintColor="#FFFFFF"
             colors={[theme.colors.primary]}
@@ -471,6 +534,7 @@ const styles = StyleSheet.create({
   meta: {
     position: 'absolute',
     left: 16,
+    paddingRight: 78,
     gap: 6,
   },
   creatorRow: {

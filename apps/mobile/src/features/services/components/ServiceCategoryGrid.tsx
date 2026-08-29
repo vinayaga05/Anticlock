@@ -37,7 +37,13 @@ function CategoryVisual({
             backgroundColor: softFill(accent, 0.14),
           },
         ]}>
-        <Image source={image} style={styles.image} resizeMode="cover" />
+        <Image
+          source={image}
+          style={styles.image}
+          resizeMode="cover"
+          accessible
+          accessibilityLabel={`${category.name} service image`}
+        />
       </View>
     );
   }
@@ -174,7 +180,7 @@ export function ServiceCategoryGrid({
       {categories.map(cat => (
         <View
           key={cat.id}
-          style={{ width: compact ? (treeId === 'health' ? '48%' : '31%') : '100%' }}>
+          style={{ width: compact ? '31%' : '100%' }}>
           <ServiceCategoryCard
             category={cat}
             treeId={treeId as ServiceTreeId}
@@ -223,7 +229,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   gridHealth: {
-    gap: 12,
+    gap: 10,
   },
   imageRing: {
     overflow: 'hidden',

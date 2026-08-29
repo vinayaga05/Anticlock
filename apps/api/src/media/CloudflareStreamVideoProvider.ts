@@ -19,7 +19,8 @@ function requireStreamEnv() {
 
 export function isStreamConfigured() {
   return Boolean(
-    process.env.STREAM_ACCOUNT_ID?.trim() && process.env.STREAM_API_TOKEN?.trim(),
+    process.env.STREAM_ACCOUNT_ID?.trim() &&
+      process.env.STREAM_API_TOKEN?.trim(),
   );
 }
 
@@ -39,10 +40,7 @@ export function streamThumbnailUrl(uid: string) {
   return `https://customer-${process.env.STREAM_ACCOUNT_ID}.cloudflarestream.com/${uid}/thumbnails/thumbnail.jpg`;
 }
 
-async function streamFetch<T>(
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
+async function streamFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const { accountId, apiToken } = requireStreamEnv();
   const res = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream${path}`,
@@ -76,7 +74,7 @@ export class CloudflareStreamVideoProvider implements VideoProvider {
   }): Promise<{ uploadUrl: string; externalId: string }> {
     const maxDurationSeconds =
       input.maxDurationSeconds ??
-      Number(process.env.STREAM_MAX_DURATION_SECONDS ?? 90);
+      Number(process.env.STREAM_MAX_DURATION_SECONDS ?? 180);
 
     const result = await streamFetch<{ uploadURL: string; uid: string }>(
       '/direct_upload',
@@ -136,14 +134,18 @@ export class CloudflareStreamVideoProvider implements VideoProvider {
   async delete(externalId: string): Promise<void> {
     const { accountId, apiToken } = requireStreamEnv();
     const res = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream/${encodeURIComponent(externalId)}`,
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream/${encodeURIComponent(
+        externalId,
+      )}`,
       {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${apiToken}` },
       },
     );
     if (!res.ok && res.status !== 404) {
-      const json = (await res.json().catch(() => null)) as StreamApiResult<unknown> | null;
+      const json = (await res
+        .json()
+        .catch(() => null)) as StreamApiResult<unknown> | null;
       const msg =
         json?.errors?.map(e => e.message).join('; ') ||
         `Stream delete failed (${res.status})`;

@@ -8,8 +8,12 @@ import { useAuth } from '@/lib/auth';
 export default function LoginPage() {
   const { login, user, loading } = useAuth();
   const router = useRouter();
-  const [email, setEmail] = useState('admin@anticlock.app');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState(
+    process.env.NODE_ENV === 'production' ? '' : 'admin@anticlock.app',
+  );
+  const [password, setPassword] = useState(
+    process.env.NODE_ENV === 'production' ? '' : 'admin123',
+  );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 

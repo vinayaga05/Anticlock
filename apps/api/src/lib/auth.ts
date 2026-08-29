@@ -2,10 +2,14 @@ import { SignJWT, jwtVerify } from 'jose';
 import type { Permission, Role } from '@anticlock/contracts';
 import { ROLE_PERMISSIONS } from '@anticlock/contracts';
 
-const secret = () =>
-  new TextEncoder().encode(
-    process.env.JWT_SECRET ?? 'anticlock-dev-jwt-secret-change-me',
-  );
+const secret = () => {
+  const configured = process.env.JWT_SECRET?.trim();
+  if (configured) return new TextEncoder().encode(configured);
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET must be configured in production');
+  }
+  return new TextEncoder().encode('anticlock-dev-jwt-secret-change-me');
+};
 
 export type AuthClaims = {
   sub: string;

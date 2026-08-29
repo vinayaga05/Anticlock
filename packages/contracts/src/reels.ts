@@ -1,7 +1,52 @@
 import { z } from 'zod';
 
-export const ReelStatusSchema = z.enum(['draft', 'published', 'archived']);
+/**
+ * Lifecycle state is intentionally separate from the editor-facing mode.
+ * Only `published` Reels are eligible for the public mobile feed.
+ */
+export const ReelStatusSchema = z.enum([
+  'draft',
+  'in_review',
+  'published',
+  'archived',
+]);
 export type ReelStatus = z.infer<typeof ReelStatusSchema>;
+
+/** A test Reel is never publicly publishable; sample Reels may be published. */
+export const ReelContentModeSchema = z.enum(['standard', 'test', 'sample']);
+export type ReelContentMode = z.infer<typeof ReelContentModeSchema>;
+
+export const ReelModerationStatusSchema = z.enum([
+  'clear',
+  'under_review',
+  'restricted',
+  'removed',
+]);
+export type ReelModerationStatus = z.infer<typeof ReelModerationStatusSchema>;
+
+export const ReelReportStatusSchema = z.enum(['open', 'resolved', 'dismissed']);
+export type ReelReportStatus = z.infer<typeof ReelReportStatusSchema>;
+
+export const ReelReportReasonSchema = z.enum([
+  'spam',
+  'nudity',
+  'violence',
+  'harassment',
+  'misinformation',
+  'copyright',
+  'other',
+]);
+export type ReelReportReason = z.infer<typeof ReelReportReasonSchema>;
+
+export const ReelReportResolutionActionSchema = z.enum([
+  'dismiss',
+  'return_to_review',
+  'restrict_reel',
+  'remove_reel',
+]);
+export type ReelReportResolutionAction = z.infer<
+  typeof ReelReportResolutionActionSchema
+>;
 
 export const ReelCtaEntityTypeSchema = z.enum([
   'provider',
@@ -26,10 +71,16 @@ export const ReelAdminSchema = z.object({
   creatorName: z.string(),
   category: z.string().nullable(),
   status: ReelStatusSchema,
+  contentMode: ReelContentModeSchema,
+  moderationStatus: ReelModerationStatusSchema,
   isSample: z.boolean(),
   likeCount: z.number().int(),
   commentCount: z.number().int(),
   saveCount: z.number().int(),
+  viewCount: z.number().int(),
+  completionCount: z.number().int(),
+  completionRate: z.number().min(0).max(1),
+  reportCount: z.number().int(),
   displayOrder: z.number().int(),
   mediaId: z.string().uuid().nullable(),
   thumbnailMediaId: z.string().uuid().nullable(),
@@ -41,11 +92,15 @@ export const ReelAdminSchema = z.object({
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   publishedAt: z.string().datetime().nullable(),
+  submittedForReviewAt: z.string().datetime().nullable(),
+  reviewedAt: z.string().datetime().nullable(),
 });
 export type ReelAdmin = z.infer<typeof ReelAdminSchema>;
 
 export const ReelFeedItemSchema = z.object({
   id: z.string().uuid(),
+  /** Defense-in-depth marker for mobile clients; the API only emits published rows. */
+  status: z.literal('published'),
   title: z.string(),
   caption: z.string().nullable(),
   creatorName: z.string(),
@@ -64,12 +119,16 @@ export const CreateReelRequestSchema = z.object({
   caption: z.string().max(2000).optional(),
   creatorName: z.string().min(1).max(120),
   category: z.string().max(80).optional(),
+  /** Editorial mode, independent of Draft → Review → Published lifecycle. */
+  contentMode: ReelContentModeSchema.optional(),
   isSample: z.boolean().default(true),
   likeCount: z.number().int().min(0).default(0),
   commentCount: z.number().int().min(0).default(0),
   saveCount: z.number().int().min(0).default(0),
   displayOrder: z.number().int().default(0),
   cta: ReelCtaSchema.nullable().optional(),
+  /** A ready public video from the Admin Media Library. */
+  mediaId: z.string().uuid().optional(),
   /** Dev fallback when Stream is not configured */
   externalPlaybackUrl: z.string().url().optional(),
   externalPosterUrl: z.string().url().optional(),
@@ -81,20 +140,130 @@ export const UpdateReelRequestSchema = z.object({
   caption: z.string().max(2000).nullable().optional(),
   creatorName: z.string().min(1).max(120).optional(),
   category: z.string().max(80).nullable().optional(),
+  contentMode: ReelContentModeSchema.optional(),
   isSample: z.boolean().optional(),
   likeCount: z.number().int().min(0).optional(),
   commentCount: z.number().int().min(0).optional(),
   saveCount: z.number().int().min(0).optional(),
   displayOrder: z.number().int().optional(),
   cta: ReelCtaSchema.nullable().optional(),
+  mediaId: z.string().uuid().nullable().optional(),
   thumbnailMediaId: z.string().uuid().nullable().optional(),
   externalPlaybackUrl: z.string().url().optional(),
   externalPosterUrl: z.string().url().optional(),
 });
 export type UpdateReelRequest = z.infer<typeof UpdateReelRequestSchema>;
 
+/** The request is deliberately empty: the current admin is the submitter. */
+export const SubmitReelForReviewRequestSchema = z.object({}).strict();
+export type SubmitReelForReviewRequest = z.infer<
+  typeof SubmitReelForReviewRequestSchema
+>;
+
+export const ReturnReelToDraftRequestSchema = z
+  .object({
+    note: z.string().trim().max(1000).optional(),
+  })
+  .strict();
+export type ReturnReelToDraftRequest = z.infer<
+  typeof ReturnReelToDraftRequestSchema
+>;
+
+export const ReelAnalyticsEventRequestSchema = z
+  .object({
+    /** UUID generated by the client and used as the idempotency key. */
+    eventId: z.string().uuid(),
+    eventType: z.literal('view'),
+    /** Watched time for this completed playback session, in milliseconds. */
+    watchedMs: z.number().int().min(0).max(3 * 60 * 1000),
+    completed: z.boolean(),
+    sessionId: z.string().trim().min(1).max(128).optional(),
+  })
+  .strict();
+export type ReelAnalyticsEventRequest = z.infer<
+  typeof ReelAnalyticsEventRequestSchema
+>;
+
+export const SetReelLikeRequestSchema = z
+  .object({ liked: z.boolean() })
+  .strict();
+export type SetReelLikeRequest = z.infer<typeof SetReelLikeRequestSchema>;
+
+export const CreateReelCommentRequestSchema = z
+  .object({ body: z.string().trim().min(1).max(1000) })
+  .strict();
+export type CreateReelCommentRequest = z.infer<
+  typeof CreateReelCommentRequestSchema
+>;
+
+export const CreateReelReportRequestSchema = z
+  .object({
+    reason: ReelReportReasonSchema,
+    details: z.string().trim().max(1000).optional(),
+  })
+  .strict();
+export type CreateReelReportRequest = z.infer<
+  typeof CreateReelReportRequestSchema
+>;
+
+export const ReelReportListQuerySchema = z.object({
+  status: ReelReportStatusSchema.optional(),
+  reelId: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type ReelReportListQuery = z.infer<typeof ReelReportListQuerySchema>;
+
+export const ResolveReelReportRequestSchema = z
+  .object({
+    action: ReelReportResolutionActionSchema,
+    note: z.string().trim().max(1000).optional(),
+  })
+  .strict();
+export type ResolveReelReportRequest = z.infer<
+  typeof ResolveReelReportRequestSchema
+>;
+
+export const ReelReportAdminSchema = z.object({
+  id: z.string().uuid(),
+  reelId: z.string().uuid(),
+  reelTitle: z.string(),
+  reporterKey: z.string(),
+  reporterKind: z.enum(['mobile_user', 'device']),
+  reason: ReelReportReasonSchema,
+  details: z.string().nullable(),
+  status: ReelReportStatusSchema,
+  resolutionAction: ReelReportResolutionActionSchema.nullable(),
+  resolutionNote: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  resolvedAt: z.string().datetime().nullable(),
+});
+export type ReelReportAdmin = z.infer<typeof ReelReportAdminSchema>;
+
+export const ReelAnalyticsDaySchema = z.object({
+  date: z.string(),
+  views: z.number().int(),
+  completedViews: z.number().int(),
+  likes: z.number().int(),
+  comments: z.number().int(),
+});
+export type ReelAnalyticsDay = z.infer<typeof ReelAnalyticsDaySchema>;
+
+export const ReelAnalyticsSummarySchema = z.object({
+  reelId: z.string().uuid(),
+  views: z.number().int(),
+  uniqueViewers: z.number().int(),
+  completedViews: z.number().int(),
+  completionRate: z.number().min(0).max(1),
+  likes: z.number().int(),
+  comments: z.number().int(),
+  reports: z.number().int(),
+  daily: z.array(ReelAnalyticsDaySchema),
+});
+export type ReelAnalyticsSummary = z.infer<typeof ReelAnalyticsSummarySchema>;
+
 export const ReelListQuerySchema = z.object({
   status: ReelStatusSchema.optional(),
+  contentMode: ReelContentModeSchema.optional(),
   isSample: z
     .union([z.literal('true'), z.literal('false'), z.boolean()])
     .optional()
@@ -114,6 +283,7 @@ export const ImportStreamReelRequestSchema = z.object({
   caption: z.string().max(2000).optional(),
   creatorName: z.string().min(1).max(120),
   category: z.string().max(80).optional(),
+  contentMode: ReelContentModeSchema.optional(),
   isSample: z.boolean().default(true),
   likeCount: z.number().int().min(0).default(0),
   commentCount: z.number().int().min(0).default(0),

@@ -12,7 +12,7 @@ import {
   minutesUntil,
 } from '@/shared/utils/bookingDates';
 
-export type BookingFilter = 'all' | 'online' | 'classes';
+export type BookingFilter = 'all' | 'on_site' | 'online' | 'classes';
 
 export type BookingAction =
   | 'view_details'
@@ -436,6 +436,7 @@ export function filterBookings(
   filter: BookingFilter,
 ): ConsolidatedBooking[] {
   const booked = getBookedItems(items);
+  if (filter === 'on_site') return booked.filter(b => !b.isOnline);
   if (filter === 'online') return booked.filter(b => b.isOnline);
   if (filter === 'classes') return booked.filter(b => b.isClass);
   return booked;

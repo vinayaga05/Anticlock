@@ -21,11 +21,15 @@ while true; do
 done
 
 cd /app
-echo "Running migrations..."
-pnpm --filter @anticlock/api db:migrate
+if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
+  echo "Running migrations..."
+  pnpm --filter @anticlock/api db:migrate
+fi
 
-echo "Seeding database..."
-pnpm --filter @anticlock/api db:seed
+if [ "${RUN_SEED:-true}" = "true" ]; then
+  echo "Seeding database..."
+  pnpm --filter @anticlock/api db:seed
+fi
 
 echo "Starting API..."
 cd /app/apps/api

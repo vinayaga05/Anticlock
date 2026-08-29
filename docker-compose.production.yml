@@ -1,0 +1,166 @@
+# Production topology for a single Hostinger VPS.
+#
+# Usage on the server:
+#   cp .env.production.example .env.production
+#   # fill in every required value, then:
+#   docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
+#
+# Only Caddy exposes host ports. PostgreSQL is reachable solely by the API on
+# the private `database` network.
+name: anticlock
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: anticlock
+      POSTGRES_USER: anticlock
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}
+    volumes:
+      - anticlock_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U anticlock -d anticlock']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - database
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      API_PORT: '4000'
+      DATABASE_URL: postgresql://anticlock:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}@postgres:5432/anticlock
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.production}
+      ADMIN_ORIGIN: https://${ADMIN_DOMAIN:?Set ADMIN_DOMAIN in .env.production}
+      API_PUBLIC_URL: https://${API_DOMAIN:?Set API_DOMAIN in .env.production}
+      RUN_MIGRATIONS: 'false'
+      RUN_SEED: 'false'
+      MEDIA_STORAGE: ${MEDIA_STORAGE:-r2}
+      MEDIA_LOCAL_DIR: /app/apps/api/.media
+      MEDIA_UPLOAD_MAX_IMAGE_BYTES: ${MEDIA_UPLOAD_MAX_IMAGE_BYTES:-10485760}
+      MEDIA_UPLOAD_MAX_DOC_BYTES: ${MEDIA_UPLOAD_MAX_DOC_BYTES:-20971520}
+      MEDIA_UPLOAD_MAX_VIDEO_BYTES: ${MEDIA_UPLOAD_MAX_VIDEO_BYTES:-262144000}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET_PUBLIC: ${R2_BUCKET_PUBLIC:-}
+      R2_BUCKET_PRIVATE: ${R2_BUCKET_PRIVATE:-}
+      R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
+      STREAM_ACCOUNT_ID: ${STREAM_ACCOUNT_ID:-}
+      STREAM_API_TOKEN: ${STREAM_API_TOKEN:-}
+      STREAM_CUSTOMER_SUBDOMAIN: ${STREAM_CUSTOMER_SUBDOMAIN:-}
+      STREAM_WEBHOOK_SECRET: ${STREAM_WEBHOOK_SECRET:-}
+      STREAM_MAX_DURATION_SECONDS: ${STREAM_MAX_DURATION_SECONDS:-180}
+    # Retained only for an intentional MEDIA_STORAGE=local fallback. R2 is the
+    # production default so user media normally remains outside the VPS.
+    volumes:
+      - anticlock_media:/app/apps/api/.media
+    expose:
+      - '4000'
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:4000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    networks:
+      - edge
+      - database
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: 'no'
+    working_dir: /app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ['/bin/sh', '-ec']
+    command:
+      - >-
+        pnpm --filter @anticlock/api db:migrate &&
+        if [ "$${RUN_SEED}" = "true" ]; then
+          pnpm --filter @anticlock/api db:seed;
+        fi
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://anticlock:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}@postgres:5432/anticlock
+      RUN_SEED: ${RUN_SEED:-true}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
+      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
+    networks:
+      - database
+
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://${API_DOMAIN:?Set API_DOMAIN in .env.production}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      HOSTNAME: 0.0.0.0
+    expose:
+      - '3000'
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/login']
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - edge
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      admin:
+        condition: service_healthy
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env.production}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?Set ADMIN_DOMAIN in .env.production}
+      API_DOMAIN: ${API_DOMAIN:?Set API_DOMAIN in .env.production}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+
+volumes:
+  anticlock_postgres:
+  anticlock_media:
+  caddy_data:
+  caddy_config:
+
+networks:
+  edge:
+  database:
+    internal: true

@@ -42,7 +42,9 @@ export function getAllCategories(): ServiceCategory[] {
   return serviceCategories;
 }
 
-export function getProvidersForCategory(categoryId: string): MarketplaceProvider[] {
+export function getProvidersForCategory(
+  categoryId: string,
+): MarketplaceProvider[] {
   const matched = marketplaceProviders.filter(p =>
     p.categoryIds.includes(categoryId),
   );
@@ -54,7 +56,9 @@ export function getProvidersForCategory(categoryId: string): MarketplaceProvider
   return marketplaceProviders.filter(p => p.actionType === category.actionType);
 }
 
-export function getProvider(providerId: string): MarketplaceProvider | undefined {
+export function getProvider(
+  providerId: string,
+): MarketplaceProvider | undefined {
   return marketplaceProviders.find(p => p.id === providerId);
 }
 
@@ -87,7 +91,9 @@ export function getCourse(courseId: string): MarketplaceCourse | undefined {
   return marketplaceCourses.find(c => c.id === courseId);
 }
 
-export function getProductsForCategory(categoryId: string): MarketplaceProduct[] {
+export function getProductsForCategory(
+  categoryId: string,
+): MarketplaceProduct[] {
   const direct = marketplaceProducts.filter(p => p.categoryId === categoryId);
   if (direct.length) return direct;
   const category = getCategory(categoryId);
@@ -106,16 +112,22 @@ export function getProduct(productId: string): MarketplaceProduct | undefined {
   return marketplaceProducts.find(p => p.id === productId);
 }
 
-export function resolvePrimaryCta(
-  actionType: ServiceActionType,
-): CtaConfig {
+export function resolvePrimaryCta(actionType: ServiceActionType): CtaConfig {
   switch (actionType) {
     case 'appointment':
-      return { label: 'Book appointment', icon: 'calendar', action: 'schedule' };
+      return {
+        label: 'Book appointment',
+        icon: 'calendar',
+        action: 'schedule',
+      };
     case 'class_booking':
       return { label: 'Book class', icon: 'calendar', action: 'schedule' };
     case 'membership':
-      return { label: 'View memberships', icon: 'clipboard', action: 'membership' };
+      return {
+        label: 'View memberships',
+        icon: 'clipboard',
+        action: 'membership',
+      };
     case 'event_booking':
       return { label: 'Book trip', icon: 'globe', action: 'event_book' };
     case 'transport_booking':
@@ -146,32 +158,52 @@ export function searchCatalog(query: string) {
     };
   }
 
+  const matches = (...values: Array<string | undefined>) =>
+    values.some(value => value?.toLowerCase().includes(q));
+  const categoryContext = (categoryId: string) => {
+    const category = getCategory(categoryId);
+    const tree = category ? getTree(category.treeId) : undefined;
+    return [category?.name, category?.description, tree?.name];
+  };
+
   return {
-    categories: serviceCategories.filter(
-      c =>
-        c.name.toLowerCase().includes(q) ||
-        c.description.toLowerCase().includes(q),
+    categories: serviceCategories.filter(category =>
+      matches(
+        category.name,
+        category.description,
+        getTree(category.treeId)?.name,
+      ),
     ),
-    providers: marketplaceProviders.filter(
-      p =>
-        p.name.toLowerCase().includes(q) ||
-        p.type.toLowerCase().includes(q) ||
-        p.subtitle?.toLowerCase().includes(q),
+    providers: marketplaceProviders.filter(provider =>
+      matches(
+        provider.name,
+        provider.type,
+        provider.subtitle,
+        ...provider.categoryIds.flatMap(categoryContext),
+      ),
     ),
-    products: marketplaceProducts.filter(
-      p =>
-        p.name.toLowerCase().includes(q) ||
-        p.description.toLowerCase().includes(q),
+    products: marketplaceProducts.filter(product =>
+      matches(
+        product.name,
+        product.description,
+        ...categoryContext(product.categoryId),
+      ),
     ),
-    events: marketplaceEvents.filter(
-      e =>
-        e.title.toLowerCase().includes(q) ||
-        e.destination.toLowerCase().includes(q),
+    events: marketplaceEvents.filter(event =>
+      matches(
+        event.title,
+        event.destination,
+        event.organizer,
+        ...categoryContext(event.categoryId),
+      ),
     ),
-    courses: marketplaceCourses.filter(
-      c =>
-        c.title.toLowerCase().includes(q) ||
-        c.instructor.toLowerCase().includes(q),
+    courses: marketplaceCourses.filter(course =>
+      matches(
+        course.title,
+        course.instructor,
+        course.level,
+        ...categoryContext(course.categoryId),
+      ),
     ),
   };
 }

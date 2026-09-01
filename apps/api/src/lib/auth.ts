@@ -18,6 +18,8 @@ export type AuthClaims = {
   roles: Role[];
   permissions: Permission[];
   kind: 'admin' | 'mobile';
+  mobileRoles?: string[];
+  providerId?: string | null;
 };
 
 export async function signToken(
@@ -36,6 +38,8 @@ export async function signToken(
     roles: claims.roles,
     permissions,
     kind: claims.kind,
+    mobileRoles: claims.mobileRoles ?? [],
+    providerId: claims.providerId ?? null,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(claims.sub)
@@ -53,5 +57,7 @@ export async function verifyToken(token: string): Promise<AuthClaims> {
     roles: (payload.roles as Role[]) ?? [],
     permissions: (payload.permissions as Permission[]) ?? [],
     kind: (payload.kind as 'admin' | 'mobile') ?? 'admin',
+    mobileRoles: (payload.mobileRoles as string[]) ?? [],
+    providerId: (payload.providerId as string | null | undefined) ?? null,
   };
 }

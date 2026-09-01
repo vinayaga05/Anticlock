@@ -75,6 +75,13 @@ export type RootStackParamList = {
   TeamJoinRequests: { teamId: string };
   ChallengeDetail: { challengeId: string };
   ChallengeParticipate: { challengeId: string };
+  ProviderApplicationIntro: undefined;
+  ProviderApplicationKind: { applicationId?: string } | undefined;
+  ProviderApplicationServices: { applicationId: string };
+  ProviderApplicationForm: { applicationId: string };
+  ProviderApplicationReview: { applicationId: string };
+  ProviderApplicationStatus: { applicationId: string };
+  ProviderDashboard: undefined;
 };
 
 declare global {

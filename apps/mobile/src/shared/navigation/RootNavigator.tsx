@@ -54,6 +54,13 @@ import { FlashCommentsScreen } from '@/features/flash/screens/FlashCommentsScree
 import { StoryViewerScreen } from '@/features/flash/screens/StoryViewerScreen';
 import { StoryCreatorScreen } from '@/features/flash/screens/StoryCreatorScreen';
 import { SavedHubScreen } from '@/features/flash/screens/SavedHubScreen';
+import { ProviderApplicationIntroScreen } from '@/features/provider-onboarding/screens/ProviderApplicationIntroScreen';
+import { ProviderApplicationKindScreen } from '@/features/provider-onboarding/screens/ProviderApplicationKindScreen';
+import { ProviderApplicationServiceSelectScreen } from '@/features/provider-onboarding/screens/ProviderApplicationServiceSelectScreen';
+import { ProviderApplicationFormScreen } from '@/features/provider-onboarding/screens/ProviderApplicationFormScreen';
+import { ProviderApplicationReviewScreen } from '@/features/provider-onboarding/screens/ProviderApplicationReviewScreen';
+import { ProviderApplicationStatusScreen } from '@/features/provider-onboarding/screens/ProviderApplicationStatusScreen';
+import { ProviderDashboardScreen } from '@/features/provider-onboarding/screens/ProviderDashboardScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -312,6 +319,41 @@ export function RootNavigator() {
           name="ChallengeParticipate"
           component={ChallengeParticipateScreen}
           options={{ title: 'Participate', headerShown: false }}
+        />
+        <Stack.Screen
+          name="ProviderApplicationIntro"
+          component={ProviderApplicationIntroScreen}
+          options={{ title: 'Become a Provider' }}
+        />
+        <Stack.Screen
+          name="ProviderApplicationKind"
+          component={ProviderApplicationKindScreen}
+          options={{ title: 'Provider type' }}
+        />
+        <Stack.Screen
+          name="ProviderApplicationServices"
+          component={ProviderApplicationServiceSelectScreen}
+          options={{ title: 'Select services' }}
+        />
+        <Stack.Screen
+          name="ProviderApplicationForm"
+          component={ProviderApplicationFormScreen}
+          options={{ title: 'Application' }}
+        />
+        <Stack.Screen
+          name="ProviderApplicationReview"
+          component={ProviderApplicationReviewScreen}
+          options={{ title: 'Review' }}
+        />
+        <Stack.Screen
+          name="ProviderApplicationStatus"
+          component={ProviderApplicationStatusScreen}
+          options={{ title: 'Application status' }}
+        />
+        <Stack.Screen
+          name="ProviderDashboard"
+          component={ProviderDashboardScreen}
+          options={{ title: 'Provider dashboard' }}
         />
           </>
         )}

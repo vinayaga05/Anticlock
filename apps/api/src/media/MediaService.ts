@@ -49,7 +49,10 @@ export class MediaService {
   private requireSessionOwner(
     auth: AuthClaims,
     session: { createdBy: string | null },
+    options?: { skipOwnerCheck?: boolean },
   ) {
+    if (options?.skipOwnerCheck) return;
+    if (session.createdBy === null) return;
     if (session.createdBy !== auth.sub && !auth.roles.includes('super_admin')) {
       throw Object.assign(
         new Error('You cannot complete another admin’s upload'),
@@ -191,6 +194,50 @@ export class MediaService {
 
   async putLocalContent(auth: AuthClaims, sessionId: string, body: Buffer) {
     mediaAccessPolicy.require(auth, 'media.write');
+    return this.putLocalContentInternal(auth, sessionId, body);
+  }
+
+  async putMobileProviderLocalContent(
+    mobileUserId: string,
+    applicationId: string,
+    sessionId: string,
+    body: Buffer,
+  ) {
+    const session = await this.repo.getSession(sessionId);
+    if (!session) {
+      throw Object.assign(new Error('Upload session not found'), {
+        code: 'session_not_found',
+        status: 404,
+      });
+    }
+    const asset = await this.repo.getAsset(session.mediaId);
+    if (!asset || !asset.storageKey.includes(`provider-app-${applicationId}`)) {
+      throw Object.assign(new Error('Upload session not found'), {
+        code: 'session_not_found',
+        status: 404,
+      });
+    }
+    return this.putLocalContentInternal(
+      {
+        sub: mobileUserId,
+        email: '',
+        name: '',
+        roles: [],
+        permissions: ['media.write'],
+        kind: 'mobile',
+      },
+      sessionId,
+      body,
+      { skipOwnerCheck: true },
+    );
+  }
+
+  private async putLocalContentInternal(
+    auth: AuthClaims,
+    sessionId: string,
+    body: Buffer,
+    options?: { skipOwnerCheck?: boolean },
+  ) {
     const session = await this.repo.getSession(sessionId);
     if (!session || session.status !== 'open') {
       throw Object.assign(new Error('Upload session not found'), {
@@ -198,7 +245,7 @@ export class MediaService {
         status: 404,
       });
     }
-    this.requireSessionOwner(auth, session);
+    this.requireSessionOwner(auth, session, options);
     if (session.expiresAt.getTime() < Date.now()) {
       await this.repo.updateSession(sessionId, { status: 'expired' });
       throw Object.assign(new Error('Upload session expired'), {
@@ -233,6 +280,7 @@ export class MediaService {
     auth: AuthClaims,
     sessionId: string,
     clientChecksum?: string,
+    options?: { skipOwnerCheck?: boolean },
   ) {
     mediaAccessPolicy.require(auth, 'media.write');
     const session = await this.repo.getSession(sessionId);
@@ -242,7 +290,7 @@ export class MediaService {
         status: 404,
       });
     }
-    this.requireSessionOwner(auth, session);
+    this.requireSessionOwner(auth, session, options);
     if (session.status === 'completed') {
       const existing = await this.repo.getAsset(session.mediaId);
       if (!existing)
@@ -835,6 +883,121 @@ export class MediaService {
         return { id: b.id, title: b.title, imageUrl };
       }),
     );
+  }
+
+  async createMobileProviderUploadSession(
+    _mobileUserId: string,
+    applicationId: string,
+    body: CreateUploadSessionRequest,
+  ) {
+    assertAllowedMime(body.kind, body.contentType);
+    const maxBytes = Math.min(body.byteSize, maxBytesForKind(body.kind));
+    const accessLevel = 'private' as const;
+    const bucket = bucketForAccess(accessLevel);
+    const ext = extensionForMime(body.contentType);
+    const hint = `provider-app-${applicationId}`;
+
+    const asset = await this.repo.createAsset({
+      kind: body.kind,
+      storageProvider: this.storage.name,
+      storageKey: 'pending',
+      bucket,
+      mimeType: body.contentType,
+      byteSize: body.byteSize,
+      width: body.width ?? null,
+      height: body.height ?? null,
+      durationMs: body.durationMs ?? null,
+      originalFilename: body.filename,
+      accessLevel,
+      processingStatus: 'initiated',
+      moderationStatus: 'not_required',
+      createdBy: null,
+    });
+
+    const storageKey = `${accessLevel}/${hint}/${asset.id}/upload.${ext}`;
+    await this.repo.updateAsset(asset.id, {
+      storageKey,
+      processingStatus: 'uploading',
+    });
+
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    const session = await this.repo.createSession({
+      mediaId: asset.id,
+      createdBy: null,
+      expiresAt,
+      status: 'open',
+      expectedMime: body.contentType,
+      maxBytes,
+    });
+
+    const target = await this.storage.createUploadTarget({
+      bucket,
+      key: storageKey,
+      contentType: body.contentType,
+      maxBytes,
+      sessionId: session.id,
+    });
+
+    return {
+      sessionId: session.id,
+      mediaId: asset.id,
+      uploadUrl: target.uploadUrl,
+      headers: target.headers,
+      storageKey,
+      expiresAt: expiresAt.toISOString(),
+    };
+  }
+
+  async completeMobileProviderUpload(
+    mobileUserId: string,
+    applicationId: string,
+    sessionId: string,
+  ) {
+    const session = await this.repo.getSession(sessionId);
+    if (!session) {
+      throw Object.assign(new Error('Upload session not found'), {
+        code: 'session_not_found',
+        status: 404,
+      });
+    }
+    const asset = await this.repo.getAsset(session.mediaId);
+    if (!asset || !asset.storageKey.includes(`provider-app-${applicationId}`)) {
+      throw Object.assign(new Error('Upload session not found'), {
+        code: 'session_not_found',
+        status: 404,
+      });
+    }
+
+    const result = await this.completeUpload(
+      {
+        sub: mobileUserId,
+        email: '',
+        name: '',
+        roles: [],
+        permissions: ['media.write'],
+        kind: 'mobile',
+      },
+      sessionId,
+      undefined,
+      { skipOwnerCheck: true },
+    );
+    return result.asset;
+  }
+
+  async createPrivateDownloadUrl(mediaId: string) {
+    const asset = await this.repo.getAsset(mediaId);
+    if (
+      !asset ||
+      asset.accessLevel !== 'private' ||
+      asset.processingStatus !== 'ready'
+    ) {
+      return null;
+    }
+    return this.storage.createDownloadUrl({
+      bucket: asset.bucket as 'public-media' | 'private-documents',
+      key: asset.storageKey,
+      accessLevel: 'private',
+    });
   }
 }
 

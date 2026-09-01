@@ -15,7 +15,11 @@ export const marketplaceProviders: MarketplaceProvider[] = [
     id: 'prov-doc-remya',
     name: 'Dr. Remya',
     type: 'Doctor',
-    categoryIds: ['health.doctors', 'health.clinic'],
+    categoryIds: [
+      'health.doctors',
+      'health.doctors.general_physician',
+      'health.clinic',
+    ],
     actionType: 'appointment',
     imageUrl: img('photo-1559839734-2b71ea197ec2', 600, 600),
     rating: 4.8,

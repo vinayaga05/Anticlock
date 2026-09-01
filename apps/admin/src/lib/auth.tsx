@@ -115,6 +115,16 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/users', label: 'Users & roles', permission: 'users.read' },
   { href: '/audit', label: 'Audit log', permission: 'audit.read' },
   { href: '/providers', label: 'Providers', permission: 'provider.read' },
+  {
+    href: '/provider/applications',
+    label: 'Provider applications',
+    permission: 'provider.read',
+  },
+  {
+    href: '/provider/form-schemas',
+    label: 'Provider forms',
+    permission: 'catalog.read',
+  },
   { href: '/cms', label: 'CMS', permission: 'cms.read' },
   { href: '/reels', label: 'Reels', permission: 'cms.read' },
   { href: '/commerce', label: 'Commerce', permission: 'orders.manage' },

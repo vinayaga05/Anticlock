@@ -36,6 +36,7 @@ export type MediaStorageProvider = z.infer<typeof MediaStorageProviderSchema>;
 
 export const MediaEntityTypeSchema = z.enum([
   'PROVIDER',
+  'PROVIDER_APPLICATION',
   'PRODUCT',
   'BANNER',
   'REEL',
@@ -46,8 +47,13 @@ export const MediaUsageTypeSchema = z.enum([
   'PROFILE',
   'GALLERY',
   'HERO',
+  'COVER',
   'ATTACHMENT',
   'VIDEO',
+  'INTRO_VIDEO',
+  'KYC_AADHAAR',
+  'KYC_IDENTITY',
+  'KYC_REGISTRATION',
 ]);
 export type MediaUsageType = z.infer<typeof MediaUsageTypeSchema>;
 

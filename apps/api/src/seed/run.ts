@@ -16,12 +16,17 @@ import {
   stubBanners,
   stubProducts,
   stubProviders,
+  providerFormSchemas,
   userRoles,
   users,
   mediaAssets,
   reels,
 } from '../db/schema.js';
 import catalog from './catalog.json' with { type: 'json' };
+import {
+  CATEGORY_PROVIDER_FORM_SCHEMAS,
+  GLOBAL_PROVIDER_FORM_SCHEMA,
+} from './providerFormSchemas.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -183,6 +188,42 @@ async function seed() {
           updatedAt: new Date(),
         },
       });
+  }
+
+  const [existingGlobalSchema] = await db
+    .select()
+    .from(providerFormSchemas)
+    .where(eq(providerFormSchemas.scope, 'global'))
+    .limit(1);
+
+  if (!existingGlobalSchema) {
+    await db.insert(providerFormSchemas).values({
+      scope: GLOBAL_PROVIDER_FORM_SCHEMA.scope,
+      categoryId: null,
+      providerKinds: GLOBAL_PROVIDER_FORM_SCHEMA.providerKinds,
+      version: GLOBAL_PROVIDER_FORM_SCHEMA.version,
+      status: GLOBAL_PROVIDER_FORM_SCHEMA.status,
+      sections: GLOBAL_PROVIDER_FORM_SCHEMA.sections,
+      fields: GLOBAL_PROVIDER_FORM_SCHEMA.fields,
+    });
+  }
+
+  for (const schema of CATEGORY_PROVIDER_FORM_SCHEMAS) {
+    const [existing] = await db
+      .select()
+      .from(providerFormSchemas)
+      .where(eq(providerFormSchemas.categoryId, schema.categoryId!))
+      .limit(1);
+    if (existing) continue;
+    await db.insert(providerFormSchemas).values({
+      scope: schema.scope,
+      categoryId: schema.categoryId ?? null,
+      providerKinds: schema.providerKinds,
+      version: schema.version,
+      status: schema.status,
+      sections: schema.sections,
+      fields: schema.fields,
+    });
   }
 
   if (!seedDemoData) {

@@ -146,6 +146,52 @@ export const serviceCategories: ServiceCategory[] = [
     actionType: 'appointment',
     features: [...appointmentFeatures],
   },
+  // Health alone supports a second level of specialties. These remain data-driven
+  // and are shown only after a top-level Health category is selected.
+  {
+    id: 'health.doctors.general_physician',
+    treeId: 'health',
+    parentId: 'health.doctors',
+    order: 1,
+    name: 'General Physician',
+    description: 'Primary and everyday medical care',
+    icon: 'doctor',
+    actionType: 'appointment',
+    features: [...appointmentFeatures],
+  },
+  {
+    id: 'health.doctors.dentist',
+    treeId: 'health',
+    parentId: 'health.doctors',
+    order: 2,
+    name: 'Dentist',
+    description: 'Dental and oral health care',
+    icon: 'health',
+    actionType: 'appointment',
+    features: [...appointmentFeatures],
+  },
+  {
+    id: 'health.doctors.dermatologist',
+    treeId: 'health',
+    parentId: 'health.doctors',
+    order: 3,
+    name: 'Dermatologist',
+    description: 'Skin, hair, and nail care',
+    icon: 'health',
+    actionType: 'appointment',
+    features: [...appointmentFeatures],
+  },
+  {
+    id: 'health.doctors.pediatrician',
+    treeId: 'health',
+    parentId: 'health.doctors',
+    order: 4,
+    name: 'Pediatrician',
+    description: 'Specialist care for children',
+    icon: 'users',
+    actionType: 'appointment',
+    features: [...appointmentFeatures],
+  },
 
   // Fitness 10–18
   {

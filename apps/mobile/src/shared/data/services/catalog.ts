@@ -30,7 +30,13 @@ export function getTree(treeId: ServiceTreeId): ServiceTree | undefined {
 
 export function getCategoriesByTree(treeId: ServiceTreeId): ServiceCategory[] {
   return serviceCategories
-    .filter(c => c.treeId === treeId)
+    .filter(c => c.treeId === treeId && !c.parentId)
+    .sort((a, b) => a.order - b.order);
+}
+
+export function getChildCategories(parentId: string): ServiceCategory[] {
+  return serviceCategories
+    .filter(category => category.parentId === parentId)
     .sort((a, b) => a.order - b.order);
 }
 

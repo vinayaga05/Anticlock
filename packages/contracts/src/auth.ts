@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { PermissionSchema, RoleSchema } from './rbac.js';
+import { MobileRoleSchema } from './provider.js';
 
 export const ApiErrorSchema = z.object({
   error: z.object({
@@ -68,6 +69,8 @@ export const MobileUserSchema = z.object({
   phone: z.string().min(8),
   displayName: z.string(),
   avatarUrl: z.string().url().nullable().optional(),
+  roles: z.array(MobileRoleSchema).optional(),
+  providerId: z.string().uuid().nullable().optional(),
 });
 export type MobileUser = z.infer<typeof MobileUserSchema>;
 

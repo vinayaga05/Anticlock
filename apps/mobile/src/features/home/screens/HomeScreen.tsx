@@ -14,7 +14,11 @@ import { SectionHeader } from '@/shared/components/SectionHeader';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { useSearchScrollRestoration } from '@/shared/hooks/useSearchScrollRestoration';
 import { fitnessClasses, doctors } from '@/shared/data/mocks';
-import { getTrees, marketplaceProviders } from '@/shared/data/services';
+import {
+  getAllCategories,
+  getTrees,
+  marketplaceProviders,
+} from '@/shared/data/services';
 import { ServiceTreeGrid } from '@/features/services/components/ServiceTreeGrid';
 import { ServiceCatalogSearchResults } from '@/features/services/components/ServiceCatalogSearchResults';
 import { ProviderCard } from '@/features/services/components/ProviderCard';
@@ -29,6 +33,9 @@ export function HomeScreen() {
   const { searchQuery, onChangeText, scrollRef, onScroll } =
     useSearchScrollRestoration();
   const trees = getTrees();
+  const categoryCount = getAllCategories().filter(
+    category => !category.parentId,
+  ).length;
   const popular = marketplaceProviders.slice(0, 3);
 
   return (
@@ -43,7 +50,7 @@ export function HomeScreen() {
 
       <SectionHeader
         title="Explore Services"
-        subtitle="Nine lifestyle trees · 81 categories"
+        subtitle={`${trees.length} service sections · ${categoryCount} categories`}
       />
       {searchQuery.trim() ? (
         <ServiceCatalogSearchResults query={searchQuery} />

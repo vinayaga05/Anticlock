@@ -3,6 +3,8 @@ export type MobileUser = {
   phone: string;
   displayName: string;
   avatarUrl?: string | null;
+  roles?: string[];
+  providerId?: string | null;
 };
 
 export type AuthSession = {

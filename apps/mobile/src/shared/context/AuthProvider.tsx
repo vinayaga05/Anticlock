@@ -18,12 +18,18 @@ import {
 } from '@/shared/services/auth/authService';
 import type { MobileUser, OtpSendResult } from '@/shared/services/auth/types';
 import { setUnauthorizedHandler } from '@/shared/api/client';
+import { ensureUserAvatar } from '@/shared/services/auth/avatar';
 
 type AuthState = {
   user: MobileUser | null;
   loading: boolean;
   requestOtp: (phone: string) => Promise<OtpSendResult>;
-  loginWithOtp: (phone: string, code: string, requestId: string) => Promise<void>;
+  loginWithOtp: (
+    phone: string,
+    code: string,
+    requestId: string,
+  ) => Promise<void>;
+  continueAsGuest: () => void;
   logout: () => Promise<void>;
 };
 
@@ -78,6 +84,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const requestOtp = useCallback(async (phone: string) => sendOtp(phone), []);
 
+  const continueAsGuest = useCallback(() => {
+    // Intentionally in-memory only: this is a temporary way to preview the app
+    // and guests return to sign-in after the app restarts.
+    setUser(
+      ensureUserAvatar({
+        id: 'temporary-guest',
+        phone: '',
+        displayName: 'Guest',
+      }),
+    );
+  }, []);
+
   const loginWithOtp = useCallback(
     async (phone: string, code: string, requestId: string) => {
       const session = await verifyOtp(phone, code, requestId);
@@ -92,9 +110,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       requestOtp,
       loginWithOtp,
+      continueAsGuest,
       logout,
     }),
-    [user, loading, requestOtp, loginWithOtp, logout],
+    [user, loading, requestOtp, loginWithOtp, continueAsGuest, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

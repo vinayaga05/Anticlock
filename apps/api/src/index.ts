@@ -14,6 +14,10 @@ import {
   reelsPublicRoutes,
   streamWebhookRoutes,
 } from './routes/reels.js';
+import {
+  providerAdminRoutes,
+  providerMobileRoutes,
+} from './routes/provider.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -73,7 +77,9 @@ app.route('/auth', authRoutes);
 app.route('/v1/catalog', catalogRoutes);
 app.route('/v1/media', mediaPublicRoutes);
 app.route('/v1/reels', reelsPublicRoutes);
+app.route('/v1/provider', providerMobileRoutes);
 app.route('/admin', adminRoutes);
+app.route('/admin/provider', providerAdminRoutes);
 app.route('/admin/media', mediaAdminRoutes);
 app.route('/admin/stubs', stubDomainRoutes);
 app.route('/admin/reels', reelsAdminRoutes);

@@ -1,5 +1,5 @@
-import 'dotenv/config';
-import { sql } from './client.js';
+import "dotenv/config";
+import { sql } from "./client.js";
 
 async function migrate() {
   await sql`CREATE EXTENSION IF NOT EXISTS pgcrypto`;
@@ -79,6 +79,7 @@ async function migrate() {
     CREATE TABLE IF NOT EXISTS service_categories (
       id text PRIMARY KEY,
       tree_id text NOT NULL REFERENCES service_trees(id) ON DELETE CASCADE,
+      parent_id text,
       name text NOT NULL,
       description text,
       icon text,
@@ -89,6 +90,8 @@ async function migrate() {
       updated_at timestamptz NOT NULL DEFAULT now()
     )
   `;
+
+  await sql`ALTER TABLE service_categories ADD COLUMN IF NOT EXISTS parent_id text`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS mobile_devices (
@@ -395,11 +398,120 @@ async function migrate() {
     ON CONFLICT DO NOTHING
   `;
 
-  console.log('Migrations applied.');
+  await sql`
+    CREATE TABLE IF NOT EXISTS mobile_user_roles (
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      role_id text NOT NULL,
+      PRIMARY KEY (mobile_user_id, role_id)
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS provider_form_schemas (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      scope text NOT NULL,
+      category_id text REFERENCES service_categories(id) ON DELETE CASCADE,
+      provider_kinds jsonb NOT NULL,
+      version integer NOT NULL DEFAULT 1,
+      status text NOT NULL DEFAULT 'published',
+      sections jsonb NOT NULL,
+      fields jsonb NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS provider_form_schemas_global_uid
+      ON provider_form_schemas (scope)
+      WHERE scope = 'global' AND status = 'published'
+  `;
+
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS provider_form_schemas_category_uid
+      ON provider_form_schemas (category_id)
+      WHERE scope = 'category' AND status = 'published' AND category_id IS NOT NULL
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS providers (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      provider_kind text NOT NULL,
+      name text NOT NULL,
+      status text NOT NULL DEFAULT 'active',
+      public_profile jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS providers_mobile_user_uid
+      ON providers (mobile_user_id)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS provider_service_offerings (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      provider_id uuid NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+      category_id text NOT NULL REFERENCES service_categories(id) ON DELETE CASCADE,
+      pricing_starts_at integer,
+      metadata jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (provider_id, category_id)
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS provider_applications (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      provider_kind text NOT NULL,
+      status text NOT NULL DEFAULT 'draft',
+      common_payload jsonb,
+      dynamic_payload jsonb,
+      review_notes text,
+      info_request_message text,
+      provider_id uuid REFERENCES providers(id) ON DELETE SET NULL,
+      submitted_at timestamptz,
+      reviewed_at timestamptz,
+      reviewed_by uuid REFERENCES users(id) ON DELETE SET NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS provider_applications_status_idx
+      ON provider_applications (status, submitted_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS provider_application_services (
+      application_id uuid NOT NULL REFERENCES provider_applications(id) ON DELETE CASCADE,
+      category_id text NOT NULL REFERENCES service_categories(id) ON DELETE CASCADE,
+      PRIMARY KEY (application_id, category_id)
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS provider_application_documents (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      application_id uuid NOT NULL REFERENCES provider_applications(id) ON DELETE CASCADE,
+      field_key text NOT NULL,
+      media_asset_id uuid NOT NULL REFERENCES media_assets(id) ON DELETE CASCADE,
+      aadhaar_encrypted text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (application_id, field_key)
+    )
+  `;
+
+  console.log("Migrations applied.");
   await sql.end({ timeout: 5 });
 }
 
-migrate().catch(err => {
+migrate().catch((err) => {
   console.error(err);
   process.exit(1);
 });

@@ -53,13 +53,21 @@ export type ServiceTree = {
 export type ServiceCategory = {
   id: string;
   treeId: ServiceTreeId;
+  /** Only Health currently uses this optional second-level specialty relationship. */
+  parentId?: string;
   order: number;
   name: string;
   description: string;
   icon: string;
   actionType: ServiceActionType;
   features: ServiceFeature[];
-  legacyRoute?: 'Doctors' | 'DiagnosticsHub' | 'PhysioHub' | 'FitnessFeed' | 'LabList' | 'Shop';
+  legacyRoute?:
+    | 'Doctors'
+    | 'DiagnosticsHub'
+    | 'PhysioHub'
+    | 'FitnessFeed'
+    | 'LabList'
+    | 'Shop';
 };
 
 export type MarketplaceLocation = {
@@ -128,7 +136,11 @@ export type MarketplaceProduct = {
   isProperty?: boolean;
 };
 
-export type BookingStatus = 'upcoming' | 'completed' | 'cancelled' | 'confirmed';
+export type BookingStatus =
+  | 'upcoming'
+  | 'completed'
+  | 'cancelled'
+  | 'confirmed';
 
 export type UniversalBooking = {
   id: string;

@@ -15,6 +15,7 @@ import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { CURRENT_USER, getProfileMeta, getProfileShortcuts } from '@/shared/data/flash';
 import { useEngagementStore } from '@/shared/services/engagementRepository';
+import { useMyProviderApplicationQuery } from '@/shared/api/providerHooks';
 import { useStoryStore } from '@/shared/data/flash/storyStore';
 
 type MenuItem = {
@@ -78,6 +79,8 @@ export function ProfileScreen() {
   const meta = getProfileMeta(profileId);
   const saved = useEngagementStore(s => s.saved);
   const storyRevision = useStoryStore(s => `${s.stories.length}-${s.archive.length}`);
+  const { data: providerApplication } = useMyProviderApplicationQuery();
+  const isServiceProvider = Boolean(user?.roles?.includes('service_provider'));
 
   const shortcuts: Shortcut[] = useMemo(() => {
     return getProfileShortcuts(profileId).map(item => ({
@@ -115,6 +118,19 @@ export function ProfileScreen() {
         onPress: () => navigation.navigate('ComingSoon', { title: 'Anticlock AI' }),
       },
       {
+        id: 'provider',
+        label: isServiceProvider ? 'Provider dashboard' : 'Become a Service Provider',
+        icon: 'badge-check',
+        onPress: () =>
+          isServiceProvider
+            ? navigation.navigate('ProviderDashboard')
+            : providerApplication
+              ? navigation.navigate('ProviderApplicationStatus', {
+                  applicationId: providerApplication.id,
+                })
+              : navigation.navigate('ProviderApplicationIntro'),
+      },
+      {
         id: 'saved',
         label: 'Saved',
         icon: 'save',
@@ -139,7 +155,7 @@ export function ProfileScreen() {
         onPress: () => navigation.navigate('Main', { screen: 'Community' }),
       },
     ],
-    [navigation],
+    [navigation, isServiceProvider, providerApplication],
   );
 
   const moreItems: MenuItem[] = useMemo(
@@ -214,11 +230,21 @@ export function ProfileScreen() {
         icon: 'grid',
         items: [
           { label: 'Anticlock Plus', onPress: () => navigation.navigate('ComingSoon', { title: 'Anticlock Plus' }) },
-          { label: 'Provider tools', onPress: () => navigation.navigate('ComingSoon', { title: 'Provider tools' }) },
+          {
+            label: isServiceProvider ? 'Provider dashboard' : 'Provider tools',
+            onPress: () =>
+              isServiceProvider
+                ? navigation.navigate('ProviderDashboard')
+                : providerApplication
+                  ? navigation.navigate('ProviderApplicationStatus', {
+                      applicationId: providerApplication.id,
+                    })
+                  : navigation.navigate('ProviderApplicationIntro'),
+          },
         ],
       },
     ],
-    [mode, navigation, setMode, logout],
+    [mode, navigation, setMode, logout, isServiceProvider, providerApplication],
   );
 
   const visibleItems = showMore ? [...primaryItems, ...moreItems] : primaryItems;

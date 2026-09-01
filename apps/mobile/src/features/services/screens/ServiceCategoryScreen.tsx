@@ -6,11 +6,13 @@ import { HealthScreenShell } from '@/shared/components/HealthScreenShell';
 import { healthTheme } from '@/shared/theme/healthTheme';
 import { SearchBar } from '@/shared/components/SearchBar';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { SectionHeader } from '@/shared/components/SectionHeader';
 import { FilterPills } from '@/shared/components/FilterPills';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { useSearchScrollRestoration } from '@/shared/hooks/useSearchScrollRestoration';
 import {
   getCategory,
+  getChildCategories,
   getCoursesForCategory,
   getEventsForCategory,
   getProductsForCategory,
@@ -20,6 +22,7 @@ import { ProviderCard } from '@/features/services/components/ProviderCard';
 import { EventCard } from '@/features/services/components/EventCard';
 import { CourseCard } from '@/features/services/components/CourseCard';
 import { ProductCard } from '@/features/services/components/ProductCard';
+import { ServiceCategoryGrid } from '@/features/services/components/ServiceCategoryGrid';
 import { RootStackParamList } from '@/shared/navigation/types';
 import { treeColors, TreeColorId } from '@/shared/theme/colors';
 
@@ -62,6 +65,17 @@ export function ServiceCategoryScreen() {
     [categoryId],
   );
   const normalizedQuery = searchQuery.trim().toLowerCase();
+  const childCategories = useMemo(
+    () => getChildCategories(categoryId),
+    [categoryId],
+  );
+  const filteredChildCategories = useMemo(
+    () =>
+      childCategories.filter(child =>
+        matchesQuery(normalizedQuery, child.name, child.description),
+      ),
+    [childCategories, normalizedQuery],
+  );
   const filteredProviders = useMemo(
     () =>
       providers.filter(provider =>
@@ -122,6 +136,45 @@ export function ServiceCategoryScreen() {
           title="Category not found"
           illustration="search"
         />
+      </Shell>
+    );
+  }
+
+  if (isHealth && childCategories.length) {
+    return (
+      <Shell
+        scrollable
+        tabAware={false}
+        scrollRef={scrollRef}
+        onScroll={onScroll}
+      >
+        <Text
+          style={[
+            theme.typography.bodySmall,
+            { color: theme.colors.textSecondary },
+          ]}
+        >
+          {category.description}
+        </Text>
+        <SearchBar
+          placeholder={`Search ${category.name} specialties`}
+          value={searchQuery}
+          onChangeText={onChangeText}
+        />
+        <SectionHeader title={`${category.name} specialties`} />
+        {filteredChildCategories.length ? (
+          <ServiceCategoryGrid
+            categories={filteredChildCategories}
+            treeId={treeId}
+            compact
+          />
+        ) : (
+          <EmptyState
+            icon="search"
+            title="No specialties found"
+            description={`No ${category.name.toLowerCase()} specialties match “${searchQuery.trim()}”.`}
+          />
+        )}
       </Shell>
     );
   }

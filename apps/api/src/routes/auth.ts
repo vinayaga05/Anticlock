@@ -14,6 +14,7 @@ import { signToken } from '../lib/auth.js';
 import { writeAudit } from '../lib/audit.js';
 import { createOtpProvider, normalizePhone, OtpError } from '../lib/otp/index.js';
 import { requireAuth, type AppEnv } from '../middleware/auth.js';
+import { getMobileUserContext } from '../lib/mobileUserContext.js';
 
 export const authRoutes = new Hono<AppEnv>();
 const otpProvider = createOtpProvider();
@@ -26,6 +27,7 @@ function displayNameFromPhone(phone: string) {
 }
 
 async function issueMobileSession(user: typeof mobileUsers.$inferSelect) {
+  const { roles, providerId } = await getMobileUserContext(user.id);
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
   const token = await signToken(
     {
@@ -35,6 +37,8 @@ async function issueMobileSession(user: typeof mobileUsers.$inferSelect) {
       roles: [],
       permissions: ['catalog.read', 'cms.read'],
       kind: 'mobile',
+      mobileRoles: roles,
+      providerId,
     },
     '30d',
   );
@@ -45,6 +49,8 @@ async function issueMobileSession(user: typeof mobileUsers.$inferSelect) {
       phone: user.phone,
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
+      roles,
+      providerId,
     },
     token,
     expiresAt,
@@ -255,6 +261,7 @@ authRoutes.get('/mobile/me', requireAuth, async c => {
       phone: user.phone,
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
+      ...(await getMobileUserContext(user.id)),
     },
   });
 });

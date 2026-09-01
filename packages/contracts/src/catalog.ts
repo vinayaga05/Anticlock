@@ -1,16 +1,16 @@
-import { z } from 'zod';
-import { ContentStatusSchema, RoleSchema } from './rbac.js';
+import { z } from "zod";
+import { ContentStatusSchema, RoleSchema } from "./rbac.js";
 
 export const ServiceTreeIdSchema = z.enum([
-  'health',
-  'fitness',
-  'sports',
-  'wellness',
-  'tours_events',
-  'beauty_spa',
-  'course_training',
-  'home_services',
-  'ecommerce',
+  "health",
+  "fitness",
+  "sports",
+  "wellness",
+  "tours_events",
+  "beauty_spa",
+  "course_training",
+  "home_services",
+  "ecommerce",
 ]);
 export type ServiceTreeId = z.infer<typeof ServiceTreeIdSchema>;
 
@@ -29,6 +29,7 @@ export type ServiceTree = z.infer<typeof ServiceTreeSchema>;
 export const ServiceCategorySchema = z.object({
   id: z.string(),
   treeId: z.string(),
+  parentId: z.string().nullable().optional(),
   name: z.string(),
   description: z.string().optional(),
   icon: z.string().optional(),
@@ -37,6 +38,13 @@ export const ServiceCategorySchema = z.object({
   status: ContentStatusSchema,
 });
 export type ServiceCategory = z.infer<typeof ServiceCategorySchema>;
+
+export const ManageServiceCategorySchema = ServiceCategorySchema.omit({
+  status: true,
+}).extend({
+  status: ContentStatusSchema.optional(),
+});
+export type ManageServiceCategory = z.infer<typeof ManageServiceCategorySchema>;
 
 export const AuditLogSchema = z.object({
   id: z.string().uuid(),

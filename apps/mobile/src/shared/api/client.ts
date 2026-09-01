@@ -35,7 +35,9 @@ export async function apiRequest<T>(
   }
 
   const headers = new Headers(init.headers);
-  headers.set('Content-Type', 'application/json');
+  if (!headers.has('Content-Type') && !(init.body instanceof ArrayBuffer)) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (bearerToken) headers.set('Authorization', `Bearer ${bearerToken}`);
 
   const res = await fetch(`${API_BASE_URL}${path}`, {

@@ -26,7 +26,7 @@ function authErrorMessage(err: unknown, fallback: string): string {
 export function LoginScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { requestOtp, loginWithOtp } = useAuth();
+  const { requestOtp, loginWithOtp, continueAsGuest } = useAuth();
 
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
@@ -47,7 +47,10 @@ export function LoginScreen() {
     try {
       const digits = phone.replace(/\D/g, '').slice(-10);
       if (digits.length !== 10) {
-        throw new AuthError('invalid_phone', 'Enter a valid 10-digit mobile number');
+        throw new AuthError(
+          'invalid_phone',
+          'Enter a valid 10-digit mobile number',
+        );
       }
       const result = await requestOtp(digits);
       setRequestId(result.requestId);
@@ -78,10 +81,16 @@ export function LoginScreen() {
     setError(null);
   };
 
+  const handleSkipLogin = () => {
+    setError(null);
+    continueAsGuest();
+  };
+
   return (
     <KeyboardAvoidingView
       style={[styles.root, { backgroundColor: theme.colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <View
         style={[
           styles.content,
@@ -89,7 +98,8 @@ export function LoginScreen() {
             paddingTop: insets.top + 48,
             paddingBottom: insets.bottom + 24,
           },
-        ]}>
+        ]}
+      >
         <BrandLogo height={56} style={styles.logo} />
         <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
           {step === 'phone' ? 'Sign in with mobile' : 'Enter OTP'}
@@ -102,7 +112,9 @@ export function LoginScreen() {
 
         {step === 'phone' ? (
           <View style={styles.fieldGroup}>
-            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Mobile number</Text>
+            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
+              Mobile number
+            </Text>
             <View
               style={[
                 styles.inputRow,
@@ -110,8 +122,13 @@ export function LoginScreen() {
                   backgroundColor: theme.colors.surface,
                   borderColor: theme.colors.borderSoft,
                 },
-              ]}>
-              <Text style={[styles.prefix, { color: theme.colors.textPrimary }]}>+91</Text>
+              ]}
+            >
+              <Text
+                style={[styles.prefix, { color: theme.colors.textPrimary }]}
+              >
+                +91
+              </Text>
               <TextInput
                 value={phone}
                 onChangeText={setPhone}
@@ -126,7 +143,9 @@ export function LoginScreen() {
           </View>
         ) : (
           <View style={styles.fieldGroup}>
-            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>OTP</Text>
+            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
+              OTP
+            </Text>
             <TextInput
               value={otp}
               onChangeText={setOtp}
@@ -148,7 +167,9 @@ export function LoginScreen() {
         )}
 
         {error ? (
-          <Text style={[styles.error, { color: theme.colors.error }]}>{error}</Text>
+          <Text style={[styles.error, { color: theme.colors.error }]}>
+            {error}
+          </Text>
         ) : null}
 
         {__DEV__ ? (
@@ -159,14 +180,32 @@ export function LoginScreen() {
 
         <View style={styles.actions}>
           {step === 'otp' ? (
-            <Button title="Change number" variant="ghost" onPress={handleBack} disabled={loading} />
+            <Button
+              title="Change number"
+              variant="ghost"
+              onPress={handleBack}
+              disabled={loading}
+            />
           ) : null}
           <Button
             title={step === 'phone' ? 'Continue' : 'Verify & sign in'}
             onPress={step === 'phone' ? handleSendOtp : handleVerifyOtp}
             loading={loading}
-            disabled={step === 'phone' ? phone.replace(/\D/g, '').length < 10 : otp.length < 6}
+            disabled={
+              step === 'phone'
+                ? phone.replace(/\D/g, '').length < 10
+                : otp.length < 6
+            }
           />
+          {step === 'phone' ? (
+            <Button
+              title="Skip for now"
+              variant="ghost"
+              onPress={handleSkipLogin}
+              disabled={loading}
+              accessibilityLabel="Continue without signing in"
+            />
+          ) : null}
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -176,9 +215,15 @@ export function LoginScreen() {
 export function AuthLoadingScreen() {
   const theme = useTheme();
   return (
-    <View style={[styles.loadingRoot, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[styles.loadingRoot, { backgroundColor: theme.colors.background }]}
+    >
       <BrandLogo height={64} />
-      <ActivityIndicator size="large" color={theme.colors.primary} style={styles.loadingSpinner} />
+      <ActivityIndicator
+        size="large"
+        color={theme.colors.primary}
+        style={styles.loadingSpinner}
+      />
     </View>
   );
 }

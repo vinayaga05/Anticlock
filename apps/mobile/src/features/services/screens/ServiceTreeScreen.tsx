@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useMemo } from 'react';
+import React, { useLayoutEffect } from 'react';
 import { ImageBackground, StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { HealthScreenShell } from '@/shared/components/HealthScreenShell';
@@ -16,6 +16,7 @@ import {
   ServiceTreeId,
 } from '@/shared/data/services';
 import { ServiceCategoryGrid } from '@/features/services/components/ServiceCategoryGrid';
+import { ServiceTreeSearchResults } from '@/features/services/components/ServiceTreeSearchResults';
 import { RootStackParamList } from '@/shared/navigation/types';
 
 export function ServiceTreeScreen() {
@@ -27,15 +28,6 @@ export function ServiceTreeScreen() {
   const categories = getCategoriesByTree(treeId);
   const { searchQuery, onChangeText, scrollRef, onScroll } =
     useSearchScrollRestoration();
-  const filteredCategories = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return categories;
-    return categories.filter(category =>
-      [category.name, category.description].some(value =>
-        value.toLowerCase().includes(query),
-      ),
-    );
-  }, [categories, searchQuery]);
   const isHealth = treeId === 'health';
   const { data: cmsBanners = [] } = useCmsBannersQuery();
   const healthAd = cmsBanners[0];
@@ -108,18 +100,10 @@ export function ServiceTreeScreen() {
             : `Explore ${tree.name}`
         }
       />
-      {filteredCategories.length ? (
-        <ServiceCategoryGrid
-          categories={filteredCategories}
-          treeId={tree.id}
-          compact
-        />
+      {searchQuery.trim() ? (
+        <ServiceTreeSearchResults query={searchQuery} categories={categories} />
       ) : (
-        <EmptyState
-          icon="search"
-          title="No services found"
-          description={`No ${tree.name.toLowerCase()} services match “${searchQuery.trim()}”.`}
-        />
+        <ServiceCategoryGrid categories={categories} treeId={tree.id} compact />
       )}
     </>
   );

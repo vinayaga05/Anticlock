@@ -75,7 +75,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 45s
+      start_period: 60s
     networks:
       - edge
       - database
@@ -92,9 +92,9 @@ services:
     entrypoint: ['/bin/sh', '-ec']
     command:
       - >-
-        pnpm --filter @anticlock/api db:migrate &&
+        node apps/api/dist/db/migrate.js &&
         if [ "$${RUN_SEED}" = "true" ]; then
-          pnpm --filter @anticlock/api db:seed;
+          node apps/api/dist/seed/run.js;
         fi
     environment:
       NODE_ENV: production

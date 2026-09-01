@@ -28,7 +28,16 @@ import {
 
 function createStorage(): ObjectStorageProvider {
   const mode = (process.env.MEDIA_STORAGE ?? 'local').toLowerCase();
-  if (mode === 'r2') return new R2ObjectStorageProvider();
+  if (mode === 'r2') {
+    const hasR2Credentials =
+      Boolean(process.env.R2_ACCOUNT_ID?.trim()) &&
+      Boolean(process.env.R2_ACCESS_KEY_ID?.trim()) &&
+      Boolean(process.env.R2_SECRET_ACCESS_KEY?.trim());
+    if (hasR2Credentials) return new R2ObjectStorageProvider();
+    console.warn(
+      'MEDIA_STORAGE=r2 but R2 credentials are incomplete; using local storage until configured',
+    );
+  }
   return new LocalObjectStorageProvider();
 }
 

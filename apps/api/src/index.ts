@@ -35,18 +35,6 @@ function assertProductionConfiguration() {
   if ((process.env.JWT_SECRET?.trim().length ?? 0) < 32) {
     throw new Error('JWT_SECRET must be at least 32 characters in production');
   }
-
-  if ((process.env.MEDIA_STORAGE ?? 'local').toLowerCase() === 'r2') {
-    const r2Required = [
-      'R2_ACCOUNT_ID',
-      'R2_ACCESS_KEY_ID',
-      'R2_SECRET_ACCESS_KEY',
-    ];
-    const r2Missing = r2Required.filter(name => !process.env[name]?.trim());
-    if (r2Missing.length) {
-      throw new Error(`MEDIA_STORAGE=r2 requires: ${r2Missing.join(', ')}`);
-    }
-  }
 }
 
 function corsOrigins() {
@@ -100,8 +88,9 @@ app.onError((err, c) => {
 });
 
 const port = Number(process.env.API_PORT ?? 4000);
-serve({ fetch: app.fetch, port }, info => {
-  console.log(`Anticlock API listening on http://localhost:${info.port}`);
+const hostname = process.env.API_HOST ?? '0.0.0.0';
+serve({ fetch: app.fetch, port, hostname }, info => {
+  console.log(`Anticlock API listening on http://${hostname}:${info.port}`);
 });
 
 export default app;

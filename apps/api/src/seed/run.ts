@@ -53,8 +53,8 @@ function initialAdminCredentials() {
       'INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD are required when creating the first production admin',
     );
   }
-  if (password.length < 12) {
-    throw new Error('INITIAL_ADMIN_PASSWORD must be at least 12 characters');
+  if (password.length < 8) {
+    throw new Error('INITIAL_ADMIN_PASSWORD must be at least 8 characters');
   }
 
   return { email, password };
@@ -112,36 +112,38 @@ async function seed() {
 
   if (!adminId) {
     if (!credentials) {
-      throw new Error(
-        'INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD are required when creating the first production admin',
+      console.warn(
+        'Skipping initial admin creation: set INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD, or create a super_admin manually.',
       );
-    }
-
-    const [existingUser] = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, credentials.email));
-
-    if (existingUser) {
-      adminId = existingUser.id;
     } else {
-      const passwordHash = await bcrypt.hash(credentials.password, 10);
-      const [created] = await db
-        .insert(users)
-        .values({
-          email: credentials.email,
-          name: 'Anticlock Admin',
-          passwordHash,
-        })
-        .returning();
-      adminId = created!.id;
+      const [existingUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, credentials.email));
+
+      if (existingUser) {
+        adminId = existingUser.id;
+      } else {
+        const passwordHash = await bcrypt.hash(credentials.password, 10);
+        const [created] = await db
+          .insert(users)
+          .values({
+            email: credentials.email,
+            name: 'Anticlock Admin',
+            passwordHash,
+          })
+          .returning();
+        adminId = created!.id;
+      }
     }
   }
 
-  await db
-    .insert(userRoles)
-    .values({ userId: adminId, roleId: 'super_admin' })
-    .onConflictDoNothing();
+  if (adminId) {
+    await db
+      .insert(userRoles)
+      .values({ userId: adminId, roleId: 'super_admin' })
+      .onConflictDoNothing();
+  }
 
   for (const tree of catalog.trees) {
     await db

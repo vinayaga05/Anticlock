@@ -10,7 +10,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
+    "db:migrate:prod": "node dist/db/migrate.js",
     "db:seed": "tsx src/seed/run.ts",
+    "db:seed:prod": "node dist/seed/run.js",
     "stream:upload-canva": "tsx scripts/upload-canva-to-stream.ts",
     "r2:upload-canva": "tsx scripts/upload-canva-to-r2.ts",
     "r2:sync-reels": "tsx scripts/sync-r2-reels-manifest.ts"

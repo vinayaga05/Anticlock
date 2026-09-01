@@ -46,6 +46,12 @@ services:
       STREAM_CUSTOMER_SUBDOMAIN: ${STREAM_CUSTOMER_SUBDOMAIN:-}
       STREAM_WEBHOOK_SECRET: ${STREAM_WEBHOOK_SECRET:-}
       STREAM_MAX_DURATION_SECONDS: ${STREAM_MAX_DURATION_SECONDS:-180}
+      # Migrations run on each API start by default. After the first successful
+      # deploy, set RUN_SEED=false unless you are intentionally re-seeding.
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+      RUN_SEED: ${RUN_SEED:-false}
+      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
     volumes:
       - anticlock_media:/app/apps/api/.media
     healthcheck:
@@ -53,7 +59,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 40s
+      start_period: 120s
 
   admin:
     build:

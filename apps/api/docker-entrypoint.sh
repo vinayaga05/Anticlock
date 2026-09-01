@@ -20,15 +20,14 @@ while true; do
   sleep 1
 done
 
-cd /app
 if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
   echo "Running migrations..."
-  pnpm --filter @anticlock/api db:migrate
+  node /app/apps/api/dist/db/migrate.js
 fi
 
 if [ "${RUN_SEED:-true}" = "true" ]; then
   echo "Seeding database..."
-  pnpm --filter @anticlock/api db:seed
+  node /app/apps/api/dist/seed/run.js
 fi
 
 echo "Starting API..."

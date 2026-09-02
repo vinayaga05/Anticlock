@@ -507,6 +507,99 @@ async function migrate() {
     )
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS assistant_conversations (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      title text,
+      persona_version text NOT NULL DEFAULT '1',
+      status text NOT NULL DEFAULT 'active',
+      last_response_id text,
+      current_screen text,
+      metadata jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      archived_at timestamptz
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS assistant_conversations_user_updated_idx
+      ON assistant_conversations (mobile_user_id, updated_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS assistant_messages (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      conversation_id uuid NOT NULL REFERENCES assistant_conversations(id) ON DELETE CASCADE,
+      role text NOT NULL,
+      content text,
+      tool_calls jsonb,
+      tool_results jsonb,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS assistant_messages_conversation_created_idx
+      ON assistant_messages (conversation_id, created_at ASC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS assistant_analytics_events (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      conversation_id uuid REFERENCES assistant_conversations(id) ON DELETE SET NULL,
+      type text NOT NULL,
+      payload jsonb NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS assistant_analytics_user_created_idx
+      ON assistant_analytics_events (mobile_user_id, created_at DESC)
+  `;
+
+  // Full-text search for assistant discovery
+  await sql`
+    ALTER TABLE mobile_users ADD COLUMN IF NOT EXISTS search_vector tsvector
+      GENERATED ALWAYS AS (to_tsvector('english', coalesce(display_name, ''))) STORED
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS mobile_users_search_idx
+      ON mobile_users USING gin (search_vector)
+  `;
+
+  await sql`
+    ALTER TABLE reels ADD COLUMN IF NOT EXISTS search_vector tsvector
+      GENERATED ALWAYS AS (
+        to_tsvector('english', coalesce(title, '') || ' ' || coalesce(caption, '') || ' ' || coalesce(category, ''))
+      ) STORED
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS reels_search_idx
+      ON reels USING gin (search_vector)
+  `;
+
+  await sql`
+    ALTER TABLE service_trees ADD COLUMN IF NOT EXISTS search_vector tsvector
+      GENERATED ALWAYS AS (to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))) STORED
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS service_trees_search_idx
+      ON service_trees USING gin (search_vector)
+  `;
+
+  await sql`
+    ALTER TABLE service_categories ADD COLUMN IF NOT EXISTS search_vector tsvector
+      GENERATED ALWAYS AS (to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))) STORED
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS service_categories_search_idx
+      ON service_categories USING gin (search_vector)
+  `;
+
   console.log("Migrations applied.");
   await sql.end({ timeout: 5 });
 }

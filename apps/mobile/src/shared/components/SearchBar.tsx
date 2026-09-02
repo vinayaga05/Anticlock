@@ -12,6 +12,7 @@ export function SearchBar({
   compact = true,
   value,
   onChangeText,
+  onVoicePress,
 }: {
   placeholder?: string;
   showFilter?: boolean;
@@ -21,6 +22,7 @@ export function SearchBar({
   compact?: boolean;
   value?: string;
   onChangeText?: (value: string) => void;
+  onVoicePress?: () => void;
 }) {
   const theme = useTheme();
   const [uncontrolledValue, setUncontrolledValue] = useState('');
@@ -81,7 +83,12 @@ export function SearchBar({
             <View
               style={[styles.divider, { backgroundColor: theme.colors.border }]}
             />
-            <AppIcon name="mic" size={19} color={theme.colors.primary} />
+            <PressableScale
+              accessibilityLabel="Open Genie"
+              onPress={onVoicePress}
+              style={styles.micButton}>
+              <AppIcon name="mic" size={19} color={theme.colors.primary} />
+            </PressableScale>
           </View>
         ) : null}
       </View>
@@ -146,5 +153,8 @@ const styles = StyleSheet.create({
   divider: {
     width: StyleSheet.hairlineWidth,
     height: 22,
+  },
+  micButton: {
+    padding: 2,
   },
 });

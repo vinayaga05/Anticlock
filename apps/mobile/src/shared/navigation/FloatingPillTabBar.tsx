@@ -8,6 +8,8 @@ import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { CommentsBottomSheetHost } from '@/shared/navigation/CommentsBottomSheetHost';
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
+import { FloatingAssistantButton } from '@/features/assistant/components/FloatingAssistantButton';
+import { AssistantBottomSheetHost } from '@/features/assistant/components/AssistantBottomSheet';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -145,7 +147,9 @@ export function FloatingPillTabBar({
         pointerEvents="box-none"
         style={[styles.sheetLayer, { height: SCREEN_HEIGHT, zIndex: 50, elevation: 50 }]}>
         <CommentsBottomSheetHost />
+        <AssistantBottomSheetHost />
       </View>
+      <FloatingAssistantButton />
     </View>
   );
 }

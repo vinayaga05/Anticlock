@@ -1634,6 +1634,8 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - react-native-voice (3.2.4):
+    - React-Core
   - React-NativeModulesApple (0.86.0):
     - hermes-engine
     - React-callinvoker
@@ -2364,6 +2366,7 @@ DEPENDENCIES:
   - "react-native-blur (from `../../../node_modules/@react-native-community/blur`)"
   - react-native-safe-area-context (from `../../../node_modules/react-native-safe-area-context`)
   - react-native-video (from `../../../node_modules/react-native-video`)
+  - "react-native-voice (from `../../../node_modules/@react-native-voice/voice`)"
   - React-NativeModulesApple (from `../../../node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios`)
   - React-networking (from `../../../node_modules/react-native/ReactCommon/react/networking`)
   - React-oscompat (from `../../../node_modules/react-native/ReactCommon/oscompat`)
@@ -2500,6 +2503,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/react-native-safe-area-context"
   react-native-video:
     :path: "../../../node_modules/react-native-video"
+  react-native-voice:
+    :path: "../../../node_modules/@react-native-voice/voice"
   React-NativeModulesApple:
     :path: "../../../node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios"
   React-networking:
@@ -2629,6 +2634,7 @@ SPEC CHECKSUMS:
   react-native-blur: ea6c78ddeaa7aa0fce36ea29d1f81dd23063032a
   react-native-safe-area-context: 8368d1052ccc8fe8725adfb6a83498c8bdb48250
   react-native-video: db3a70efc9fa0c00f5499d7798283bf0585cbd37
+  react-native-voice: 908a0eba96c8c3d643e4f98b7232c6557d0a6f9c
   React-NativeModulesApple: a092d89b58f635ebfab88048b0eda9fb516819fd
   React-networking: 968bbbe73590149feb1e72b2af4f6a68e4796ece
   React-oscompat: 0b72a7e926954a0415ccd83e0748b6561fe45367

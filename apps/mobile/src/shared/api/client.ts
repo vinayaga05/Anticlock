@@ -65,3 +65,55 @@ export async function apiRequest<T>(
 
   return (await res.json()) as T;
 }
+
+export async function apiStream<TEvent>(
+  path: string,
+  body: unknown,
+  onEvent: (event: TEvent) => void,
+  init: { signal?: AbortSignal } = {},
+): Promise<void> {
+  if (!isApiEnabled) {
+    throw new ApiError(0, 'api_disabled', 'API_BASE_URL is not configured');
+  }
+
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  if (bearerToken) headers.set('Authorization', `Bearer ${bearerToken}`);
+
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+    signal: init.signal,
+  });
+
+  if (!res.ok) {
+    throw new ApiError(res.status, 'stream_failed', res.statusText);
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) {
+    throw new ApiError(0, 'stream_unavailable', 'Streaming is not supported');
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split('\n');
+    buffer = parts.pop() ?? '';
+    for (const line of parts) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      const payload = trimmed.slice(5).trim();
+      if (!payload) continue;
+      try {
+        onEvent(JSON.parse(payload) as TEvent);
+      } catch {
+        /* ignore malformed chunks */
+      }
+    }
+  }
+}

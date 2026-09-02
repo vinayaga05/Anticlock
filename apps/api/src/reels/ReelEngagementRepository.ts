@@ -383,6 +383,29 @@ export class ReelEngagementRepository {
       daily: [...daily.values()].sort((a, b) => a.date.localeCompare(b.date)),
     };
   }
+
+  async listRecentlyViewed(viewerKey: string, limit = 10) {
+    const rows = await db
+      .select({
+        reelId: reelViewEvents.reelId,
+        title: reels.title,
+        caption: reels.caption,
+        creatorName: reels.creatorName,
+        viewedAt: reelViewEvents.createdAt,
+      })
+      .from(reelViewEvents)
+      .innerJoin(reels, eq(reels.id, reelViewEvents.reelId))
+      .where(eq(reelViewEvents.viewerKey, viewerKey))
+      .orderBy(desc(reelViewEvents.createdAt))
+      .limit(limit);
+
+    const seen = new Set<string>();
+    return rows.filter(row => {
+      if (seen.has(row.reelId)) return false;
+      seen.add(row.reelId);
+      return true;
+    });
+  }
 }
 
 export const reelEngagementRepository = new ReelEngagementRepository();

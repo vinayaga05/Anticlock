@@ -35,6 +35,10 @@
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string></string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Genie uses the microphone for voice input.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Genie uses speech recognition to transcribe your requests.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

@@ -490,3 +490,53 @@ export const providerApplicationDocuments = pgTable(
     ),
   ]
 );
+
+export const assistantConversations = pgTable("assistant_conversations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  mobileUserId: uuid("mobile_user_id")
+    .notNull()
+    .references(() => mobileUsers.id, { onDelete: "cascade" }),
+  title: text("title"),
+  personaVersion: text("persona_version").notNull().default("1"),
+  status: text("status").notNull().default("active"),
+  lastResponseId: text("last_response_id"),
+  currentScreen: text("current_screen"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+});
+
+export const assistantMessages = pgTable("assistant_messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  conversationId: uuid("conversation_id")
+    .notNull()
+    .references(() => assistantConversations.id, { onDelete: "cascade" }),
+  role: text("role").notNull(),
+  content: text("content"),
+  toolCalls: jsonb("tool_calls").$type<unknown[]>(),
+  toolResults: jsonb("tool_results").$type<unknown[]>(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const assistantAnalyticsEvents = pgTable("assistant_analytics_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  mobileUserId: uuid("mobile_user_id")
+    .notNull()
+    .references(() => mobileUsers.id, { onDelete: "cascade" }),
+  conversationId: uuid("conversation_id").references(
+    () => assistantConversations.id,
+    { onDelete: "set null" }
+  ),
+  type: text("type").notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});

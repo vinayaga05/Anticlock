@@ -1,6 +1,8 @@
 import React from 'react';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { assistantLinking } from '@/features/assistant/navigation/assistantNavigation';
+import { useAssistantStore } from '@/features/assistant/store/assistantStore';
 import { MainNavigator } from '@/shared/navigation/MainNavigator';
 import { RootStackParamList } from '@/shared/navigation/types';
 import { useTheme } from '@/shared/hooks/useTheme';
@@ -98,7 +100,15 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer
+      theme={navigationTheme}
+      linking={assistantLinking}
+      onStateChange={state => {
+        if (!state) return;
+        const route = state.routes[state.index];
+        const screenName = route?.name ?? null;
+        useAssistantStore.getState().setCurrentScreen(screenName);
+      }}>
       <Stack.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: theme.colors.background },

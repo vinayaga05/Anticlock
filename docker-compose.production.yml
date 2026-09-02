@@ -10,6 +10,18 @@
 name: anticlock
 
 services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks:
+      - database
+
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -36,12 +48,28 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     environment:
       NODE_ENV: production
       API_PORT: '4000'
       DATABASE_URL: postgresql://anticlock:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}@postgres:5432/anticlock
+      REDIS_URL: redis://redis:6379
+      AI_PROVIDER: ${AI_PROVIDER:-groq}
+      AI_FALLBACK_PROVIDER: ${AI_FALLBACK_PROVIDER:-openai}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      ASSISTANT_MAX_TURNS: ${ASSISTANT_MAX_TURNS:-8}
+      ASSISTANT_PERSONA_VERSION: ${ASSISTANT_PERSONA_VERSION:-1}
+      ALGOLIA_APP_ID: ${ALGOLIA_APP_ID:-}
+      ALGOLIA_API_KEY: ${ALGOLIA_API_KEY:-}
+      ALGOLIA_REELS_INDEX: ${ALGOLIA_REELS_INDEX:-anticlock_reels}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.production}
       ADMIN_ORIGIN: https://${ADMIN_DOMAIN:?Set ADMIN_DOMAIN in .env.production}
       API_PUBLIC_URL: https://${API_DOMAIN:?Set API_DOMAIN in .env.production}

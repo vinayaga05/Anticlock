@@ -150,12 +150,56 @@ rollback consists of returning to the prior Git revision and redeploying its
 containers; restore the database only when a tested backup is needed, because
 database rollbacks are not automatically safe.
 
+## Genie AI providers
+
+Genie uses a server-side AI provider abstraction. **Groq is the default** for
+development and testing. API keys never reach the React Native client.
+
+Add these to `.env.production`:
+
+```dotenv
+AI_PROVIDER=groq
+AI_FALLBACK_PROVIDER=openai
+
+GROQ_API_KEY=gsk_your_groq_key
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+GROQ_MODEL=llama-3.3-70b-versatile
+
+OPENAI_API_KEY=sk_your_openai_key
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4.1-mini
+
+ASSISTANT_MAX_TURNS=8
+```
+
+Switch to OpenAI only:
+
+```dotenv
+AI_PROVIDER=openai
+```
+
+Enable one-time OpenAI fallback after retryable Groq failures:
+
+```dotenv
+AI_PROVIDER=groq
+AI_FALLBACK_PROVIDER=openai
+```
+
+Both the active and fallback providers require their respective API keys when
+configured. On startup the API logs only `{ provider, model, fallbackProvider }`
+— never credentials or prompts.
+
+Supported models must support tool calling. Defaults:
+`llama-3.3-70b-versatile` (Groq) and `gpt-4.1-mini` (OpenAI).
+
 ## What stays out of this VPS
 
 - Metro and simulator/emulator tooling
 - large user uploads, images, and videos (use R2 / Stream)
-- Redis, MinIO, and workers until there is a concrete cache, queue, or
-  background-processing requirement
+- MinIO and background workers until there is a concrete queue or
+  processing requirement. **Redis is required** for Genie (session buffer,
+  rate limiting) and is included in the production compose file on the
+  private `database` network.
 
 This is a single-VPS starting point, not high availability. Add managed
 database replicas, workers, monitoring/alerts, and a load balancer only as

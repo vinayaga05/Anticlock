@@ -17,6 +17,8 @@ import { CURRENT_USER, getProfileMeta, getProfileShortcuts } from '@/shared/data
 import { useEngagementStore } from '@/shared/services/engagementRepository';
 import { useMyProviderApplicationQuery } from '@/shared/api/providerHooks';
 import { useStoryStore } from '@/shared/data/flash/storyStore';
+import { AssistantPrivacySection } from '@/features/assistant/components/AssistantPrivacySection';
+import { useAssistantStore } from '@/features/assistant/store/assistantStore';
 
 type MenuItem = {
   id: string;
@@ -113,9 +115,9 @@ export function ProfileScreen() {
     () => [
       {
         id: 'ai',
-        label: 'Anticlock AI',
+        label: 'Genie',
         icon: 'sparkles',
-        onPress: () => navigation.navigate('ComingSoon', { title: 'Anticlock AI' }),
+        onPress: () => useAssistantStore.getState().openAssistant(),
       },
       {
         id: 'provider',
@@ -425,6 +427,10 @@ export function ProfileScreen() {
           })}
         </View>
 
+        <View style={styles.privacySection}>
+          <AssistantPrivacySection />
+        </View>
+
         <Text style={[styles.footerMeta, { color: theme.colors.textTertiary }]}>
           {meta.username} · {meta.location}
         </Text>
@@ -593,6 +599,10 @@ const styles = StyleSheet.create({
   },
   accordionItemText: {
     fontSize: 15,
+  },
+  privacySection: {
+    paddingHorizontal: 14,
+    marginTop: 8,
   },
   footerMeta: {
     textAlign: 'center',

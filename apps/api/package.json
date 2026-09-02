@@ -15,25 +15,31 @@
     "db:seed:prod": "node dist/seed/run.js",
     "stream:upload-canva": "tsx scripts/upload-canva-to-stream.ts",
     "r2:upload-canva": "tsx scripts/upload-canva-to-r2.ts",
-    "r2:sync-reels": "tsx scripts/sync-r2-reels-manifest.ts"
+    "r2:sync-reels": "tsx scripts/sync-r2-reels-manifest.ts",
+    "assistant:backfill-algolia": "tsx src/seed/backfillAlgoliaReels.ts",
+    "test": "AI_PROVIDER=groq GROQ_API_KEY=gsk_test OPENAI_API_KEY=sk_test tsx --test src/config/*.test.ts src/assistant/__tests__/*.test.ts"
   },
   "dependencies": {
     "@anticlock/contracts": "workspace:*",
     "@aws-sdk/client-s3": "^3.1116.0",
     "@aws-sdk/s3-request-presigner": "^3.1116.0",
     "@hono/node-server": "^1.14.4",
+    "algoliasearch": "^5.57.0",
     "bcryptjs": "^3.0.2",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.44.2",
     "hono": "^4.8.3",
     "image-size": "^2.0.2",
+    "ioredis": "^6.0.0",
     "jose": "^6.0.11",
+    "openai": "^7.9.0",
     "postgres": "^3.4.7",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/image-size": "^0.8.0",
+    "@types/ioredis": "^5.0.0",
     "@types/node": "^22.15.30",
     "drizzle-kit": "^0.31.1",
     "tsx": "^4.20.3",

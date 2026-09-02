@@ -343,6 +343,7 @@ async function seed() {
           accessLevel: 'public',
           processingStatus: 'ready',
           moderationStatus: 'not_required',
+          durationMs: 60_000,
           originalFilename: `${sample.key}.mp4`,
           createdBy: adminId,
         })

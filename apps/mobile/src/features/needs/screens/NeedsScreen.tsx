@@ -21,6 +21,7 @@ import { ProviderCard } from '@/features/services/components/ProviderCard';
 import { RootStackParamList } from '@/shared/navigation/types';
 import { TAB_BAR_VISIBLE_HEIGHT } from '@/shared/navigation/FloatingPillTabBar';
 import { softFill } from '@/shared/theme/colors';
+import { useAssistantStore } from '@/features/assistant/store/assistantStore';
 
 export function NeedsScreen() {
   const theme = useTheme();
@@ -57,6 +58,7 @@ export function NeedsScreen() {
             showFilter
             value={searchQuery}
             onChangeText={onChangeText}
+            onVoicePress={() => useAssistantStore.getState().openAssistant({ voiceMode: true })}
           />
           <SectionHeader title="Explore Services" />
         </View>

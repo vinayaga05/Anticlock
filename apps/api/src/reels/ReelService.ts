@@ -30,6 +30,7 @@ import { mediaRepository } from '../media/MediaRepository.js';
 import { r2PublicDeliveryUrl } from '../media/R2ObjectStorageProvider.js';
 import { reelEngagementRepository } from './ReelEngagementRepository.js';
 import { reelRepository } from './ReelRepository.js';
+import { searchService } from '../assistant/SearchService.js';
 import type { mediaAssets, reels } from '../db/schema.js';
 
 function toIso(d: Date | null | undefined) {
@@ -761,7 +762,19 @@ export class ReelService {
       entityId: reelId,
     });
 
-    return this.getAdmin(auth, reelId);
+    const updated = await this.getAdmin(auth, reelId);
+    const playback = row.media ? resolvePlayback(row.media) : null;
+    await searchService.indexReel({
+      id: reelId,
+      title: row.reel.title,
+      caption: row.reel.caption,
+      category: row.reel.category,
+      creatorName: row.reel.creatorName,
+      thumbnailUrl: playback?.posterUrl ?? null,
+      status: 'published',
+    }).catch(() => undefined);
+
+    return updated;
   }
 
   async unpublish(auth: AuthClaims, reelId: string) {
@@ -783,6 +796,7 @@ export class ReelService {
       status: 'draft',
       publishedAt: null,
     });
+    await searchService.removeReelFromIndex(reelId).catch(() => undefined);
     await writeAudit({
       actorId: auth.sub,
       actorEmail: auth.email,

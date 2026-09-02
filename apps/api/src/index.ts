@@ -18,6 +18,13 @@ import {
   providerAdminRoutes,
   providerMobileRoutes,
 } from './routes/provider.js';
+import { assistantRoutes } from './routes/assistant.js';
+import { startAssistantLifecycleJob } from './assistant/PrivacyService.js';
+import { redisHealthCheck } from './lib/redis.js';
+import {
+  loadAiProviderConfig,
+  logAiProviderStartup,
+} from './config/ai-provider.config.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -45,6 +52,9 @@ function corsOrigins() {
 
 assertProductionConfiguration();
 
+const aiConfig = loadAiProviderConfig();
+logAiProviderStartup(aiConfig);
+
 const app = new Hono();
 
 app.use(
@@ -57,8 +67,13 @@ app.use(
   }),
 );
 
-app.get('/health', c =>
-  c.json({ ok: true, service: 'anticlock-api', version: '0.1.0' }),
+app.get('/health', async c =>
+  c.json({
+    ok: true,
+    service: 'anticlock-api',
+    version: '0.1.0',
+    redis: await redisHealthCheck(),
+  }),
 );
 
 app.route('/auth', authRoutes);
@@ -66,6 +81,7 @@ app.route('/v1/catalog', catalogRoutes);
 app.route('/v1/media', mediaPublicRoutes);
 app.route('/v1/reels', reelsPublicRoutes);
 app.route('/v1/provider', providerMobileRoutes);
+app.route('/v1/assistant', assistantRoutes);
 app.route('/admin', adminRoutes);
 app.route('/admin/provider', providerAdminRoutes);
 app.route('/admin/media', mediaAdminRoutes);
@@ -91,6 +107,7 @@ const port = Number(process.env.API_PORT ?? 4000);
 const hostname = process.env.API_HOST ?? '0.0.0.0';
 serve({ fetch: app.fetch, port, hostname }, info => {
   console.log(`Anticlock API listening on http://${hostname}:${info.port}`);
+  startAssistantLifecycleJob();
 });
 
 export default app;

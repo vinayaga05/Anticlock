@@ -14,6 +14,7 @@ import {
   users,
 } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
+import { searchService } from "../assistant/SearchService.js";
 import {
   requireAuth,
   requirePermission,
@@ -73,6 +74,15 @@ catalogRoutes.get("/categories", async (c) => {
       })),
     meta: { nextCursor: null },
   });
+});
+
+catalogRoutes.get("/search", async (c) => {
+  const q = c.req.query("q")?.trim() ?? "";
+  if (!q) {
+    return c.json({ data: [], meta: { query: q } });
+  }
+  const data = await searchService.searchCatalog(q, 20);
+  return c.json({ data, meta: { query: q } });
 });
 
 export const adminRoutes = new Hono<AppEnv>();

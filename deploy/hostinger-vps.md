@@ -386,6 +386,99 @@ If the API or `migrate` service fails with password authentication errors:
   the repo’s `docker-compose.production.yml` from `/opt/apps/Anticlock` instead.
 - After hPanel edits, reconcile with `git pull` and redeploy from CLI.
 
+### `git pull` blocked by local compose changes
+
+If the VPS has manual edits or a hand-created Traefik override, `git pull` may
+abort with:
+
+```text
+error: Your local changes … would be overwritten by merge:
+        docker-compose.production.yml
+error: The following untracked working tree files would be overwritten by merge:
+        docker-compose.traefik.override.yml
+```
+
+The repo versions of those files are authoritative. Reset and pull:
+
+```bash
+cd /opt/apps/Anticlock
+git checkout -- docker-compose.production.yml
+rm -f docker-compose.traefik.override.yml
+git pull --ff-only
+chmod +x deploy/vps-deploy.sh
+./deploy/vps-deploy.sh update
+```
+
+`.env.production` is untracked and is not affected. After pulling API changes,
+always **rebuild** images (`./deploy/vps-deploy.sh update` runs `build`).
+
+If the API crashes with `AI_FALLBACK_PROVIDER` validation errors on an old
+image, rebuild explicitly:
+
+```bash
+docker compose --env-file .env.production \
+  -f docker-compose.production.yml \
+  -f docker-compose.traefik.override.yml \
+  build api admin
+docker compose --env-file .env.production \
+  -f docker-compose.production.yml \
+  -f docker-compose.traefik.override.yml \
+  up -d --no-deps api admin
+```
+
+### Clips feed empty or videos do not play
+
+**Symptoms:** Mobile Clips tab is blank, or videos show “Video unavailable”.
+
+1. **API feed check** — must return published items with HTTPS `playbackUrl`:
+
+   ```bash
+   curl -sk https://api.anticlock.online/v1/reels
+   ```
+
+   `{"data":[]}` means nothing is published yet (not a player bug).
+
+2. **Publication gate** — upload in Admin → attach to a Reel → publish. Raw R2
+   objects alone never appear in Clips.
+
+3. **R2 playback** — `R2_PUBLIC_BASE_URL` must be set and the public bucket must
+   allow anonymous GET. Without it, `playbackUrl` is null and the reel is skipped.
+
+4. **Demo reels (first launch)** — seed sample clips for smoke testing:
+
+   ```bash
+   cd /opt/apps/Anticlock
+   docker compose --env-file .env.production \
+     -f docker-compose.production.yml \
+     -f docker-compose.traefik.override.yml \
+     run --rm -e RUN_SEED=true -e SEED_DEMO_DATA=true migrate
+   ```
+
+5. **Mobile release API URL** — production builds must use
+   `https://api.anticlock.online` (see `apps/mobile/src/shared/api/config.ts`).
+   Port `4000` is not exposed on the VPS; `http://srv….hstgr.cloud:4000` will
+   not work from phones. Rebuild and reinstall the app after changing this.
+
+6. **Canva / R2 clips (real feed)** — after `git pull` and API rebuild, upload
+   repo Canva MP4s to R2 and publish reels:
+
+   ```bash
+   cd /opt/apps/Anticlock
+   chmod +x deploy/import-r2-clips.sh
+   ./deploy/import-r2-clips.sh
+   ```
+
+   Requires `R2_*` vars and `R2_PUBLIC_BASE_URL` in `.env.production`. Playback
+   URLs look like `https://pub-….r2.dev/canva/yoga-flow.mp4`. Confirm with:
+
+   ```bash
+   curl -sk "https://pub-….r2.dev/canva/yoga-flow.mp4" -I
+   curl -sk https://api.anticlock.online/v1/reels
+   ```
+
+   The API image entrypoint always starts the server; the import script uses
+   `docker compose run --entrypoint node` (see `deploy/import-r2-clips.sh`).
+
 ---
 
 ## Backups and recovery

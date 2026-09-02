@@ -54,28 +54,34 @@ React Native is **not** containerized — run it on the host (below).
 
 ## Production — Hostinger VPS
 
-The production stack is intentionally separate from the local Compose file:
+The production stack is intentionally separate from the local Compose file.
+
+**Hostinger VPS (Traefik):** use `docker-compose.production.yml` plus
+`docker-compose.traefik.override.yml` — Traefik owns ports `80`/`443`.
+
+**Standalone VPS (Caddy):** use `docker-compose.production.yml` only — Caddy
+obtains TLS and proxies to Admin and API.
 
 ```text
 Internet (HTTPS)
        |
-     Caddy
+  Traefik or Caddy
     /     \
- Admin    API --- PostgreSQL (private Docker network)
+ Admin    API --- PostgreSQL + Redis (private Docker network)
               \
                Cloudflare R2 / Stream
 ```
 
-- Caddy is the only container with public ports (`80`, `443`); it obtains and
-  renews TLS certificates automatically.
-- Admin and API are private Docker services behind `admin.anticlock.com` and
-  `api.anticlock.com`.
+- Admin and API are private Docker services (for example
+  `admin.anticlock.online`, `api.anticlock.online`).
 - PostgreSQL has a persistent volume but no published host port.
 - Metro remains a local development tool. Release mobile builds call the
   HTTPS API directly.
 
-See [the VPS deployment guide](deploy/hostinger-vps.md) before deploying. It
-covers DNS, secrets, first-time initialization, updates, backups, and rollback.
+See [the VPS deployment guide](deploy/hostinger-vps.md) and [deploy/README.md](deploy/README.md)
+before deploying. They cover Traefik vs Caddy, DNS, the `vps-deploy.sh` script,
+secrets, first-time initialization, updates, verification, troubleshooting,
+backups, and rollback.
 
 ## Local override (without Docker apps)
 

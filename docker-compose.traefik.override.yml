@@ -1,0 +1,27 @@
+# Hostinger VPS Traefik routing (use with the bundled Traefik stack on ports 80/443).
+#
+#   docker compose --env-file .env.production \
+#     -f docker-compose.production.yml \
+#     -f docker-compose.traefik.override.yml \
+#     up -d --force-recreate api admin
+#
+# Do not use alongside the Caddy service — Traefik already owns 80/443 on this VPS.
+services:
+  api:
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=anticlock_edge
+      - traefik.http.routers.anticlock-api.rule=Host(`${API_DOMAIN:?Set API_DOMAIN in .env.production}`)
+      - traefik.http.routers.anticlock-api.entrypoints=websecure
+      - traefik.http.routers.anticlock-api.tls=true
+      - traefik.http.routers.anticlock-api.tls.certresolver=letsencrypt
+      - traefik.http.services.anticlock-api.loadbalancer.server.port=4000
+  admin:
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=anticlock_edge
+      - traefik.http.routers.anticlock-admin.rule=Host(`${ADMIN_DOMAIN:?Set ADMIN_DOMAIN in .env.production}`)
+      - traefik.http.routers.anticlock-admin.entrypoints=websecure
+      - traefik.http.routers.anticlock-admin.tls=true
+      - traefik.http.routers.anticlock-admin.tls.certresolver=letsencrypt
+      - traefik.http.services.anticlock-admin.loadbalancer.server.port=3000

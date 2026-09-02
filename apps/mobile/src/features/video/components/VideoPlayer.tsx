@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import Video, { OnLoadData, OnProgressData, VideoRef } from 'react-native-video';
+import { AppIcon } from '@/shared/components/AppIcon';
 
 export type VideoSource = string | number;
 
@@ -154,8 +155,18 @@ export function VideoPlayer({
           ) : null}
         </View>
       ) : null}
-      {isPaused && ready ? (
-        <View style={styles.overlay} pointerEvents="none" />
+      {localPaused && ready ? (
+        <View style={styles.pauseOverlay} pointerEvents="none">
+          <View style={styles.pauseButton}>
+            <AppIcon
+              name="play"
+              size={36}
+              color="#fff"
+              fill="#fff"
+              strokeWidth={0}
+            />
+          </View>
+        </View>
       ) : null}
     </Pressable>
   );
@@ -164,9 +175,20 @@ export function VideoPlayer({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   video: { ...StyleSheet.absoluteFill },
-  overlay: {
+  pauseOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pauseButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Slight optical nudge so the play triangle reads centered
+    paddingLeft: 4,
   },
   loading: {
     ...StyleSheet.absoluteFill,

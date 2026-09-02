@@ -3,7 +3,11 @@ import { assertModelSupportsTools, getModelCapabilities } from '../assistant/ai/
 
 const envSchema = z.object({
   AI_PROVIDER: z.enum(['groq', 'openai']).default('groq'),
-  AI_FALLBACK_PROVIDER: z.enum(['groq', 'openai']).optional(),
+  AI_FALLBACK_PROVIDER: z
+    .preprocess(
+      value => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+      z.enum(['groq', 'openai']).optional(),
+    ),
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   AI_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
 

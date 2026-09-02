@@ -5,8 +5,14 @@
 #   # fill in every required value, then:
 #   docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
 #
-# Only Caddy exposes host ports. PostgreSQL is reachable solely by the API on
-# the private `database` network.
+# Hostinger VPS with the bundled Traefik stack (ports 80/443 already taken):
+#   docker compose --env-file .env.production \
+#     -f docker-compose.production.yml \
+#     -f docker-compose.traefik.override.yml \
+#     up -d --force-recreate api admin
+#
+# Standalone VPS without Traefik: Caddy exposes host ports. PostgreSQL is
+# reachable solely by the API on the private `database` network.
 name: anticlock
 
 services:
@@ -58,7 +64,8 @@ services:
       DATABASE_URL: postgresql://anticlock:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}@postgres:5432/anticlock
       REDIS_URL: redis://redis:6379
       AI_PROVIDER: ${AI_PROVIDER:-groq}
-      AI_FALLBACK_PROVIDER: ${AI_FALLBACK_PROVIDER:-openai}
+      # Empty by default — do not force openai fallback without OPENAI_API_KEY.
+      AI_FALLBACK_PROVIDER: ${AI_FALLBACK_PROVIDER:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
       GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
@@ -104,6 +111,14 @@ services:
       timeout: 5s
       retries: 12
       start_period: 60s
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=anticlock_edge
+      - traefik.http.routers.anticlock-api.rule=Host(`${API_DOMAIN:?Set API_DOMAIN in .env.production}`)
+      - traefik.http.routers.anticlock-api.entrypoints=websecure
+      - traefik.http.routers.anticlock-api.tls=true
+      - traefik.http.routers.anticlock-api.tls.certresolver=letsencrypt
+      - traefik.http.services.anticlock-api.loadbalancer.server.port=4000
     networks:
       - edge
       - database
@@ -120,7 +135,13 @@ services:
     entrypoint: ['/bin/sh', '-ec']
     command:
       - >-
-        node apps/api/dist/db/migrate.js &&
+        node apps/api/dist/db/migrate.js ||
+        (sleep 3 && node apps/api/dist/db/migrate.js) ||
+        (sleep 3 && node apps/api/dist/db/migrate.js) ||
+        (sleep 3 && node apps/api/dist/db/migrate.js) ||
+        (sleep 3 && node apps/api/dist/db/migrate.js) ||
+        (sleep 3 && node apps/api/dist/db/migrate.js) ||
+        exit 1;
         if [ "$${RUN_SEED}" = "true" ]; then
           node apps/api/dist/seed/run.js;
         fi
@@ -156,6 +177,14 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=anticlock_edge
+      - traefik.http.routers.anticlock-admin.rule=Host(`${ADMIN_DOMAIN:?Set ADMIN_DOMAIN in .env.production}`)
+      - traefik.http.routers.anticlock-admin.entrypoints=websecure
+      - traefik.http.routers.anticlock-admin.tls=true
+      - traefik.http.routers.anticlock-admin.tls.certresolver=letsencrypt
+      - traefik.http.services.anticlock-admin.loadbalancer.server.port=3000
     networks:
       - edge
 

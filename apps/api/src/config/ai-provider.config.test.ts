@@ -7,7 +7,7 @@ function baseEnv(overrides: Record<string, string | undefined> = {}) {
     AI_PROVIDER: undefined,
     GROQ_API_KEY: 'gsk_test_key',
     GROQ_BASE_URL: 'https://api.groq.com/openai/v1',
-    GROQ_MODEL: 'llama-3.3-70b-versatile',
+    GROQ_MODEL: 'openai/gpt-oss-20b',
     OPENAI_API_KEY: 'sk-test-key',
     OPENAI_BASE_URL: 'https://api.openai.com/v1',
     OPENAI_MODEL: 'gpt-4.1-mini',
@@ -19,7 +19,7 @@ describe('loadAiProviderConfig', () => {
   it('defaults to groq when AI_PROVIDER is absent', () => {
     const config = loadAiProviderConfig(baseEnv());
     assert.equal(config.activeProvider, 'groq');
-    assert.equal(config.groq.model, 'llama-3.3-70b-versatile');
+    assert.equal(config.groq.model, 'openai/gpt-oss-20b');
   });
 
   it('uses openai when AI_PROVIDER=openai', () => {

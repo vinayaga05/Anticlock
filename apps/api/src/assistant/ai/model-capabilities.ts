@@ -7,6 +7,24 @@ export type ModelCapabilities = {
 };
 
 const REGISTRY: Record<string, ModelCapabilities> = {
+  'openai/gpt-oss-20b': {
+    supportsTools: true,
+    supportsStreaming: true,
+    supportsJsonSchema: false,
+    contextWindow: 128_000,
+  },
+  'openai/gpt-oss-120b': {
+    supportsTools: true,
+    supportsStreaming: true,
+    supportsJsonSchema: false,
+    contextWindow: 128_000,
+  },
+  'qwen/qwen3.8-27b': {
+    supportsTools: true,
+    supportsStreaming: true,
+    supportsJsonSchema: false,
+    contextWindow: 128_000,
+  },
   'llama-3.3-70b-versatile': {
     supportsTools: true,
     supportsStreaming: true,

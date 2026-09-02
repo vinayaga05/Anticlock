@@ -163,7 +163,7 @@ AI_FALLBACK_PROVIDER=openai
 
 GROQ_API_KEY=gsk_your_groq_key
 GROQ_BASE_URL=https://api.groq.com/openai/v1
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MODEL=openai/gpt-oss-20b
 
 OPENAI_API_KEY=sk_your_openai_key
 OPENAI_BASE_URL=https://api.openai.com/v1
@@ -190,7 +190,7 @@ configured. On startup the API logs only `{ provider, model, fallbackProvider }`
 — never credentials or prompts.
 
 Supported models must support tool calling. Defaults:
-`llama-3.3-70b-versatile` (Groq) and `gpt-4.1-mini` (OpenAI).
+`openai/gpt-oss-20b` (Groq) and `gpt-4.1-mini` (OpenAI).
 
 ## What stays out of this VPS
 

@@ -132,7 +132,7 @@ export class AssistantRepository {
   }
 
   async archiveStaleConversations(days = 90) {
-    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
     await db
       .update(assistantConversations)
       .set({ status: 'archived', archivedAt: new Date(), updatedAt: new Date() })

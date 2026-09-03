@@ -99,6 +99,7 @@ services:
       STREAM_CUSTOMER_SUBDOMAIN: ${STREAM_CUSTOMER_SUBDOMAIN:-}
       STREAM_WEBHOOK_SECRET: ${STREAM_WEBHOOK_SECRET:-}
       STREAM_MAX_DURATION_SECONDS: ${STREAM_MAX_DURATION_SECONDS:-180}
+      OTP_DEV_WHITELIST: ${OTP_DEV_WHITELIST:-true}
     # Retained only for an intentional MEDIA_STORAGE=local fallback. R2 is the
     # production default so user media normally remains outside the VPS.
     volumes:

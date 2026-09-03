@@ -183,11 +183,17 @@ workflow rather than an implicit side effect of upload.
 
 ## Application readiness note
 
-The production SMS OTP adapter is currently a placeholder. Do not expose a
-public phone-login flow until a real provider integration (for example MSG91),
-its credentials, delivery monitoring, and rate limiting are implemented. The
-VPS configuration is ready for the API itself, but it cannot make an
-unimplemented external authentication service live.
+Mobile login supports a **dev OTP whitelist** when `OTP_DEV_WHITELIST=true`
+(default in `docker-compose.production.yml` until MSG91 is wired):
+
+| Mobile | OTP |
+|--------|-----|
+| `9999999999` (+91) | `123456` |
+| `8888888888` (+91) | `123456` |
+
+Do not expose a public phone-login flow to real users until a real SMS provider
+(for example MSG91), its credentials, delivery monitoring, and rate limiting
+are implemented. Set `OTP_DEV_WHITELIST=false` once MSG91 is live.
 
 ---
 
@@ -381,10 +387,45 @@ If the API or `migrate` service fails with password authentication errors:
 
 ### hPanel Docker Manager vs CLI
 
+- **Prefer CLI deploy** from `/opt/apps/Anticlock` (`./deploy/vps-deploy.sh update`).
+  hPanel’s compose editor uses a separate env store and often includes **Caddy**,
+  which conflicts with the bundled **Traefik** stack on ports 80/443.
 - hPanel may store env vars separately and use a trimmed compose file.
 - If `docker compose … run migrate` reports `no such service: migrate`, use
   the repo’s `docker-compose.production.yml` from `/opt/apps/Anticlock` instead.
 - After hPanel edits, reconcile with `git pull` and redeploy from CLI.
+
+### hPanel deploy fails: `migrate` exit 1
+
+Typical log: `PostgresError: password authentication failed for user "anticlock"`.
+
+hPanel **recreates** Postgres with env from its UI, but the existing volume keeps
+the old password. Sync and redeploy from CLI:
+
+```bash
+cd /opt/apps/Anticlock
+python3 <<'PY'
+import subprocess, re
+text = open('.env.production').read()
+p = re.search(r'^POSTGRES_PASSWORD=(.*)$', text, re.M).group(1).strip().strip('"').strip("'")
+subprocess.run([
+  'docker','exec','anticlock-postgres-1','psql','-U','anticlock','-d','anticlock','-c',
+  f"ALTER USER anticlock WITH PASSWORD '{p}';"
+], check=True)
+print('password synced')
+PY
+docker stop anticlock-caddy-1 2>/dev/null; docker rm anticlock-caddy-1 2>/dev/null
+docker compose --env-file .env.production \
+  -f docker-compose.production.yml \
+  -f docker-compose.traefik.override.yml \
+  run --rm migrate
+docker compose --env-file .env.production \
+  -f docker-compose.production.yml \
+  -f docker-compose.traefik.override.yml \
+  up -d --no-deps api admin
+```
+
+Verify: `curl -sk https://api.anticlock.online/health` (expect `"ok":true`).
 
 ### `git pull` blocked by local compose changes
 

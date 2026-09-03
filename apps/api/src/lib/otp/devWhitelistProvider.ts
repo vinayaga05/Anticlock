@@ -16,12 +16,12 @@ type Challenge = {
 
 const challenges = new Map<string, Challenge>();
 
+/**
+ * Fixed OTP whitelist for staging / pre-MSG91 production.
+ * Selected only when OTP_DEV_WHITELIST=true (or NODE_ENV !== production).
+ */
 export class DevWhitelistOtpProvider implements OtpProvider {
   async sendOtp(rawPhone: string): Promise<OtpSendResult> {
-    if (process.env.NODE_ENV === 'production') {
-      throw new OtpError('otp_not_available', 'Development OTP is disabled in production');
-    }
-
     const phone = normalizePhone(rawPhone);
     const code = DEV_OTP_WHITELIST[phone];
     if (!code) {
@@ -44,10 +44,6 @@ export class DevWhitelistOtpProvider implements OtpProvider {
   }
 
   async verifyOtp(rawPhone: string, code: string, requestId: string): Promise<boolean> {
-    if (process.env.NODE_ENV === 'production') {
-      return false;
-    }
-
     const phone = normalizePhone(rawPhone);
     const challenge = challenges.get(requestId);
     if (!challenge) return false;

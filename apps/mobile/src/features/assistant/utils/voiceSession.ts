@@ -28,30 +28,71 @@ export function shouldFireSilenceTimeout(
   return now - idleSince >= silenceTimeoutMs;
 }
 
-export type SpeechErrorKind = 'permission' | 'network' | 'no_match' | 'unavailable' | 'unknown';
+export type SpeechErrorKind =
+  | 'permission'
+  | 'network'
+  | 'no_match'
+  | 'busy'
+  | 'unavailable'
+  | 'unknown';
 
+/**
+ * Normalize Voice module errors. Android often sends bare codes ("7") or
+ * "7/No match" — those must not surface as hard failures while listening.
+ */
 export function classifySpeechError(message: string): SpeechErrorKind {
-  const lower = message.toLowerCase();
+  const lower = message.toLowerCase().trim();
+  const codeMatch = lower.match(/(?:^|\/|\s)(\d{1,2})(?:\/|$|\s)/);
+  const code = codeMatch ? Number(codeMatch[1]) : NaN;
+
   if (
     lower.includes('denied') ||
     lower.includes('not authorized') ||
     lower.includes('permission') ||
-    lower.includes('insufficient permissions')
+    lower.includes('insufficient permissions') ||
+    code === 9
   ) {
     return 'permission';
   }
-  if (lower.includes('network')) return 'network';
-  if (lower.includes('no match') || lower.includes('no speech') || lower.includes('speech timeout')) {
+  if (lower.includes('network') || code === 1 || code === 2) {
+    return 'network';
+  }
+  if (
+    lower.includes('no match') ||
+    lower.includes('no speech') ||
+    lower.includes('speech timeout') ||
+    lower.includes('error_no_match') ||
+    lower.includes('error_speech_timeout') ||
+    lower.includes('didn\'t catch') ||
+    lower.includes('did not understand') ||
+    code === 6 ||
+    code === 7
+  ) {
     return 'no_match';
   }
-  if (lower.includes('not available') || lower.includes('recognition service')) {
+  if (
+    lower.includes('busy') ||
+    lower.includes('recognizer_busy') ||
+    lower.includes('client side error') ||
+    lower.includes('error_client') ||
+    code === 5 ||
+    code === 8
+  ) {
+    return 'busy';
+  }
+  if (
+    lower.includes('not available') ||
+    lower.includes('recognition service') ||
+    code === 11
+  ) {
     return 'unavailable';
   }
   return 'unknown';
 }
 
+/** Transient recognizer failures — keep the listening session alive. */
 export function isBenignSpeechError(kind: SpeechErrorKind): boolean {
-  return kind === 'no_match';
+  return kind === 'no_match' || kind === 'busy';
 }
 
 export function speechErrorMessage(kind: SpeechErrorKind): string {
@@ -62,6 +103,8 @@ export function speechErrorMessage(kind: SpeechErrorKind): string {
       return 'Network error. Check your connection and try again.';
     case 'no_match':
       return "Couldn't hear you. Try again.";
+    case 'busy':
+      return 'Voice is busy. Try again in a moment.';
     case 'unavailable':
       return 'Speech recognition is not available on this device.';
     default:

@@ -6,8 +6,8 @@ import type {
 } from 'react-native';
 
 /** Keeps a screen's place when temporary live-search results are cleared. */
-export function useSearchScrollRestoration() {
-  const [searchQuery, setSearchQuery] = useState('');
+export function useSearchScrollRestoration(initialQuery = '') {
+  const [searchQuery, setSearchQuery] = useState(initialQuery);
   const scrollRef = useRef<ScrollView>(null);
   const offsetY = useRef(0);
   const savedOffsetY = useRef(0);

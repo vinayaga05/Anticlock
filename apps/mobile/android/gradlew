@@ -1,6 +1,30 @@
 #!/bin/sh
 
-export PATH="/opt/homebrew/bin:$PATH"
+# Android Studio does not use this script, but CLI builds should always find node.
+# Prefer local.properties node.binary when present; otherwise common install locations.
+APP_ROOT=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+NODE_FROM_PROPS=
+if [ -f "$APP_ROOT/local.properties" ]; then
+  NODE_FROM_PROPS=$(sed -n 's/^node.binary=//p' "$APP_ROOT/local.properties" | tr -d '\r' | tail -n 1)
+fi
+for candidate in \
+  "$NODE_FROM_PROPS" \
+  "$NODE_BINARY" \
+  /opt/homebrew/bin \
+  /usr/local/bin \
+  "$HOME/.local/bin" \
+  "$HOME/.hermes/node/bin"
+do
+  if [ -n "$candidate" ] && [ -x "$candidate/node" ]; then
+    export PATH="$candidate:$PATH"
+    break
+  fi
+  # candidate may already be a full path to the node binary
+  if [ -n "$candidate" ] && [ -x "$candidate" ] && [ "${candidate%/node}" != "$candidate" ]; then
+    export PATH="$(dirname "$candidate"):$PATH"
+    break
+  fi
+done
 
 #
 # Copyright © 2015 the original authors.

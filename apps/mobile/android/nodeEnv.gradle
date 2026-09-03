@@ -1,13 +1,12 @@
 /**
- * Ensure `node` is on PATH for the Gradle daemon / Android Studio.
+ * Resolve an absolute node binary for Android builds.
  *
- * macOS GUI apps (and their Gradle daemons) often only have
- * PATH=/usr/bin:/bin:/usr/sbin:/sbin — so Homebrew / hermes / nvm node
- * is invisible. Libraries like react-native-reanimated and
- * react-native-worklets hardcode commandLine("node", ...) and ignore
- * react.nodeExecutableAndArgs.
+ * Do NOT mutate java.lang.ProcessEnvironment — on JDK 17+ its map uses
+ * Variable/Value keys, and putting raw Strings breaks every later ProcessBuilder
+ * (including Gradle exec) with ClassCastException / "Cannot run program node".
  *
- * Applied from settings.gradle so PATH is fixed before subprojects evaluate.
+ * Applied from settings.gradle. Reanimated/worklets stock assert tasks that
+ * call bare `node` are replaced in root build.gradle with absolute-path checks.
  */
 
 def readLocalProp = { String key ->
@@ -41,39 +40,12 @@ def nodeBinary = nodeCandidates.find { path ->
 }
 
 if (nodeBinary == null) {
-    logger.warn("[Anticlock] Could not locate a node binary; tasks that invoke `node` may fail. Set node.binary in android/local.properties.")
+    logger.warn("[Anticlock] Could not locate a node binary. Set node.binary in android/local.properties.")
     return
 }
 
-def nodeDir = new File(nodeBinary).parentFile.absolutePath
-def currentPath = System.getenv("PATH") ?: ""
-def pathParts = currentPath.split(File.pathSeparator) as List
-if (!pathParts.contains(nodeDir)) {
-    def newPath = nodeDir + File.pathSeparator + currentPath
-    // Mutate the process environment so providers.exec / Exec see `node`.
-    try {
-        def env = System.getenv()
-        def field = env.getClass().getDeclaredField("m")
-        field.setAccessible(true)
-        ((Map<String, String>) field.get(env)).put("PATH", newPath)
-    } catch (Throwable ignored) {
-        // UnmodifiableMap layout differs on some JDKs; ProcessEnvironment below is enough.
-    }
-    try {
-        def pe = Class.forName("java.lang.ProcessEnvironment")
-        for (name in ["theEnvironment", "theCaseInsensitiveEnvironment"]) {
-            try {
-                def f = pe.getDeclaredField(name)
-                f.setAccessible(true)
-                ((Map<String, String>) f.get(null)).put("PATH", newPath)
-            } catch (Throwable ignored) {
-            }
-        }
-    } catch (Throwable ignored) {
-    }
-}
-
-System.setProperty("anticlock.node.binary", nodeBinary)
-gradle.ext.nodeBinary = nodeBinary
-gradle.ext.nodeBinDir = nodeDir
-logger.lifecycle("[Anticlock] Using node at ${nodeBinary}")
+def nodeFile = new File(nodeBinary).canonicalFile
+System.setProperty("anticlock.node.binary", nodeFile.absolutePath)
+gradle.ext.nodeBinary = nodeFile.absolutePath
+gradle.ext.nodeBinDir = nodeFile.parentFile.absolutePath
+logger.lifecycle("[Anticlock] Using node at ${nodeFile.absolutePath}")

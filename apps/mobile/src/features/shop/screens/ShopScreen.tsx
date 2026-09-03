@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import type { ImageSourcePropType } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { AppHeader } from '@/shared/components/AppHeader';
 import { SearchBar } from '@/shared/components/SearchBar';
@@ -21,6 +21,7 @@ import { ProductCard } from '@/features/services/components/ProductCard';
 import { useCartStore } from '@/shared/store/cartStore';
 import { AppIcon } from '@/shared/components/AppIcon';
 import { softFill, treeColors } from '@/shared/theme/colors';
+import type { MainTabParamList } from '@/shared/navigation/types';
 
 const shopCategoryImages: Record<string, ImageSourcePropType> = {
   'ecom.sports': require('../../../shared/assets/categories/shop-sports-3d.png'),
@@ -37,17 +38,34 @@ const shopCategoryImages: Record<string, ImageSourcePropType> = {
 export function ShopScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
+  const route = useRoute<RouteProp<MainTabParamList, 'Shop'>>();
   const { count } = useCartStore();
   const categories = getEcommerceCategories();
-  const [categoryId, setCategoryId] = useState<string | null>(null);
-
-  const products = useMemo(
-    () =>
-      categoryId
-        ? getProductsForCategory(categoryId)
-        : marketplaceProducts.filter(product => !product.isProperty),
-    [categoryId],
+  const [categoryId, setCategoryId] = useState<string | null>(
+    route.params?.categoryId ?? null,
   );
+  const [query, setQuery] = useState(route.params?.q ?? '');
+
+  useEffect(() => {
+    if (route.params?.q !== undefined) setQuery(route.params.q);
+    if (route.params?.categoryId !== undefined) {
+      setCategoryId(route.params.categoryId);
+    }
+  }, [route.params?.q, route.params?.categoryId]);
+
+  const products = useMemo(() => {
+    const base = categoryId
+      ? getProductsForCategory(categoryId)
+      : marketplaceProducts.filter(product => !product.isProperty);
+    const q = query.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter(
+      p =>
+        p.name.toLowerCase().includes(q) ||
+        p.seller?.toLowerCase().includes(q) ||
+        p.description?.toLowerCase().includes(q),
+    );
+  }, [categoryId, query]);
 
   const selectedName =
     categories.find(c => c.id === categoryId)?.name ?? 'All products';
@@ -55,7 +73,11 @@ export function ShopScreen() {
   return (
     <ScreenContainer scrollable>
       <AppHeader title="Shop" />
-      <SearchBar placeholder="Search products" />
+      <SearchBar
+        placeholder="Search products"
+        value={query}
+        onChangeText={setQuery}
+      />
 
       <Card
         tint={softFill(theme.colors.ecommerce, 0.12)}

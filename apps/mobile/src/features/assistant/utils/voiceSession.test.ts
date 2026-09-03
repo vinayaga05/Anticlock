@@ -3,6 +3,7 @@ import {
   classifySpeechError,
   commitSegment,
   formatTranscript,
+  isBenignSpeechError,
   shouldFireSilenceTimeout,
   speechErrorMessage,
 } from '../utils/voiceSession';
@@ -21,20 +22,20 @@ describe('voiceSession helpers', () => {
   it('fires silence timeout after grace when no speech heard', () => {
     const startedAt = 1000;
     expect(
-      shouldFireSilenceTimeout(1800, null, startedAt, 2000, 800, false),
+      shouldFireSilenceTimeout(1800, null, startedAt, 2800, 2200, false),
     ).toBe(false);
     expect(
-      shouldFireSilenceTimeout(3801, null, startedAt, 2000, 800, false),
+      shouldFireSilenceTimeout(6001, null, startedAt, 2800, 2200, false),
     ).toBe(true);
   });
 
   it('fires silence timeout after last speech activity', () => {
     const lastActivity = 5000;
     expect(
-      shouldFireSilenceTimeout(6500, lastActivity, 1000, 2000, 800, true),
+      shouldFireSilenceTimeout(6500, lastActivity, 1000, 2800, 2200, true),
     ).toBe(false);
     expect(
-      shouldFireSilenceTimeout(7001, lastActivity, 1000, 2000, 800, true),
+      shouldFireSilenceTimeout(7801, lastActivity, 1000, 2800, 2200, true),
     ).toBe(true);
   });
 
@@ -43,6 +44,16 @@ describe('voiceSession helpers', () => {
       'permission',
     );
     expect(speechErrorMessage('permission')).toMatch(/Microphone access/);
+  });
+
+  it('treats android numeric no-match and busy codes as restartable', () => {
+    expect(classifySpeechError('7')).toBe('no_match');
+    expect(classifySpeechError('7/No match')).toBe('no_match');
+    expect(classifySpeechError('6')).toBe('no_match');
+    expect(classifySpeechError('5')).toBe('busy');
+    expect(classifySpeechError('8/Recognizer busy')).toBe('busy');
+    expect(isBenignSpeechError('no_match')).toBe(true);
+    expect(isBenignSpeechError('busy')).toBe(true);
   });
 });
 

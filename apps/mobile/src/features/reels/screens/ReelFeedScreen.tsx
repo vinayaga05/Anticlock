@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   Image,
@@ -11,7 +11,7 @@ import {
   View,
   ViewToken,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { VideoPlayer } from '@/features/video/components/VideoPlayer';
@@ -28,6 +28,7 @@ import {
   recordReelAnalyticsEvent,
 } from '@/shared/api/reelAnalytics';
 import { useTabBarBottomInset } from '@/shared/navigation/tabBarInset';
+import type { MainTabParamList } from '@/shared/navigation/types';
 
 const DEFAULT_AUTHOR_AVATAR =
   'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&h=200&q=80';
@@ -152,6 +153,7 @@ function VerticalFade({
 export function ReelFeedScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
+  const route = useRoute<RouteProp<MainTabParamList, 'PlayFeed'>>();
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const addToCart = useCartStore(s => s.add);
@@ -163,6 +165,7 @@ export function ReelFeedScreen() {
   const [viewportHeight, setViewportHeight] = useState(windowHeight);
   const viewedReelIds = useRef(new Set<string>());
   const completedReelIds = useRef(new Set<string>());
+  const listRef = useRef<FlatList<ReelItem>>(null);
   const analyticsSessionId = useRef<string | null>(null);
   if (!analyticsSessionId.current) {
     analyticsSessionId.current = createAnalyticsEventId();
@@ -177,7 +180,29 @@ export function ReelFeedScreen() {
   // `useReelsQuery` supplies demo data only when the API is deliberately
   // disabled for local development. Do not use the bundled/R2 demo list as a
   // production fallback: the public feed endpoint is the publication gate.
-  const reels = queriedReels ?? [];
+  const feedReels = queriedReels ?? [];
+  const genieQ = route.params?.q?.trim().toLowerCase();
+  const reels = useMemo(() => {
+    if (!genieQ) return feedReels;
+    return feedReels.filter(
+      r =>
+        r.title?.toLowerCase().includes(genieQ) ||
+        r.caption?.toLowerCase().includes(genieQ) ||
+        r.author?.toLowerCase().includes(genieQ),
+    );
+  }, [feedReels, genieQ]);
+
+  useEffect(() => {
+    const reelId = route.params?.reelId;
+    if (!reelId || !reels.length) return;
+    const idx = reels.findIndex(r => r.id === reelId);
+    if (idx >= 0) {
+      setActiveIndex(idx);
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToIndex({ index: idx, animated: false });
+      });
+    }
+  }, [route.params?.reelId, reels]);
 
   const bottomSafe = useTabBarBottomInset(20);
   const topFadeH = insets.top + 96;
@@ -456,6 +481,7 @@ export function ReelFeedScreen() {
   return (
     <View style={styles.root} onLayout={onRootLayout}>
       <FlatList
+        ref={listRef}
         data={reels}
         keyExtractor={item => item.id}
         renderItem={renderItem}

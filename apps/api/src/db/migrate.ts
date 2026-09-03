@@ -561,6 +561,56 @@ async function migrate() {
       ON assistant_analytics_events (mobile_user_id, created_at DESC)
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS user_behavior_events (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      type text NOT NULL,
+      entity_type text,
+      entity_id text,
+      metadata jsonb,
+      idempotency_key text,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS user_behavior_events_idempotency_uidx
+      ON user_behavior_events (mobile_user_id, idempotency_key)
+      WHERE idempotency_key IS NOT NULL
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS user_behavior_events_user_created_idx
+      ON user_behavior_events (mobile_user_id, created_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS user_preference_settings (
+      mobile_user_id uuid PRIMARY KEY REFERENCES mobile_users(id) ON DELETE CASCADE,
+      personalization_enabled boolean NOT NULL DEFAULT true,
+      explicit_prefs jsonb NOT NULL DEFAULT '{}'::jsonb,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS user_preference_scores (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      entity_type text NOT NULL,
+      entity_id text NOT NULL,
+      score double precision NOT NULL DEFAULT 0,
+      confidence double precision NOT NULL DEFAULT 0,
+      evidence_count integer NOT NULL DEFAULT 0,
+      last_interaction_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (mobile_user_id, entity_type, entity_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS user_preference_scores_user_score_idx
+      ON user_preference_scores (mobile_user_id, score DESC)
+  `;
+
   // Full-text search for assistant discovery
   await sql`
     ALTER TABLE mobile_users ADD COLUMN IF NOT EXISTS search_vector tsvector

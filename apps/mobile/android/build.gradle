@@ -33,6 +33,86 @@ subprojects { subproject ->
 }
 
 /**
+ * reanimated / worklets hardcode commandLine("node", ...). Android Studio's
+ * Gradle daemon often has no Homebrew on PATH, so the stock assert tasks fail
+ * with "Cannot run program node". Always disable them and re-run checks with
+ * an absolute node path from nodeEnv.gradle / local.properties.
+ */
+gradle.projectsEvaluated {
+    def nodeBinary = gradle.ext.has("nodeBinary")
+        ? gradle.ext.nodeBinary as String
+        : System.getProperty("anticlock.node.binary")
+    if (!nodeBinary || !new File(nodeBinary).canExecute()) {
+        def fallbacks = [
+            "/opt/homebrew/bin/node",
+            "/usr/local/bin/node",
+            "${System.getProperty('user.home')}/.local/bin/node",
+        ]
+        nodeBinary = fallbacks.find { new File(it).canExecute() }
+    }
+
+    rootProject.subprojects.each { sub ->
+        if (!(sub.name in ["react-native-reanimated", "react-native-worklets"])) {
+            return
+        }
+
+        sub.tasks.matching {
+            it.name in ["assertMinimalReactNativeVersionTask", "assertWorkletsVersionTask"]
+        }.configureEach {
+            enabled = false
+        }
+
+        if (!nodeBinary) {
+            logger.warn("[Anticlock] No node binary for :${sub.name} asserts; stock tasks disabled")
+            return
+        }
+
+        def node = nodeBinary
+        def scriptsDir = new File(sub.projectDir, "../scripts")
+
+        def rnAssert = sub.tasks.register("assertMinimalReactNativeVersionWithNode") {
+            onlyIf { new File(scriptsDir, "validate-react-native-version.js").exists() }
+            doLast {
+                def rnDir = rootProject.ext.has("REACT_NATIVE_NODE_MODULES_DIR")
+                    ? rootProject.ext.REACT_NATIVE_NODE_MODULES_DIR as File
+                    : new File(rootProject.projectDir, "../../../node_modules/react-native")
+                def propsFile = new File(rnDir, "ReactAndroid/gradle.properties")
+                def rnVersion = "0.0.0"
+                if (propsFile.exists()) {
+                    def props = new Properties()
+                    propsFile.withInputStream { props.load(it) }
+                    rnVersion = props.getProperty("VERSION_NAME", rnVersion)
+                }
+                sub.exec {
+                    workingDir sub.projectDir
+                    commandLine node, "./../scripts/validate-react-native-version.js", rnVersion
+                }
+            }
+        }
+
+        def workletsAssert = sub.tasks.register("assertWorkletsVersionWithNode") {
+            onlyIf {
+                sub.name == "react-native-reanimated" &&
+                    new File(scriptsDir, "validate-worklets-build.js").exists()
+            }
+            doLast {
+                sub.exec {
+                    workingDir sub.projectDir
+                    commandLine node, "./../scripts/validate-worklets-build.js"
+                }
+            }
+        }
+
+        sub.tasks.named("preBuild").configure {
+            dependsOn(rnAssert)
+            if (sub.name == "react-native-reanimated") {
+                dependsOn(workletsAssert)
+            }
+        }
+    }
+}
+
+/**
  * AGP prefab bug with react-native-nitro-modules:
  * MMKV's ninja looks for `NitroModules.so` under cxx/refs, but the prefab
  * package only ships `libNitroModules.so` and the copy into refs is incomplete.

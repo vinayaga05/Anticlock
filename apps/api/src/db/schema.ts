@@ -8,6 +8,9 @@ import {
   primaryKey,
   boolean,
   unique,
+  uniqueIndex,
+  index,
+  doublePrecision,
 } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
@@ -540,3 +543,80 @@ export const assistantAnalyticsEvents = pgTable("assistant_analytics_events", {
     .notNull()
     .defaultNow(),
 });
+
+/** Raw per-user behavior events for Genie personalization (isolated by user). */
+export const userBehaviorEvents = pgTable(
+  "user_behavior_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    entityType: text("entity_type"),
+    entityId: text("entity_id"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    idempotencyKey: text("idempotency_key"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  table => [
+    index("user_behavior_events_idempotency_idx").on(
+      table.mobileUserId,
+      table.idempotencyKey,
+    ),
+    index("user_behavior_events_user_created_idx").on(
+      table.mobileUserId,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const userPreferenceSettings = pgTable("user_preference_settings", {
+  mobileUserId: uuid("mobile_user_id")
+    .primaryKey()
+    .references(() => mobileUsers.id, { onDelete: "cascade" }),
+  personalizationEnabled: boolean("personalization_enabled")
+    .notNull()
+    .default(true),
+  explicitPrefs: jsonb("explicit_prefs")
+    .$type<Record<string, unknown>>()
+    .notNull()
+    .default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const userPreferenceScores = pgTable(
+  "user_preference_scores",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    score: doublePrecision("score").notNull().default(0),
+    confidence: doublePrecision("confidence").notNull().default(0),
+    evidenceCount: integer("evidence_count").notNull().default(0),
+    lastInteractionAt: timestamp("last_interaction_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  table => [
+    uniqueIndex("user_preference_scores_user_entity_uidx").on(
+      table.mobileUserId,
+      table.entityType,
+      table.entityId,
+    ),
+    index("user_preference_scores_user_score_idx").on(
+      table.mobileUserId,
+      table.score,
+    ),
+  ],
+);

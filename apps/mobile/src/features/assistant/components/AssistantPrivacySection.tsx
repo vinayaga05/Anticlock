@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Share, StyleSheet, Switch, Text, View } from 'react-native';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { PressableScale } from '@/shared/components/PressableScale';
@@ -7,6 +7,8 @@ import {
   useDeleteAllAssistantHistory,
   useExportAssistantData,
 } from '@/features/assistant/hooks/assistantHooks';
+import { apiRequest } from '@/shared/api/client';
+import { isApiEnabled } from '@/shared/api/config';
 
 export function AssistantPrivacySection() {
   const theme = useTheme();
@@ -17,11 +19,21 @@ export function AssistantPrivacySection() {
   const deleteAll = useDeleteAllAssistantHistory();
   const exportData = useExportAssistantData();
   const [busy, setBusy] = useState(false);
+  const [personalization, setPersonalization] = useState(true);
+
+  useEffect(() => {
+    if (!isApiEnabled) return;
+    void apiRequest<{ data: { personalizationEnabled: boolean } }>(
+      '/v1/assistant/preferences',
+    )
+      .then(res => setPersonalization(res.data.personalizationEnabled !== false))
+      .catch(() => undefined);
+  }, []);
 
   const confirmDeleteAll = () => {
     Alert.alert(
       'Delete Genie history',
-      'This permanently deletes all Genie conversations.',
+      'This permanently deletes all Genie conversations and preference data.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -56,6 +68,44 @@ export function AssistantPrivacySection() {
     }
   };
 
+  const togglePersonalization = async (next: boolean) => {
+    setPersonalization(next);
+    if (!isApiEnabled) return;
+    try {
+      await apiRequest('/v1/assistant/preferences/personalization', {
+        method: 'PUT',
+        body: JSON.stringify({ enabled: next }),
+      });
+    } catch {
+      setPersonalization(!next);
+      Alert.alert('Update failed', 'Could not update personalization setting.');
+    }
+  };
+
+  const resetPreferences = () => {
+    Alert.alert(
+      'Reset Genie preferences',
+      'Clears inferred interests. Conversation history is kept.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          onPress: async () => {
+            if (!isApiEnabled) return;
+            setBusy(true);
+            try {
+              await apiRequest('/v1/assistant/preferences/reset', { method: 'POST' });
+            } catch {
+              Alert.alert('Reset failed', 'Could not reset preferences.');
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <View style={styles.section}>
       <Text style={[styles.heading, { color: theme.colors.textPrimary }]}>
@@ -67,6 +117,12 @@ export function AssistantPrivacySection() {
         </Text>
         <Switch value={enabled} onValueChange={setEnabled} />
       </View>
+      <View style={[styles.row, { borderColor: theme.colors.borderSoft }]}>
+        <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
+          Personalization
+        </Text>
+        <Switch value={personalization} onValueChange={togglePersonalization} />
+      </View>
       <PressableScale
         disabled={!enabled || busy}
         onPress={() => openAssistant()}
@@ -77,7 +133,12 @@ export function AssistantPrivacySection() {
       </PressableScale>
       <PressableScale disabled={busy} onPress={handleExport} style={styles.action}>
         <Text style={[styles.actionText, { color: theme.colors.textPrimary }]}>
-          Export conversation data
+          Export conversation & preference data
+        </Text>
+      </PressableScale>
+      <PressableScale disabled={busy} onPress={resetPreferences} style={styles.action}>
+        <Text style={[styles.actionText, { color: theme.colors.textPrimary }]}>
+          Reset preferences
         </Text>
       </PressableScale>
       <PressableScale disabled={busy} onPress={confirmDeleteAll} style={styles.action}>

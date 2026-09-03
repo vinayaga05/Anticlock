@@ -1,0 +1,10 @@
+---
+description: Do not run tests unless the user explicitly asks
+alwaysApply: true
+---
+
+# Testing
+
+- Do not run tests, test suites, or test watchers by default.
+- Do not run `npm test`, `yarn test`, `pnpm test`, `jest`, `vitest`, `pytest`, or similar as part of verifying changes.
+- Only run tests when the user explicitly asks.

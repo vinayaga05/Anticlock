@@ -34,11 +34,12 @@ export function ServiceCategoryScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<RootStackParamList, 'ServiceCategory'>>();
-  const { categoryId, treeId } = route.params;
+  const { categoryId, treeId, q: initialQ, areaLabel, sort: initialSort } =
+    route.params;
   const category = getCategory(categoryId);
-  const [sort, setSort] = useState('near');
+  const [sort, setSort] = useState(initialSort ?? 'near');
   const { searchQuery, onChangeText, scrollRef, onScroll } =
-    useSearchScrollRestoration();
+    useSearchScrollRestoration(initialQ ?? '');
   const treeKey = (
     treeId in treeColors ? treeId : category?.treeId ?? 'health'
   ) as TreeColorId;
@@ -205,6 +206,15 @@ export function ServiceCategoryScreen() {
       >
         {category.description}
       </Text>
+      {areaLabel ? (
+        <Text
+          style={[
+            theme.typography.caption,
+            { color: theme.colors.primary, marginBottom: 4 },
+          ]}>
+          Showing results for {areaLabel}
+        </Text>
+      ) : null}
       <SearchBar
         placeholder={`Search ${category.name}`}
         value={searchQuery}

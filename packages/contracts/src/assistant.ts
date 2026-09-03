@@ -44,11 +44,76 @@ export const AssistantToolCallSchema = z.object({
 });
 export type AssistantToolCall = z.infer<typeof AssistantToolCallSchema>;
 
+export const GenieActionDomainSchema = z.enum([
+  'services',
+  'clips',
+  'flash',
+  'needs',
+  'community',
+  'knock',
+  'shop',
+]);
+export type GenieActionDomain = z.infer<typeof GenieActionDomainSchema>;
+
+export const GenieActionOutcomeSchema = z.enum([
+  'success',
+  'no_results',
+  'canceled',
+  'failed',
+]);
+export type GenieActionOutcome = z.infer<typeof GenieActionOutcomeSchema>;
+
+/** Versioned structured actions — validated on server and client. */
+export const GenieActionSchema = z.discriminatedUnion('type', [
+  z.object({
+    id: z.string().min(1),
+    version: z.literal(1),
+    type: z.literal('navigate'),
+    target: z.object({
+      route: z.string().min(1),
+      params: z.record(z.unknown()).default({}),
+    }),
+  }),
+  z.object({
+    id: z.string().min(1),
+    version: z.literal(1),
+    type: z.literal('open_search_results'),
+    domain: GenieActionDomainSchema,
+    filters: z.record(z.unknown()).default({}),
+  }),
+  z.object({
+    id: z.string().min(1),
+    version: z.literal(1),
+    type: z.literal('request_location'),
+    purpose: z.string().min(1),
+  }),
+  z.object({
+    id: z.string().min(1),
+    version: z.literal(1),
+    type: z.literal('confirm_mutation'),
+    operation: z.string().min(1),
+    preview: z.record(z.unknown()).default({}),
+  }),
+]);
+export type GenieAction = z.infer<typeof GenieActionSchema>;
+
 export const AssistantMessageRequestSchema = z.object({
   message: z.string().min(1).max(4000),
   conversationId: z.string().uuid().optional(),
   currentScreen: z.string().optional(),
   previousResponseId: z.string().optional(),
+  /** Client-generated id so stale stream events can be ignored. */
+  clientRequestId: z.string().uuid().optional(),
+  /** Optional area label from an explicit user-typed location (never silent GPS). */
+  areaLabel: z.string().max(200).optional(),
+  /** Soft location hint after permissioned GPS — city/area only preferred. */
+  locationHint: z
+    .object({
+      label: z.string().max(200).optional(),
+      lat: z.number().optional(),
+      lng: z.number().optional(),
+    })
+    .optional(),
 });
 export type AssistantMessageRequest = z.infer<
   typeof AssistantMessageRequestSchema
@@ -77,6 +142,30 @@ export const AssistantMessageSchema = z.object({
 });
 export type AssistantMessage = z.infer<typeof AssistantMessageSchema>;
 
+export const UserBehaviorEventTypeSchema = z.enum([
+  'search_submitted',
+  'search_result_opened',
+  'provider_viewed',
+  'category_viewed',
+  'content_viewed',
+  'content_saved',
+  'item_hidden',
+  'genie_action_executed',
+  'filter_applied',
+  'booking_intent',
+  'cart_item_added',
+]);
+export type UserBehaviorEventType = z.infer<typeof UserBehaviorEventTypeSchema>;
+
+export const TrackUserBehaviorEventSchema = z.object({
+  type: UserBehaviorEventTypeSchema,
+  entityType: z.string().max(64).optional(),
+  entityId: z.string().max(128).optional(),
+  metadata: z.record(z.unknown()).optional(),
+  idempotencyKey: z.string().min(8).max(128).optional(),
+});
+export type TrackUserBehaviorEvent = z.infer<typeof TrackUserBehaviorEventSchema>;
+
 export const AssistantAnalyticsEventTypeSchema = z.enum([
   'query_submitted',
   'tool_called',
@@ -85,6 +174,11 @@ export const AssistantAnalyticsEventTypeSchema = z.enum([
   'conversation_resolved',
   'unresolved_intent',
   'privacy_action',
+  'provider_call',
+  'action_executed',
+  'action_failed',
+  'stream_failed',
+  'no_results',
 ]);
 export type AssistantAnalyticsEventType = z.infer<
   typeof AssistantAnalyticsEventTypeSchema
@@ -124,7 +218,13 @@ export const AssistantAnalyticsEventSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('privacy_action'),
-    action: z.enum(['history_deleted', 'conversation_cleared', 'data_exported']),
+    action: z.enum([
+      'history_deleted',
+      'conversation_cleared',
+      'data_exported',
+      'preferences_reset',
+      'personalization_opt_out',
+    ]),
   }),
   z.object({
     type: z.literal('provider_call'),
@@ -151,6 +251,27 @@ export const AssistantAnalyticsEventSchema = z.discriminatedUnion('type', [
       ])
       .optional(),
   }),
+  z.object({
+    type: z.literal('action_executed'),
+    actionType: z.string(),
+    actionId: z.string(),
+    latencyMs: z.number().optional(),
+  }),
+  z.object({
+    type: z.literal('action_failed'),
+    actionType: z.string(),
+    actionId: z.string(),
+    code: z.string(),
+  }),
+  z.object({
+    type: z.literal('stream_failed'),
+    code: z.string(),
+  }),
+  z.object({
+    type: z.literal('no_results'),
+    domain: GenieActionDomainSchema.or(z.string()),
+    query: z.string().optional(),
+  }),
 ]);
 export type AssistantAnalyticsEvent = z.infer<
   typeof AssistantAnalyticsEventSchema
@@ -175,6 +296,16 @@ export const AssistantStreamEventSchema = z.discriminatedUnion('type', [
     params: z.record(z.unknown()),
   }),
   z.object({
+    type: z.literal('action'),
+    action: GenieActionSchema,
+  }),
+  z.object({
+    type: z.literal('result'),
+    actionId: z.string(),
+    outcome: GenieActionOutcomeSchema,
+    message: z.string().optional(),
+  }),
+  z.object({
     type: z.literal('quick_actions'),
     actions: z.array(z.string()),
   }),
@@ -183,6 +314,7 @@ export const AssistantStreamEventSchema = z.discriminatedUnion('type', [
     conversationId: z.string().uuid(),
     responseId: z.string().optional(),
     message: z.string(),
+    clientRequestId: z.string().uuid().optional(),
   }),
   z.object({ type: z.literal('error'), code: z.string(), message: z.string() }),
 ]);

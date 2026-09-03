@@ -40,23 +40,29 @@ function buildInstructions(
     return `- ${c.route}${screen}: ${c.description} (aliases: ${c.aliases.join(', ')})`;
   }).join('\n');
 
-  return `You are Genie, a navigation-first helper inside the Anticlock lifestyle services app.
+  return `You are Genie, a warm helpful friend inside the Anticlock lifestyle services app.
 Persona version: ${personaVersion}
 Current screen: ${currentScreen ?? 'unknown'}
 Recent actions: ${recentActions.join(', ') || 'none'}
 User preferences: ${JSON.stringify(preferences)}
 
+Tone: casual, clear, brief (1–2 sentences). Sound like a helpful friend, not a robot.
+Good: "Sure — I'll show plumbers near you." / "Opening Shop for home workout gear."
+Bad: "Intent identified." / "Navigation action executed."
+
 Available screens:
 ${catalogSummary}
 
-Rules:
-- Prefer tool calls over long explanations.
-- For tab screens (Shop, Flash, Needs, Community, Knock, PlayFeed), always call navigate_to_screen with route "Main" and params.screen set to that tab name.
-- When the user says "open the first/second/third one", use open_content with the matching item from recent results context.
-- Keep replies concise (1-2 sentences).
-- If a request is ambiguous, ask one clarifying question.
-- Never invent routes outside the catalog.
-- Never claim navigation or content actions succeeded unless a tool returns success.`;
+How to act:
+- Prefer tools over long explanations. When the user has an actionable request, call a tool.
+- Service discovery (plumbers, doctors, trainers, yoga): use resolve_service_category with their query. Set nearMe=true only if they said near me/nearby. Pass areaLabel when they named a city/area (e.g. Chennai, Indiranagar).
+- Shop products: use open_shop_search with query.
+- Clips/fitness reels: use search_reels or get_feed.
+- Tab screens (Shop, Flash, Needs, Community, Knock, PlayFeed): navigate_to_screen with route "Main" and params.screen.
+- Community/Flash/Knock deep search is limited — navigate to the tab and say you'll open it so they can browse.
+- Never invent routes, category IDs, prices, distances, or availability. Only claim what tools return.
+- Ask at most one clarifying question when the missing detail changes the result.
+- When the user says "open the first/second/third", use open_content with recent results.`;
 }
 
 async function* streamTextChunks(text: string): AsyncGenerator<AssistantStreamEvent> {
@@ -190,6 +196,7 @@ export class AssistantService {
     let finalText = '';
     let turns = 0;
     let mutatingToolsThisTurn = 0;
+    toolExecutionService.resetActionDedupe();
 
     while (turns < this.maxTurns) {
       turns += 1;
@@ -265,6 +272,10 @@ export class AssistantService {
           conversationId,
           body.currentScreen,
           recentResults,
+          {
+            areaLabel: body.areaLabel,
+            locationHint: body.locationHint,
+          },
         );
 
         for (const evt of events) yield evt;
@@ -298,6 +309,20 @@ export class AssistantService {
             type: 'navigation_completed',
             route: result.navigation.route,
             fromScreen: body.currentScreen,
+          });
+        }
+
+        if (result.ok && result.action) {
+          await assistantRepository.trackAnalytics(userId, conversationId, {
+            type: 'action_executed',
+            actionType: result.action.type,
+            actionId: result.action.id,
+          });
+        } else if (result.ok && result.resultOutcome === 'no_results') {
+          await assistantRepository.trackAnalytics(userId, conversationId, {
+            type: 'no_results',
+            domain: 'services',
+            query: body.message.slice(0, 120),
           });
         }
       }
@@ -349,6 +374,7 @@ export class AssistantService {
       conversationId,
       responseId: previousResponseId,
       message: finalText,
+      clientRequestId: body.clientRequestId,
     };
   }
 

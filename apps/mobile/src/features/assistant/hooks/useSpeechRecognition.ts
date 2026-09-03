@@ -105,7 +105,8 @@ function getVoiceModule(): VoiceModule | null {
 function androidStartOptions(): AndroidStartOptions {
   return {
     EXTRA_PARTIAL_RESULTS: true,
-    EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: 3000,
+    EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS: 1500,
+    EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: 2500,
     EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS: 2000,
     REQUEST_PERMISSIONS_AUTO: true,
   };
@@ -188,8 +189,8 @@ export function useSpeechRecognition(options?: {
     }
   }, []);
 
-  const markActivity = useCallback(() => {
-    hasHeardSpeechRef.current = true;
+  const markActivity = useCallback((heardSpeech = false) => {
+    if (heardSpeech) hasHeardSpeechRef.current = true;
     lastActivityAtRef.current = Date.now();
   }, []);
 
@@ -289,19 +290,19 @@ export function useSpeechRecognition(options?: {
       onPartial: text => {
         if (!listeningIntentRef.current) return;
         segmentRef.current = text;
-        markActivity();
+        markActivity(Boolean(text.trim()));
         publishTranscript(committedRef.current, segmentRef.current);
       },
       onResult: text => {
         if (!listeningIntentRef.current) return;
         segmentRef.current = text;
-        markActivity();
+        markActivity(Boolean(text.trim()));
         publishTranscript(committedRef.current, segmentRef.current);
       },
       onFinalSegment: () => {
         if (!listeningIntentRef.current) return;
         commitCurrentSegment();
-        markActivity();
+        markActivity(true);
       },
       onEnd: () => {
         if (!listeningIntentRef.current) return;
@@ -314,12 +315,21 @@ export function useSpeechRecognition(options?: {
       },
       onVolume: () => {
         if (!listeningIntentRef.current) return;
-        markActivity();
+        // Volume alone is not speech — only refresh idle clock after we've heard words.
+        if (hasHeardSpeechRef.current) markActivity(false);
       },
       onError: message => {
         if (!listeningIntentRef.current) return;
         const kind = classifySpeechError(message);
-        if (isBenignSpeechError(kind)) {
+        const startedAt = sessionStartedAtRef.current ?? Date.now();
+        const withinWarmup = Date.now() - startedAt < VOICE_START_GRACE_MS;
+        // Early unknown/client blips while the engine warms up are common on Android
+        // when the user speaks immediately — keep listening instead of failing.
+        const softFail =
+          isBenignSpeechError(kind) ||
+          (withinWarmup && (kind === 'unknown' || kind === 'busy' || kind === 'no_match'));
+
+        if (softFail) {
           clearRestartTimer();
           restartTimerRef.current = setTimeout(() => {
             if (!listeningIntentRef.current) return;

@@ -7,6 +7,9 @@ import {
   getSavedContent,
   navigateToScreen,
   openContent,
+  openShopSearch,
+  requestUserLocation,
+  resolveServiceCategory,
   searchPosts,
   searchReels,
   searchUsers,
@@ -41,16 +44,40 @@ const TOOL_HANDLERS: Record<ApprovedToolName, ToolHandler> = {
   get_saved_content: (args, ctx) => getSavedContent(args as Record<string, never>, ctx),
   open_content: (args, ctx) =>
     openContent(
-      args as { contentType: 'reel' | 'user' | 'post'; contentId: string },
+      args as {
+        contentType: 'reel' | 'user' | 'post' | 'catalog';
+        contentId: string;
+        treeId?: string;
+      },
       ctx,
     ),
   get_product_help: (args, ctx) =>
     getProductHelp(args as { query: string; limit?: number }, ctx),
+  resolve_service_category: (args, ctx) =>
+    resolveServiceCategory(
+      args as {
+        query: string;
+        areaLabel?: string;
+        nearMe?: boolean;
+        openResults?: boolean;
+      },
+      ctx,
+    ),
+  open_shop_search: (args, ctx) =>
+    openShopSearch(args as { query?: string; categoryId?: string }, ctx),
+  request_user_location: (args, ctx) =>
+    requestUserLocation(args as { purpose: string }, ctx),
 };
 
 export { APPROVED_TOOL_NAMES, ASSISTANT_TOOLS_CHAT, ASSISTANT_TOOLS_RESPONSES } from './tools/definitions.js';
 
 export class ToolExecutionService {
+  private emittedActionIds = new Set<string>();
+
+  resetActionDedupe() {
+    this.emittedActionIds.clear();
+  }
+
   async execute(
     name: string,
     args: Record<string, unknown>,
@@ -58,6 +85,10 @@ export class ToolExecutionService {
     conversationId: string,
     currentScreen: string | undefined,
     recentResults: ToolContext['recentResults'],
+    extras?: {
+      areaLabel?: string;
+      locationHint?: ToolContext['locationHint'];
+    },
   ): Promise<{ result: ToolResult; events: AssistantStreamEvent[] }> {
     const normalized = normalizeToolName(name);
     if (!normalized || !TOOL_HANDLERS[normalized]) {
@@ -84,6 +115,8 @@ export class ToolExecutionService {
       conversationId,
       currentScreen,
       recentResults,
+      areaLabel: extras?.areaLabel,
+      locationHint: extras?.locationHint,
     };
 
     const started = Date.now();
@@ -119,6 +152,26 @@ export class ToolExecutionService {
         });
       }
 
+      if (result.ok && result.action) {
+        if (!this.emittedActionIds.has(result.action.id)) {
+          this.emittedActionIds.add(result.action.id);
+          events.push({ type: 'action', action: result.action });
+          events.push({
+            type: 'result',
+            actionId: result.action.id,
+            outcome: result.resultOutcome ?? 'success',
+            message: result.resultMessage,
+          });
+        }
+      } else if (result.ok && result.resultOutcome === 'no_results') {
+        events.push({
+          type: 'result',
+          actionId: `no-results-${started}`,
+          outcome: 'no_results',
+          message: result.resultMessage,
+        });
+      }
+
       void started;
       return { result, events };
     } catch (err) {
@@ -151,6 +204,10 @@ export class ToolExecutionService {
     if (name === 'get_saved_content') return 'Opening your saved content...';
     if (name === 'get_feed') return 'Loading the latest feed...';
     if (name === 'get_recently_viewed') return 'Loading recently viewed reels...';
+    if (name === 'resolve_service_category')
+      return `Finding ${String(args.query ?? 'services')} for you...`;
+    if (name === 'open_shop_search') return 'Opening Shop...';
+    if (name === 'request_user_location') return 'Checking location access...';
     return `Running ${name}...`;
   }
 }

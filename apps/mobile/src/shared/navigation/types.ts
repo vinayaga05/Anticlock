@@ -2,11 +2,11 @@ export type KnockTab = 'notifications' | 'bookings' | 'chat';
 
 export type MainTabParamList = {
   Flash: undefined;
-  PlayFeed: undefined;
+  PlayFeed: { reelId?: string; q?: string } | undefined;
   Needs: undefined;
   Community: undefined;
   Knock: { initialTab?: KnockTab } | undefined;
-  Shop: undefined;
+  Shop: { q?: string; categoryId?: string } | undefined;
 };
 
 export type RootStackParamList = {
@@ -42,8 +42,14 @@ export type RootStackParamList = {
   Communities: undefined;
   Inbox: undefined;
   Thread: { conversationId: string };
-  ServiceTree: { treeId: string };
-  ServiceCategory: { treeId: string; categoryId: string };
+  ServiceTree: { treeId: string; q?: string };
+  ServiceCategory: {
+    treeId: string;
+    categoryId: string;
+    q?: string;
+    areaLabel?: string;
+    sort?: string;
+  };
   UniversalDetail: {
     entityType: 'provider' | 'event' | 'course' | 'product';
     entityId: string;

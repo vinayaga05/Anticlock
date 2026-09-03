@@ -106,7 +106,18 @@ export function RootNavigator() {
       onStateChange={state => {
         if (!state) return;
         const route = state.routes[state.index];
-        const screenName = route?.name ?? null;
+        if (!route) return;
+        // Prefer nested tab name when on Main (Shop, PlayFeed, …)
+        let screenName: string | null = route.name ?? null;
+        const nested = route.state as
+          | { index: number; routes: { name: string }[] }
+          | undefined;
+        if (
+          route.name === 'Main' &&
+          nested?.routes?.[nested.index]?.name
+        ) {
+          screenName = nested.routes[nested.index].name;
+        }
         useAssistantStore.getState().setCurrentScreen(screenName);
       }}>
       <Stack.Navigator

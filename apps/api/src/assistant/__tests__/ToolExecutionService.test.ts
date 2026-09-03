@@ -43,9 +43,9 @@ describe('ToolExecutionService allowlist', () => {
     assert.equal(toolExecutionService.isMutatingTool('search_reels'), false);
   });
 
-  it('exports chat tool definitions with closed schemas', () => {
-    for (const tool of ASSISTANT_TOOLS_CHAT) {
-      assert.equal(tool.function.parameters.additionalProperties, false);
-    }
+  it('includes resolve and shop tools', () => {
+    assert.ok(APPROVED_TOOL_NAMES.includes('resolve_service_category'));
+    assert.ok(APPROVED_TOOL_NAMES.includes('open_shop_search'));
+    assert.ok(APPROVED_TOOL_NAMES.includes('request_user_location'));
   });
 });

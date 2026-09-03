@@ -3,8 +3,10 @@ import { streamSSE } from 'hono/streaming';
 import {
   AssistantMessageRequestSchema,
   TrackAssistantAnalyticsRequestSchema,
+  TrackUserBehaviorEventSchema,
 } from '@anticlock/contracts';
 import { assistantService } from '../assistant/AssistantService.js';
+import { preferenceService } from '../assistant/PreferenceService.js';
 import { privacyService } from '../assistant/PrivacyService.js';
 import { requireAuth, type AppEnv } from '../middleware/auth.js';
 
@@ -162,6 +164,58 @@ assistantRoutes.post('/analytics', async c => {
       body.conversationId,
       body.event,
     );
+    return c.json({ ok: true });
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
+assistantRoutes.post('/behavior-events', async c => {
+  try {
+    const auth = c.get('auth');
+    if (auth.kind !== 'mobile') {
+      return c.json({ error: { code: 'forbidden', message: 'Mobile session required' } }, 403);
+    }
+    const body = TrackUserBehaviorEventSchema.parse(await c.req.json());
+    // Non-blocking for clients: await briefly but never throw preference failures hard
+    const result = await preferenceService.ingestBehavior(auth.sub, body);
+    return c.json({ ok: true, ...result });
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
+assistantRoutes.get('/preferences', async c => {
+  try {
+    const auth = c.get('auth');
+    if (auth.kind !== 'mobile') {
+      return c.json({ error: { code: 'forbidden', message: 'Mobile session required' } }, 403);
+    }
+    const settings = await preferenceService.getSettings(auth.sub);
+    return c.json({ data: settings });
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
+assistantRoutes.put('/preferences/personalization', async c => {
+  try {
+    const auth = c.get('auth');
+    const body = (await c.req.json()) as { enabled?: boolean };
+    await privacyService.setPersonalization(auth, Boolean(body.enabled));
+    return c.json({ ok: true });
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
+assistantRoutes.post('/preferences/reset', async c => {
+  try {
+    await privacyService.resetPreferences(c.get('auth'));
     return c.json({ ok: true });
   } catch (err) {
     const { status, body } = httpError(err);

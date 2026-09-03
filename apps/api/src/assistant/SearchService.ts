@@ -137,6 +137,53 @@ export class SearchService {
     return [...treeCards, ...categoryCards].slice(0, limit);
   }
 
+  /**
+   * Resolve a free-text service query to the best matching published category
+   * (and optionally tree). Uses FTS + simple alias/name fallbacks.
+   */
+  async resolveServiceCategory(query: string): Promise<{
+    treeId: string;
+    categoryId: string;
+    name: string;
+    treeName: string;
+  } | null> {
+    const normalized = query.toLowerCase().trim();
+    if (!normalized) return null;
+
+    const byName = await db.execute<{
+      id: string;
+      tree_id: string;
+      name: string;
+      tree_name: string;
+    }>(sql`
+      SELECT c.id, c.tree_id, c.name, t.name AS tree_name
+      FROM service_categories c
+      JOIN service_trees t ON t.id = c.tree_id
+      WHERE c.status = 'published' AND t.status = 'published'
+        AND (
+          lower(c.name) = ${normalized}
+          OR lower(c.id) = ${normalized}
+          OR lower(c.name) LIKE ${`%${normalized}%`}
+          OR c.search_vector @@ plainto_tsquery('english', ${query})
+        )
+      ORDER BY
+        CASE WHEN lower(c.name) = ${normalized} THEN 0
+             WHEN lower(c.id) = ${normalized} THEN 1
+             ELSE 2 END,
+        ts_rank(c.search_vector, plainto_tsquery('english', ${query})) DESC NULLS LAST
+      LIMIT 1
+    `);
+
+    const row = byName[0];
+    if (!row) return null;
+    return {
+      treeId: row.tree_id,
+      categoryId: row.id,
+      name: row.name,
+      treeName: row.tree_name,
+    };
+  }
+
   async indexReel(reel: {
     id: string;
     title: string;

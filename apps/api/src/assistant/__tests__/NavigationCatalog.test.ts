@@ -51,4 +51,15 @@ describe('NavigationCatalog', () => {
     assert.equal(result.ok, true);
     if (result.ok) assert.equal(result.item.route, 'Main');
   });
+
+  it('keeps PlayFeed and Shop as distinct Main entries', () => {
+    const reels = validateNavigation('Main', { screen: 'PlayFeed' }, true);
+    const shop = validateNavigation('Main', { screen: 'Shop' }, true);
+    assert.equal(reels.ok, true);
+    assert.equal(shop.ok, true);
+    if (reels.ok && shop.ok) {
+      assert.equal(reels.item.id, 'reels_feed');
+      assert.equal(shop.item.id, 'shop');
+    }
+  });
 });

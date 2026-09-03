@@ -2,6 +2,7 @@ import type { AssistantAnalyticsEvent } from '@anticlock/contracts';
 import type { AuthClaims } from '../lib/auth.js';
 import { writeAudit } from '../lib/audit.js';
 import { assistantRepository } from './AssistantRepository.js';
+import { preferenceService } from './PreferenceService.js';
 import { sessionStore } from './SessionStore.js';
 
 export class AnalyticsService {
@@ -47,6 +48,7 @@ export class PrivacyService {
 
     await sessionStore.deleteAllForUser(auth.sub);
     await assistantRepository.deleteAllConversations(auth.sub);
+    await preferenceService.deleteAllUserData(auth.sub);
     await assistantRepository.trackAnalytics(auth.sub, null, {
       type: 'privacy_action',
       action: 'history_deleted',
@@ -68,12 +70,45 @@ export class PrivacyService {
       });
     }
 
-    const data = await assistantRepository.exportConversations(auth.sub);
+    const [conversations, preferences] = await Promise.all([
+      assistantRepository.exportConversations(auth.sub),
+      preferenceService.exportUserData(auth.sub),
+    ]);
     await assistantRepository.trackAnalytics(auth.sub, null, {
       type: 'privacy_action',
       action: 'data_exported',
     });
-    return data;
+    return { conversations, preferences };
+  }
+
+  async resetPreferences(auth: AuthClaims) {
+    if (auth.kind !== 'mobile') {
+      throw Object.assign(new Error('A mobile session is required'), {
+        code: 'forbidden',
+        status: 403,
+      });
+    }
+    await preferenceService.resetPreferences(auth.sub);
+    await assistantRepository.trackAnalytics(auth.sub, null, {
+      type: 'privacy_action',
+      action: 'preferences_reset',
+    });
+  }
+
+  async setPersonalization(auth: AuthClaims, enabled: boolean) {
+    if (auth.kind !== 'mobile') {
+      throw Object.assign(new Error('A mobile session is required'), {
+        code: 'forbidden',
+        status: 403,
+      });
+    }
+    await preferenceService.setPersonalizationEnabled(auth.sub, enabled);
+    if (!enabled) {
+      await assistantRepository.trackAnalytics(auth.sub, null, {
+        type: 'privacy_action',
+        action: 'personalization_opt_out',
+      });
+    }
   }
 
   async clearSessionBuffer(auth: AuthClaims, conversationId: string) {
@@ -92,6 +127,8 @@ export class PrivacyService {
 
   async runExpiryJob() {
     await assistantRepository.archiveStaleConversations(90);
+    await preferenceService.purgeOldEvents(90);
+    await preferenceService.decayScores();
   }
 }
 

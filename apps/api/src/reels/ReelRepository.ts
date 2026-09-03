@@ -101,6 +101,8 @@ export class ReelRepository {
           ne(reels.contentMode, 'test'),
           eq(mediaAssets.kind, 'video'),
           eq(mediaAssets.mimeType, 'video/mp4'),
+          // Public Clips feed is R2-only — no external sample URLs or local files.
+          eq(mediaAssets.storageProvider, 'r2'),
           eq(mediaAssets.accessLevel, 'public'),
           eq(mediaAssets.processingStatus, 'ready'),
           or(
@@ -141,6 +143,7 @@ export class ReelRepository {
                 : eq(reels.moderationStatus, 'clear'),
               eq(mediaAssets.kind, 'video'),
               eq(mediaAssets.mimeType, 'video/mp4'),
+              eq(mediaAssets.storageProvider, 'r2'),
               eq(mediaAssets.accessLevel, 'public'),
               eq(mediaAssets.processingStatus, 'ready'),
               or(

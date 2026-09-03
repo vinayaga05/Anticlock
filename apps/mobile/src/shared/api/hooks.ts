@@ -101,10 +101,23 @@ export function mapApiReelToItem(r: ApiReelFeedItem): ReelItem {
   };
 }
 
+function isR2PlaybackUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host.endsWith('.r2.dev') || host.includes('r2.cloudflarestorage.com');
+  } catch {
+    return false;
+  }
+}
+
 function isPublishedReelFeedItem(
   value: ApiReelFeedItem,
 ): value is ApiReelFeedItem {
-  return value?.status === 'published' && Boolean(value.playbackUrl);
+  return (
+    value?.status === 'published' &&
+    Boolean(value.playbackUrl) &&
+    isR2PlaybackUrl(value.playbackUrl)
+  );
 }
 
 export function useServiceTreesQuery(fallback: ApiServiceTree[]) {

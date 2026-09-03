@@ -25,7 +25,12 @@ function bucketName(bucket: StorageBucket): string {
 /** Public delivery URLs are only valid when this bucket has a configured CDN/custom domain. */
 export function r2PublicDeliveryUrl(key: string): string | null {
   const base = process.env.R2_PUBLIC_BASE_URL?.trim().replace(/\/$/, '');
-  return base ? `${base}/${key}` : null;
+  if (!base) return null;
+  const encodedKey = key
+    .split('/')
+    .map(segment => encodeURIComponent(segment))
+    .join('/');
+  return `${base}/${encodedKey}`;
 }
 
 export class R2ObjectStorageProvider implements ObjectStorageProvider {

@@ -1,0 +1,79 @@
+/**
+ * Ensure `node` is on PATH for the Gradle daemon / Android Studio.
+ *
+ * macOS GUI apps (and their Gradle daemons) often only have
+ * PATH=/usr/bin:/bin:/usr/sbin:/sbin — so Homebrew / hermes / nvm node
+ * is invisible. Libraries like react-native-reanimated and
+ * react-native-worklets hardcode commandLine("node", ...) and ignore
+ * react.nodeExecutableAndArgs.
+ *
+ * Applied from settings.gradle so PATH is fixed before subprojects evaluate.
+ */
+
+def readLocalProp = { String key ->
+    def f = new File(settingsDir, "local.properties")
+    if (!f.exists()) return null
+    def props = new Properties()
+    f.withInputStream { props.load(it) }
+    return props.getProperty(key)?.trim()
+}
+
+def nodeCandidates = []
+def fromLocal = readLocalProp("node.binary") ?: readLocalProp("NODE_BINARY")
+if (fromLocal) nodeCandidates << fromLocal
+def fromEnv = System.getenv("NODE_BINARY")
+if (fromEnv) nodeCandidates << fromEnv.trim()
+def fromGradleProp = providers.gradleProperty("react.nodeExecutableAndArgs").orNull
+if (fromGradleProp) {
+    nodeCandidates << fromGradleProp.split(/[\s,]+/)[0].trim()
+}
+nodeCandidates.addAll([
+    "/opt/homebrew/bin/node",
+    "/usr/local/bin/node",
+    "${System.getProperty('user.home')}/.local/bin/node",
+    "${System.getProperty('user.home')}/.hermes/node/bin/node",
+])
+
+def nodeBinary = nodeCandidates.find { path ->
+    if (!path) return false
+    def f = new File(path)
+    f.isFile() && f.canExecute()
+}
+
+if (nodeBinary == null) {
+    logger.warn("[Anticlock] Could not locate a node binary; tasks that invoke `node` may fail. Set node.binary in android/local.properties.")
+    return
+}
+
+def nodeDir = new File(nodeBinary).parentFile.absolutePath
+def currentPath = System.getenv("PATH") ?: ""
+def pathParts = currentPath.split(File.pathSeparator) as List
+if (!pathParts.contains(nodeDir)) {
+    def newPath = nodeDir + File.pathSeparator + currentPath
+    // Mutate the process environment so providers.exec / Exec see `node`.
+    try {
+        def env = System.getenv()
+        def field = env.getClass().getDeclaredField("m")
+        field.setAccessible(true)
+        ((Map<String, String>) field.get(env)).put("PATH", newPath)
+    } catch (Throwable ignored) {
+        // UnmodifiableMap layout differs on some JDKs; ProcessEnvironment below is enough.
+    }
+    try {
+        def pe = Class.forName("java.lang.ProcessEnvironment")
+        for (name in ["theEnvironment", "theCaseInsensitiveEnvironment"]) {
+            try {
+                def f = pe.getDeclaredField(name)
+                f.setAccessible(true)
+                ((Map<String, String>) f.get(null)).put("PATH", newPath)
+            } catch (Throwable ignored) {
+            }
+        }
+    } catch (Throwable ignored) {
+    }
+}
+
+System.setProperty("anticlock.node.binary", nodeBinary)
+gradle.ext.nodeBinary = nodeBinary
+gradle.ext.nodeBinDir = nodeDir
+logger.lifecycle("[Anticlock] Using node at ${nodeBinary}")

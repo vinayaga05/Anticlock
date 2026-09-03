@@ -35,9 +35,59 @@ export const NAVIGATION_CATALOG: NavigationCatalogItem[] = [
     aliases: ['reels', 'play feed', 'watch reels', 'clips'],
     route: 'Main',
     paramsSchema: { screen: 'PlayFeed' },
-    description: 'Browse the reels feed',
+    description: 'Browse the reels / clips feed',
     permissions: ['authenticated', 'guest'],
     examples: ['Show me reels', 'Open the play feed'],
+  },
+  {
+    id: 'shop',
+    name: 'Shop',
+    aliases: ['shop', 'store', 'marketplace', 'ecommerce', 'buy'],
+    route: 'Main',
+    paramsSchema: { screen: 'Shop' },
+    description: 'Open the Shop tab to browse products',
+    permissions: ['authenticated', 'guest'],
+    examples: ['Take me to shop', 'Open the store', 'Go to marketplace'],
+  },
+  {
+    id: 'flash_feed',
+    name: 'Flash',
+    aliases: ['flash', 'stories', 'flash feed'],
+    route: 'Main',
+    paramsSchema: { screen: 'Flash' },
+    description: 'Open the Flash feed',
+    permissions: ['authenticated', 'guest'],
+    examples: ['Open flash', 'Show flash feed'],
+  },
+  {
+    id: 'needs',
+    name: 'Needs',
+    aliases: ['needs', 'services home', 'what i need'],
+    route: 'Main',
+    paramsSchema: { screen: 'Needs' },
+    description: 'Open the Needs tab for lifestyle services',
+    permissions: ['authenticated', 'guest'],
+    examples: ['Open needs', 'Take me to needs'],
+  },
+  {
+    id: 'community',
+    name: 'Community',
+    aliases: ['community', 'communities', 'groups'],
+    route: 'Main',
+    paramsSchema: { screen: 'Community' },
+    description: 'Open the Community tab',
+    permissions: ['authenticated', 'guest'],
+    examples: ['Open community', 'Show communities'],
+  },
+  {
+    id: 'knock_tab',
+    name: 'Knock',
+    aliases: ['knock tab', 'knock screen'],
+    route: 'Main',
+    paramsSchema: { screen: 'Knock' },
+    description: 'Open the Knock tab (messages hub)',
+    permissions: ['authenticated', 'guest'],
+    examples: ['Open knock'],
   },
   {
     id: 'my_bookings',
@@ -133,12 +183,42 @@ export function findCatalogItem(query: string): NavigationCatalogItem | null {
   );
 }
 
+function resolveCatalogItem(
+  route: string,
+  params: Record<string, unknown>,
+): NavigationCatalogItem | null {
+  const candidates = NAVIGATION_CATALOG.filter(c => c.route === route);
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0] ?? null;
+
+  const screen = params.screen;
+  if (typeof screen === 'string') {
+    const byScreen = candidates.find(c => c.paramsSchema?.screen === screen);
+    if (byScreen) return byScreen;
+  }
+
+  return candidates[0] ?? null;
+}
+
 export function validateNavigation(
   route: string,
   params: Record<string, unknown>,
   isAuthenticated: boolean,
 ): { ok: true; item: NavigationCatalogItem } | { ok: false; error: string; code: string } {
-  const item = NAVIGATION_CATALOG.find(c => c.route === route);
+  // Allow "Shop" / "PlayFeed" style shortcuts → Main + screen
+  const mainTab = NAVIGATION_CATALOG.find(
+    c =>
+      c.route === 'Main' &&
+      typeof c.paramsSchema?.screen === 'string' &&
+      c.paramsSchema.screen === route,
+  );
+  const resolvedRoute = mainTab ? 'Main' : route;
+  const resolvedParams =
+    mainTab && !params.screen
+      ? { ...params, screen: mainTab.paramsSchema!.screen }
+      : params;
+
+  const item = resolveCatalogItem(resolvedRoute, resolvedParams);
   if (!item) {
     return { ok: false, error: `Unknown route: ${route}`, code: 'invalid_route' };
   }
@@ -151,15 +231,27 @@ export function validateNavigation(
   }
 
   if (item.paramsSchema) {
-    for (const [key, type] of Object.entries(item.paramsSchema)) {
-      const value = params[key];
+    for (const [key, expected] of Object.entries(item.paramsSchema)) {
+      const value = resolvedParams[key];
       if (value === undefined || value === null) {
-        if (key === 'userId' && route === 'Profile') continue;
-        if (key === 'screen' && route === 'Main') continue;
+        if (key === 'userId' && resolvedRoute === 'Profile') continue;
+        // Literal screen defaults (e.g. screen: 'Shop') are filled by the tool layer
+        if (expected !== 'string') {
+          resolvedParams[key] = expected;
+          continue;
+        }
         return { ok: false, error: `Missing required param: ${key}`, code: 'invalid_params' };
       }
-      if (type === 'string' && typeof value !== 'string') {
-        return { ok: false, error: `Param ${key} must be a string`, code: 'invalid_params' };
+      if (expected === 'string') {
+        if (typeof value !== 'string') {
+          return { ok: false, error: `Param ${key} must be a string`, code: 'invalid_params' };
+        }
+      } else if (value !== expected) {
+        return {
+          ok: false,
+          error: `Param ${key} must be ${expected}`,
+          code: 'invalid_params',
+        };
       }
     }
   }

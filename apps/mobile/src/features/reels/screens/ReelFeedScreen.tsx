@@ -1,11 +1,13 @@
 import React, { useCallback, useRef, useState } from 'react';
 import {
-  Dimensions,
   FlatList,
   Image,
+  LayoutChangeEvent,
+  Platform,
   RefreshControl,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
   ViewToken,
 } from 'react-native';
@@ -25,9 +27,7 @@ import {
   createAnalyticsEventId,
   recordReelAnalyticsEvent,
 } from '@/shared/api/reelAnalytics';
-import { TAB_BAR_VISIBLE_HEIGHT } from '@/shared/navigation/FloatingPillTabBar';
-
-const { height: WINDOW_HEIGHT, width: WINDOW_WIDTH } = Dimensions.get('window');
+import { useTabBarBottomInset } from '@/shared/navigation/tabBarInset';
 
 const DEFAULT_AUTHOR_AVATAR =
   'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&h=200&q=80';
@@ -105,9 +105,11 @@ function TopChromeButton({
 }
 
 function VerticalFade({
+  width,
   height,
   fromTop,
 }: {
+  width: number;
   height: number;
   fromTop: boolean;
 }) {
@@ -126,7 +128,7 @@ function VerticalFade({
 
   return (
     <Svg
-      width={WINDOW_WIDTH}
+      width={width}
       height={height}
       style={StyleSheet.absoluteFill}
       pointerEvents="none">
@@ -142,7 +144,7 @@ function VerticalFade({
           ))}
         </LinearGradient>
       </Defs>
-      <Rect x="0" y="0" width={WINDOW_WIDTH} height={height} fill={`url(#${id})`} />
+      <Rect x="0" y="0" width={width} height={height} fill={`url(#${id})`} />
     </Svg>
   );
 }
@@ -151,11 +153,14 @@ export function ReelFeedScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const addToCart = useCartStore(s => s.add);
   const [activeIndex, setActiveIndex] = useState(0);
   const [liked, setLiked] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [coins] = useState(120);
+  /** Actual FlatList viewport — must match page height or iOS drifts the feed down. */
+  const [viewportHeight, setViewportHeight] = useState(windowHeight);
   const viewedReelIds = useRef(new Set<string>());
   const completedReelIds = useRef(new Set<string>());
   const analyticsSessionId = useRef<string | null>(null);
@@ -174,10 +179,17 @@ export function ReelFeedScreen() {
   // production fallback: the public feed endpoint is the publication gate.
   const reels = queriedReels ?? [];
 
-  const bottomSafe =
-    TAB_BAR_VISIBLE_HEIGHT + Math.max(insets.bottom, 8) + 20;
+  const bottomSafe = useTabBarBottomInset(20);
   const topFadeH = insets.top + 96;
   const bottomFadeH = bottomSafe + 160;
+  const pageHeight = viewportHeight > 0 ? viewportHeight : windowHeight;
+
+  const onRootLayout = useCallback((e: LayoutChangeEvent) => {
+    const next = Math.round(e.nativeEvent.layout.height);
+    if (next > 0) {
+      setViewportHeight(prev => (prev === next ? prev : next));
+    }
+  }, []);
 
   const trackPlayback = useCallback(
     (reelId: string, watchedMs: number, completed: boolean) => {
@@ -283,10 +295,10 @@ export function ReelFeedScreen() {
     const musicLabel = item.title ? `♪ ${item.title}` : '♪ Original audio';
 
     return (
-      <View style={[styles.reel, { height: WINDOW_HEIGHT, width: WINDOW_WIDTH }]}>
+      <View style={[styles.reel, { height: pageHeight, width: windowWidth }]}>
         <VideoPlayer
           uri={item.videoUrl}
-          muted
+          muted={false}
           paused={
             index !== activeIndex || (commentsOpen && !playbackActive)
           }
@@ -310,7 +322,7 @@ export function ReelFeedScreen() {
 
         {/* Top fade + chrome */}
         <View style={[styles.topFade, { height: topFadeH }]} pointerEvents="none">
-          <VerticalFade height={topFadeH} fromTop />
+          <VerticalFade width={windowWidth} height={topFadeH} fromTop />
         </View>
         <View style={[styles.topBar, { paddingTop: insets.top + 6 }]}>
           <TopChromeButton
@@ -375,7 +387,7 @@ export function ReelFeedScreen() {
         <View
           style={[styles.bottomFade, { height: bottomFadeH }]}
           pointerEvents="none">
-          <VerticalFade height={bottomFadeH} fromTop={false} />
+          <VerticalFade width={windowWidth} height={bottomFadeH} fromTop={false} />
         </View>
         <View
           style={[
@@ -442,7 +454,7 @@ export function ReelFeedScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} onLayout={onRootLayout}>
       <FlatList
         data={reels}
         keyExtractor={item => item.id}
@@ -450,15 +462,23 @@ export function ReelFeedScreen() {
         pagingEnabled
         scrollEnabled={!commentsOpen}
         showsVerticalScrollIndicator={false}
-        snapToInterval={WINDOW_HEIGHT}
         decelerationRate="fast"
+        disableIntervalMomentum
         getItemLayout={(_, index) => ({
-          length: WINDOW_HEIGHT,
-          offset: WINDOW_HEIGHT * index,
+          length: pageHeight,
+          offset: pageHeight * index,
           index,
         })}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={{ itemVisiblePercentThreshold: 80 }}
+        // iOS safe-area inset auto-adjust shrinks the scroll viewport after mount
+        // and makes full-screen pages drift downward under the tab bar.
+        contentInsetAdjustmentBehavior="never"
+        automaticallyAdjustContentInsets={false}
+        automaticallyAdjustsScrollIndicatorInsets={false}
+        {...(Platform.OS === 'android'
+          ? { overScrollMode: 'never' as const }
+          : null)}
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}

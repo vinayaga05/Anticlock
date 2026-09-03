@@ -149,9 +149,39 @@ export async function loadClipsReels(
   );
 }
 
-/** @deprecated Use buildClipsReelsFromManifest */
-export function applyCloudflareVideosToReels(reels: ReelItem[]): ReelItem[] {
-  return buildClipsReelsFromManifest(getLocalManifest(), reels);
+function normalizePlaybackUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = '';
+    parsed.search = '';
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+/** Merge API-published reels with canva/ R2 clips (dedupe by playback URL). */
+export function mergeReelFeeds(
+  primary: ReelItem[],
+  extra: ReelItem[],
+): ReelItem[] {
+  const seen = new Set(
+    primary
+      .map(item =>
+        typeof item.videoUrl === 'string'
+          ? normalizePlaybackUrl(item.videoUrl)
+          : '',
+      )
+      .filter(Boolean),
+  );
+  const appended = extra.filter(item => {
+    if (typeof item.videoUrl !== 'string' || !item.videoUrl) return false;
+    const key = normalizePlaybackUrl(item.videoUrl);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return [...primary, ...appended];
 }
 
 export function getFlashCloudflareVideo(): {

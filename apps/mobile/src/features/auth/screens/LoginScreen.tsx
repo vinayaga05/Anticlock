@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandLogo } from '@/shared/components/BrandLogo';
 import { Button } from '@/shared/components/Button';
+import { isDevEnvironment } from '@/shared/api/config';
 import { useAuth } from '@/shared/context/AuthProvider';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { AuthError } from '@/shared/services/auth/types';
@@ -172,7 +173,7 @@ export function LoginScreen() {
           </Text>
         ) : null}
 
-        {__DEV__ ? (
+        {isDevEnvironment ? (
           <Text style={[styles.devHint, { color: theme.colors.textTertiary }]}>
             Dev login: +91 9999999999 or 8888888888 · OTP 123456
           </Text>

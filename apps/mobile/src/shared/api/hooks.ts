@@ -3,6 +3,22 @@ import { apiRequest, ApiError } from './client';
 import { isApiEnabled } from './config';
 import { readStoredSession } from '@/shared/services/auth/authService';
 import type { ReelItem } from '@/shared/types';
+import {
+  fetchR2ReelsManifest,
+  buildClipsReelsFromManifest,
+  mergeReelFeeds,
+} from '@/shared/data/cloudflareVideos';
+
+const CANVA_REEL_TEMPLATE: ReelItem = {
+  id: 'canva-template',
+  title: 'Clip',
+  author: 'anticlock',
+  caption: '',
+  videoUrl: '',
+  posterUrl: '',
+  likeCount: 0,
+  commentCount: 0,
+};
 
 export type ApiServiceTree = {
   id: string;
@@ -185,11 +201,44 @@ export function useReelsQuery(fallback: ReelItem[]) {
       // an object in storage is not necessarily a published Reel.
       if (!isApiEnabled) return fallback;
 
-      const res = await apiRequest<{ data: ApiReelFeedItem[] }>('/v1/reels');
-      // Treat the server's explicit publication signal as a second guard. A
-      // malformed or unexpectedly broad response must not surface a draft,
-      // review, or raw storage asset in the Clips feed.
-      return res.data.filter(isPublishedReelFeedItem).map(mapApiReelToItem);
+      let published: ReelItem[] = [];
+      try {
+        const res = await apiRequest<{ data: ApiReelFeedItem[] }>('/v1/reels');
+        // Treat the server's explicit publication signal as a second guard. A
+        // malformed or unexpectedly broad response must not surface a draft,
+        // review, or raw storage asset in the Clips feed.
+        published = res.data
+          .filter(isPublishedReelFeedItem)
+          .map(mapApiReelToItem);
+      } catch {
+        // Still try canva/ R2 clips below so a transient API error does not
+        // blank the entire Clips tab when bucket videos are available.
+      }
+
+      // Surface canva/ R2 clips immediately after upload, even before an
+      // operator runs importR2Clips on the VPS. Only canva/ keys are merged.
+      const manifest = await fetchR2ReelsManifest({ bustCache: true });
+      if (!manifest) return published;
+
+      const canvaManifest = {
+        ...manifest,
+        videos: (manifest.videos ?? []).filter(entry => {
+          const key = entry.objectKey ?? '';
+          const url = entry.playbackUrl ?? '';
+          return (
+            key.startsWith('canva/') ||
+            url.includes('/canva/') ||
+            url.includes('%2Fcanva%2F')
+          );
+        }),
+      };
+      if (!canvaManifest.videos.length) return published;
+
+      const canvaReels = buildClipsReelsFromManifest(canvaManifest, [
+        ...published,
+        CANVA_REEL_TEMPLATE,
+      ]);
+      return mergeReelFeeds(published, canvaReels);
     },
     // Keep a concrete empty value in API-enabled builds so consumers cannot
     // substitute mock Reels while the request is loading or has failed.

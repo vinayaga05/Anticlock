@@ -4,6 +4,7 @@
  *
  * Usage:
  *   pnpm --filter @anticlock/api r2:sync-reels
+ *   pnpm --filter @anticlock/api r2:sync-reels -- --prefix canva/
  *   pnpm --filter @anticlock/api r2:sync-reels -- --keys "clip-a.mp4,clip-b.mp4"
  */
 import 'dotenv/config';
@@ -92,13 +93,21 @@ function createClient() {
   });
 }
 
-async function listMp4Keys(client: S3Client, bucket: string): Promise<string[]> {
+async function listMp4Keys(
+  client: S3Client,
+  bucket: string,
+  prefix?: string,
+): Promise<string[]> {
   const keys: string[] = [];
   let token: string | undefined;
 
   do {
     const page = await client.send(
-      new ListObjectsV2Command({ Bucket: bucket, ContinuationToken: token }),
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        ContinuationToken: token,
+      }),
     );
     for (const obj of page.Contents ?? []) {
       const key = obj.Key ?? '';
@@ -170,6 +179,9 @@ async function main() {
 
   const args = process.argv.slice(2);
   const keysIdx = args.indexOf('--keys');
+  const prefixIdx = args.indexOf('--prefix');
+  const prefix =
+    prefixIdx >= 0 ? args[prefixIdx + 1]?.replace(/\/?$/, '/') : undefined;
   let keys: string[] = [];
 
   const client = createClient();
@@ -180,8 +192,9 @@ async function main() {
     keys = raw.split(',').map(k => k.trim()).filter(Boolean);
     console.log(`Using ${keys.length} manual key(s)`);
   } else {
-    console.log(`Listing .mp4 objects in bucket "${bucket}"…`);
-    keys = await listMp4Keys(client, bucket);
+    const scope = prefix ? `prefix "${prefix}"` : 'entire bucket';
+    console.log(`Listing .mp4 objects in bucket "${bucket}" (${scope})…`);
+    keys = await listMp4Keys(client, bucket, prefix);
     console.log(`Found ${keys.length} video(s)`);
   }
 

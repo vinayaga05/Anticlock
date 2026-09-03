@@ -35,5 +35,20 @@ describe('NavigationCatalog', () => {
     assert.ok(routes.has('SavedHub'));
     assert.ok(routes.has('Search'));
     assert.ok(routes.has('MyBookings'));
+    assert.ok(NAVIGATION_CATALOG.some(i => i.paramsSchema?.screen === 'Shop'));
+  });
+
+  it('maps shop alias and validates Main/Shop navigation', () => {
+    const item = findCatalogItem('shop');
+    assert.equal(item?.paramsSchema?.screen, 'Shop');
+    const result = validateNavigation('Main', { screen: 'Shop' }, true);
+    assert.equal(result.ok, true);
+    if (result.ok) assert.equal(result.item.id, 'shop');
+  });
+
+  it('accepts Shop as a Main-tab shortcut route', () => {
+    const result = validateNavigation('Shop', {}, true);
+    assert.equal(result.ok, true);
+    if (result.ok) assert.equal(result.item.route, 'Main');
   });
 });

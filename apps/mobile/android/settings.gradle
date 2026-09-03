@@ -1,6 +1,14 @@
 pluginManagement { includeBuild("../../../node_modules/@react-native/gradle-plugin") }
 plugins { id("com.facebook.react.settings") }
-extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand(["/opt/homebrew/bin/npx", "@react-native-community/cli", "config"]) }
+
+// Fix PATH for Android Studio / Gradle daemon before subprojects look up `node`.
+// Must come after pluginManagement/plugins blocks (Gradle requirement).
+apply from: new File(settingsDir, "nodeEnv.gradle")
+
+def npx = (gradle.ext.has("nodeBinDir") ? "${gradle.ext.nodeBinDir}/npx" : "/opt/homebrew/bin/npx")
+extensions.configure(com.facebook.react.ReactSettingsExtension){ ex ->
+    ex.autolinkLibrariesFromCommand([npx, "@react-native-community/cli", "config"])
+}
 rootProject.name = 'AnticlockTemp'
 include ':app'
 includeBuild('../../../node_modules/@react-native/gradle-plugin')

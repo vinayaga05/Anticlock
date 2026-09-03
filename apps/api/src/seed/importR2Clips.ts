@@ -141,7 +141,11 @@ async function uploadCanvaDir(client: S3Client, bucket: string, dir: string) {
   }
 }
 
-async function listMp4Keys(client: S3Client, bucket: string) {
+function isMp4Key(key: string) {
+  return /\.mp4$/i.test(key);
+}
+
+async function listMp4Keys(client: S3Client, bucket: string, prefix?: string) {
   const keys: string[] = [];
   let token: string | undefined;
 
@@ -149,12 +153,13 @@ async function listMp4Keys(client: S3Client, bucket: string) {
     const res = await client.send(
       new ListObjectsV2Command({
         Bucket: bucket,
+        Prefix: prefix,
         ContinuationToken: token,
       }),
     );
     for (const obj of res.Contents ?? []) {
       const key = obj.Key?.trim();
-      if (!key || !key.toLowerCase().endsWith('.mp4')) continue;
+      if (!key || !isMp4Key(key)) continue;
       keys.push(key);
     }
     token = res.NextContinuationToken;
@@ -292,24 +297,18 @@ async function main() {
   }
 
   // Prefer canva/ objects only so accidental bucket dumps do not enter the feed.
-  const allKeys = await listMp4Keys(client, bucket);
-  const keys = allKeys.filter(key => key.startsWith(`${R2_PREFIX}/`));
+  // Match .mp4 / .MP4 — iOS exports often use uppercase extensions.
+  const keys = await listMp4Keys(client, bucket, `${R2_PREFIX}/`);
   if (!keys.length) {
     console.log('No MP4 objects found under canva/ in R2 bucket.');
     await sql.end({ timeout: 5 });
     return;
   }
 
-  console.log(`Found ${keys.length} canva/ MP4 object(s) in R2 (of ${allKeys.length} total):`);
+  console.log(`Found ${keys.length} canva/ MP4 object(s) in R2:`);
   const adminId = await resolveAdminUserId();
 
   for (const key of keys) {
-    // Skip accidental screen recordings / non-export dumps under canva/.
-    const file = basename(key);
-    if (!(file in CANVA_META) && !file.match(/^(yoga-flow|fitness-reel|health-tips)\.mp4$/i)) {
-      console.log(`\n↷ skip ${key}`);
-      continue;
-    }
     console.log(`\n→ ${key}`);
     console.log(`  playback: ${r2PublicDeliveryUrl(key)}`);
     await upsertPublishedReel(adminId, bucket, key);

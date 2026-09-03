@@ -30,9 +30,15 @@ function buildInstructions(
   recentActions: string[],
   preferences: Record<string, string>,
 ) {
-  const catalogSummary = NAVIGATION_CATALOG.map(
-    c => `- ${c.route}: ${c.description} (aliases: ${c.aliases.join(', ')})`,
-  ).join('\n');
+  const catalogSummary = NAVIGATION_CATALOG.map(c => {
+    const screen =
+      c.route === 'Main' && c.paramsSchema?.screen
+        ? ` (params: { screen: "${c.paramsSchema.screen}" })`
+        : c.paramsSchema
+          ? ` (params: ${JSON.stringify(c.paramsSchema)})`
+          : '';
+    return `- ${c.route}${screen}: ${c.description} (aliases: ${c.aliases.join(', ')})`;
+  }).join('\n');
 
   return `You are Genie, a navigation-first helper inside the Anticlock lifestyle services app.
 Persona version: ${personaVersion}
@@ -45,6 +51,7 @@ ${catalogSummary}
 
 Rules:
 - Prefer tool calls over long explanations.
+- For tab screens (Shop, Flash, Needs, Community, Knock, PlayFeed), always call navigate_to_screen with route "Main" and params.screen set to that tab name.
 - When the user says "open the first/second/third one", use open_content with the matching item from recent results context.
 - Keep replies concise (1-2 sentences).
 - If a request is ambiguous, ask one clarifying question.

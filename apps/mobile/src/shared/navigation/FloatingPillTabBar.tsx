@@ -1,6 +1,9 @@
 import React from 'react';
-import { Dimensions, Platform, StyleSheet, Text, View } from 'react-native';
-import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  BottomTabBarHeightCallbackContext,
+  BottomTabBarProps,
+} from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { useCartStore } from '@/shared/store/cartStore';
@@ -10,8 +13,6 @@ import { CommentsBottomSheetHost } from '@/shared/navigation/CommentsBottomSheet
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
 import { FloatingAssistantButton } from '@/features/assistant/components/FloatingAssistantButton';
 import { AssistantBottomSheetHost } from '@/features/assistant/components/AssistantBottomSheet';
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 /** Visible control height for the floating pill (icons + labels). */
 export const TAB_BAR_VISIBLE_HEIGHT = 66;
@@ -35,16 +36,27 @@ export function FloatingPillTabBar({
   const cartCount = useCartStore(s => s.count);
   const commentsOpen = useCommentsSheetStore(s => s.open || s.closing);
   const requestClose = useCommentsSheetStore(s => s.requestClose);
+  const onHeightChange = React.useContext(BottomTabBarHeightCallbackContext);
 
   const focusedRoute = state.routes[state.index]?.name;
   const onPlayFeed = focusedRoute === 'PlayFeed';
   const bottomPad = Math.max(insets.bottom, 8) + 8;
   const layoutHeight = TAB_BAR_VISIBLE_HEIGHT + bottomPad;
 
+  // Overlay tab bar — report 0 so scene content stays full-bleed (screens pad themselves).
+  React.useEffect(() => {
+    onHeightChange?.(0);
+  }, [onHeightChange]);
+
   return (
-    <View
-      pointerEvents="box-none"
-      style={[styles.root, { height: layoutHeight, zIndex: 100, elevation: 100 }]}>
+    <View pointerEvents="box-none" style={[styles.root, { zIndex: 100, elevation: 100 }]}>
+      {/* Invisible layout spacer so React Navigation still measures tab bar height */}
+      <View
+        pointerEvents="none"
+        style={{ height: layoutHeight }}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      />
       <View
         pointerEvents="box-none"
         style={[styles.wrap, { paddingBottom: bottomPad, zIndex: 30, elevation: 30 }]}>
@@ -145,7 +157,7 @@ export function FloatingPillTabBar({
 
       <View
         pointerEvents="box-none"
-        style={[styles.sheetLayer, { height: SCREEN_HEIGHT, zIndex: 50, elevation: 50 }]}>
+        style={[styles.sheetLayer, { zIndex: 50, elevation: 50 }]}>
         <CommentsBottomSheetHost />
         <AssistantBottomSheetHost />
       </View>
@@ -160,12 +172,18 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    // Full-bleed overlay host so Genie/comments sheets are not clipped by the
+    // short tab-bar layout height.
+    top: 0,
+    overflow: 'visible',
   },
   sheetLayer: {
     position: 'absolute',
     left: 0,
     right: 0,
+    top: 0,
     bottom: 0,
+    overflow: 'visible',
   },
   wrap: {
     position: 'absolute',

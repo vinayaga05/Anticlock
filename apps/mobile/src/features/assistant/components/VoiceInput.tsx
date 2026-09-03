@@ -54,6 +54,7 @@ export function VoiceInput({
     stopListening,
     cancelListening,
     dismissConfirm,
+    exitConfirm,
     reset,
     openSettings,
   } = speech;
@@ -178,7 +179,7 @@ export function VoiceInput({
         <TextInput
           value={value}
           onChangeText={text => {
-            if (isConfirm) dismissConfirm();
+            if (isConfirm) exitConfirm();
             onChangeText(text);
           }}
           placeholder="Ask Genie anything…"

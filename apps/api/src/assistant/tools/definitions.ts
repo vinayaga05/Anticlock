@@ -63,12 +63,21 @@ export const toolSchemas: Record<ApprovedToolName, z.ZodTypeAny> = {
 const toolDefinitions = [
   {
     name: 'navigate_to_screen' as const,
-    description: 'Navigate the user to an app screen by route name',
+    description:
+      'Navigate the user to an app screen. For Shop/Flash/Needs/Community/Knock/PlayFeed tabs use route "Main" with params { "screen": "<TabName>" }.',
     parameters: {
       type: 'object',
       properties: {
-        route: { type: 'string', description: 'React Navigation route name' },
-        params: { type: 'object', additionalProperties: true },
+        route: {
+          type: 'string',
+          description:
+            'React Navigation route name (e.g. Main, Search, SavedHub). Tab destinations use Main.',
+        },
+        params: {
+          type: 'object',
+          additionalProperties: true,
+          description: 'Route params. For Main tabs include { "screen": "Shop" } etc.',
+        },
       },
       required: ['route', 'params'],
       additionalProperties: false,

@@ -64,7 +64,6 @@ export function AssistantBottomSheetHost() {
   const expandedY = insets.top + TOP_GAP;
   const closedY = SCREEN_HEIGHT;
   const defaultY = expandedY + (1 - DEFAULT_VISIBLE) * (closedY - expandedY);
-  const sheetHeight = closedY - expandedY;
 
   const translateY = useSharedValue(closedY);
   const backdrop = useSharedValue(0);
@@ -260,9 +259,16 @@ export function AssistantBottomSheetHost() {
       );
     });
 
-  const sheetStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-  }));
+  const sheetStyle = useAnimatedStyle(() => {
+    // Keep the sheet anchored to the bottom of the screen so the composer
+    // stays visible at every detent (mid / expanded). A fixed full-height
+    // sheet + translateY alone pushes the footer below the viewport.
+    const y = Math.min(Math.max(translateY.value, expandedY - 80), closedY);
+    return {
+      transform: [{ translateY: y }],
+      height: Math.max(closedY - y, 120),
+    };
+  });
 
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: backdrop.value,
@@ -326,7 +332,6 @@ export function AssistantBottomSheetHost() {
         style={[
           styles.sheet,
           {
-            height: sheetHeight,
             backgroundColor: theme.colors.backgroundElevated,
             borderColor: theme.colors.borderSoft,
           },

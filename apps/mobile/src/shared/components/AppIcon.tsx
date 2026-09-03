@@ -73,6 +73,8 @@ import {
   UserPlus,
   Users,
   Video,
+  Volume2,
+  VolumeX,
   Wrench,
   X,
   Zap,
@@ -198,6 +200,11 @@ export const iconMap = {
   love: Heart,
   like: Heart,
   film: Film,
+  volume: Volume2,
+  'volume-2': Volume2,
+  unmute: Volume2,
+  'volume-x': VolumeX,
+  mute: VolumeX,
 } as const;
 
 export type IconName = keyof typeof iconMap;

@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
-import { apiStream, isApiEnabled } from '@/shared/api/client';
+import { apiStream, ApiError } from '@/shared/api/client';
+import { isApiEnabled } from '@/shared/api/config';
 import { useAssistantStore } from '@/features/assistant/store/assistantStore';
 import type { AssistantStreamEvent } from '@/features/assistant/types';
 import { executeAssistantNavigation } from '@/features/assistant/navigation/assistantNavigation';
@@ -113,8 +114,12 @@ export function useAssistantChat(navigation: { navigate: (route: string, params?
       } catch (err) {
         const isAbort = err instanceof Error && err.name === 'AbortError';
         if (!isAbort) {
+          const message =
+            err instanceof ApiError && err.message
+              ? err.message
+              : 'Something went wrong. Please try again.';
           useAssistantStore.getState().updateLastAssistant({
-            content: 'Something went wrong. Please try again.',
+            content: message,
             pending: false,
           });
           useAssistantStore.getState().enqueueOffline({

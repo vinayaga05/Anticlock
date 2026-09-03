@@ -33,12 +33,9 @@ function mockUserId(phone: string): string {
   return `00000000-0000-4000-8000-${digits.padStart(12, '0').slice(-12)}`;
 }
 
-/** Local OTP provider for mock/offline development — whitelist only in __DEV__. */
+/** Local OTP provider for the on-device whitelist when USE_PRODUCTION_ENVIRONMENT is false. */
 export class DevOtpProvider implements OtpProvider {
   async sendOtp(rawPhone: string): Promise<OtpSendResult> {
-    if (!__DEV__) {
-      throw new AuthError('otp_not_available', 'Development OTP is disabled in production builds');
-    }
 
     const phone = normalizePhone(rawPhone);
     if (!(phone in DEV_OTP_WHITELIST)) {
@@ -59,10 +56,6 @@ export class DevOtpProvider implements OtpProvider {
   }
 
   async verifyOtp(rawPhone: string, code: string, requestId: string): Promise<AuthSession> {
-    if (!__DEV__) {
-      throw new AuthError('otp_not_available', 'Development OTP is disabled in production builds');
-    }
-
     const phone = normalizePhone(rawPhone);
     const challenge = challenges.get(requestId);
     if (!challenge || challenge.expiresAt < Date.now()) {

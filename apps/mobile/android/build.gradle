@@ -22,6 +22,17 @@ buildscript {
 apply plugin: "com.facebook.react.rootproject"
 
 /**
+ * @react-native-voice/voice still declares com.android.support:appcompat-v7,
+ * which clashes with AndroidX (duplicate INotificationSideChannel, etc.).
+ * Its Java sources only need AndroidX annotations — drop the old Support libs.
+ */
+subprojects { subproject ->
+    subproject.configurations.configureEach {
+        exclude group: "com.android.support"
+    }
+}
+
+/**
  * AGP prefab bug with react-native-nitro-modules:
  * MMKV's ninja looks for `NitroModules.so` under cxx/refs, but the prefab
  * package only ships `libNitroModules.so` and the copy into refs is incomplete.

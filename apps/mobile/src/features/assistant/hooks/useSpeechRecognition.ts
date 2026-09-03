@@ -154,24 +154,25 @@ export function useSpeechRecognition(options?: {
   const silenceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startingRef = useRef(false);
+  const onTranscriptChangeRef = useRef(options?.onTranscriptChange);
+  const onStateChangeRef = useRef(options?.onStateChange);
 
-  const updateState = useCallback(
-    (next: VoiceInputState) => {
-      stateRef.current = next;
-      setState(next);
-      options?.onStateChange?.(next);
-    },
-    [options],
-  );
+  useEffect(() => {
+    onTranscriptChangeRef.current = options?.onTranscriptChange;
+    onStateChangeRef.current = options?.onStateChange;
+  });
 
-  const publishTranscript = useCallback(
-    (base: string, segment: string) => {
-      const next = formatTranscript(base, segment);
-      setTranscript(next);
-      options?.onTranscriptChange?.(next);
-    },
-    [options],
-  );
+  const updateState = useCallback((next: VoiceInputState) => {
+    stateRef.current = next;
+    setState(next);
+    onStateChangeRef.current?.(next);
+  }, []);
+
+  const publishTranscript = useCallback((base: string, segment: string) => {
+    const next = formatTranscript(base, segment);
+    setTranscript(next);
+    onTranscriptChangeRef.current?.(next);
+  }, []);
 
   const clearSilenceTimer = useCallback(() => {
     if (silenceTimerRef.current) {
@@ -241,11 +242,11 @@ export function useSpeechRecognition(options?: {
 
       if (commit && finalText) {
         setTranscript(finalText);
-        options?.onTranscriptChange?.(finalText);
+        onTranscriptChangeRef.current?.(finalText);
         updateState('confirm');
       } else {
         setTranscript('');
-        options?.onTranscriptChange?.('');
+        onTranscriptChangeRef.current?.('');
         updateState('idle');
       }
     },
@@ -254,7 +255,6 @@ export function useSpeechRecognition(options?: {
       clearSilenceTimer,
       commitCurrentSegment,
       internalStopEngine,
-      options,
       updateState,
     ],
   );
@@ -390,7 +390,7 @@ export function useSpeechRecognition(options?: {
       hasHeardSpeechRef.current = false;
       setErrorMessage(null);
       setTranscript('');
-      options?.onTranscriptChange?.('');
+      onTranscriptChangeRef.current?.('');
       updateState('listening');
       hapticPulse();
       startSilenceWatcher();
@@ -409,7 +409,6 @@ export function useSpeechRecognition(options?: {
   }, [
     bindAndStartEngine,
     clearSilenceTimer,
-    options,
     requestPermission,
     showError,
     startSilenceWatcher,
@@ -436,15 +435,22 @@ export function useSpeechRecognition(options?: {
     lastActivityAtRef.current = null;
     hasHeardSpeechRef.current = false;
     setTranscript('');
-    options?.onTranscriptChange?.('');
+    onTranscriptChangeRef.current?.('');
     updateState('idle');
-  }, [clearRestartTimer, clearSilenceTimer, internalStopEngine, options, updateState]);
+  }, [clearRestartTimer, clearSilenceTimer, internalStopEngine, updateState]);
 
   const dismissConfirm = useCallback(() => {
     setTranscript('');
-    options?.onTranscriptChange?.('');
+    onTranscriptChangeRef.current?.('');
     updateState('idle');
-  }, [options, updateState]);
+  }, [updateState]);
+
+  /** Leave confirm without wiping the draft (e.g. user started typing). */
+  const exitConfirm = useCallback(() => {
+    if (stateRef.current === 'confirm') {
+      updateState('idle');
+    }
+  }, [updateState]);
 
   const reset = useCallback(async () => {
     listeningIntentRef.current = false;
@@ -470,9 +476,9 @@ export function useSpeechRecognition(options?: {
     hasHeardSpeechRef.current = false;
     setTranscript('');
     setErrorMessage(null);
-    options?.onTranscriptChange?.('');
+    onTranscriptChangeRef.current?.('');
     updateState('idle');
-  }, [clearRestartTimer, clearSilenceTimer, options, updateState]);
+  }, [clearRestartTimer, clearSilenceTimer, updateState]);
 
   const openSettings = useCallback(async () => {
     await Linking.openSettings();
@@ -515,6 +521,7 @@ export function useSpeechRecognition(options?: {
     stopListening,
     cancelListening,
     dismissConfirm,
+    exitConfirm,
     reset,
     openSettings,
   };

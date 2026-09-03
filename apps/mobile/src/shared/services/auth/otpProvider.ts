@@ -1,5 +1,5 @@
 import { apiRequest } from '@/shared/api/client';
-import { isApiEnabled } from '@/shared/api/config';
+import { isApiEnabled, isDevEnvironment } from '@/shared/api/config';
 import { DevOtpProvider } from './devOtpProvider';
 import {
   AuthError,
@@ -32,5 +32,6 @@ export class ApiOtpProvider implements OtpProvider {
 }
 
 export function createOtpProvider(): OtpProvider {
+  if (isDevEnvironment) return new DevOtpProvider();
   return isApiEnabled ? new ApiOtpProvider() : new DevOtpProvider();
 }

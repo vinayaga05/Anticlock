@@ -19,7 +19,11 @@ react {
     //   The cli.js file which is the React Native CLI entrypoint. Default is ../../node_modules/react-native/cli.js
     cliFile = file("../../../../node_modules/react-native/cli.js")
 
-    nodeExecutableAndArgs = ["/opt/homebrew/bin/node"]
+    // Absolute path — Android Studio's Gradle daemon often has no Homebrew on PATH.
+    // Resolved in android/nodeEnv.gradle (override via local.properties node.binary).
+    nodeExecutableAndArgs = [
+        System.getProperty("anticlock.node.binary") ?: "/opt/homebrew/bin/node"
+    ]
 
     /* Variants */
     //   The list of variants to that are debuggable. For those we're going to

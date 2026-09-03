@@ -25,16 +25,26 @@ export async function navigateToScreen(
   args: { route: string; params?: Record<string, unknown> },
   ctx: ToolContext,
 ): Promise<ToolResult> {
-  const params = args.params ?? {};
+  const params = { ...(args.params ?? {}) };
   const isAuthenticated = ctx.auth.kind === 'mobile';
   const validation = validateNavigation(args.route, params, isAuthenticated);
   if (!validation.ok) {
     return { ok: false, error: validation.error, code: validation.code };
   }
+
+  // Prefer the catalog's canonical Main + screen (e.g. Shop → Main/Shop)
+  const route =
+    validation.item.route === 'Main' && validation.item.paramsSchema?.screen
+      ? 'Main'
+      : validation.item.route;
+  if (route === 'Main' && validation.item.paramsSchema?.screen) {
+    params.screen = validation.item.paramsSchema.screen;
+  }
+
   return {
     ok: true,
-    data: { route: args.route, params },
-    navigation: { route: args.route, params },
+    data: { route, params },
+    navigation: { route, params },
   };
 }
 

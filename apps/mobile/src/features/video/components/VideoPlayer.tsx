@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Image,
   Platform,
   Pressable,
@@ -8,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import Video, { OnLoadData, OnProgressData, VideoRef } from 'react-native-video';
 import { AppIcon } from '@/shared/components/AppIcon';
 
@@ -16,7 +18,7 @@ export type VideoSource = string | number;
 interface VideoPlayerProps {
   uri: VideoSource;
   paused?: boolean;
-  /** Feed autoplay works best muted on iOS. */
+  /** When true, playback has no audio. Clips/Reels should pass false. */
   muted?: boolean;
   poster?: string;
   /** Optional, non-blocking playback signal for product analytics. */
@@ -64,21 +66,38 @@ export function VideoPlayer({
 }: VideoPlayerProps) {
   const ref = useRef<VideoRef>(null);
   const durationRef = useRef(0);
+  const isFocused = useIsFocused();
+  const [appActive, setAppActive] = useState(
+    () => AppState.currentState === 'active',
+  );
   const [localPaused, setLocalPaused] = useState(false);
+  const [isMuted, setIsMuted] = useState(muted);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const playbackUri = useMemo(() => resolvePlaybackUri(uri), [uri]);
   const source = useMemo(() => toSource(playbackUri), [playbackUri]);
-  const isPaused = localPaused || paused;
+  // Pause on tab blur / navigation away / app background so audio does not
+  // keep playing under other screens.
+  const isPaused = localPaused || paused || !isFocused || !appActive;
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', next => {
+      setAppActive(next === 'active');
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     setReady(false);
     setFailed(false);
     setErrorMsg(null);
     setLocalPaused(false);
+    setIsMuted(muted);
     durationRef.current = 0;
+    // Reset mute to the caller's default only when the clip source changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- muted is an initial value per uri
   }, [playbackUri]);
 
   const handleLoad = (data: OnLoadData) => {
@@ -114,7 +133,7 @@ export function VideoPlayer({
           resizeMode="cover"
           repeat
           paused={isPaused}
-          muted={muted}
+          muted={isMuted}
           poster={poster && !ready ? poster : undefined}
           posterResizeMode="cover"
           playInBackground={false}
@@ -156,15 +175,33 @@ export function VideoPlayer({
         </View>
       ) : null}
       {localPaused && ready ? (
-        <View style={styles.pauseOverlay} pointerEvents="none">
-          <View style={styles.pauseButton}>
-            <AppIcon
-              name="play"
-              size={36}
-              color="#fff"
-              fill="#fff"
-              strokeWidth={0}
-            />
+        <View style={styles.pauseOverlay} pointerEvents="box-none">
+          <View style={styles.pauseControls} pointerEvents="box-none">
+            <View style={styles.pauseButton} pointerEvents="none">
+              <AppIcon
+                name="play"
+                size={36}
+                color="#fff"
+                fill="#fff"
+                strokeWidth={0}
+              />
+            </View>
+            <Pressable
+              style={styles.muteButton}
+              onPress={event => {
+                event.stopPropagation?.();
+                setIsMuted(m => !m);
+              }}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={isMuted ? 'Unmute audio' : 'Mute audio'}>
+              <AppIcon
+                name={isMuted ? 'mute' : 'volume'}
+                size={18}
+                color="#fff"
+                strokeWidth={2.1}
+              />
+            </Pressable>
           </View>
         </View>
       ) : null}
@@ -180,6 +217,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  pauseControls: {
+    alignItems: 'center',
+    gap: 14,
+  },
   pauseButton: {
     width: 72,
     height: 72,
@@ -189,6 +230,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     // Slight optical nudge so the play triangle reads centered
     paddingLeft: 4,
+  },
+  muteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.28)',
   },
   loading: {
     ...StyleSheet.absoluteFill,

@@ -17,6 +17,8 @@ export function MainNavigator() {
       tabBar={props => <FloatingPillTabBar {...props} />}
       screenOptions={{
         headerShown: false,
+        // Floating pill overlays content; screens pad themselves via tabBarInset.
+        tabBarStyle: { position: 'absolute' },
       }}>
       <Tab.Screen
         name="PlayFeed"

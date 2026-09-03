@@ -112,7 +112,7 @@ cmd_recreate() {
   require_env_file
   echo "==> Recreate web services (EDGE=$EDGE)"
   # shellcheck disable=SC2046
-  compose up -d --force-recreate $(web_services)
+  compose up -d --no-deps --force-recreate $(web_services)
   compose ps
   cmd_verify || true
 }

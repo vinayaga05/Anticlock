@@ -177,15 +177,6 @@ export function VideoPlayer({
       {localPaused && ready ? (
         <View style={styles.pauseOverlay} pointerEvents="box-none">
           <View style={styles.pauseControls} pointerEvents="box-none">
-            <View style={styles.pauseButton} pointerEvents="none">
-              <AppIcon
-                name="play"
-                size={36}
-                color="#fff"
-                fill="#fff"
-                strokeWidth={0}
-              />
-            </View>
             <Pressable
               style={styles.muteButton}
               onPress={event => {
@@ -202,6 +193,15 @@ export function VideoPlayer({
                 strokeWidth={2.1}
               />
             </Pressable>
+            <View style={styles.pauseButton} pointerEvents="none">
+              <AppIcon
+                name="play"
+                size={36}
+                color="#fff"
+                fill="#fff"
+                strokeWidth={0}
+              />
+            </View>
           </View>
         </View>
       ) : null}

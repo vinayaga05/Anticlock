@@ -18,16 +18,26 @@ function Bubble({
 }) {
   const theme = useTheme();
   const isUser = message.role === 'user';
+  const isDark = theme.mode === 'dark';
 
   return (
     <View style={[styles.row, isUser ? styles.rowUser : styles.rowAssistant]}>
       <View
         style={[
           styles.bubble,
-          {
-            backgroundColor: isUser ? theme.colors.primary : theme.colors.surface,
-            borderColor: theme.colors.borderSoft,
-          },
+          isUser
+            ? {
+                backgroundColor: theme.colors.primary,
+                borderColor: 'transparent',
+              }
+            : {
+                backgroundColor: isDark
+                  ? 'rgba(255,255,255,0.08)'
+                  : 'rgba(255,255,255,0.55)',
+                borderColor: isDark
+                  ? 'rgba(255,255,255,0.12)'
+                  : 'rgba(255,255,255,0.7)',
+              },
         ]}>
         <Text
           style={{
@@ -56,6 +66,7 @@ export function MessageThread({
   nativeGesture?: GestureType;
   onScrollOffsetChange?: (offsetY: number) => void;
 }) {
+  const theme = useTheme();
   const listRef = useRef<FlatList<AssistantMessage>>(null);
 
   const list = (
@@ -75,7 +86,9 @@ export function MessageThread({
       onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
       renderItem={({ item }) => <Bubble message={item} onPressCard={onPressCard} />}
       ListEmptyComponent={
-        <Text style={styles.empty}>Ask Genie anything about Anticlock.</Text>
+        <Text style={[styles.empty, { color: theme.colors.textSecondary }]}>
+          Ask Genie anything about Anticlock.
+        </Text>
       }
     />
   );
@@ -99,7 +112,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 28,
     fontSize: 14,
-    opacity: 0.5,
+    opacity: 0.72,
   },
   row: {
     width: '100%',
@@ -112,7 +125,7 @@ const styles = StyleSheet.create({
   },
   bubble: {
     maxWidth: '88%',
-    borderRadius: 18,
+    borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: StyleSheet.hairlineWidth,

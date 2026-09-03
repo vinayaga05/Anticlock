@@ -37,6 +37,7 @@ export function VoiceInput({
   const theme = useTheme();
   const autoStartedRef = useRef(false);
   const pulse = useSharedValue(1);
+  const isDark = theme.mode === 'dark';
 
   const speech = useSpeechRecognition({
     onTranscriptChange: onChangeText,
@@ -172,8 +173,14 @@ export function VoiceInput({
         style={[
           styles.bar,
           {
-            backgroundColor: theme.colors.surface,
-            borderColor: listening ? theme.colors.primary : theme.colors.borderSoft,
+            backgroundColor: isDark
+              ? 'rgba(255,255,255,0.08)'
+              : 'rgba(255,255,255,0.58)',
+            borderColor: listening
+              ? theme.colors.primary
+              : isDark
+                ? 'rgba(255,255,255,0.14)'
+                : 'rgba(255,255,255,0.75)',
           },
         ]}>
         <TextInput
@@ -275,8 +282,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   bar: {
-    minHeight: 48,
-    borderRadius: 16,
+    minHeight: 50,
+    borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     alignItems: 'center',

@@ -12,6 +12,7 @@ export function QuickSuggestions({
 }) {
   const theme = useTheme();
   if (!actions.length) return null;
+  const isDark = theme.mode === 'dark';
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.row}>
@@ -22,8 +23,12 @@ export function QuickSuggestions({
           style={[
             styles.chip,
             {
-              backgroundColor: theme.colors.surfaceMuted,
-              borderColor: theme.colors.borderSoft,
+              backgroundColor: isDark
+                ? 'rgba(255,255,255,0.08)'
+                : 'rgba(255,255,255,0.5)',
+              borderColor: isDark
+                ? 'rgba(255,255,255,0.14)'
+                : 'rgba(255,255,255,0.72)',
             },
           ]}>
           <Text style={[styles.label, { color: theme.colors.primary }]}>{action}</Text>

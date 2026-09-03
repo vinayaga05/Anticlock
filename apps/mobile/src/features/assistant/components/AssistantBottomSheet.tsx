@@ -7,6 +7,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { BlurView } from '@react-native-community/blur';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Extrapolation,
@@ -43,6 +44,10 @@ const DEFAULT_VISIBLE = 0.62;
 
 const SPRING = { damping: 26, stiffness: 280, mass: 0.82 };
 const RUBBER = 0.55;
+/** Soft dim so the feed remains visible under frosted Genie glass. */
+const BACKDROP_DEFAULT = 0.28;
+const BACKDROP_EXPANDED = 0.38;
+const GLASS_BLUR = 28;
 
 export function AssistantBottomSheetHost() {
   const theme = useTheme();
@@ -84,12 +89,12 @@ export function AssistantBottomSheetHost() {
 
   const snapToDefault = useCallback(() => {
     translateY.value = withSpring(defaultY, SPRING);
-    backdrop.value = withSpring(0.45, SPRING);
+    backdrop.value = withSpring(BACKDROP_DEFAULT, SPRING);
   }, [backdrop, defaultY, translateY]);
 
   const snapToExpanded = useCallback(() => {
     translateY.value = withSpring(expandedY, SPRING);
-    backdrop.value = withSpring(0.55, SPRING);
+    backdrop.value = withSpring(BACKDROP_EXPANDED, SPRING);
   }, [backdrop, expandedY, translateY]);
 
   const dismissSheet = useCallback(() => {
@@ -151,7 +156,7 @@ export function AssistantBottomSheetHost() {
       backdrop.value = 0;
       const id = requestAnimationFrame(() => {
         translateY.value = withSpring(defaultY, SPRING);
-        backdrop.value = withSpring(0.45, SPRING);
+        backdrop.value = withSpring(BACKDROP_DEFAULT, SPRING);
       });
       return () => cancelAnimationFrame(id);
     }
@@ -172,7 +177,7 @@ export function AssistantBottomSheetHost() {
     const show = Keyboard.addListener(showEvt, () => {
       if (translateY.value > expandedY + 40) {
         translateY.value = withSpring(expandedY, SPRING);
-        backdrop.value = withSpring(0.55, SPRING);
+        backdrop.value = withSpring(BACKDROP_EXPANDED, SPRING);
       }
     });
     return () => show.remove();
@@ -227,7 +232,7 @@ export function AssistantBottomSheetHost() {
 
       translateY.value = clampWithRubber(dragStartY.value + e.translationY);
       const progress = 1 - (translateY.value - expandedY) / (closedY - expandedY);
-      backdrop.value = Math.max(0, Math.min(0.55, progress * 0.55));
+      backdrop.value = Math.max(0, Math.min(BACKDROP_EXPANDED, progress * BACKDROP_EXPANDED));
     })
     .onEnd(e => {
       runOnJS(endDrag)(
@@ -248,7 +253,7 @@ export function AssistantBottomSheetHost() {
     .onUpdate(e => {
       translateY.value = clampWithRubber(dragStartY.value + e.translationY);
       const progress = 1 - (translateY.value - expandedY) / (closedY - expandedY);
-      backdrop.value = Math.max(0, Math.min(0.55, progress * 0.55));
+      backdrop.value = Math.max(0, Math.min(BACKDROP_EXPANDED, progress * BACKDROP_EXPANDED));
     })
     .onEnd(e => {
       runOnJS(endDrag)(
@@ -317,6 +322,12 @@ export function AssistantBottomSheetHost() {
 
   if (!sheetMounted) return null;
 
+  const isDark = theme.mode === 'dark';
+  const glassTint = isDark ? 'rgba(16,16,20,0.48)' : 'rgba(255,255,255,0.48)';
+  const glassBorder = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.62)';
+  const glassHighlight = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.55)';
+  const blurFallback = isDark ? 'rgba(18,18,22,0.94)' : 'rgba(250,250,248,0.96)';
+
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       <Animated.View style={[styles.backdrop, backdropStyle]}>
@@ -332,31 +343,81 @@ export function AssistantBottomSheetHost() {
         style={[
           styles.sheet,
           {
-            backgroundColor: theme.colors.backgroundElevated,
-            borderColor: theme.colors.borderSoft,
+            backgroundColor: 'transparent',
+            borderColor: glassBorder,
           },
           sheetStyle,
         ]}>
+        <BlurView
+          pointerEvents="none"
+          style={StyleSheet.absoluteFill}
+          blurType={
+            isDark
+              ? 'dark'
+              : Platform.OS === 'ios'
+                ? 'chromeMaterialLight'
+                : 'light'
+          }
+          blurAmount={GLASS_BLUR}
+          {...(Platform.OS === 'ios'
+            ? { reducedTransparencyFallbackColor: blurFallback }
+            : { overlayColor: 'transparent' })}
+        />
+        <View
+          pointerEvents="none"
+          style={[styles.glassTint, { backgroundColor: glassTint }]}
+        />
+        <View
+          pointerEvents="none"
+          style={[styles.glassSheen, { backgroundColor: glassHighlight }]}
+        />
+
         <GestureDetector gesture={headerPan}>
           <View>
             <View style={styles.handleWrap}>
               <Animated.View
                 style={[
                   styles.handle,
-                  { backgroundColor: theme.colors.border },
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(255,255,255,0.35)'
+                      : 'rgba(0,0,0,0.22)',
+                  },
                   handleGrabStyle,
                 ]}
               />
             </View>
             <View style={styles.header}>
               <View style={styles.headerLeft}>
-                <AppIcon name="sparkles" size={18} color={theme.colors.primary} />
+                <View
+                  style={[
+                    styles.headerBadge,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(255,255,255,0.08)'
+                        : 'rgba(255,255,255,0.55)',
+                      borderColor: glassBorder,
+                    },
+                  ]}>
+                  <AppIcon name="sparkles" size={16} color={theme.colors.primary} />
+                </View>
                 <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
                   Genie
                 </Text>
               </View>
-              <PressableScale onPress={dismissSheet} accessibilityLabel="Close">
-                <AppIcon name="x" size={22} color={theme.colors.textSecondary} />
+              <PressableScale
+                onPress={dismissSheet}
+                accessibilityLabel="Close"
+                style={[
+                  styles.closeBtn,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(255,255,255,0.08)'
+                      : 'rgba(255,255,255,0.45)',
+                    borderColor: glassBorder,
+                  },
+                ]}>
+                <AppIcon name="x" size={18} color={theme.colors.textSecondary} />
               </PressableScale>
             </View>
           </View>
@@ -416,19 +477,33 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     flexDirection: 'column',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOpacity: 0.18,
-        shadowRadius: 20,
-        shadowOffset: { width: 0, height: -6 },
+        shadowOpacity: 0.22,
+        shadowRadius: 28,
+        shadowOffset: { width: 0, height: -8 },
       },
-      android: { elevation: 18 },
+      android: { elevation: 22 },
     }),
+  },
+  glassTint: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  },
+  glassSheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 72,
   },
   handleWrap: {
     alignItems: 'center',
@@ -445,16 +520,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingBottom: 10,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
+  },
+  headerBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
   },
   title: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
+    letterSpacing: 0.2,
   },
   progressWrap: {
     paddingHorizontal: 16,

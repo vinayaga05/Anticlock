@@ -291,17 +291,25 @@ async function main() {
     await uploadCanvaDir(client, bucket, uploadDirArg);
   }
 
-  const keys = await listMp4Keys(client, bucket);
+  // Prefer canva/ objects only so accidental bucket dumps do not enter the feed.
+  const allKeys = await listMp4Keys(client, bucket);
+  const keys = allKeys.filter(key => key.startsWith(`${R2_PREFIX}/`));
   if (!keys.length) {
-    console.log('No MP4 objects found in R2 bucket.');
+    console.log('No MP4 objects found under canva/ in R2 bucket.');
     await sql.end({ timeout: 5 });
     return;
   }
 
-  console.log(`Found ${keys.length} MP4 object(s) in R2:`);
+  console.log(`Found ${keys.length} canva/ MP4 object(s) in R2 (of ${allKeys.length} total):`);
   const adminId = await resolveAdminUserId();
 
   for (const key of keys) {
+    // Skip accidental screen recordings / non-export dumps under canva/.
+    const file = basename(key);
+    if (!(file in CANVA_META) && !file.match(/^(yoga-flow|fitness-reel|health-tips)\.mp4$/i)) {
+      console.log(`\n↷ skip ${key}`);
+      continue;
+    }
     console.log(`\n→ ${key}`);
     console.log(`  playback: ${r2PublicDeliveryUrl(key)}`);
     await upsertPublishedReel(adminId, bucket, key);

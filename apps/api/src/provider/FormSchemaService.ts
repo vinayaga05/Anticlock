@@ -8,6 +8,7 @@ import type {
 import { eq, inArray, and } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { providerFormSchemas } from '../db/schema.js';
+import { GLOBAL_PROVIDER_FORM_SCHEMA } from '../seed/providerFormSchemas.js';
 
 function fieldVisible(field: FormFieldDefinition, providerKind: ProviderKind) {
   if (!field.visibleWhen?.providerKind) return true;
@@ -102,11 +103,36 @@ export async function loadPublishedSchemas(categoryIds: string[]) {
   };
 }
 
+/**
+ * A form must always be available for a newly provisioned environment. The
+ * seed command normally creates this record, but local and first-run stacks
+ * may intentionally start with RUN_SEED=false. Bootstrap only the published
+ * global default in that case; admins can still replace it in the CMS.
+ */
+async function ensureDefaultGlobalSchema() {
+  await db
+    .insert(providerFormSchemas)
+    .values({
+      scope: GLOBAL_PROVIDER_FORM_SCHEMA.scope,
+      categoryId: null,
+      providerKinds: GLOBAL_PROVIDER_FORM_SCHEMA.providerKinds,
+      version: GLOBAL_PROVIDER_FORM_SCHEMA.version,
+      status: GLOBAL_PROVIDER_FORM_SCHEMA.status,
+      sections: GLOBAL_PROVIDER_FORM_SCHEMA.sections,
+      fields: GLOBAL_PROVIDER_FORM_SCHEMA.fields,
+    })
+    .onConflictDoNothing();
+}
+
 export async function resolveFormSchema(
   providerKind: ProviderKind,
   categoryIds: string[],
 ): Promise<ResolvedProviderFormSchema> {
-  const { global, categories } = await loadPublishedSchemas(categoryIds);
+  let { global, categories } = await loadPublishedSchemas(categoryIds);
+  if (!global) {
+    await ensureDefaultGlobalSchema();
+    ({ global, categories } = await loadPublishedSchemas(categoryIds));
+  }
   if (!global) {
     throw Object.assign(new Error('Global provider form schema is not configured'), {
       code: 'schema_missing',

@@ -4,50 +4,29 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { Button } from '@/shared/components/Button';
+import { AppIcon } from '@/shared/components/AppIcon';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { isApiEnabled } from '@/shared/api/config';
-import {
-  useCreateProviderApplicationMutation,
-  useMyProviderApplicationQuery,
-} from '@/shared/api/providerHooks';
 
 export function ProviderApplicationIntroScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const { data: application } = useMyProviderApplicationQuery();
-  const create = useCreateProviderApplicationMutation();
-
-  const continueFlow = () => {
-    if (application?.id) {
-      if (application.status === 'approved') {
-        navigation.navigate('ProviderDashboard');
-        return;
-      }
-      if (application.categoryIds.length) {
-        navigation.navigate('ProviderApplicationForm', { applicationId: application.id });
-        return;
-      }
-      if (application.providerKind) {
-        navigation.navigate('ProviderApplicationServices', { applicationId: application.id });
-        return;
-      }
-      navigation.navigate('ProviderApplicationKind', { applicationId: application.id });
-      return;
-    }
-    navigation.navigate('ProviderApplicationKind');
-  };
-
   return (
     <ScreenContainer tabAware={false} contentStyle={{ paddingTop: insets.top + 16 }}>
       <View style={styles.content}>
-        <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
-          Become a Service Provider
-        </Text>
+        <View style={[styles.hero, { backgroundColor: theme.colors.primarySoft }]}>
+          <View style={[styles.heroIcon, { backgroundColor: theme.colors.primary }]}>
+            <AppIcon name="shop" size={26} color="#FFFFFF" />
+          </View>
+          <View style={styles.heroCopy}>
+            <Text style={[styles.eyebrow, { color: theme.colors.primaryMuted }]}>GROW WITH ANTICLOCK</Text>
+            <Text style={[styles.title, { color: theme.colors.textPrimary }]}>Become a service provider</Text>
+          </View>
+        </View>
         <Text style={[styles.body, { color: theme.colors.textSecondary }]}>
-          Apply to list your services on Anticlock. Choose your provider type, select
-          services from our catalog, and complete a tailored application form. Our team
-          reviews every submission before your profile goes live.
+          Create one business listing with a primary service, complete a tailored profile,
+          and submit it for review. You can add another business whenever you need to.
         </Text>
         {!isApiEnabled ? (
           <Text style={[styles.banner, { color: theme.colors.textSecondary }]}>
@@ -55,28 +34,11 @@ export function ProviderApplicationIntroScreen() {
             API is connected.
           </Text>
         ) : null}
-        {application ? (
-          <Text style={{ color: theme.colors.textSecondary }}>
-            Current status: {application.status.replace(/_/g, ' ')}
-          </Text>
-        ) : null}
         <Button
-          title={application ? 'Continue application' : 'Start application'}
-          onPress={continueFlow}
-          disabled={create.isPending}
-          loading={create.isPending}
+          title="Create a business"
+          onPress={() => navigation.navigate('ProviderApplicationKind')}
         />
-        {application ? (
-          <Button
-            title="View application status"
-            variant="secondary"
-            onPress={() =>
-              navigation.navigate('ProviderApplicationStatus', {
-                applicationId: application.id,
-              })
-            }
-          />
-        ) : null}
+        <Button title="View my businesses" variant="secondary" onPress={() => navigation.navigate('ProviderBusinesses')} />
       </View>
     </ScreenContainer>
   );
@@ -87,9 +49,33 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 16,
   },
+  hero: {
+    alignItems: 'center',
+    borderRadius: 22,
+    flexDirection: 'row',
+    gap: 14,
+    padding: 18,
+  },
+  heroIcon: {
+    alignItems: 'center',
+    borderRadius: 18,
+    height: 48,
+    justifyContent: 'center',
+    width: 48,
+  },
+  heroCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  eyebrow: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 21,
+    fontWeight: '800',
+    letterSpacing: -0.35,
   },
   body: {
     fontSize: 16,

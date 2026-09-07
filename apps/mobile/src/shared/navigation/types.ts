@@ -11,10 +11,13 @@ export type MainTabParamList = {
 
 export type RootStackParamList = {
   Login: undefined;
+  InterestOnboarding: undefined;
+  InterestPreferences: undefined;
   Main: undefined | { screen: keyof MainTabParamList };
   Search: undefined;
   Profile: { userId?: string } | undefined;
   AccountSettings: undefined;
+  EditProfile: undefined;
   Doctors: undefined;
   DoctorProfile: { doctorId: string };
   DiagnosticsHub: undefined;
@@ -87,6 +90,7 @@ export type RootStackParamList = {
   ProviderApplicationForm: { applicationId: string };
   ProviderApplicationReview: { applicationId: string };
   ProviderApplicationStatus: { applicationId: string };
+  ProviderBusinesses: undefined;
   ProviderDashboard: undefined;
 };
 

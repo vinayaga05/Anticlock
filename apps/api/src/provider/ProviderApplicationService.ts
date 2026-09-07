@@ -18,6 +18,7 @@ import {
   providerApplicationDocuments,
   providerApplicationServices,
   providerApplications,
+  providerMemberships,
   providerServiceOfferings,
   providers,
 } from '../db/schema.js';
@@ -42,8 +43,16 @@ function toSummary(
   row: typeof providerApplications.$inferSelect,
   categoryIds: string[],
 ): ProviderApplicationSummary {
+  const commonPayload = (row.commonPayload ?? {}) as Record<string, unknown>;
+  const basic = (commonPayload.basic ?? {}) as Record<string, unknown>;
   return {
     id: row.id,
+    businessName:
+      typeof basic.providerName === 'string' && basic.providerName.trim()
+        ? basic.providerName.trim()
+        : row.providerKind === 'business'
+          ? 'New business'
+          : 'New professional profile',
     providerKind: row.providerKind as ProviderApplicationSummary['providerKind'],
     status: row.status as ProviderApplicationSummary['status'],
     categoryIds,
@@ -108,6 +117,28 @@ async function getAadhaarMasked(applicationId: string) {
 }
 
 export class ProviderApplicationService {
+  async getMyApplications(mobileUserId: string): Promise<ProviderApplicationSummary[]> {
+    const rows = await db
+      .select()
+      .from(providerApplications)
+      .where(
+        and(
+          eq(providerApplications.mobileUserId, mobileUserId),
+          inArray(providerApplications.status, [
+            'submitted',
+            'under_review',
+            'more_info_requested',
+            'approved',
+          ]),
+        ),
+      )
+      .orderBy(desc(providerApplications.updatedAt));
+
+    return Promise.all(
+      rows.map(async row => toSummary(row, await getCategoryIds(row.id))),
+    );
+  }
+
   async getMyApplication(mobileUserId: string): Promise<ProviderApplicationDetail | null> {
     const [row] = await db
       .select()
@@ -134,33 +165,36 @@ export class ProviderApplicationService {
     };
   }
 
+  async getApplication(
+    mobileUserId: string,
+    applicationId: string,
+  ): Promise<ProviderApplicationDetail> {
+    const row = await this.requireOwnedApplication(mobileUserId, applicationId);
+    const categoryIds = await getCategoryIds(row.id);
+    const documents = await getDocuments(row.id);
+    return {
+      ...toSummary(row, categoryIds),
+      commonPayload: (row.commonPayload ?? {}) as ProviderApplicationDetail['commonPayload'],
+      dynamicPayload: (row.dynamicPayload ?? {}) as Record<string, unknown>,
+      documents,
+      aadhaarMasked: await getAadhaarMasked(row.id),
+    };
+  }
+
   async createApplication(
     mobileUserId: string,
     body: CreateProviderApplicationRequest,
   ) {
-    const existing = await this.getMyApplication(mobileUserId);
-    if (existing && existing.status !== 'rejected') {
-      throw Object.assign(new Error('An active application already exists'), {
-        code: 'application_exists',
-        status: 409,
-      });
-    }
-
-    const [providerRole] = await db
-      .select()
-      .from(mobileUserRoles)
+    // Drafts are only temporary onboarding state, not user-visible businesses.
+    // Starting a new listing replaces an abandoned unfinished draft.
+    await db
+      .delete(providerApplications)
       .where(
         and(
-          eq(mobileUserRoles.mobileUserId, mobileUserId),
-          eq(mobileUserRoles.roleId, 'service_provider'),
+          eq(providerApplications.mobileUserId, mobileUserId),
+          eq(providerApplications.status, 'draft'),
         ),
       );
-    if (providerRole) {
-      throw Object.assign(new Error('You are already a service provider'), {
-        code: 'already_provider',
-        status: 409,
-      });
-    }
 
     const [row] = await db
       .insert(providerApplications)
@@ -227,7 +261,7 @@ export class ProviderApplicationService {
         });
     }
 
-    return this.getMyApplication(mobileUserId);
+    return this.getApplication(mobileUserId, applicationId);
   }
 
   private async ensurePlaceholderMedia(applicationId: string) {
@@ -287,7 +321,24 @@ export class ProviderApplicationService {
       .set({ updatedAt: new Date() })
       .where(eq(providerApplications.id, applicationId));
 
-    return this.getMyApplication(mobileUserId);
+    return this.getApplication(mobileUserId, applicationId);
+  }
+
+  async deleteApplication(mobileUserId: string, applicationId: string) {
+    const row = await this.requireOwnedApplication(mobileUserId, applicationId);
+    if (row.status === 'approved' || row.providerId) {
+      throw Object.assign(
+        new Error('An approved business cannot be deleted from the app'),
+        {
+          code: 'invalid_status',
+          status: 400,
+        },
+      );
+    }
+
+    await db
+      .delete(providerApplications)
+      .where(eq(providerApplications.id, applicationId));
   }
 
   async submitApplication(mobileUserId: string, applicationId: string) {
@@ -349,7 +400,7 @@ export class ProviderApplicationService {
       })
       .where(eq(providerApplications.id, applicationId));
 
-    return this.getMyApplication(mobileUserId);
+    return this.getApplication(mobileUserId, applicationId);
   }
 
   async createKycUploadSession(
@@ -561,12 +612,7 @@ export class ProviderApplicationService {
     const basic = (common.basic ?? {}) as Record<string, string>;
     const providerName = basic.providerName ?? 'Provider';
 
-    const [existingProvider] = await db
-      .select()
-      .from(providers)
-      .where(eq(providers.mobileUserId, row.mobileUserId));
-
-    let providerId = existingProvider?.id;
+    let providerId = row.providerId;
     if (!providerId) {
       const [created] = await db
         .insert(providers)
@@ -583,6 +629,15 @@ export class ProviderApplicationService {
         .returning();
       providerId = created!.id;
     }
+
+    await db
+      .insert(providerMemberships)
+      .values({
+        providerId,
+        mobileUserId: row.mobileUserId,
+        role: 'owner',
+      })
+      .onConflictDoNothing();
 
     const categoryIds = await getCategoryIds(row.id);
     const servicesSummary = (common.services ?? {}) as Record<string, unknown>;

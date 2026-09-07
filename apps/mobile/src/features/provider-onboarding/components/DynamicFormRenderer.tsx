@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -7,9 +7,14 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import type { FormFieldDefinition, ResolvedProviderFormSchema } from '@/features/provider-onboarding/types';
+import type {
+  FormFieldDefinition,
+  ResolvedProviderFormSchema,
+} from '@/features/provider-onboarding/types';
 import { useTheme } from '@/shared/hooks/useTheme';
+import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { Button } from '@/shared/components/Button';
+import { PressableScale } from '@/shared/components/PressableScale';
 
 type Props = {
   schema: ResolvedProviderFormSchema;
@@ -21,6 +26,38 @@ type Props = {
   onDocumentUploaded?: (fieldKey: string) => void;
 };
 
+const SECTION_DETAILS: Record<string, { icon: IconName; description: string }> =
+  {
+    basic: { icon: 'shop', description: 'Tell customers who you are' },
+    location: { icon: 'map-pin', description: 'Add your business address' },
+    profile: { icon: 'user', description: 'Share what makes you different' },
+    identity: {
+      icon: 'badge-check',
+      description: 'Verify your identity and documents',
+    },
+    availability: { icon: 'clock', description: 'Set your working hours' },
+    services: {
+      icon: 'clipboard-list',
+      description: 'Set how customers can book you',
+    },
+    hospital: { icon: 'hospital', description: 'Add facilities and services' },
+    medical: {
+      icon: 'stethoscope',
+      description: 'Add your professional credentials',
+    },
+    gym: {
+      icon: 'dumbbell',
+      description: 'Add facilities and membership details',
+    },
+    trainer: { icon: 'activity', description: 'Add expertise and packages' },
+    coaching: {
+      icon: 'graduation-cap',
+      description: 'Add your course details',
+    },
+    homeservice: { icon: 'home', description: 'Add service areas and pricing' },
+    food: { icon: 'shop', description: 'Add menu and delivery details' },
+  };
+
 function getValue(values: Record<string, unknown>, key: string) {
   if (key in values) return values[key];
   const parts = key.split('.');
@@ -30,6 +67,12 @@ function getValue(values: Record<string, unknown>, key: string) {
     current = (current as Record<string, unknown>)[part];
   }
   return current;
+}
+
+function hasValue(value: unknown) {
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'string') return value.trim().length > 0;
+  return value !== undefined && value !== null;
 }
 
 function FieldInput({
@@ -52,15 +95,19 @@ function FieldInput({
   const theme = useTheme();
 
   if (field.type === 'boolean') {
-    return (
-      <Switch value={Boolean(value)} onValueChange={onChange} />
-    );
+    return <Switch value={Boolean(value)} onValueChange={onChange} />;
   }
 
   if (field.type === 'aadhaar') {
     return (
       <TextInput
-        style={[styles.input, { color: theme.colors.textPrimary, borderColor: theme.colors.borderSoft }]}
+        style={[
+          styles.input,
+          {
+            color: theme.colors.textPrimary,
+            borderColor: theme.colors.borderSoft,
+          },
+        ]}
         placeholder={aadhaarMasked ? 'Saved (masked)' : '12-digit Aadhaar'}
         placeholderTextColor={theme.colors.textTertiary}
         keyboardType="number-pad"
@@ -73,7 +120,11 @@ function FieldInput({
     );
   }
 
-  if (field.type === 'document' || field.type === 'image' || field.type === 'video') {
+  if (
+    field.type === 'document' ||
+    field.type === 'image' ||
+    field.type === 'video'
+  ) {
     return (
       <View>
         <Text style={{ color: theme.colors.textSecondary }}>
@@ -87,7 +138,9 @@ function FieldInput({
               onChange(`pending:${field.key}`);
               return;
             }
-            const { uploadProviderDocument } = await import('@/shared/api/providerHooks');
+            const { uploadProviderDocument } = await import(
+              '@/shared/api/providerHooks'
+            );
             const placeholder = new Uint8Array([80, 68, 70, 45, 49, 46, 52]);
             await uploadProviderDocument(
               applicationId,
@@ -150,17 +203,20 @@ function FieldInput({
     field.type === 'number' || field.type === 'currency'
       ? 'numeric'
       : field.type === 'phone'
-        ? 'phone-pad'
-        : field.type === 'email'
-          ? 'email-address'
-          : 'default';
+      ? 'phone-pad'
+      : field.type === 'email'
+      ? 'email-address'
+      : 'default';
 
   return (
     <TextInput
       style={[
         styles.input,
         multiline && styles.textarea,
-        { color: theme.colors.textPrimary, borderColor: theme.colors.borderSoft },
+        {
+          color: theme.colors.textPrimary,
+          borderColor: theme.colors.borderSoft,
+        },
       ]}
       placeholder={field.label}
       placeholderTextColor={theme.colors.textTertiary}
@@ -194,31 +250,181 @@ export function DynamicFormRenderer({
     return map;
   }, [schema.fields]);
 
+  const visibleSections = useMemo(
+    () =>
+      schema.sections.filter(
+        section => (fieldsBySection.get(section.id) ?? []).length > 0,
+      ),
+    [fieldsBySection, schema.sections],
+  );
+
+  useEffect(() => {
+    if (!visibleSections.some(section => section.id === openSection)) {
+      setOpenSection(visibleSections[0]?.id ?? '');
+    }
+  }, [openSection, visibleSections]);
+
+  const activeStep = Math.max(
+    visibleSections.findIndex(section => section.id === openSection) + 1,
+    1,
+  );
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      {schema.sections.map(section => {
+    <ScrollView
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.progressHeader}>
+        <Text style={[styles.eyebrow, { color: theme.colors.primaryMuted }]}>
+          BUSINESS PROFILE
+        </Text>
+        <Text
+          style={[styles.progressTitle, { color: theme.colors.textPrimary }]}
+        >
+          Step {activeStep} of {visibleSections.length}
+        </Text>
+        <View style={styles.progressTrack}>
+          {visibleSections.map((section, index) => (
+            <View
+              key={section.id}
+              style={[
+                styles.progressSegment,
+                {
+                  backgroundColor:
+                    index < activeStep
+                      ? theme.colors.primary
+                      : theme.colors.surfaceMuted,
+                },
+              ]}
+            />
+          ))}
+        </View>
+      </View>
+
+      {visibleSections.map(section => {
         const fields = fieldsBySection.get(section.id) ?? [];
-        if (!fields.length) return null;
         const isOpen = openSection === section.id;
+        const required = fields.filter(field => field.required);
+        const isComplete =
+          required.length > 0 &&
+          required.every(field => hasValue(getValue(values, field.key)));
+        const completedCount = fields.filter(field =>
+          hasValue(getValue(values, field.key)),
+        ).length;
+        const details = SECTION_DETAILS[section.id] ?? {
+          icon: 'clipboard-list' as IconName,
+          description: 'Add the details customers need to know',
+        };
         return (
           <View
             key={section.id}
-            style={[styles.section, { borderColor: theme.colors.borderSoft, backgroundColor: theme.colors.surface }]}
+            style={[
+              styles.section,
+              {
+                borderColor: isOpen
+                  ? `${theme.colors.primary}40`
+                  : theme.colors.borderSoft,
+                backgroundColor: theme.colors.surface,
+              },
+            ]}
           >
-            <Button
-              title={section.title}
-              variant="ghost"
+            <PressableScale
               onPress={() => setOpenSection(isOpen ? '' : section.id)}
-            />
-            {isOpen
-              ? fields.map(field => (
+              style={styles.sectionHeader}
+            >
+              <View
+                style={[
+                  styles.sectionIcon,
+                  { backgroundColor: theme.colors.primarySoft },
+                ]}
+              >
+                <AppIcon
+                  name={details.icon}
+                  size={21}
+                  color={theme.colors.primaryMuted}
+                />
+              </View>
+              <View style={styles.sectionCopy}>
+                <Text
+                  style={[
+                    styles.sectionTitle,
+                    { color: theme.colors.textPrimary },
+                  ]}
+                >
+                  {section.title}
+                </Text>
+                <Text
+                  style={[
+                    styles.sectionDescription,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {details.description}
+                </Text>
+              </View>
+              {isComplete ? (
+                <View
+                  style={[
+                    styles.completeBadge,
+                    { backgroundColor: theme.colors.primarySoft },
+                  ]}
+                >
+                  <AppIcon
+                    name="check-circle"
+                    size={15}
+                    color={theme.colors.primaryMuted}
+                  />
+                  <Text
+                    style={[
+                      styles.completeText,
+                      { color: theme.colors.primaryMuted },
+                    ]}
+                  >
+                    Done
+                  </Text>
+                </View>
+              ) : null}
+              <AppIcon
+                name={isOpen ? 'chevron-down' : 'chevron-right'}
+                size={20}
+                color={theme.colors.textSecondary}
+              />
+            </PressableScale>
+            {isOpen ? (
+              <View
+                style={[
+                  styles.sectionContent,
+                  { borderTopColor: theme.colors.borderSoft },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.sectionStatus,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  {completedCount} of {fields.length} details completed
+                </Text>
+                {fields.map(field => (
                   <View key={field.key} style={styles.field}>
-                    <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
+                    <Text
+                      style={[
+                        styles.label,
+                        { color: theme.colors.textPrimary },
+                      ]}
+                    >
                       {field.label}
                       {field.required ? ' *' : ''}
                     </Text>
                     {field.helpText ? (
-                      <Text style={{ color: theme.colors.textSecondary, marginBottom: 6 }}>
+                      <Text
+                        style={{
+                          color: theme.colors.textSecondary,
+                          marginBottom: 6,
+                        }}
+                      >
                         {field.helpText}
                       </Text>
                     ) : null}
@@ -234,8 +440,9 @@ export function DynamicFormRenderer({
                       onDocumentUploaded={onDocumentUploaded}
                     />
                   </View>
-                ))
-              : null}
+                ))}
+              </View>
+            ) : null}
           </View>
         );
       })}
@@ -247,27 +454,102 @@ const styles = StyleSheet.create({
   container: {
     padding: 16,
     gap: 12,
+    paddingBottom: 28,
+  },
+  progressHeader: {
+    alignItems: 'center',
+    gap: 7,
+    paddingBottom: 8,
+    paddingTop: 2,
+  },
+  eyebrow: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+  },
+  progressTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.25,
+  },
+  progressTrack: {
+    flexDirection: 'row',
+    gap: 6,
+    width: '100%',
+  },
+  progressSegment: {
+    borderRadius: 100,
+    flex: 1,
+    height: 5,
   },
   section: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    padding: 12,
-    gap: 8,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  sectionHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 86,
+    padding: 14,
+  },
+  sectionIcon: {
+    alignItems: 'center',
+    borderRadius: 18,
+    height: 48,
+    justifyContent: 'center',
+    width: 48,
+  },
+  sectionCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.25,
+  },
+  sectionDescription: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  completeBadge: {
+    alignItems: 'center',
+    borderRadius: 10,
+    flexDirection: 'row',
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+  },
+  completeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  sectionContent: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 16,
+    padding: 16,
+  },
+  sectionStatus: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   field: {
-    marginTop: 8,
-    gap: 6,
+    gap: 7,
   },
   label: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.1,
   },
   input: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
+    borderRadius: 14,
+    fontSize: 16,
+    minHeight: 54,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   textarea: {
     minHeight: 96,

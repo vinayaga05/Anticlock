@@ -18,6 +18,7 @@ import {
 } from './tools/index.js';
 import {
   APPROVED_TOOL_NAMES,
+  getAssistantToolPolicy,
   MUTATING_TOOL_NAMES,
   normalizeToolName,
   parseToolArguments,
@@ -98,6 +99,27 @@ export class ToolExecutionService {
       };
     }
 
+    const policy = getAssistantToolPolicy(normalized);
+    // There are no transactional Genie tools today. This fail-closed branch is
+    // deliberate: adding one to the allowlist cannot accidentally let the
+    // model execute it until a server-owned confirmation flow is implemented.
+    if (policy?.requiresUserConfirmation) {
+      return {
+        result: {
+          ok: false,
+          error: 'This action requires your confirmation before it can run.',
+          code: 'confirmation_required',
+        },
+        events: [
+          {
+            type: 'tool_result',
+            toolName: normalized,
+            result: { error: 'Confirmation required', code: 'confirmation_required' },
+          },
+        ],
+      };
+    }
+
     let parsedArgs: Record<string, unknown>;
     try {
       parsedArgs = parseToolArguments(normalized, args) as Record<string, unknown>;
@@ -144,7 +166,10 @@ export class ToolExecutionService {
         });
       }
 
-      if (result.ok && result.navigation) {
+      // Structured actions are authoritative. Older clients may still use a
+      // navigation event, so emit that compatibility event only when the tool
+      // did not also return an action. Otherwise clients would navigate twice.
+      if (result.ok && result.navigation && !result.action) {
         events.push({
           type: 'navigation',
           route: result.navigation.route,

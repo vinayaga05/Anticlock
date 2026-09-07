@@ -186,7 +186,7 @@ export type UpdateProviderApplicationRequest = z.infer<
 >;
 
 export const SetProviderApplicationServicesRequestSchema = z.object({
-  categoryIds: z.array(z.string()).min(1).max(20),
+  categoryIds: z.array(z.string()).length(1),
 });
 export type SetProviderApplicationServicesRequest = z.infer<
   typeof SetProviderApplicationServicesRequestSchema
@@ -204,6 +204,7 @@ export type ProviderApplicationDocument = z.infer<
 
 export const ProviderApplicationSummarySchema = z.object({
   id: z.string().uuid(),
+  businessName: z.string(),
   providerKind: ProviderKindSchema,
   status: ProviderApplicationStatusSchema,
   categoryIds: z.array(z.string()),

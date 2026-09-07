@@ -6,6 +6,7 @@ import {
   MobileOtpSendRequestSchema,
   MobileOtpVerifyRequestSchema,
   MobileTokenRequestSchema,
+  UpdateMobileProfileRequestSchema,
   type Role,
 } from '@anticlock/contracts';
 import { db } from '../db/client.js';
@@ -49,6 +50,9 @@ async function issueMobileSession(user: typeof mobileUsers.$inferSelect) {
       phone: user.phone,
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
+      bio: user.bio,
+      location: user.location,
+      website: user.website,
       roles,
       providerId,
     },
@@ -261,6 +265,56 @@ authRoutes.get('/mobile/me', requireAuth, async c => {
       phone: user.phone,
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
+      bio: user.bio,
+      location: user.location,
+      website: user.website,
+      ...(await getMobileUserContext(user.id)),
+    },
+  });
+});
+
+authRoutes.put('/mobile/profile', requireAuth, async c => {
+  const auth = c.get('auth');
+  if (auth.kind !== 'mobile') {
+    return c.json({ error: { code: 'forbidden', message: 'Mobile session required' } }, 403);
+  }
+
+  const body = UpdateMobileProfileRequestSchema.parse(await c.req.json());
+  const [user] = await db
+    .update(mobileUsers)
+    .set({
+      displayName: body.displayName,
+      avatarUrl: body.avatarUrl,
+      bio: body.bio,
+      location: body.location,
+      website: body.website,
+      updatedAt: new Date(),
+    })
+    .where(eq(mobileUsers.id, auth.sub))
+    .returning();
+
+  if (!user || !user.isActive) {
+    return c.json({ error: { code: 'not_found', message: 'Profile not found' } }, 404);
+  }
+
+  await writeAudit({
+    actorId: user.id,
+    actorEmail: user.phone,
+    action: 'mobile_user.profile_updated',
+    entityType: 'mobile_user',
+    entityId: user.id,
+    metadata: { changed: ['displayName', 'avatarUrl', 'bio', 'location', 'website'] },
+  });
+
+  return c.json({
+    user: {
+      id: user.id,
+      phone: user.phone,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+      bio: user.bio,
+      location: user.location,
+      website: user.website,
       ...(await getMobileUserContext(user.id)),
     },
   });

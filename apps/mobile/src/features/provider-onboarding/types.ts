@@ -58,6 +58,7 @@ export type ProviderApplicationDocument = {
 
 export type ProviderApplicationDetail = {
   id: string;
+  businessName: string;
   providerKind: ProviderKind;
   status: ProviderApplicationStatus;
   categoryIds: string[];
@@ -73,6 +74,11 @@ export type ProviderApplicationDetail = {
   documents: ProviderApplicationDocument[];
   aadhaarMasked?: string | null;
 };
+
+export type ProviderApplicationSummary = Omit<
+  ProviderApplicationDetail,
+  'commonPayload' | 'dynamicPayload' | 'documents' | 'aadhaarMasked'
+>;
 
 export type CreateProviderApplicationRequest = {
   providerKind: ProviderKind;

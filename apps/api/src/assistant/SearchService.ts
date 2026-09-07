@@ -3,6 +3,14 @@ import { algoliasearch } from 'algoliasearch';
 import { sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 
+export type GroundedCatalogSource = {
+  sourceType: 'service_tree' | 'service_category';
+  sourceId: string;
+  title: string;
+  excerpt?: string;
+  metadata: Record<string, string>;
+};
+
 function algoliaClient() {
   const appId = process.env.ALGOLIA_APP_ID?.trim();
   const apiKey = process.env.ALGOLIA_API_KEY?.trim();
@@ -90,7 +98,16 @@ export class SearchService {
     return reels.map(r => ({ ...r, type: 'post' as const }));
   }
 
-  async searchCatalog(query: string, limit = 10): Promise<AssistantResultCard[]> {
+  /**
+   * Retrieves published catalog facts in a model-friendly format. The source
+   * IDs are deliberately retained so a trace can explain which first-party
+   * data supported a response without saving raw conversation text.
+   */
+  async searchCatalogGrounding(
+    query: string,
+    limit = 10,
+  ): Promise<GroundedCatalogSource[]> {
+    const safeLimit = Math.max(1, Math.min(limit, 20));
     const trees = await db.execute<{
       id: string;
       name: string;
@@ -101,7 +118,7 @@ export class SearchService {
       WHERE status = 'published'
         AND search_vector @@ plainto_tsquery('english', ${query})
       ORDER BY ts_rank(search_vector, plainto_tsquery('english', ${query})) DESC
-      LIMIT ${Math.ceil(limit / 2)}
+      LIMIT ${Math.ceil(safeLimit / 2)}
     `);
 
     const categories = await db.execute<{
@@ -109,32 +126,60 @@ export class SearchService {
       tree_id: string;
       name: string;
       description: string | null;
+      parent_id: string | null;
+      action_type: string | null;
+      tree_name: string;
     }>(sql`
-      SELECT id, tree_id, name, description
-      FROM service_categories
-      WHERE status = 'published'
-        AND search_vector @@ plainto_tsquery('english', ${query})
-      ORDER BY ts_rank(search_vector, plainto_tsquery('english', ${query})) DESC
-      LIMIT ${Math.ceil(limit / 2)}
+      SELECT c.id, c.tree_id, c.name, c.description, c.parent_id, c.action_type,
+             t.name AS tree_name
+      FROM service_categories c
+      JOIN service_trees t ON t.id = c.tree_id
+      WHERE c.status = 'published' AND t.status = 'published'
+        AND c.search_vector @@ plainto_tsquery('english', ${query})
+      ORDER BY ts_rank(c.search_vector, plainto_tsquery('english', ${query})) DESC
+      LIMIT ${Math.ceil(safeLimit / 2)}
     `);
 
-    const treeCards: AssistantResultCard[] = trees.map(t => ({
-      id: t.id,
-      type: 'catalog',
-      title: t.name,
-      subtitle: t.description ?? undefined,
-      metadata: { treeId: t.id, kind: 'tree' },
-    }));
+    return [
+      ...trees.map(t => ({
+        sourceType: 'service_tree' as const,
+        sourceId: t.id,
+        title: t.name,
+        excerpt: t.description ?? undefined,
+        metadata: { treeId: t.id },
+      })),
+      ...categories.map(c => ({
+        sourceType: 'service_category' as const,
+        sourceId: c.id,
+        title: c.name,
+        excerpt: c.description ?? undefined,
+        metadata: {
+          treeId: c.tree_id,
+          treeName: c.tree_name,
+          ...(c.parent_id ? { parentId: c.parent_id } : {}),
+          ...(c.action_type ? { actionType: c.action_type } : {}),
+        },
+      })),
+    ].slice(0, safeLimit);
+  }
 
-    const categoryCards: AssistantResultCard[] = categories.map(c => ({
-      id: c.id,
-      type: 'catalog',
-      title: c.name,
-      subtitle: c.description ?? undefined,
-      metadata: { treeId: c.tree_id, categoryId: c.id, kind: 'category' },
-    }));
+  async searchCatalog(query: string, limit = 10): Promise<AssistantResultCard[]> {
+    const sources = await this.searchCatalogGrounding(query, limit);
 
-    return [...treeCards, ...categoryCards].slice(0, limit);
+    return sources.map(source => ({
+      id: source.sourceId,
+      type: 'catalog' as const,
+      title: source.title,
+      subtitle: source.excerpt,
+      metadata:
+        source.sourceType === 'service_tree'
+          ? { treeId: source.metadata.treeId, kind: 'tree' }
+          : {
+              treeId: source.metadata.treeId,
+              categoryId: source.sourceId,
+              kind: 'category',
+            },
+    }));
   }
 
   /**

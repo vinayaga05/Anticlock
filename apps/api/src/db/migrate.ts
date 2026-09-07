@@ -433,6 +433,172 @@ async function migrate() {
       WHERE scope = 'category' AND status = 'published' AND category_id IS NOT NULL
   `;
 
+  // The provider table is created here as well as in the legacy provider
+  // migration below so membership/content tables can safely reference it in
+  // both fresh and upgraded databases.
+  await sql`
+    CREATE TABLE IF NOT EXISTS providers (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      provider_kind text NOT NULL,
+      name text NOT NULL,
+      status text NOT NULL DEFAULT 'active',
+      public_profile jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS provider_memberships (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      provider_id uuid NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      role text NOT NULL CHECK (role IN ('owner', 'admin', 'content_creator', 'analyst')),
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (provider_id, mobile_user_id)
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS provider_memberships_user_idx ON provider_memberships (mobile_user_id)`;
+  await sql`
+    INSERT INTO provider_memberships (provider_id, mobile_user_id, role)
+    SELECT id, mobile_user_id, 'owner'
+    FROM providers
+    ON CONFLICT (provider_id, mobile_user_id) DO NOTHING
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS content_containers (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      created_by_mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      author_mobile_user_id uuid REFERENCES mobile_users(id) ON DELETE CASCADE,
+      author_provider_id uuid REFERENCES providers(id) ON DELETE CASCADE,
+      format text NOT NULL CHECK (format IN ('flash', 'story', 'clip')),
+      media_type text NOT NULL CHECK (media_type IN ('text', 'image', 'video', 'hybrid')),
+      caption text NOT NULL DEFAULT '',
+      media_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+      thumbnail_media_id uuid REFERENCES media_assets(id) ON DELETE SET NULL,
+      hashtags jsonb NOT NULL DEFAULT '[]'::jsonb,
+      tagged_mobile_user_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+      location jsonb,
+      visibility text NOT NULL DEFAULT 'public',
+      status text NOT NULL DEFAULT 'ready_to_publish' CHECK (status IN ('draft', 'ready_to_publish', 'published', 'discarded')),
+      created_at timestamptz NOT NULL DEFAULT now(),
+      published_at timestamptz,
+      CHECK ((author_mobile_user_id IS NULL) <> (author_provider_id IS NULL))
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS content_containers_creator_idx ON content_containers (created_by_mobile_user_id)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS content_posts (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      container_id uuid REFERENCES content_containers(id) ON DELETE SET NULL,
+      created_by_mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      author_mobile_user_id uuid REFERENCES mobile_users(id) ON DELETE CASCADE,
+      author_provider_id uuid REFERENCES providers(id) ON DELETE CASCADE,
+      format text NOT NULL CHECK (format IN ('flash', 'story', 'clip')),
+      media_type text NOT NULL CHECK (media_type IN ('text', 'image', 'video', 'hybrid')),
+      caption text NOT NULL DEFAULT '',
+      media_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+      thumbnail_media_id uuid REFERENCES media_assets(id) ON DELETE SET NULL,
+      hashtags jsonb NOT NULL DEFAULT '[]'::jsonb,
+      tagged_mobile_user_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+      location jsonb,
+      duplicate_cluster_id text NOT NULL,
+      visibility text NOT NULL DEFAULT 'public',
+      status text NOT NULL DEFAULT 'published',
+      view_count integer NOT NULL DEFAULT 0,
+      like_count integer NOT NULL DEFAULT 0,
+      comment_count integer NOT NULL DEFAULT 0,
+      share_count integer NOT NULL DEFAULT 0,
+      expires_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      published_at timestamptz NOT NULL DEFAULT now(),
+      CHECK ((author_mobile_user_id IS NULL) <> (author_provider_id IS NULL))
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS content_posts_feed_idx ON content_posts (format, published_at DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS content_posts_expiry_idx ON content_posts (expires_at) WHERE expires_at IS NOT NULL`;
+
+  // Content publishing gained metadata and durable feed-delivery claims after
+  // the first mobile rollout. Keep upgrades safe for databases that created
+  // the original minimal tables.
+  await sql`
+    ALTER TABLE content_containers
+      ADD COLUMN IF NOT EXISTS thumbnail_media_id uuid REFERENCES media_assets(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS hashtags jsonb NOT NULL DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS tagged_mobile_user_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS location jsonb
+  `;
+  await sql`
+    ALTER TABLE content_posts
+      ADD COLUMN IF NOT EXISTS thumbnail_media_id uuid REFERENCES media_assets(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS hashtags jsonb NOT NULL DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS tagged_mobile_user_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS location jsonb,
+      ADD COLUMN IF NOT EXISTS duplicate_cluster_id text,
+      ADD COLUMN IF NOT EXISTS view_count integer NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS like_count integer NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS comment_count integer NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS share_count integer NOT NULL DEFAULT 0
+  `;
+  await sql`
+    UPDATE content_posts
+    SET duplicate_cluster_id = COALESCE(NULLIF(media_ids ->> 0, ''), id::text)
+    WHERE duplicate_cluster_id IS NULL
+  `;
+  await sql`
+    ALTER TABLE content_posts
+      ALTER COLUMN duplicate_cluster_id SET NOT NULL
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS content_posts_cluster_idx ON content_posts (duplicate_cluster_id)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS content_post_deliveries (
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      content_post_id uuid NOT NULL REFERENCES content_posts(id) ON DELETE CASCADE,
+      claimed_at timestamptz NOT NULL DEFAULT now(),
+      expires_at timestamptz NOT NULL,
+      PRIMARY KEY (mobile_user_id, content_post_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS content_post_deliveries_expiry_idx
+      ON content_post_deliveries (mobile_user_id, expires_at)
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS content_cluster_deliveries (
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      duplicate_cluster_id text NOT NULL,
+      claimed_at timestamptz NOT NULL DEFAULT now(),
+      expires_at timestamptz NOT NULL,
+      PRIMARY KEY (mobile_user_id, duplicate_cluster_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS content_cluster_deliveries_expiry_idx
+      ON content_cluster_deliveries (mobile_user_id, expires_at)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS content_post_reports (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      content_post_id uuid NOT NULL REFERENCES content_posts(id) ON DELETE CASCADE,
+      reporter_mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      reason text NOT NULL,
+      details text,
+      status text NOT NULL DEFAULT 'open',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (content_post_id, reporter_mobile_user_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS content_post_reports_status_created_idx
+      ON content_post_reports (status, created_at DESC)
+  `;
+
   await sql`
     CREATE TABLE IF NOT EXISTS providers (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -609,6 +775,93 @@ async function migrate() {
   await sql`
     CREATE INDEX IF NOT EXISTS user_preference_scores_user_score_idx
       ON user_preference_scores (mobile_user_id, score DESC)
+  `;
+
+  await sql`
+    ALTER TABLE mobile_users
+      ADD COLUMN IF NOT EXISTS interests_completed_at timestamptz
+  `;
+
+  await sql`
+    ALTER TABLE mobile_users
+      ADD COLUMN IF NOT EXISTS bio text,
+      ADD COLUMN IF NOT EXISTS location text,
+      ADD COLUMN IF NOT EXISTS website text
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS interest_options (
+      id text PRIMARY KEY,
+      name text NOT NULL,
+      image_url text,
+      sort_order integer NOT NULL DEFAULT 0,
+      is_active boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS interest_options_active_order_idx
+      ON interest_options (is_active, sort_order)
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS mobile_user_interests (
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      interest_id text NOT NULL REFERENCES interest_options(id) ON DELETE RESTRICT,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (mobile_user_id, interest_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS mobile_user_interests_interest_idx
+      ON mobile_user_interests (interest_id)
+  `;
+
+  // A block has one precise target. We retain separate target columns rather
+  // than treating a provider as a user, so a business-only block does not
+  // silently hide the personal profile of the people who operate it.
+  await sql`
+    CREATE TABLE IF NOT EXISTS mobile_user_blocks (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      blocker_mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      blocked_mobile_user_id uuid REFERENCES mobile_users(id) ON DELETE CASCADE,
+      blocked_provider_id uuid REFERENCES providers(id) ON DELETE CASCADE,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      CHECK ((blocked_mobile_user_id IS NULL) <> (blocked_provider_id IS NULL)),
+      CHECK (blocker_mobile_user_id IS DISTINCT FROM blocked_mobile_user_id)
+    )
+  `;
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS mobile_user_blocks_user_target_uidx
+      ON mobile_user_blocks (blocker_mobile_user_id, blocked_mobile_user_id)
+      WHERE blocked_mobile_user_id IS NOT NULL
+  `;
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS mobile_user_blocks_provider_target_uidx
+      ON mobile_user_blocks (blocker_mobile_user_id, blocked_provider_id)
+      WHERE blocked_provider_id IS NOT NULL
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS mobile_user_blocks_blocker_created_idx
+      ON mobile_user_blocks (blocker_mobile_user_id, created_at DESC)
+  `;
+
+  await sql`
+    INSERT INTO interest_options (id, name, image_url, sort_order)
+    VALUES
+      ('art', 'Art', 'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?auto=format&fit=crop&w=600&q=80', 10),
+      ('fashion', 'Fashion', 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=600&q=80', 20),
+      ('design', 'Design', 'https://images.unsplash.com/photo-1561070791-2526d30994b5?auto=format&fit=crop&w=600&q=80', 30),
+      ('sports', 'Sports', 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=600&q=80', 40),
+      ('music', 'Music', 'https://images.unsplash.com/photo-1524368535928-5b5e00ddc76b?auto=format&fit=crop&w=600&q=80', 50),
+      ('gaming', 'Gaming', 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80', 60),
+      ('news', 'News', 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=600&q=80', 70),
+      ('travel', 'Travel', 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=600&q=80', 80),
+      ('fitness', 'Fitness', 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=600&q=80', 90),
+      ('cooking', 'Cooking', 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=600&q=80', 100),
+      ('business', 'Business', 'https://images.unsplash.com/photo-1521737711867-e3b97375f902?auto=format&fit=crop&w=600&q=80', 110),
+      ('technology', 'Technology', 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80', 120)
+    ON CONFLICT (id) DO NOTHING
   `;
 
   // Full-text search for assistant discovery

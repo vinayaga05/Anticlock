@@ -112,6 +112,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Categories',
     permission: 'catalog.read',
   },
+  { href: '/interests', label: 'Interests', permission: 'catalog.read' },
   { href: '/users', label: 'Users & roles', permission: 'users.read' },
   { href: '/audit', label: 'Audit log', permission: 'audit.read' },
   { href: '/providers', label: 'Providers', permission: 'provider.read' },

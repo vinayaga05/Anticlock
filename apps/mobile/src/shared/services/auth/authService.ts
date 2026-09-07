@@ -11,6 +11,7 @@ import {
   isSessionExpired,
   MobileUser,
   OtpSendResult,
+  ProfileUpdate,
 } from './types';
 import { ensureUserAvatar } from './avatar';
 
@@ -87,4 +88,24 @@ export async function logoutRemote(): Promise<void> {
   } catch {
     /* ignore */
   }
+}
+
+export async function updateProfile(input: ProfileUpdate): Promise<MobileUser> {
+  const session = readStoredSession();
+  if (!session) throw new Error('Please sign in to edit your profile.');
+
+  let user: MobileUser;
+  if (!isApiEnabled || session.token.startsWith('dev-')) {
+    user = { ...session.user, ...input };
+  } else {
+    const response = await apiRequest<{ user: MobileUser }>('/auth/mobile/profile', {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    });
+    user = response.user;
+  }
+
+  const updatedSession = { ...session, user: ensureUserAvatar(user) };
+  persistSession(updatedSession);
+  return updatedSession.user;
 }

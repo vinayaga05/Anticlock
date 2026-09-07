@@ -1,5 +1,6 @@
 import type {
   AttachMediaUsageRequest,
+  CreateContentUploadRequest,
   CreateUploadSessionRequest,
   MediaAccessLevel,
   MediaAsset,
@@ -22,6 +23,7 @@ import {
   assertAllowedMime,
   detectMimeFromMagic,
   maxBytesForKind,
+  sha256,
   validateVideoUploadMetadata,
   validateUploadedBytes,
 } from './validateUpload.js';
@@ -361,6 +363,27 @@ export class MediaService {
           byteSize: meta.byteSize,
           durationMs: asset.durationMs,
         });
+        // Store a server-computed source checksum for exact duplicate grouping.
+        // This is intentionally before promotion: only the staged bytes that
+        // passed signature/metadata validation can influence feed de-dup.
+        // Production can replace this bounded read with an object-store
+        // checksum/streaming worker without changing the persisted contract.
+        const videoBytes = await this.storage.getObjectBuffer({
+          bucket: asset.bucket as 'public-media' | 'private-documents',
+          key: asset.storageKey,
+        });
+        const checksumSha256 = sha256(videoBytes);
+        if (clientChecksum && clientChecksum !== checksumSha256) {
+          throw Object.assign(new Error('Checksum mismatch'), {
+            code: 'checksum_mismatch',
+            status: 400,
+          });
+        }
+        const duplicate = await this.repo.findByChecksum(checksumSha256);
+        const duplicateOf =
+          duplicate && duplicate.id !== asset.id
+            ? await this.mapAsset(duplicate)
+            : null;
         const finalStorageKey = finalStorageKeyFor(asset.storageKey);
         await this.storage.finalizeUpload({
           bucket: asset.bucket as 'public-media' | 'private-documents',
@@ -374,6 +397,7 @@ export class MediaService {
           mimeType: validated.mimeType,
           byteSize: validated.byteSize,
           durationMs: validated.durationMs,
+          checksumSha256,
           processingStatus: 'ready',
           moderationStatus: 'approved',
         });
@@ -388,13 +412,14 @@ export class MediaService {
           metadata: {
             durationMs: validated.durationMs,
             byteSize: validated.byteSize,
-            checksum: null,
+            checksum: checksumSha256,
+            duplicateOf: duplicateOf?.id ?? null,
           },
         });
 
         return {
           asset: await this.mapAsset(updated!),
-          duplicateOf: null as MediaAsset | null,
+          duplicateOf,
         };
       } catch (err) {
         await this.repo.updateAsset(asset.id, { processingStatus: 'failed' });
@@ -772,6 +797,25 @@ export class MediaService {
     return row ?? null;
   }
 
+  /** Public-content mapper used only after the post visibility gate has run. */
+  async getPublicContentDeliveryUrl(mediaId: string) {
+    const asset = await this.repo.getAsset(mediaId);
+    if (
+      !asset ||
+      asset.accessLevel !== 'public' ||
+      asset.processingStatus !== 'ready' ||
+      asset.deletedAt ||
+      asset.archivedAt
+    ) {
+      return null;
+    }
+    return this.storage.createDownloadUrl({
+      bucket: asset.bucket as 'public-media' | 'private-documents',
+      key: asset.storageKey,
+      accessLevel: 'public',
+    });
+  }
+
   // --- stub domain helpers ---
 
   async listProviders(auth: AuthClaims) {
@@ -955,6 +999,222 @@ export class MediaService {
       storageKey,
       expiresAt: expiresAt.toISOString(),
     };
+  }
+
+  /**
+   * Creator uploads are owned by the signed-in mobile user, not by an admin
+   * account. The ownership marker is checked again for local PUT and complete
+   * calls, while a short-lived R2 URL remains scoped to one staging object.
+   */
+  async createMobileContentUploadSession(
+    mobileUserId: string,
+    body: CreateContentUploadRequest,
+  ) {
+    assertAllowedMime(body.kind, body.contentType);
+    const maxBytes = maxBytesForKind(body.kind);
+    if (body.byteSize > maxBytes) {
+      throw Object.assign(new Error('File exceeds max size'), {
+        code: 'file_too_large',
+        status: 400,
+      });
+    }
+    if (body.kind === 'video') {
+      validateVideoUploadMetadata({
+        expectedMime: body.contentType,
+        contentType: body.contentType,
+        maxBytes,
+        byteSize: body.byteSize,
+        durationMs: body.durationMs ?? null,
+      });
+    }
+
+    // Non-public posts must not be put in a public bucket merely because the
+    // author selected the privacy option after uploading.
+    const accessLevel = body.visibility === 'public' ? 'public' : 'private';
+    const bucket = bucketForAccess(accessLevel);
+    const ext = extensionForMime(body.contentType);
+    const hint = `content-${mobileUserId}`;
+    const asset = await this.repo.createAsset({
+      kind: body.kind,
+      storageProvider: this.storage.name,
+      storageKey: 'pending',
+      bucket,
+      mimeType: body.contentType,
+      byteSize: body.byteSize,
+      width: body.width ?? null,
+      height: body.height ?? null,
+      durationMs: body.durationMs ?? null,
+      originalFilename: body.filename,
+      accessLevel,
+      processingStatus: 'initiated',
+      moderationStatus: 'not_required',
+      createdBy: null,
+    });
+    const storageKey = `${accessLevel}/${hint}/${asset.id}/upload.${ext}`;
+    await this.repo.updateAsset(asset.id, {
+      storageKey,
+      processingStatus: 'uploading',
+    });
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    const session = await this.repo.createSession({
+      mediaId: asset.id,
+      createdBy: null,
+      expiresAt,
+      status: 'open',
+      expectedMime: body.contentType,
+      maxBytes,
+    });
+    const target = await this.storage.createUploadTarget({
+      bucket,
+      key: storageKey,
+      contentType: body.contentType,
+      maxBytes,
+      sessionId: session.id,
+    });
+    const apiBase = (
+      process.env.API_PUBLIC_URL ??
+      `http://localhost:${process.env.API_PORT ?? 4000}`
+    ).replace(/\/$/, '');
+    return {
+      sessionId: session.id,
+      mediaId: asset.id,
+      // Local storage writes through the mobile-authorized route rather than
+      // the admin Media Library route returned by the generic provider.
+      uploadUrl:
+        this.storage.name === 'local'
+          ? `${apiBase}/v1/content/uploads/${session.id}/content`
+          : target.uploadUrl,
+      headers: target.headers,
+      expiresAt: expiresAt.toISOString(),
+    };
+  }
+
+  private async requireMobileContentSession(
+    mobileUserId: string,
+    sessionId: string,
+  ) {
+    const session = await this.repo.getSession(sessionId);
+    if (!session) {
+      throw Object.assign(new Error('Upload session not found'), {
+        code: 'session_not_found',
+        status: 404,
+      });
+    }
+    const asset = await this.repo.getAsset(session.mediaId);
+    const marker = `/content-${mobileUserId}/`;
+    if (!asset || !asset.storageKey.includes(marker)) {
+      throw Object.assign(new Error('Upload session not found'), {
+        code: 'session_not_found',
+        status: 404,
+      });
+    }
+    return { session, asset };
+  }
+
+  async putMobileContentLocalContent(
+    mobileUserId: string,
+    sessionId: string,
+    body: Buffer,
+  ) {
+    await this.requireMobileContentSession(mobileUserId, sessionId);
+    return this.putLocalContentInternal(
+      {
+        sub: mobileUserId,
+        email: '',
+        name: '',
+        roles: [],
+        permissions: ['media.write'],
+        kind: 'mobile',
+      },
+      sessionId,
+      body,
+      { skipOwnerCheck: true },
+    );
+  }
+
+  async completeMobileContentUpload(
+    mobileUserId: string,
+    sessionId: string,
+    checksumSha256?: string,
+  ) {
+    await this.requireMobileContentSession(mobileUserId, sessionId);
+    return this.completeUpload(
+      {
+        sub: mobileUserId,
+        email: '',
+        name: '',
+        roles: [],
+        permissions: ['media.write'],
+        kind: 'mobile',
+      },
+      sessionId,
+      checksumSha256,
+      { skipOwnerCheck: true },
+    );
+  }
+
+  /** Ensures creators can only attach their own completed content assets. */
+  async requireMobileContentAssets(
+    mobileUserId: string,
+    mediaIds: string[],
+    thumbnailMediaId?: string | null,
+    expectedVisibility?: string,
+  ) {
+    const ids = [...new Set(mediaIds)];
+    const assets = await Promise.all(ids.map(id => this.repo.getAsset(id)));
+    const marker = `/content-${mobileUserId}/`;
+    for (const asset of assets) {
+      if (!asset || !asset.storageKey.includes(marker)) {
+        throw Object.assign(new Error('Media was not uploaded by this account'), {
+          code: 'media_forbidden',
+          status: 403,
+        });
+      }
+      if (
+        asset.processingStatus !== 'ready' ||
+        asset.deletedAt ||
+        asset.archivedAt ||
+        !['approved', 'not_required'].includes(asset.moderationStatus)
+      ) {
+        throw Object.assign(new Error('Media is not ready to publish'), {
+          code: 'media_not_ready',
+          status: 400,
+        });
+      }
+      const wantsPublic = expectedVisibility === 'public';
+      if (expectedVisibility && (asset.accessLevel === 'public') !== wantsPublic) {
+        throw Object.assign(new Error('Upload privacy does not match the post'), {
+          code: 'media_privacy_mismatch',
+          status: 400,
+        });
+      }
+    }
+
+    let thumbnail = null;
+    if (thumbnailMediaId) {
+      thumbnail = await this.repo.getAsset(thumbnailMediaId);
+      if (
+        !thumbnail ||
+        !thumbnail.storageKey.includes(marker) ||
+        thumbnail.kind !== 'image' ||
+        thumbnail.processingStatus !== 'ready' ||
+        thumbnail.deletedAt ||
+        thumbnail.archivedAt
+      ) {
+        throw Object.assign(new Error('Thumbnail must be one of your ready images'), {
+          code: 'invalid_thumbnail',
+          status: 400,
+        });
+      }
+      const wantsPublic = expectedVisibility === 'public';
+      if (expectedVisibility && (thumbnail.accessLevel === 'public') !== wantsPublic) {
+        throw Object.assign(new Error('Thumbnail privacy does not match the post'), {
+          code: 'media_privacy_mismatch',
+          status: 400,
+        });
+      }
+    }
+    return { assets: assets.filter(Boolean), thumbnail };
   }
 
   async completeMobileProviderUpload(

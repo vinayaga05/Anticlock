@@ -69,10 +69,24 @@ export const MobileUserSchema = z.object({
   phone: z.string().min(8),
   displayName: z.string(),
   avatarUrl: z.string().url().nullable().optional(),
+  bio: z.string().max(160).nullable().optional(),
+  location: z.string().max(80).nullable().optional(),
+  website: z.string().url().max(2_000).nullable().optional(),
   roles: z.array(MobileRoleSchema).optional(),
   providerId: z.string().uuid().nullable().optional(),
 });
 export type MobileUser = z.infer<typeof MobileUserSchema>;
+
+export const UpdateMobileProfileRequestSchema = z.object({
+  displayName: z.string().trim().min(2).max(80),
+  avatarUrl: z.string().url().max(2_000).nullable(),
+  bio: z.string().trim().max(160).nullable(),
+  location: z.string().trim().max(80).nullable(),
+  website: z.string().url().max(2_000).nullable(),
+});
+export type UpdateMobileProfileRequest = z.infer<
+  typeof UpdateMobileProfileRequestSchema
+>;
 
 export const MobileOtpSendRequestSchema = z.object({
   phone: z.string().min(8),

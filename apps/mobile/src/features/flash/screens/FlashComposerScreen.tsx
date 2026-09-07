@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Image,
   ScrollView,
   StyleSheet,
@@ -20,6 +21,11 @@ import {
 import { useEngagementStore } from '@/shared/services/engagementRepository';
 import { CURRENT_USER } from '@/shared/data/flash';
 import { getFlashCloudflareVideo } from '@/shared/data/cloudflareVideos';
+import {
+  usePublishContentMutation,
+  usePublishingIdentitiesQuery,
+} from '@/shared/api/publishingHooks';
+import { isApiEnabled } from '@/shared/api/config';
 
 const canvaSampleVideo = getFlashCloudflareVideo();
 
@@ -54,13 +60,43 @@ export function FlashComposerScreen() {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const publishPost = useEngagementStore(s => s.publishPost);
+  const { data: identities = [] } = usePublishingIdentitiesQuery();
+  const publishContent = usePublishContentMutation();
 
   const [text, setText] = useState('');
   const [visibility, setVisibility] = useState<PostVisibility>('public');
   const [media, setMedia] = useState<PostMedia[]>([]);
+  const [identityId, setIdentityId] = useState<string | null>(null);
 
-  const publish = () => {
+  useEffect(() => {
+    if (!identityId && identities[0]) setIdentityId(identities[0].id);
+  }, [identities, identityId]);
+
+  const identity = identities.find(item => item.id === identityId) ?? identities[0];
+  const identityPills = useMemo(
+    () => identities.map(item => ({ id: item.id, label: item.type === 'provider' ? item.name : 'Personal' })),
+    [identities],
+  );
+
+  const publish = async () => {
     if (!text.trim() && media.length === 0) return;
+    if (isApiEnabled && identity && media.length === 0) {
+      try {
+        await publishContent.mutateAsync({
+          format: 'flash',
+          mediaType: 'text',
+          caption: text.trim(),
+          visibility,
+          identity,
+        });
+      } catch (error) {
+        Alert.alert(
+          'Could not publish',
+          error instanceof Error ? error.message : 'Please try again.',
+        );
+        return;
+      }
+    }
     publishPost({
       text: text.trim(),
       visibility,
@@ -89,13 +125,24 @@ export function FlashComposerScreen() {
           <Image source={{ uri: CURRENT_USER.avatarUrl }} style={styles.avatar} />
           <View style={{ flex: 1 }}>
             <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>
-              {CURRENT_USER.name}
+              {identity?.name ?? CURRENT_USER.name}
             </Text>
             <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
-              Visibility
+              Publishing as {identity?.type === 'provider' ? 'business' : 'personal profile'}
             </Text>
           </View>
         </View>
+
+        {identityPills.length > 1 ? (
+          <View style={styles.identityPicker}>
+            <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>Publishing as</Text>
+            <FilterPills
+              activeId={identity?.id ?? ''}
+              onChange={setIdentityId}
+              pills={identityPills}
+            />
+          </View>
+        ) : null}
 
         <FilterPills
           activeId={visibility}
@@ -177,7 +224,7 @@ export function FlashComposerScreen() {
             backgroundColor: theme.colors.backgroundElevated,
           },
         ]}>
-        <Button title="Publish" onPress={publish} />
+        <Button title="Publish" onPress={() => void publish()} loading={publishContent.isPending} />
       </View>
     </View>
   );
@@ -186,6 +233,7 @@ export function FlashComposerScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   author: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  identityPicker: { gap: 6 },
   avatar: { width: 48, height: 48, borderRadius: 24 },
   input: {
     minHeight: 140,

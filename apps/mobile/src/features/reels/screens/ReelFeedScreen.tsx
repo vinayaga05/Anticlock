@@ -2,11 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   FlatList,
   Image,
-  LayoutChangeEvent,
   Platform,
   RefreshControl,
   StyleSheet,
   Text,
+  Alert,
   useWindowDimensions,
   View,
   ViewToken,
@@ -15,9 +15,15 @@ import { useNavigation, useRoute, type RouteProp } from '@react-navigation/nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { VideoPlayer } from '@/features/video/components/VideoPlayer';
+import {
+  ClipMoreAction,
+  ClipMoreSheet,
+} from '@/features/reels/components/ClipMoreSheet';
+import { GuidedReportVideoSheet } from '@/features/reels/components/GuidedReportVideoSheet';
 import { reels as mockReels } from '@/shared/data/mocks';
 import { ReelItem } from '@/shared/types';
 import { useCartStore } from '@/shared/store/cartStore';
+import { blockProfile, reportReel } from '@/shared/api/reelSafety';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
@@ -33,6 +39,11 @@ import type { MainTabParamList } from '@/shared/navigation/types';
 const DEFAULT_AUTHOR_AVATAR =
   'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&h=200&q=80';
 const MINIMUM_VIEW_WATCH_MS = 2_000;
+const EMPTY_REELS: ReelItem[] = [];
+
+function profileKey(profile: NonNullable<ReelItem['authorProfile']>) {
+  return `${profile.type}:${profile.id}`;
+}
 
 function getAuthorAvatar(item: ReelItem) {
   return item.authorAvatarUrl ?? DEFAULT_AUTHOR_AVATAR;
@@ -156,16 +167,30 @@ export function ReelFeedScreen() {
   const route = useRoute<RouteProp<MainTabParamList, 'PlayFeed'>>();
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  // Keep each page tied to the window, not to a descendant `onLayout` event.
+  // AVPlayer can cause an otherwise harmless native relayout when it becomes
+  // ready or changes playback state. Feeding that transient layout back into
+  // FlatList changes `getItemLayout` while its content offset is still based
+  // on the old page size, which makes the current clip visibly jump.
+  const pageWidth = Math.max(1, Math.round(windowWidth));
+  const pageHeight = Math.max(1, Math.round(windowHeight));
   const addToCart = useCartStore(s => s.add);
   const [activeIndex, setActiveIndex] = useState(0);
   const [liked, setLiked] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
+  const [menuReelId, setMenuReelId] = useState<string | null>(null);
+  const [reportReelId, setReportReelId] = useState<string | null>(null);
+  const [blockedProfileKeys, setBlockedProfileKeys] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [autoScroll, setAutoScroll] = useState(false);
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false);
   const [coins] = useState(120);
-  /** Actual FlatList viewport — must match page height or iOS drifts the feed down. */
-  const [viewportHeight, setViewportHeight] = useState(windowHeight);
   const viewedReelIds = useRef(new Set<string>());
   const completedReelIds = useRef(new Set<string>());
   const listRef = useRef<FlatList<ReelItem>>(null);
+  const activeIndexRef = useRef(activeIndex);
+  const pageFrameRef = useRef({ width: pageWidth, height: pageHeight });
   const analyticsSessionId = useRef<string | null>(null);
   if (!analyticsSessionId.current) {
     analyticsSessionId.current = createAnalyticsEventId();
@@ -175,28 +200,35 @@ export function ReelFeedScreen() {
   );
   const playbackActive = useCommentsSheetStore(s => s.playbackActive);
   const openComments = useCommentsSheetStore(s => s.openComments);
-  const { data: queriedReels, refetch, isRefetching } =
-    useReelsQuery(mockReels);
+  const { data: queriedReels, refetch } = useReelsQuery(mockReels);
   // `useReelsQuery` supplies demo data only when the API is deliberately
   // disabled for local development. Do not use the bundled/R2 demo list as a
   // production fallback: the public feed endpoint is the publication gate.
-  const feedReels = queriedReels ?? [];
+  // Keep the empty state referentially stable so a loading/refetch transition
+  // cannot make FlatList think its data changed and recalculate its viewport.
+  const feedReels = queriedReels ?? EMPTY_REELS;
   const genieQ = route.params?.q?.trim().toLowerCase();
   const reels = useMemo(() => {
-    if (!genieQ) return feedReels;
-    return feedReels.filter(
+    const visibleReels = feedReels.filter(
+      reel =>
+        !reel.authorProfile ||
+        !blockedProfileKeys.has(profileKey(reel.authorProfile)),
+    );
+    if (!genieQ) return visibleReels;
+    return visibleReels.filter(
       r =>
         r.title?.toLowerCase().includes(genieQ) ||
         r.caption?.toLowerCase().includes(genieQ) ||
         r.author?.toLowerCase().includes(genieQ),
     );
-  }, [feedReels, genieQ]);
+  }, [blockedProfileKeys, feedReels, genieQ]);
 
   useEffect(() => {
     const reelId = route.params?.reelId;
     if (!reelId || !reels.length) return;
     const idx = reels.findIndex(r => r.id === reelId);
     if (idx >= 0) {
+      activeIndexRef.current = idx;
       setActiveIndex(idx);
       requestAnimationFrame(() => {
         listRef.current?.scrollToIndex({ index: idx, animated: false });
@@ -207,14 +239,27 @@ export function ReelFeedScreen() {
   const bottomSafe = useTabBarBottomInset(20);
   const topFadeH = insets.top + 96;
   const bottomFadeH = bottomSafe + 160;
-  const pageHeight = viewportHeight > 0 ? viewportHeight : windowHeight;
 
-  const onRootLayout = useCallback((e: LayoutChangeEvent) => {
-    const next = Math.round(e.nativeEvent.layout.height);
-    if (next > 0) {
-      setViewportHeight(prev => (prev === next ? prev : next));
+  // Device rotation, split-screen resizing, and Dynamic Type/window changes
+  // are legitimate page-frame changes. Re-anchor the current page exactly
+  // once for those changes instead of allowing FlatList to retain a stale
+  // offset. Normal video ready/play/pause events do not change this frame.
+  useEffect(() => {
+    const previous = pageFrameRef.current;
+    if (previous.width === pageWidth && previous.height === pageHeight) {
+      return;
     }
-  }, []);
+
+    pageFrameRef.current = { width: pageWidth, height: pageHeight };
+    const frame = requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({
+        offset: activeIndexRef.current * pageHeight,
+        animated: false,
+      });
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [pageHeight, pageWidth]);
 
   const trackPlayback = useCallback(
     (reelId: string, watchedMs: number, completed: boolean) => {
@@ -251,10 +296,45 @@ export function ReelFeedScreen() {
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       if (viewableItems[0]?.index != null) {
-        setActiveIndex(viewableItems[0].index);
+        const nextIndex = viewableItems[0].index;
+        activeIndexRef.current = nextIndex;
+        setActiveIndex(nextIndex);
       }
     },
   ).current;
+
+  // Do not connect RefreshControl to React Query's general `isRefetching`
+  // flag. It also becomes true for background refreshes while a Reel is
+  // playing, and on iOS a programmatic RefreshControl changes the scroll
+  // inset. That can make a full-screen page look as if it slid downward.
+  const refreshFeed = useCallback(async () => {
+    setIsPullRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setIsPullRefreshing(false);
+    }
+  }, [refetch]);
+
+  const blockClipAuthor = useCallback(
+    async (profile: NonNullable<ReelItem['authorProfile']>) => {
+      try {
+        await blockProfile(profile);
+        setBlockedProfileKeys(previous => new Set(previous).add(profileKey(profile)));
+        // The local filter removes the clip immediately. Refetching then lets
+        // the server apply the same block to future pages and devices.
+        await refetch();
+      } catch (error) {
+        Alert.alert(
+          'Couldn’t block profile',
+          error instanceof Error
+            ? error.message
+            : 'Please try again in a moment.',
+        );
+      }
+    },
+    [refetch],
+  );
 
   const book = useCallback(
     (item: ReelItem) => {
@@ -313,14 +393,88 @@ export function ReelFeedScreen() {
     [addToCart, navigation],
   );
 
+  const menuReel = useMemo(
+    () => (menuReelId ? reels.find(r => r.id === menuReelId) ?? null : null),
+    [menuReelId, reels],
+  );
+
+  const handleMoreAction = useCallback(
+    (action: ClipMoreAction) => {
+      const reelId = menuReelId;
+      if (!reelId) return;
+      const reel = reels.find(r => r.id === reelId);
+
+      switch (action) {
+        case 'save':
+          setSaved(prev => ({ ...prev, [reelId]: !prev[reelId] }));
+          setMenuReelId(null);
+          break;
+        case 'interested':
+          setMenuReelId(null);
+          Alert.alert('Thanks', 'We’ll show you more clips like this.');
+          break;
+        case 'not_interested':
+          setMenuReelId(null);
+          Alert.alert('Got it', 'We’ll show fewer clips like this.');
+          break;
+        case 'report':
+          setMenuReelId(null);
+          setReportReelId(reelId);
+          break;
+        case 'block': {
+          const profile = reel?.authorProfile;
+          setMenuReelId(null);
+          if (!profile) break;
+          const profileKind = profile.type === 'business' ? 'business' : 'user';
+          Alert.alert(
+            `Block ${reel?.author ?? profileKind}?`,
+            `You will no longer see videos from this ${profileKind}. You can unblock it later from your settings.`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Block',
+                style: 'destructive',
+                onPress: () => {
+                  void blockClipAuthor(profile);
+                },
+              },
+            ],
+          );
+          break;
+        }
+        case 'caption':
+          setMenuReelId(null);
+          Alert.alert(
+            'Caption',
+            reel?.caption?.trim() || 'No caption for this clip.',
+          );
+          break;
+        case 'auto_scroll':
+          setAutoScroll(prev => !prev);
+          break;
+        default:
+          setMenuReelId(null);
+          break;
+      }
+    },
+    [blockClipAuthor, menuReelId, reels],
+  );
+
+  const goToNextReel = useCallback(() => {
+    const next = activeIndex + 1;
+    if (next >= reels.length) return;
+    activeIndexRef.current = next;
+    listRef.current?.scrollToIndex({ index: next, animated: true });
+    setActiveIndex(next);
+  }, [activeIndex, reels.length]);
+
   const renderItem = ({ item, index }: { item: ReelItem; index: number }) => {
     const isLiked = liked[item.id] ?? !!item.liked;
-    const isSaved = saved[item.id] ?? !!item.saved;
     const action = getReelAction(item);
     const musicLabel = item.title ? `♪ ${item.title}` : '♪ Original audio';
 
     return (
-      <View style={[styles.reel, { height: pageHeight, width: windowWidth }]}>
+      <View style={[styles.reel, { height: pageHeight, width: pageWidth }]}>
         <VideoPlayer
           uri={item.videoUrl}
           muted={false}
@@ -342,6 +496,9 @@ export function ReelFeedScreen() {
               return;
             }
             trackPlayback(item.id, duration * 1_000, true);
+            if (autoScroll) {
+              goToNextReel();
+            }
           }}
         />
 
@@ -399,12 +556,9 @@ export function ReelFeedScreen() {
           />
           <SideAction icon="share" accessibilityLabel="Share" />
           <SideAction
-            icon="bookmark"
-            label={isSaved ? 'Saved' : undefined}
-            active={isSaved}
-            activeColor={theme.colors.primary}
-            accessibilityLabel="Save"
-            onPress={() => setSaved(prev => ({ ...prev, [item.id]: !isSaved }))}
+            icon="more"
+            accessibilityLabel="More options"
+            onPress={() => setMenuReelId(item.id)}
           />
         </View>
 
@@ -479,9 +633,10 @@ export function ReelFeedScreen() {
   };
 
   return (
-    <View style={styles.root} onLayout={onRootLayout}>
+    <View style={styles.root}>
       <FlatList
         ref={listRef}
+        style={styles.list}
         data={reels}
         keyExtractor={item => item.id}
         renderItem={renderItem}
@@ -502,20 +657,39 @@ export function ReelFeedScreen() {
         contentInsetAdjustmentBehavior="never"
         automaticallyAdjustContentInsets={false}
         automaticallyAdjustsScrollIndicatorInsets={false}
+        automaticallyAdjustKeyboardInsets={false}
         {...(Platform.OS === 'android'
           ? { overScrollMode: 'never' as const }
           : null)}
         refreshControl={
           <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={() => {
-              refetch().catch(() => undefined);
-            }}
+            refreshing={isPullRefreshing}
+            onRefresh={refreshFeed}
             tintColor="#FFFFFF"
             colors={[theme.colors.primary]}
             progressViewOffset={insets.top + 8}
           />
         }
+      />
+      <ClipMoreSheet
+        visible={Boolean(menuReel)}
+        saved={menuReel ? Boolean(saved[menuReel.id] ?? menuReel.saved) : false}
+        autoScroll={autoScroll}
+        blockTarget={
+          menuReel?.authorProfile
+            ? { ...menuReel.authorProfile, name: menuReel.author }
+            : null
+        }
+        onClose={() => setMenuReelId(null)}
+        onAction={handleMoreAction}
+      />
+      <GuidedReportVideoSheet
+        visible={Boolean(reportReelId)}
+        onClose={() => setReportReelId(null)}
+        onSubmit={reason => {
+          if (!reportReelId) return;
+          return reportReel(reportReelId, reason);
+        }}
       />
     </View>
   );
@@ -523,6 +697,7 @@ export function ReelFeedScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
+  list: { flex: 1 },
   reel: { backgroundColor: '#000' },
   topFade: {
     position: 'absolute',

@@ -99,6 +99,17 @@ export class AssistantRepository {
       .offset(offset);
   }
 
+  /** Latest N messages in chronological order (for model context). */
+  async listRecentMessages(conversationId: string, limit = 50) {
+    const rows = await db
+      .select()
+      .from(assistantMessages)
+      .where(eq(assistantMessages.conversationId, conversationId))
+      .orderBy(desc(assistantMessages.createdAt))
+      .limit(limit);
+    return rows.reverse();
+  }
+
   async deleteConversation(id: string, mobileUserId: string) {
     await db
       .delete(assistantConversations)
@@ -154,6 +165,24 @@ export class AssistantRepository {
       conversationId,
       type: event.type,
       payload: event as Record<string, unknown>,
+    });
+  }
+
+  /**
+   * Server-owned run diagnostics. This intentionally bypasses the shared
+   * client analytics contract so mobile clients cannot forge trace events.
+   */
+  async trackServerTrace(
+    mobileUserId: string,
+    conversationId: string | null,
+    type: string,
+    payload: Record<string, unknown>,
+  ) {
+    await db.insert(assistantAnalyticsEvents).values({
+      mobileUserId,
+      conversationId,
+      type,
+      payload,
     });
   }
 }

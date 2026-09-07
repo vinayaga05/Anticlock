@@ -19,6 +19,10 @@ import {
   providerMobileRoutes,
 } from './routes/provider.js';
 import { assistantRoutes } from './routes/assistant.js';
+import { interestRoutes } from './routes/interests.js';
+import { contentMobileRoutes, contentPublicRoutes } from './routes/content.js';
+import { profileBlockRoutes } from './routes/blocks.js';
+import { contentSafetyRoutes } from './routes/contentSafety.js';
 import { startAssistantLifecycleJob } from './assistant/PrivacyService.js';
 import { redisHealthCheck } from './lib/redis.js';
 import {
@@ -61,7 +65,7 @@ app.use(
   '*',
   cors({
     origin: corsOrigins(),
-    allowHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
+    allowHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-Anticlock-Context-Type', 'X-Anticlock-Context-ID'],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   }),
@@ -82,6 +86,11 @@ app.route('/v1/media', mediaPublicRoutes);
 app.route('/v1/reels', reelsPublicRoutes);
 app.route('/v1/provider', providerMobileRoutes);
 app.route('/v1/assistant', assistantRoutes);
+app.route('/v1/interests', interestRoutes);
+app.route('/v1/content', contentMobileRoutes);
+app.route('/v1/content', contentPublicRoutes);
+app.route('/v1/content', contentSafetyRoutes);
+app.route('/v1/blocks', profileBlockRoutes);
 app.route('/admin', adminRoutes);
 app.route('/admin/provider', providerAdminRoutes);
 app.route('/admin/media', mediaAdminRoutes);

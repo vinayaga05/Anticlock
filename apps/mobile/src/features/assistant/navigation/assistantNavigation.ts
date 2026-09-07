@@ -110,7 +110,12 @@ export function executeGenieAction(
       handlers.onRequestLocation?.(action.purpose, action.id);
       return { ok: true };
     case 'confirm_mutation':
-      handlers.onConfirmMutation?.(action.operation, action.preview ?? {});
+      // A confirmation action is never permission to mutate by itself. The
+      // caller must install a concrete, server-backed confirmation handler.
+      if (!handlers.onConfirmMutation) {
+        return { ok: false, reason: 'confirmation_handler_missing' };
+      }
+      handlers.onConfirmMutation(action.operation, action.preview ?? {});
       return { ok: true };
     default:
       return { ok: false, reason: 'unknown_action' };

@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react';
 import { Alert, PermissionsAndroid, Platform } from 'react-native';
 import { apiStream, ApiError } from '@/shared/api/client';
 import { isApiEnabled } from '@/shared/api/config';
+import { createAnalyticsEventId } from '@/shared/api/reelAnalytics';
 import { useAssistantStore } from '@/features/assistant/store/assistantStore';
 import type { AssistantStreamEvent } from '@/features/assistant/types';
 import {
@@ -19,8 +20,9 @@ function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** Must be a UUID — API schema validates `clientRequestId` with z.string().uuid(). */
 function newRequestId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return createAnalyticsEventId();
 }
 
 async function requestDeviceLocationPermission(): Promise<boolean> {

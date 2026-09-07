@@ -60,6 +60,13 @@ export type ApiReelFeedItem = {
     entityId: string;
     ctaLabel?: string;
   } | null;
+  /** Optional while the editorial Reel feed migrates to profile-backed clips. */
+  author?: {
+    type: 'user' | 'business';
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+  } | null;
 };
 
 export type ApiCmsBanner = {
@@ -107,7 +114,11 @@ export function mapApiReelToItem(r: ApiReelFeedItem): ReelItem {
   return {
     id: r.id,
     title: r.title,
-    author: r.creatorName,
+    author: r.author?.name ?? r.creatorName,
+    authorAvatarUrl: r.author?.avatarUrl ?? undefined,
+    authorProfile: r.author
+      ? { type: r.author.type, id: r.author.id }
+      : undefined,
     caption: r.caption ?? '',
     videoUrl: r.playbackUrl,
     posterUrl: r.posterUrl ?? '',

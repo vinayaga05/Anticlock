@@ -1,5 +1,9 @@
 import React from 'react';
-import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  DarkTheme,
+  DefaultTheme,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { assistantLinking } from '@/features/assistant/navigation/assistantNavigation';
 import { useAssistantStore } from '@/features/assistant/store/assistantStore';
@@ -7,10 +11,17 @@ import { MainNavigator } from '@/shared/navigation/MainNavigator';
 import { RootStackParamList } from '@/shared/navigation/types';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { useAuth } from '@/shared/context/AuthProvider';
-import { AuthLoadingScreen, LoginScreen } from '@/features/auth/screens/LoginScreen';
+import {
+  AuthLoadingScreen,
+  LoginScreen,
+} from '@/features/auth/screens/LoginScreen';
+import { isApiEnabled } from '@/shared/api/config';
+import { useMyInterestsQuery } from '@/features/interests/hooks/useInterestPreferences';
+import { InterestSelectionScreen } from '@/features/interests/screens/InterestSelectionScreen';
 import { SearchScreen } from '@/features/booking/screens/SearchScreen';
 import { ProfileScreen } from '@/features/booking/screens/ProfileScreen';
 import { UserProfileScreen } from '@/features/profile/screens/UserProfileScreen';
+import { EditProfileScreen } from '@/features/profile/screens/EditProfileScreen';
 import { DoctorsScreen } from '@/features/booking/screens/DoctorsScreen';
 import { DoctorProfileScreen } from '@/features/booking/screens/DoctorProfileScreen';
 import { DiagnosticsHubScreen } from '@/features/booking/screens/DiagnosticsHubScreen';
@@ -62,6 +73,7 @@ import { ProviderApplicationServiceSelectScreen } from '@/features/provider-onbo
 import { ProviderApplicationFormScreen } from '@/features/provider-onboarding/screens/ProviderApplicationFormScreen';
 import { ProviderApplicationReviewScreen } from '@/features/provider-onboarding/screens/ProviderApplicationReviewScreen';
 import { ProviderApplicationStatusScreen } from '@/features/provider-onboarding/screens/ProviderApplicationStatusScreen';
+import { ProviderBusinessesScreen } from '@/features/provider-onboarding/screens/ProviderBusinessesScreen';
 import { ProviderDashboardScreen } from '@/features/provider-onboarding/screens/ProviderDashboardScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -69,6 +81,11 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export function RootNavigator() {
   const theme = useTheme();
   const { user, loading } = useAuth();
+  const shouldLoadInterests = Boolean(
+    user && user.id !== 'temporary-guest' && isApiEnabled,
+  );
+  const { data: interests, isLoading: interestsLoading } =
+    useMyInterestsQuery(shouldLoadInterests);
 
   const navigationTheme =
     theme.mode === 'dark'
@@ -99,6 +116,12 @@ export function RootNavigator() {
     return <AuthLoadingScreen />;
   }
 
+  if (user && shouldLoadInterests && interestsLoading) {
+    return <AuthLoadingScreen />;
+  }
+
+  const needsInterestOnboarding = interests?.needsOnboarding === true;
+
   return (
     <NavigationContainer
       theme={navigationTheme}
@@ -112,14 +135,12 @@ export function RootNavigator() {
         const nested = route.state as
           | { index: number; routes: { name: string }[] }
           | undefined;
-        if (
-          route.name === 'Main' &&
-          nested?.routes?.[nested.index]?.name
-        ) {
+        if (route.name === 'Main' && nested?.routes?.[nested.index]?.name) {
           screenName = nested.routes[nested.index].name;
         }
         useAssistantStore.getState().setCurrentScreen(screenName);
-      }}>
+      }}
+    >
       <Stack.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: theme.colors.background },
@@ -129,253 +150,309 @@ export function RootNavigator() {
           headerBackButtonDisplayMode: 'minimal',
           headerBackTitle: '',
           contentStyle: { backgroundColor: theme.colors.background },
-        }}>
+        }}
+      >
         {!user ? (
           <Stack.Screen
             name="Login"
             component={LoginScreen}
             options={{ headerShown: false }}
           />
+        ) : needsInterestOnboarding ? (
+          <Stack.Screen
+            name="InterestOnboarding"
+            options={{ headerShown: false, gestureEnabled: false }}
+          >
+            {() => <InterestSelectionScreen mode="onboarding" />}
+          </Stack.Screen>
         ) : (
           <>
-        <Stack.Screen
-          name="Main"
-          component={MainNavigator}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen name="Search" component={SearchScreen} options={{ title: 'Search' }} />
-        <Stack.Screen
-          name="Profile"
-          component={UserProfileScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="AccountSettings"
-          component={ProfileScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen name="Doctors" component={DoctorsScreen} options={{ title: 'Doctors' }} />
-        <Stack.Screen
-          name="DoctorProfile"
-          component={DoctorProfileScreen}
-          options={{ title: 'Doctor' }}
-        />
-        <Stack.Screen
-          name="DiagnosticsHub"
-          component={DiagnosticsHubScreen}
-          options={{ title: 'Diagnostics' }}
-        />
-        <Stack.Screen name="LabList" component={LabListScreen} options={{ title: 'Lab Tests' }} />
-        <Stack.Screen name="LabDetail" component={LabDetailScreen} options={{ title: 'Lab' }} />
-        <Stack.Screen
-          name="PhysioHub"
-          component={PhysioHubScreen}
-          options={{ title: 'Physiotherapy' }}
-        />
-        <Stack.Screen
-          name="FitnessFeed"
-          component={FitnessFeedScreen}
-          options={{ title: 'Classes' }}
-        />
-        <Stack.Screen
-          name="ClassDetail"
-          component={ClassDetailScreen}
-          options={{ title: 'Class' }}
-        />
-        <Stack.Screen
-          name="Schedule"
-          component={ScheduleScreen}
-          options={{ title: 'Schedule' }}
-        />
-        <Stack.Screen
-          name="BookingConfirm"
-          component={BookingConfirmScreen}
-          options={{ title: 'Confirmed', headerBackVisible: false }}
-        />
-        <Stack.Screen
-          name="MyBookings"
-          component={MyBookingsScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Communities"
-          component={CommunitiesScreen}
-          options={{ title: 'Communities', headerShown: false }}
-        />
-        <Stack.Screen
-          name="Inbox"
-          component={InboxScreen}
-          options={{ title: 'Knock', headerShown: false }}
-        />
-        <Stack.Screen name="Thread" component={ThreadScreen} options={{ title: 'Chat' }} />
-        <Stack.Screen
-          name="ServiceTree"
-          component={ServiceTreeScreen}
-          options={{ title: 'Services' }}
-        />
-        <Stack.Screen
-          name="ServiceCategory"
-          component={ServiceCategoryScreen}
-          options={{ title: 'Category' }}
-        />
-        <Stack.Screen
-          name="UniversalDetail"
-          component={UniversalDetailScreen}
-          options={{ title: 'Details' }}
-        />
-        <Stack.Screen
-          name="ServiceRequest"
-          component={ServiceRequestScreen}
-          options={{ title: 'Request service' }}
-        />
-        <Stack.Screen
-          name="CourseDetail"
-          component={CourseDetailScreen}
-          options={{ title: 'Course' }}
-        />
-        <Stack.Screen
-          name="EventDetail"
-          component={EventDetailScreen}
-          options={{ title: 'Event' }}
-        />
-        <Stack.Screen
-          name="ProductDetail"
-          component={ProductDetailScreen}
-          options={{ title: 'Product' }}
-        />
-        <Stack.Screen name="Checkout" component={CheckoutScreen} options={{ title: 'Checkout' }} />
-        <Stack.Screen
-          name="MyLearning"
-          component={MyLearningScreen}
-          options={{ title: 'My Learning' }}
-        />
-        <Stack.Screen name="MyTrips" component={MyTripsScreen} options={{ title: 'My Trips' }} />
-        <Stack.Screen
-          name="MyServiceRequests"
-          component={MyServiceRequestsScreen}
-          options={{ title: 'Requests' }}
-        />
-        <Stack.Screen name="MyOrders" component={MyOrdersScreen} options={{ title: 'My Orders' }} />
-        <Stack.Screen
-          name="ComingSoon"
-          component={ComingSoonScreen}
-          options={{ title: 'Coming soon' }}
-        />
-        <Stack.Screen
-          name="FlashComposer"
-          component={FlashComposerScreen}
-          options={{ title: 'Create post' }}
-        />
-        <Stack.Screen
-          name="FlashComments"
-          component={FlashCommentsScreen}
-          options={{ title: 'Comments' }}
-        />
-        <Stack.Screen
-          name="StoryViewer"
-          component={StoryViewerScreen}
-          options={{ headerShown: false, presentation: 'fullScreenModal' }}
-        />
-        <Stack.Screen
-          name="StoryCreator"
-          component={StoryCreatorScreen}
-          options={{ title: 'Create Story', headerShown: false }}
-        />
-        <Stack.Screen
-          name="SavedHub"
-          component={SavedHubScreen}
-          options={{ title: 'Saved' }}
-        />
-        <Stack.Screen
-          name="ExploreCreate"
-          component={ExploreCreateScreen}
-          options={{ title: 'Create', headerShown: false }}
-        />
-        <Stack.Screen
-          name="CreateExploreEvent"
-          component={CreateExploreEventScreen}
-          options={{ title: 'Create Event', headerShown: false }}
-        />
-        <Stack.Screen
-          name="CreateExploreProduct"
-          component={CreateExploreProductScreen}
-          options={{ title: 'Post Product', headerShown: false }}
-        />
-        <Stack.Screen
-          name="ExploreSubmissionDetail"
-          component={ExploreSubmissionDetailScreen}
-          options={{ title: 'Submission', headerShown: false }}
-        />
-        <Stack.Screen
-          name="TeamDetail"
-          component={ClubDetailScreen}
-          options={{ title: 'Team', headerShown: false }}
-        />
-        <Stack.Screen
-          name="TeamRoster"
-          component={ClubRosterScreen}
-          options={{ title: 'Roster', headerShown: false }}
-        />
-        <Stack.Screen
-          name="TeamPlayerForm"
-          component={ClubPlayerFormScreen}
-          options={{ title: 'Player', headerShown: false }}
-        />
-        <Stack.Screen
-          name="CreateTeam"
-          component={CreateClubScreen}
-          options={{ title: 'Create Team', headerShown: false }}
-        />
-        <Stack.Screen
-          name="TeamJoinRequests"
-          component={ClubJoinRequestsScreen}
-          options={{ title: 'Join Requests', headerShown: false }}
-        />
-        <Stack.Screen
-          name="ChallengeDetail"
-          component={ChallengeDetailScreen}
-          options={{ title: 'Challenge', headerShown: false }}
-        />
-        <Stack.Screen
-          name="ChallengeParticipate"
-          component={ChallengeParticipateScreen}
-          options={{ title: 'Participate', headerShown: false }}
-        />
-        <Stack.Screen
-          name="ProviderApplicationIntro"
-          component={ProviderApplicationIntroScreen}
-          options={{ title: 'Become a Provider' }}
-        />
-        <Stack.Screen
-          name="ProviderApplicationKind"
-          component={ProviderApplicationKindScreen}
-          options={{ title: 'Provider type' }}
-        />
-        <Stack.Screen
-          name="ProviderApplicationServices"
-          component={ProviderApplicationServiceSelectScreen}
-          options={{ title: 'Select services' }}
-        />
-        <Stack.Screen
-          name="ProviderApplicationForm"
-          component={ProviderApplicationFormScreen}
-          options={{ title: 'Application' }}
-        />
-        <Stack.Screen
-          name="ProviderApplicationReview"
-          component={ProviderApplicationReviewScreen}
-          options={{ title: 'Review' }}
-        />
-        <Stack.Screen
-          name="ProviderApplicationStatus"
-          component={ProviderApplicationStatusScreen}
-          options={{ title: 'Application status' }}
-        />
-        <Stack.Screen
-          name="ProviderDashboard"
-          component={ProviderDashboardScreen}
-          options={{ title: 'Provider dashboard' }}
-        />
+            <Stack.Screen
+              name="Main"
+              component={MainNavigator}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="Search"
+              component={SearchScreen}
+              options={{ title: 'Search' }}
+            />
+            <Stack.Screen
+              name="Profile"
+              component={UserProfileScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="AccountSettings"
+              component={ProfileScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="EditProfile"
+              component={EditProfileScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="InterestPreferences"
+              options={{ headerShown: false }}
+            >
+              {() => <InterestSelectionScreen mode="settings" />}
+            </Stack.Screen>
+            <Stack.Screen
+              name="Doctors"
+              component={DoctorsScreen}
+              options={{ title: 'Doctors' }}
+            />
+            <Stack.Screen
+              name="DoctorProfile"
+              component={DoctorProfileScreen}
+              options={{ title: 'Doctor' }}
+            />
+            <Stack.Screen
+              name="DiagnosticsHub"
+              component={DiagnosticsHubScreen}
+              options={{ title: 'Diagnostics' }}
+            />
+            <Stack.Screen
+              name="LabList"
+              component={LabListScreen}
+              options={{ title: 'Lab Tests' }}
+            />
+            <Stack.Screen
+              name="LabDetail"
+              component={LabDetailScreen}
+              options={{ title: 'Lab' }}
+            />
+            <Stack.Screen
+              name="PhysioHub"
+              component={PhysioHubScreen}
+              options={{ title: 'Physiotherapy' }}
+            />
+            <Stack.Screen
+              name="FitnessFeed"
+              component={FitnessFeedScreen}
+              options={{ title: 'Classes' }}
+            />
+            <Stack.Screen
+              name="ClassDetail"
+              component={ClassDetailScreen}
+              options={{ title: 'Class' }}
+            />
+            <Stack.Screen
+              name="Schedule"
+              component={ScheduleScreen}
+              options={{ title: 'Schedule' }}
+            />
+            <Stack.Screen
+              name="BookingConfirm"
+              component={BookingConfirmScreen}
+              options={{ title: 'Confirmed', headerBackVisible: false }}
+            />
+            <Stack.Screen
+              name="MyBookings"
+              component={MyBookingsScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="Communities"
+              component={CommunitiesScreen}
+              options={{ title: 'Communities', headerShown: false }}
+            />
+            <Stack.Screen
+              name="Inbox"
+              component={InboxScreen}
+              options={{ title: 'Knock', headerShown: false }}
+            />
+            <Stack.Screen
+              name="Thread"
+              component={ThreadScreen}
+              options={{ title: 'Chat' }}
+            />
+            <Stack.Screen
+              name="ServiceTree"
+              component={ServiceTreeScreen}
+              options={{ title: 'Services' }}
+            />
+            <Stack.Screen
+              name="ServiceCategory"
+              component={ServiceCategoryScreen}
+              options={{ title: 'Category' }}
+            />
+            <Stack.Screen
+              name="UniversalDetail"
+              component={UniversalDetailScreen}
+              options={{ title: 'Details' }}
+            />
+            <Stack.Screen
+              name="ServiceRequest"
+              component={ServiceRequestScreen}
+              options={{ title: 'Request service' }}
+            />
+            <Stack.Screen
+              name="CourseDetail"
+              component={CourseDetailScreen}
+              options={{ title: 'Course' }}
+            />
+            <Stack.Screen
+              name="EventDetail"
+              component={EventDetailScreen}
+              options={{ title: 'Event' }}
+            />
+            <Stack.Screen
+              name="ProductDetail"
+              component={ProductDetailScreen}
+              options={{ title: 'Product' }}
+            />
+            <Stack.Screen
+              name="Checkout"
+              component={CheckoutScreen}
+              options={{ title: 'Checkout' }}
+            />
+            <Stack.Screen
+              name="MyLearning"
+              component={MyLearningScreen}
+              options={{ title: 'My Learning' }}
+            />
+            <Stack.Screen
+              name="MyTrips"
+              component={MyTripsScreen}
+              options={{ title: 'My Trips' }}
+            />
+            <Stack.Screen
+              name="MyServiceRequests"
+              component={MyServiceRequestsScreen}
+              options={{ title: 'Requests' }}
+            />
+            <Stack.Screen
+              name="MyOrders"
+              component={MyOrdersScreen}
+              options={{ title: 'My Orders' }}
+            />
+            <Stack.Screen
+              name="ComingSoon"
+              component={ComingSoonScreen}
+              options={{ title: 'Coming soon' }}
+            />
+            <Stack.Screen
+              name="FlashComposer"
+              component={FlashComposerScreen}
+              options={{ title: 'Create post' }}
+            />
+            <Stack.Screen
+              name="FlashComments"
+              component={FlashCommentsScreen}
+              options={{ title: 'Comments' }}
+            />
+            <Stack.Screen
+              name="StoryViewer"
+              component={StoryViewerScreen}
+              options={{ headerShown: false, presentation: 'fullScreenModal' }}
+            />
+            <Stack.Screen
+              name="StoryCreator"
+              component={StoryCreatorScreen}
+              options={{ title: 'Create Story', headerShown: false }}
+            />
+            <Stack.Screen
+              name="SavedHub"
+              component={SavedHubScreen}
+              options={{ title: 'Saved' }}
+            />
+            <Stack.Screen
+              name="ExploreCreate"
+              component={ExploreCreateScreen}
+              options={{ title: 'Create', headerShown: false }}
+            />
+            <Stack.Screen
+              name="CreateExploreEvent"
+              component={CreateExploreEventScreen}
+              options={{ title: 'Create Event', headerShown: false }}
+            />
+            <Stack.Screen
+              name="CreateExploreProduct"
+              component={CreateExploreProductScreen}
+              options={{ title: 'Post Product', headerShown: false }}
+            />
+            <Stack.Screen
+              name="ExploreSubmissionDetail"
+              component={ExploreSubmissionDetailScreen}
+              options={{ title: 'Submission', headerShown: false }}
+            />
+            <Stack.Screen
+              name="TeamDetail"
+              component={ClubDetailScreen}
+              options={{ title: 'Team', headerShown: false }}
+            />
+            <Stack.Screen
+              name="TeamRoster"
+              component={ClubRosterScreen}
+              options={{ title: 'Roster', headerShown: false }}
+            />
+            <Stack.Screen
+              name="TeamPlayerForm"
+              component={ClubPlayerFormScreen}
+              options={{ title: 'Player', headerShown: false }}
+            />
+            <Stack.Screen
+              name="CreateTeam"
+              component={CreateClubScreen}
+              options={{ title: 'Create Team', headerShown: false }}
+            />
+            <Stack.Screen
+              name="TeamJoinRequests"
+              component={ClubJoinRequestsScreen}
+              options={{ title: 'Join Requests', headerShown: false }}
+            />
+            <Stack.Screen
+              name="ChallengeDetail"
+              component={ChallengeDetailScreen}
+              options={{ title: 'Challenge', headerShown: false }}
+            />
+            <Stack.Screen
+              name="ChallengeParticipate"
+              component={ChallengeParticipateScreen}
+              options={{ title: 'Participate', headerShown: false }}
+            />
+            <Stack.Screen
+              name="ProviderApplicationIntro"
+              component={ProviderApplicationIntroScreen}
+              options={{ title: 'Become a Provider' }}
+            />
+            <Stack.Screen
+              name="ProviderApplicationKind"
+              component={ProviderApplicationKindScreen}
+              options={{ title: 'Provider type' }}
+            />
+            <Stack.Screen
+              name="ProviderApplicationServices"
+              component={ProviderApplicationServiceSelectScreen}
+              options={{ title: 'Select services' }}
+            />
+            <Stack.Screen
+              name="ProviderApplicationForm"
+              component={ProviderApplicationFormScreen}
+              options={{ title: 'Create business profile' }}
+            />
+            <Stack.Screen
+              name="ProviderApplicationReview"
+              component={ProviderApplicationReviewScreen}
+              options={{ title: 'Review' }}
+            />
+            <Stack.Screen
+              name="ProviderApplicationStatus"
+              component={ProviderApplicationStatusScreen}
+              options={{ title: 'Application status' }}
+            />
+            <Stack.Screen
+              name="ProviderBusinesses"
+              component={ProviderBusinessesScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="ProviderDashboard"
+              component={ProviderDashboardScreen}
+              options={{ title: 'Provider dashboard' }}
+            />
           </>
         )}
       </Stack.Navigator>

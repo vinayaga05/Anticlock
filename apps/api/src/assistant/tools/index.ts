@@ -188,20 +188,39 @@ export async function getProductHelp(
   args: { query: string; limit?: number },
   ctx: ToolContext,
 ): Promise<ToolResult> {
-  const cards = await searchService.searchCatalog(args.query, args.limit ?? 5);
+  const sources = await searchService.searchCatalogGrounding(
+    args.query,
+    args.limit ?? 5,
+  );
+  const cards: AssistantResultCard[] = sources.map(source => ({
+    id: source.sourceId,
+    type: 'catalog',
+    title: source.title,
+    subtitle: source.excerpt,
+    metadata:
+      source.sourceType === 'service_tree'
+        ? { treeId: source.metadata.treeId, kind: 'tree' }
+        : {
+            treeId: source.metadata.treeId,
+            categoryId: source.sourceId,
+            kind: 'category',
+          },
+  }));
   ctx.recentResults.splice(0, ctx.recentResults.length, ...cards);
   return {
     ok: true,
     data: {
-      count: cards.length,
-      topics: [
-        'Use Needs to browse services',
-        'Use PlayFeed for reels',
-        'Saved content lives in SavedHub',
-      ],
+      query: args.query,
+      sourceCount: sources.length,
+      // The model receives these first-party facts on the next agent turn.
+      // It must not fill gaps with invented price, availability, or policy data.
+      sources,
     },
     cards,
     resultOutcome: cards.length ? 'success' : 'no_results',
+    resultMessage: cards.length
+      ? undefined
+      : `I couldn't find verified Anticlock information for "${args.query}".`,
   };
 }
 

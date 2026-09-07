@@ -85,6 +85,9 @@ export function UserProfileScreen() {
   const [tab, setTab] = useState<ProfileTab>('posts');
 
   const isOwnProfile = userId === CURRENT_USER.id;
+  const profileBio = isOwnProfile ? authUser?.bio ?? meta.bio : meta.bio;
+  const profileLocation = isOwnProfile ? authUser?.location ?? meta.location : meta.location;
+  const profileWebsite = isOwnProfile ? authUser?.website : undefined;
   const postCount = getPostCount(userId);
   const followerCount = getFollowerCount(userId);
   const followingCount = getFollowingCount(userId);
@@ -208,16 +211,24 @@ export function UserProfileScreen() {
             <AppIcon name="verified" size={14} color={theme.colors.primary} strokeWidth={2} />
           ) : null}
         </View>
-        {meta.location ? (
+        {profileLocation ? (
           <View style={styles.locationRow}>
             <AppIcon name="location" size={13} color={theme.colors.textSecondary} strokeWidth={2} />
             <Text style={[styles.locationText, { color: theme.colors.textPrimary }]}>
-              {meta.location}
+              {profileLocation}
             </Text>
           </View>
         ) : null}
-        {meta.bio ? (
-          <Text style={[styles.bio, { color: theme.colors.textPrimary }]}>{meta.bio}</Text>
+        {profileBio ? (
+          <Text style={[styles.bio, { color: theme.colors.textPrimary }]}>{profileBio}</Text>
+        ) : null}
+        {profileWebsite ? (
+          <View style={styles.locationRow}>
+            <AppIcon name="globe" size={13} color={theme.colors.textSecondary} strokeWidth={2} />
+            <Text style={[styles.locationText, { color: theme.colors.link }]} numberOfLines={1}>
+              {profileWebsite}
+            </Text>
+          </View>
         ) : null}
         {isOwnProfile ? (
           <PressableScale style={[styles.bannerBtn, { borderColor: theme.colors.border }]}>
@@ -232,7 +243,7 @@ export function UserProfileScreen() {
         {isOwnProfile ? (
           <>
             <PressableScale
-              onPress={() => navigation.navigate('AccountSettings')}
+              onPress={() => navigation.navigate('EditProfile')}
               style={[styles.actionBtn, { backgroundColor: theme.colors.surfaceMuted }]}>
               <Text style={[styles.actionBtnText, { color: theme.colors.textPrimary }]}>
                 Edit profile

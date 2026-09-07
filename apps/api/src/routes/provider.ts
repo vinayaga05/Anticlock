@@ -60,6 +60,31 @@ providerMobileRoutes.get('/applications/me', async c => {
   }
 });
 
+providerMobileRoutes.get('/applications', async c => {
+  try {
+    const auth = requireMobileAuth(c);
+    const applications = await providerApplicationService.getMyApplications(auth.sub);
+    return c.json({ applications });
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
+providerMobileRoutes.get('/applications/:id', async c => {
+  try {
+    const auth = requireMobileAuth(c);
+    const application = await providerApplicationService.getApplication(
+      auth.sub,
+      c.req.param('id'),
+    );
+    return c.json({ application });
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
 providerMobileRoutes.post('/applications', async c => {
   try {
     const auth = requireMobileAuth(c);
@@ -85,6 +110,20 @@ providerMobileRoutes.patch('/applications/:id', async c => {
       body,
     );
     return c.json({ application });
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
+providerMobileRoutes.delete('/applications/:id', async c => {
+  try {
+    const auth = requireMobileAuth(c);
+    await providerApplicationService.deleteApplication(
+      auth.sub,
+      c.req.param('id'),
+    );
+    return c.json({ ok: true });
   } catch (err) {
     const { status, body } = httpError(err);
     return c.json(body, status);

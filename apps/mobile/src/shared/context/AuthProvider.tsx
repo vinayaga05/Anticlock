@@ -15,8 +15,9 @@ import {
   sendOtp,
   validateSession,
   verifyOtp,
+  updateProfile as persistProfile,
 } from '@/shared/services/auth/authService';
-import type { MobileUser, OtpSendResult } from '@/shared/services/auth/types';
+import type { MobileUser, OtpSendResult, ProfileUpdate } from '@/shared/services/auth/types';
 import { setUnauthorizedHandler } from '@/shared/api/client';
 import { ensureUserAvatar } from '@/shared/services/auth/avatar';
 
@@ -31,6 +32,7 @@ type AuthState = {
   ) => Promise<void>;
   continueAsGuest: () => void;
   logout: () => Promise<void>;
+  updateProfile: (input: ProfileUpdate) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -104,6 +106,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const updateProfile = useCallback(async (input: ProfileUpdate) => {
+    const updatedUser = await persistProfile(input);
+    setUser(updatedUser);
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -112,8 +119,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loginWithOtp,
       continueAsGuest,
       logout,
+      updateProfile,
     }),
-    [user, loading, requestOtp, loginWithOtp, continueAsGuest, logout],
+    [user, loading, requestOtp, loginWithOtp, continueAsGuest, logout, updateProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

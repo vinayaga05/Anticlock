@@ -45,6 +45,25 @@ export function requestLocationAction(
   });
 }
 
+/**
+ * Preflight only. A future transactional tool must pair this with a
+ * server-owned pending-operation and confirmation endpoint; this action never
+ * authorizes a mutation by itself.
+ */
+export function confirmMutationAction(
+  operation: string,
+  preview: Record<string, unknown> = {},
+  id = newActionId(),
+): GenieAction {
+  return GenieActionSchema.parse({
+    id,
+    version: 1,
+    type: 'confirm_mutation',
+    operation,
+    preview,
+  });
+}
+
 export function parseGenieAction(raw: unknown): GenieAction | null {
   const parsed = GenieActionSchema.safeParse(raw);
   return parsed.success ? parsed.data : null;

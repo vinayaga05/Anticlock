@@ -9,6 +9,7 @@ import {
   navigateAction,
   openSearchResultsAction,
   requestLocationAction,
+  confirmMutationAction,
   parseGenieAction,
 } from '../genieActions.js';
 
@@ -31,6 +32,16 @@ describe('GenieAction contracts', () => {
     assert.equal(search.type, 'open_search_results');
     const loc = requestLocationAction('Find plumbers near you');
     assert.equal(loc.type, 'request_location');
+  });
+
+  it('builds a mutation confirmation preflight, not a mutation', () => {
+    const confirmation = confirmMutationAction('cancel booking', {
+      bookingId: 'booking_1',
+    });
+    assert.equal(confirmation.type, 'confirm_mutation');
+    if (confirmation.type === 'confirm_mutation') {
+      assert.equal(confirmation.operation, 'cancel booking');
+    }
   });
 
   it('rejects invalid actions', () => {

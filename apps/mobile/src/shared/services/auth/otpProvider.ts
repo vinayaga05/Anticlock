@@ -1,5 +1,5 @@
 import { apiRequest } from '@/shared/api/client';
-import { isApiEnabled, isDevEnvironment } from '@/shared/api/config';
+import { isApiEnabled } from '@/shared/api/config';
 import { DevOtpProvider } from './devOtpProvider';
 import {
   AuthError,
@@ -32,6 +32,8 @@ export class ApiOtpProvider implements OtpProvider {
 }
 
 export function createOtpProvider(): OtpProvider {
-  if (isDevEnvironment) return new DevOtpProvider();
-  return isApiEnabled ? new ApiOtpProvider() : new DevOtpProvider();
+  // Genie and other authenticated API routes need a real JWT from the server.
+  // On-device whitelist tokens (`dev-…`) only work for offline / API-disabled previews.
+  if (isApiEnabled) return new ApiOtpProvider();
+  return new DevOtpProvider();
 }

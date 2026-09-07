@@ -4,12 +4,12 @@ import { Platform } from 'react-native';
  * Global environment switch for the mobile app.
  *
  * `true`  → production API (https://api.anticlock.online)
- * `false` → local/dev API + on-device OTP whitelist
+ * `false` → local/dev API (OTP whitelist via the API: +91 9999999999 / 123456)
  *
  * Flip this to test against the VPS from Metro/Simulator.
  * Release builds should keep this `true`.
  */
-export const USE_PRODUCTION_ENVIRONMENT = true;
+export const USE_PRODUCTION_ENVIRONMENT = false;
 
 export const isProductionEnvironment = USE_PRODUCTION_ENVIRONMENT;
 export const isDevEnvironment = !USE_PRODUCTION_ENVIRONMENT;

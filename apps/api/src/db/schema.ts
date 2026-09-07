@@ -12,6 +12,7 @@ import {
   index,
   doublePrecision,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -127,6 +128,9 @@ export const mobileUsers = pgTable("mobile_users", {
   phone: text("phone").notNull().unique(),
   displayName: text("display_name").notNull(),
   avatarUrl: text("avatar_url"),
+  bio: text("bio"),
+  location: text("location"),
+  website: text("website"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -134,6 +138,9 @@ export const mobileUsers = pgTable("mobile_users", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  interestsCompletedAt: timestamp("interests_completed_at", {
+    withTimezone: true,
+  }),
 });
 
 export const mediaAssets = pgTable("media_assets", {
@@ -409,6 +416,254 @@ export const providers = pgTable("providers", {
     .defaultNow(),
 });
 
+/**
+ * A viewer-controlled safety boundary. A personal-account block and a
+ * business-profile block are intentionally separate: blocking a business
+ * hides that business only, while blocking a user hides that user's posts.
+ */
+export const mobileUserBlocks = pgTable(
+  "mobile_user_blocks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    blockerMobileUserId: uuid("blocker_mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    blockedMobileUserId: uuid("blocked_mobile_user_id").references(
+      () => mobileUsers.id,
+      { onDelete: "cascade" },
+    ),
+    blockedProviderId: uuid("blocked_provider_id").references(
+      () => providers.id,
+      { onDelete: "cascade" },
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  table => [
+    // PostgreSQL treats NULLs as distinct in a normal unique index, so use
+    // two partial unique indexes to make each target idempotent.
+    uniqueIndex("mobile_user_blocks_user_target_uidx")
+      .on(table.blockerMobileUserId, table.blockedMobileUserId)
+      .where(sql`${table.blockedMobileUserId} IS NOT NULL`),
+    uniqueIndex("mobile_user_blocks_provider_target_uidx")
+      .on(table.blockerMobileUserId, table.blockedProviderId)
+      .where(sql`${table.blockedProviderId} IS NOT NULL`),
+    index("mobile_user_blocks_blocker_created_idx").on(
+      table.blockerMobileUserId,
+      table.createdAt,
+    ),
+  ],
+);
+
+/** Users who can act on behalf of an approved provider/business. */
+export const providerMemberships = pgTable(
+  "provider_memberships",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    providerId: uuid("provider_id")
+      .notNull()
+      .references(() => providers.id, { onDelete: "cascade" }),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  table => [
+    unique("provider_memberships_member_uid").on(
+      table.providerId,
+      table.mobileUserId,
+    ),
+    index("provider_memberships_user_idx").on(table.mobileUserId),
+  ],
+);
+
+/** A pre-publication request. It retains intent and target identity safely. */
+export const contentContainers = pgTable(
+  "content_containers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    createdByMobileUserId: uuid("created_by_mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    authorMobileUserId: uuid("author_mobile_user_id").references(
+      () => mobileUsers.id,
+      { onDelete: "cascade" },
+    ),
+    authorProviderId: uuid("author_provider_id").references(() => providers.id, {
+      onDelete: "cascade",
+    }),
+    format: text("format").notNull(),
+    mediaType: text("media_type").notNull(),
+    caption: text("caption").notNull().default(""),
+    mediaIds: jsonb("media_ids").$type<string[]>().notNull().default([]),
+    thumbnailMediaId: uuid("thumbnail_media_id").references(
+      () => mediaAssets.id,
+      { onDelete: "set null" },
+    ),
+    hashtags: jsonb("hashtags").$type<string[]>().notNull().default([]),
+    taggedMobileUserIds: jsonb("tagged_mobile_user_ids")
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    location: jsonb("location").$type<{
+      name: string;
+      latitude?: number;
+      longitude?: number;
+    }>(),
+    visibility: text("visibility").notNull().default("public"),
+    status: text("status").notNull().default("ready_to_publish"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+  },
+  table => [
+    index("content_containers_creator_idx").on(table.createdByMobileUserId),
+  ],
+);
+
+/** Published, format-neutral post record used by Flash, Stories, and Clips. */
+export const contentPosts = pgTable(
+  "content_posts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    containerId: uuid("container_id").references(() => contentContainers.id, {
+      onDelete: "set null",
+    }),
+    createdByMobileUserId: uuid("created_by_mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    authorMobileUserId: uuid("author_mobile_user_id").references(
+      () => mobileUsers.id,
+      { onDelete: "cascade" },
+    ),
+    authorProviderId: uuid("author_provider_id").references(() => providers.id, {
+      onDelete: "cascade",
+    }),
+    format: text("format").notNull(),
+    mediaType: text("media_type").notNull(),
+    caption: text("caption").notNull().default(""),
+    mediaIds: jsonb("media_ids").$type<string[]>().notNull().default([]),
+    thumbnailMediaId: uuid("thumbnail_media_id").references(
+      () => mediaAssets.id,
+      { onDelete: "set null" },
+    ),
+    hashtags: jsonb("hashtags").$type<string[]>().notNull().default([]),
+    taggedMobileUserIds: jsonb("tagged_mobile_user_ids")
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    location: jsonb("location").$type<{
+      name: string;
+      latitude?: number;
+      longitude?: number;
+    }>(),
+    /** Exact-media checksum (or media id when no checksum exists) used for feed de-duplication. */
+    duplicateClusterId: text("duplicate_cluster_id").notNull(),
+    visibility: text("visibility").notNull().default("public"),
+    status: text("status").notNull().default("published"),
+    viewCount: integer("view_count").notNull().default(0),
+    likeCount: integer("like_count").notNull().default(0),
+    commentCount: integer("comment_count").notNull().default(0),
+    shareCount: integer("share_count").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    publishedAt: timestamp("published_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  table => [
+    index("content_posts_feed_idx").on(table.format, table.publishedAt),
+    index("content_posts_expiry_idx").on(table.expiresAt),
+    index("content_posts_cluster_idx").on(table.duplicateClusterId),
+  ],
+);
+
+/** Durable per-viewer post claims prevent the same post from returning for 90 days. */
+export const contentPostDeliveries = pgTable(
+  "content_post_deliveries",
+  {
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    contentPostId: uuid("content_post_id")
+      .notNull()
+      .references(() => contentPosts.id, { onDelete: "cascade" }),
+    claimedAt: timestamp("claimed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  table => [
+    primaryKey({ columns: [table.mobileUserId, table.contentPostId] }),
+    index("content_post_deliveries_expiry_idx").on(
+      table.mobileUserId,
+      table.expiresAt,
+    ),
+  ],
+);
+
+/** Separate short-lived claims ensure variants of one media item do not repeat together. */
+export const contentClusterDeliveries = pgTable(
+  "content_cluster_deliveries",
+  {
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    duplicateClusterId: text("duplicate_cluster_id").notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  table => [
+    primaryKey({ columns: [table.mobileUserId, table.duplicateClusterId] }),
+    index("content_cluster_deliveries_expiry_idx").on(
+      table.mobileUserId,
+      table.expiresAt,
+    ),
+  ],
+);
+
+/** Moderation queue for user- and business-published content, including Clips. */
+export const contentPostReports = pgTable(
+  "content_post_reports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    contentPostId: uuid("content_post_id")
+      .notNull()
+      .references(() => contentPosts.id, { onDelete: "cascade" }),
+    reporterMobileUserId: uuid("reporter_mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    reason: text("reason").notNull(),
+    details: text("details"),
+    status: text("status").notNull().default("open"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  table => [
+    unique("content_post_reports_reporter_uid").on(
+      table.contentPostId,
+      table.reporterMobileUserId,
+    ),
+    index("content_post_reports_status_created_idx").on(
+      table.status,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const providerServiceOfferings = pgTable(
   "provider_service_offerings",
   {
@@ -618,5 +873,44 @@ export const userPreferenceScores = pgTable(
       table.mobileUserId,
       table.score,
     ),
+  ],
+);
+
+/** Server-managed interest choices shown in mobile onboarding and settings. */
+export const interestOptions = pgTable(
+  "interest_options",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    imageUrl: text("image_url"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  table => [index("interest_options_active_order_idx").on(table.isActive, table.sortOrder)],
+);
+
+/** Explicit user choices; separate from inferred Genie preference scores. */
+export const mobileUserInterests = pgTable(
+  "mobile_user_interests",
+  {
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    interestId: text("interest_id")
+      .notNull()
+      .references(() => interestOptions.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  table => [
+    primaryKey({ columns: [table.mobileUserId, table.interestId] }),
+    index("mobile_user_interests_interest_idx").on(table.interestId),
   ],
 );

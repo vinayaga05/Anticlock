@@ -6,7 +6,7 @@ import { Button } from '@/shared/components/Button';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { RootStackParamList } from '@/shared/navigation/types';
 import {
-  useMyProviderApplicationQuery,
+  useProviderApplicationQuery,
   useSubmitProviderApplicationMutation,
 } from '@/shared/api/providerHooks';
 
@@ -14,9 +14,9 @@ export function ProviderApplicationReviewScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<RootStackParamList, 'ProviderApplicationReview'>>();
-  const { data: application } = useMyProviderApplicationQuery();
+  const { data: application } = useProviderApplicationQuery(route.params.applicationId);
   const submit = useSubmitProviderApplicationMutation(route.params.applicationId);
-  const app = application?.id === route.params.applicationId ? application : null;
+  const app = application;
 
   const onSubmit = async () => {
     try {

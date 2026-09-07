@@ -3,6 +3,7 @@ export const STORAGE_KEYS = {
   CART_COUNT: 'cart_count',
   AUTH_SESSION: 'auth_session',
   PROVIDER_APPLICATION: 'provider_application',
+  PROVIDER_APPLICATIONS: 'provider_applications',
   ASSISTANT_ENABLED: 'assistant_enabled',
   ASSISTANT_OFFLINE_QUEUE: 'assistant_offline_queue',
 } as const;

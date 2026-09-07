@@ -5,3 +5,5 @@ export * from './media.js';
 export * from './reels.js';
 export * from './provider.js';
 export * from './assistant.js';
+export * from './interests.js';
+export * from './publishing.js';

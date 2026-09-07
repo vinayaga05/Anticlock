@@ -67,6 +67,44 @@ export interface ReelItem {
   author: string;
   /** Creator profile image shown on the clip overlay. */
   authorAvatarUrl?: string;
+  /**
+   * Stable creator identity for safety actions. A business is intentionally a
+   * separate target from the person who owns or operates it.
+   */
+  authorProfile?: {
+    type: 'user' | 'business';
+    id: string;
+  };
+  /**
+   * Identifies the moderation write path for this video. Editorial Reels and
+   * profile-published Clips are stored in different server resources, so an
+   * id alone is not enough to submit a report safely.
+   */
+  reportTarget?: {
+    kind: 'legacy_reel' | 'content_post';
+    id: string;
+  };
+  /** Where this feed item originated. Kept separate from its visual shape. */
+  feedSource?: 'legacy_reel' | 'content_post';
+  /**
+   * Creator-post metadata carried from the authenticated content feed. This
+   * stays structured so UI surfaces can add tags or location without parsing
+   * captions, and duplicate-cluster data never leaks into display copy.
+   */
+  contentMetadata?: {
+    hashtags: string[];
+    taggedUserIds: string[];
+    location: {
+      name: string;
+      latitude?: number;
+      longitude?: number;
+    } | null;
+    visibility: string;
+    duplicateClusterId: string;
+    publishedAt: string | null;
+    viewCount: number;
+    shareCount: number;
+  };
   caption: string;
   /** Remote HTTPS URL or local `require(...mp4)` asset id */
   videoUrl: string | number;

@@ -27,12 +27,37 @@ export type ReelModerationStatus = z.infer<typeof ReelModerationStatusSchema>;
 export const ReelReportStatusSchema = z.enum(['open', 'resolved', 'dismissed']);
 export type ReelReportStatus = z.infer<typeof ReelReportStatusSchema>;
 
+/**
+ * The current categories shown in the mobile report flow. Keep the values
+ * stable: reports are durable moderation records and should never depend on a
+ * display label supplied by a client.
+ */
+export const GuidedReelReportReasonSchema = z.enum([
+  'harmful_content',
+  'bullying',
+  'harassment',
+  'violent_or_assault_content',
+  'adult_or_pornographic_material',
+  'hate_speech',
+  'misinformation',
+  'illegal_activity',
+  'child_exploitation',
+  'privacy_violation',
+  'spam_or_scams',
+]);
+export type GuidedReelReportReason = z.infer<
+  typeof GuidedReelReportReasonSchema
+>;
+
+/**
+ * Includes historic report values so reports submitted before the guided flow
+ * remain readable in moderation tools and can still be resolved safely.
+ */
 export const ReelReportReasonSchema = z.enum([
+  ...GuidedReelReportReasonSchema.options,
   'spam',
   'nudity',
   'violence',
-  'harassment',
-  'misinformation',
   'copyright',
   'other',
 ]);
@@ -205,6 +230,34 @@ export const CreateReelReportRequestSchema = z
 export type CreateReelReportRequest = z.infer<
   typeof CreateReelReportRequestSchema
 >;
+
+/** User-created Clips use content posts rather than the legacy editorial Reel table. */
+export const CreateContentPostReportRequestSchema = CreateReelReportRequestSchema;
+export type CreateContentPostReportRequest = z.infer<
+  typeof CreateContentPostReportRequestSchema
+>;
+
+/** A profile is either a personal account or a business/provider profile. */
+export const ProfileBlockTargetTypeSchema = z.enum(['user', 'business']);
+export type ProfileBlockTargetType = z.infer<
+  typeof ProfileBlockTargetTypeSchema
+>;
+
+export const ProfileBlockTargetSchema = z.object({
+  type: ProfileBlockTargetTypeSchema,
+  id: z.string().uuid(),
+});
+export type ProfileBlockTarget = z.infer<typeof ProfileBlockTargetSchema>;
+
+export const CreateProfileBlockRequestSchema = ProfileBlockTargetSchema.strict();
+export type CreateProfileBlockRequest = z.infer<
+  typeof CreateProfileBlockRequestSchema
+>;
+
+export const ProfileBlockSchema = ProfileBlockTargetSchema.extend({
+  createdAt: z.string().datetime(),
+});
+export type ProfileBlock = z.infer<typeof ProfileBlockSchema>;
 
 export const ReelReportListQuerySchema = z.object({
   status: ReelReportStatusSchema.optional(),

@@ -17,6 +17,40 @@ export const APPROVED_TOOL_NAMES = [
 
 export type ApprovedToolName = (typeof APPROVED_TOOL_NAMES)[number];
 
+/**
+ * The model can only call tools listed above. This policy describes the
+ * additional user-consent boundary for each tool, independently of whether a
+ * tool happens to change client UI state.
+ */
+export type AssistantToolRisk = 'read' | 'navigate' | 'permission' | 'mutation';
+
+export type AssistantToolPolicy = {
+  risk: AssistantToolRisk;
+  requiresUserConfirmation: boolean;
+};
+
+export const ASSISTANT_TOOL_POLICIES: Record<ApprovedToolName, AssistantToolPolicy> = {
+  navigate_to_screen: { risk: 'navigate', requiresUserConfirmation: false },
+  search_users: { risk: 'read', requiresUserConfirmation: false },
+  search_posts: { risk: 'read', requiresUserConfirmation: false },
+  search_reels: { risk: 'read', requiresUserConfirmation: false },
+  get_feed: { risk: 'read', requiresUserConfirmation: false },
+  get_recently_viewed: { risk: 'read', requiresUserConfirmation: false },
+  get_saved_content: { risk: 'navigate', requiresUserConfirmation: false },
+  open_content: { risk: 'navigate', requiresUserConfirmation: false },
+  get_product_help: { risk: 'read', requiresUserConfirmation: false },
+  resolve_service_category: { risk: 'navigate', requiresUserConfirmation: false },
+  open_shop_search: { risk: 'navigate', requiresUserConfirmation: false },
+  // This only asks the operating system for permission; it never reads GPS
+  // coordinates on the server without the user's explicit device approval.
+  request_user_location: { risk: 'permission', requiresUserConfirmation: false },
+};
+
+/**
+ * UI-changing tools are limited to one per agent reply. This is deliberately
+ * separate from ASSISTANT_TOOL_POLICIES: none of these are transactional
+ * server mutations.
+ */
 export const MUTATING_TOOL_NAMES = new Set<ApprovedToolName>([
   'navigate_to_screen',
   'open_content',
@@ -266,6 +300,11 @@ export function normalizeToolName(name: string): ApprovedToolName | null {
     return name as ApprovedToolName;
   }
   return LEGACY_TOOL_ALIASES[name] ?? null;
+}
+
+export function getAssistantToolPolicy(name: string): AssistantToolPolicy | null {
+  const normalized = normalizeToolName(name);
+  return normalized ? ASSISTANT_TOOL_POLICIES[normalized] : null;
 }
 
 export function parseToolArguments<T extends ApprovedToolName>(

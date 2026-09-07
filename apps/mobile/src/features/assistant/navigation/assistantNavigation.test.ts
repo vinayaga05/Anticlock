@@ -41,6 +41,22 @@ describe('executeGenieAction', () => {
     expect(navigate).toHaveBeenCalledTimes(1);
   });
 
+  it('fails closed when a mutation confirmation has no server-backed handler', () => {
+    const navigate = jest.fn();
+    const result = executeGenieAction(
+      { navigate },
+      {
+        id: 'confirm-1',
+        version: 1,
+        type: 'confirm_mutation',
+        operation: 'cancel booking',
+        preview: { bookingId: 'booking-1' },
+      },
+    );
+    expect(result).toEqual({ ok: false, reason: 'confirmation_handler_missing' });
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
   it('opens service category from open_search_results', () => {
     const navigate = jest.fn();
     executeGenieAction(

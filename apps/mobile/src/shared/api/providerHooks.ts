@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CreateProviderApplicationRequest,
   ProviderApplicationDetail,
+  ProviderApplicationSummary,
   ProviderKind,
   ResolvedProviderFormSchema,
   SetProviderApplicationServicesRequest,
@@ -10,7 +11,9 @@ import type {
 import {
   addLocalDocument,
   createLocalApplication,
+  deleteLocalApplication,
   getLocalApplication,
+  getLocalApplications,
   setLocalServices,
   submitLocalApplication,
   updateLocalApplication,
@@ -35,6 +38,43 @@ export function useMyProviderApplicationQuery() {
       ensureAuthToken();
       const res = await apiRequest<{ application: ProviderApplicationDetail | null }>(
         '/v1/provider/applications/me',
+      );
+      return res.application;
+    },
+  });
+}
+
+export function useProviderApplicationsQuery() {
+  return useQuery({
+    queryKey: ['provider', 'applications', isApiEnabled ? 'api' : 'local'],
+    queryFn: async () => {
+      if (!isApiEnabled) {
+        return getLocalApplications().filter(application =>
+          ['submitted', 'under_review', 'more_info_requested', 'approved'].includes(
+            application.status,
+          ),
+        );
+      }
+      ensureAuthToken();
+      const res = await apiRequest<{ applications: ProviderApplicationSummary[] }>(
+        '/v1/provider/applications',
+      );
+      return res.applications;
+    },
+  });
+}
+
+export function useProviderApplicationQuery(applicationId: string) {
+  return useQuery({
+    queryKey: ['provider', 'application', applicationId, isApiEnabled ? 'api' : 'local'],
+    enabled: Boolean(applicationId),
+    queryFn: async () => {
+      if (!isApiEnabled) {
+        return getLocalApplication(applicationId);
+      }
+      ensureAuthToken();
+      const res = await apiRequest<{ application: ProviderApplicationDetail }>(
+        `/v1/provider/applications/${applicationId}`,
       );
       return res.application;
     },
@@ -85,7 +125,7 @@ export function useCreateProviderApplicationMutation() {
       return res.application;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['provider', 'application'] });
+      qc.invalidateQueries({ queryKey: ['provider'] });
     },
   });
 }
@@ -103,7 +143,26 @@ export function useUpdateProviderApplicationMutation(applicationId: string) {
       return res.application;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['provider', 'application'] });
+      qc.invalidateQueries({ queryKey: ['provider'] });
+    },
+  });
+}
+
+export function useDeleteProviderApplicationMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (applicationId: string) => {
+      if (!isApiEnabled) {
+        deleteLocalApplication(applicationId);
+        return;
+      }
+      ensureAuthToken();
+      await apiRequest<{ ok: true }>(`/v1/provider/applications/${applicationId}`, {
+        method: 'DELETE',
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['provider'] });
     },
   });
 }
@@ -121,7 +180,7 @@ export function useSetProviderServicesMutation(applicationId: string) {
       return res.application;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['provider', 'application'] });
+      qc.invalidateQueries({ queryKey: ['provider'] });
     },
   });
 }
@@ -139,7 +198,7 @@ export function useSubmitProviderApplicationMutation(applicationId: string) {
       return res.application;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['provider', 'application'] });
+      qc.invalidateQueries({ queryKey: ['provider'] });
     },
   });
 }

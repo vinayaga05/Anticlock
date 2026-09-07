@@ -44,21 +44,18 @@ services:
         condition: service_healthy
     ports:
       - '4000:4000'
+    # Genie keys / AI_* live in apps/api/.env. Do not mirror them with
+    # ${GROQ_API_KEY:-} here — an empty host env would wipe the file values.
+    env_file:
+      - apps/api/.env
     environment:
       NODE_ENV: production
       API_PORT: '4000'
+      # Local stack uses the same whitelist OTP as the API's DevWhitelist provider.
+      OTP_DEV_WHITELIST: 'true'
+      # Override host-oriented URLs from apps/api/.env for Docker DNS.
       DATABASE_URL: postgres://anticlock:anticlock@postgres:5432/anticlock
       REDIS_URL: redis://redis:6379
-      AI_PROVIDER: ${AI_PROVIDER:-groq}
-      AI_FALLBACK_PROVIDER: ${AI_FALLBACK_PROVIDER:-}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
-      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
-      ASSISTANT_MAX_TURNS: ${ASSISTANT_MAX_TURNS:-8}
-      ASSISTANT_PERSONA_VERSION: ${ASSISTANT_PERSONA_VERSION:-1}
       JWT_SECRET: anticlock-dev-jwt-secret-change-me
       ADMIN_ORIGIN: http://localhost:3000
       # URLs the browser / Admin can reach (host ports, not Docker DNS)

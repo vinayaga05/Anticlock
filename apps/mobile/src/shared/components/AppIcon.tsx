@@ -51,6 +51,7 @@ import {
   Music2,
   Package,
   PartyPopper,
+  Pencil,
   Pill,
   Play as PlayIcon,
   Plus,
@@ -67,7 +68,9 @@ import {
   Stethoscope,
   TestTube2,
   ThumbsDown,
+  ThumbsUp,
   Trophy,
+  Trash2,
   Truck,
   User,
   UserPlus,
@@ -78,6 +81,9 @@ import {
   Wrench,
   X,
   Zap,
+  Flag,
+  Captions,
+  ChevronsDown,
 } from 'lucide-react-native';
 
 export const iconMap = {
@@ -183,6 +189,8 @@ export const iconMap = {
   mountain: Mountain,
   bike: Bike,
   trophy: Trophy,
+  trash: Trash2,
+  edit: Pencil,
   sparkles: Sparkles,
   wrench: Wrench,
   zap: Zap,
@@ -205,6 +213,14 @@ export const iconMap = {
   unmute: Volume2,
   'volume-x': VolumeX,
   mute: VolumeX,
+  flag: Flag,
+  report: Flag,
+  'thumbs-up': ThumbsUp,
+  interested: ThumbsUp,
+  captions: Captions,
+  caption: Captions,
+  'chevrons-down': ChevronsDown,
+  'auto-scroll': ChevronsDown,
 } as const;
 
 export type IconName = keyof typeof iconMap;

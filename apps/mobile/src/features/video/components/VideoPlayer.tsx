@@ -131,6 +131,7 @@ export function VideoPlayer({
           source={source}
           style={styles.video}
           resizeMode="cover"
+          controls={false}
           repeat
           paused={isPaused}
           muted={isMuted}
@@ -210,8 +211,22 @@ export function VideoPlayer({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  video: { ...StyleSheet.absoluteFill },
+  // A video surface is rendered by a native AVPlayer layer on iOS. Give that
+  // layer one explicit, clipped viewport so its intrinsic video size can
+  // never participate in the Reel cell's layout as playback starts/stops.
+  container: {
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: '#000',
+    overflow: 'hidden',
+  },
+  video: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+  },
   pauseOverlay: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',

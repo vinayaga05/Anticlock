@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,6 +23,11 @@ import {
 import { useStoryStore } from '@/shared/data/flash/storyStore';
 import type { StoryAudience, StoryMediaType } from '@/shared/data/flash/storyTypes';
 import { RootStackParamList } from '@/shared/navigation/types';
+import {
+  usePublishContentMutation,
+  usePublishingIdentitiesQuery,
+} from '@/shared/api/publishingHooks';
+import { isApiEnabled } from '@/shared/api/config';
 
 const AUDIENCE: { id: StoryAudience; label: string }[] = [
   { id: 'followers', label: 'Followers' },
@@ -41,16 +47,53 @@ export function StoryCreatorScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const publishStory = useStoryStore(s => s.publishStory);
+  const { data: identities = [] } = usePublishingIdentitiesQuery();
+  const publishContent = usePublishContentMutation();
 
   const [mode, setMode] = useState<StoryMediaType>('photo');
   const [audience, setAudience] = useState<StoryAudience>('followers');
   const [text, setText] = useState('');
   const [photoIndex, setPhotoIndex] = useState(0);
   const [bgIndex, setBgIndex] = useState(0);
+  const [identityId, setIdentityId] = useState<string | null>(null);
 
-  const share = () => {
+  useEffect(() => {
+    if (!identityId && identities[0]) setIdentityId(identities[0].id);
+  }, [identities, identityId]);
+
+  const identity = identities.find(item => item.id === identityId) ?? identities[0];
+  const identityPills = useMemo(
+    () => identities.map(item => ({
+      id: item.id,
+      label: item.type === 'provider' ? item.name : 'Personal',
+    })),
+    [identities],
+  );
+
+  const share = async () => {
     if (mode === 'text') {
       if (!text.trim()) return;
+      if (isApiEnabled && identity) {
+        try {
+          await publishContent.mutateAsync({
+            format: 'story',
+            mediaType: 'text',
+            caption: text.trim(),
+            visibility: audience === 'followers'
+              ? 'followers'
+              : audience === 'close_friends'
+                ? 'friends'
+                : 'community',
+            identity,
+          });
+        } catch (error) {
+          Alert.alert(
+            'Could not share story',
+            error instanceof Error ? error.message : 'Please try again.',
+          );
+          return;
+        }
+      }
       publishStory({
         type: 'text',
         textContent: text.trim(),
@@ -82,6 +125,17 @@ export function StoryCreatorScreen() {
           gap: theme.spacing.lg,
         }}>
         <AppHeader title="Create Story" showBrand={false} showActions={false} />
+
+        {identityPills.length > 1 ? (
+          <View style={styles.identityPicker}>
+            <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>Publishing as</Text>
+            <FilterPills
+              activeId={identity?.id ?? ''}
+              onChange={setIdentityId}
+              pills={identityPills}
+            />
+          </View>
+        ) : null}
 
         <View style={styles.modeGrid}>
           {MODES.map(m => (
@@ -182,7 +236,7 @@ export function StoryCreatorScreen() {
             backgroundColor: theme.colors.backgroundElevated,
           },
         ]}>
-        <Button title="Share Story" icon="plus" onPress={share} />
+        <Button title="Share Story" icon="plus" onPress={() => void share()} loading={publishContent.isPending} />
       </View>
     </View>
   );
@@ -190,6 +244,7 @@ export function StoryCreatorScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  identityPicker: { gap: 6 },
   modeGrid: { gap: 10 },
   modeCard: {
     padding: 14,

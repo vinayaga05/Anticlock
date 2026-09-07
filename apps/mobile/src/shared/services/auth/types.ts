@@ -3,6 +3,9 @@ export type MobileUser = {
   phone: string;
   displayName: string;
   avatarUrl?: string | null;
+  bio?: string | null;
+  location?: string | null;
+  website?: string | null;
   roles?: string[];
   providerId?: string | null;
 };
@@ -11,6 +14,14 @@ export type AuthSession = {
   user: MobileUser;
   token: string;
   expiresAt: string;
+};
+
+export type ProfileUpdate = {
+  displayName: string;
+  avatarUrl: string | null;
+  bio: string | null;
+  location: string | null;
+  website: string | null;
 };
 
 export type OtpSendResult = {

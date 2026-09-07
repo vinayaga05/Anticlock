@@ -179,6 +179,7 @@ export const AssistantAnalyticsEventTypeSchema = z.enum([
   'action_failed',
   'stream_failed',
   'no_results',
+  'guardrail_triggered',
 ]);
 export type AssistantAnalyticsEventType = z.infer<
   typeof AssistantAnalyticsEventTypeSchema
@@ -271,6 +272,12 @@ export const AssistantAnalyticsEventSchema = z.discriminatedUnion('type', [
     type: z.literal('no_results'),
     domain: GenieActionDomainSchema.or(z.string()),
     query: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('guardrail_triggered'),
+    stage: z.enum(['input', 'output', 'tool']),
+    rule: z.string(),
+    action: z.enum(['blocked', 'rewritten', 'confirmation_required']),
   }),
 ]);
 export type AssistantAnalyticsEvent = z.infer<

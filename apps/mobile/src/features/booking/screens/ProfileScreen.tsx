@@ -15,7 +15,6 @@ import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { CURRENT_USER, getProfileMeta, getProfileShortcuts } from '@/shared/data/flash';
 import { useEngagementStore } from '@/shared/services/engagementRepository';
-import { useMyProviderApplicationQuery } from '@/shared/api/providerHooks';
 import { useStoryStore } from '@/shared/data/flash/storyStore';
 import { AssistantPrivacySection } from '@/features/assistant/components/AssistantPrivacySection';
 import { useAssistantStore } from '@/features/assistant/store/assistantStore';
@@ -81,8 +80,6 @@ export function ProfileScreen() {
   const meta = getProfileMeta(profileId);
   const saved = useEngagementStore(s => s.saved);
   const storyRevision = useStoryStore(s => `${s.stories.length}-${s.archive.length}`);
-  const { data: providerApplication } = useMyProviderApplicationQuery();
-  const isServiceProvider = Boolean(user?.roles?.includes('service_provider'));
 
   const shortcuts: Shortcut[] = useMemo(() => {
     return getProfileShortcuts(profileId).map(item => ({
@@ -113,6 +110,16 @@ export function ProfileScreen() {
 
   const primaryItems: MenuItem[] = useMemo(
     () => [
+      ...(user?.id !== 'temporary-guest'
+        ? [
+            {
+              id: 'edit-profile',
+              label: 'Edit profile',
+              icon: 'user' as IconName,
+              onPress: () => navigation.navigate('EditProfile'),
+            },
+          ]
+        : []),
       {
         id: 'ai',
         label: 'Genie',
@@ -121,16 +128,10 @@ export function ProfileScreen() {
       },
       {
         id: 'provider',
-        label: isServiceProvider ? 'Provider dashboard' : 'Become a Service Provider',
+        label: 'My businesses',
         icon: 'badge-check',
         onPress: () =>
-          isServiceProvider
-            ? navigation.navigate('ProviderDashboard')
-            : providerApplication
-              ? navigation.navigate('ProviderApplicationStatus', {
-                  applicationId: providerApplication.id,
-                })
-              : navigation.navigate('ProviderApplicationIntro'),
+          navigation.navigate('ProviderBusinesses'),
       },
       {
         id: 'saved',
@@ -157,7 +158,7 @@ export function ProfileScreen() {
         onPress: () => navigation.navigate('Main', { screen: 'Community' }),
       },
     ],
-    [navigation, isServiceProvider, providerApplication],
+    [navigation, user?.id],
   );
 
   const moreItems: MenuItem[] = useMemo(
@@ -216,6 +217,12 @@ export function ProfileScreen() {
             label: `Appearance: ${mode}`,
             onPress: () => setMode(mode === 'dark' ? 'light' : 'dark'),
           },
+          ...(user?.id !== 'temporary-guest'
+            ? [{
+                label: 'Interests',
+                onPress: () => navigation.navigate('InterestPreferences'),
+              }]
+            : []),
           { label: 'Privacy', onPress: () => navigation.navigate('ComingSoon', { title: 'Privacy' }) },
           { label: 'Notifications', onPress: () => navigation.navigate('ComingSoon', { title: 'Notifications' }) },
           {
@@ -233,20 +240,13 @@ export function ProfileScreen() {
         items: [
           { label: 'Anticlock Plus', onPress: () => navigation.navigate('ComingSoon', { title: 'Anticlock Plus' }) },
           {
-            label: isServiceProvider ? 'Provider dashboard' : 'Provider tools',
-            onPress: () =>
-              isServiceProvider
-                ? navigation.navigate('ProviderDashboard')
-                : providerApplication
-                  ? navigation.navigate('ProviderApplicationStatus', {
-                      applicationId: providerApplication.id,
-                    })
-                  : navigation.navigate('ProviderApplicationIntro'),
+            label: 'My businesses',
+            onPress: () => navigation.navigate('ProviderBusinesses'),
           },
         ],
       },
     ],
-    [mode, navigation, setMode, logout, isServiceProvider, providerApplication],
+    [mode, navigation, setMode, logout, user?.id],
   );
 
   const visibleItems = showMore ? [...primaryItems, ...moreItems] : primaryItems;

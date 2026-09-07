@@ -2,7 +2,9 @@ import { Hono } from "hono";
 import { asc, desc, eq } from "drizzle-orm";
 import {
   AssignRolesRequestSchema,
+  CreateInterestOptionSchema,
   ManageServiceCategorySchema,
+  UpdateInterestOptionSchema,
 } from "@anticlock/contracts";
 import { db } from "../db/client.js";
 import {
@@ -15,6 +17,7 @@ import {
 } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
 import { searchService } from "../assistant/SearchService.js";
+import { interestService } from "../interests/InterestService.js";
 import {
   requireAuth,
   requirePermission,
@@ -207,6 +210,66 @@ adminRoutes.delete(
       .where(eq(serviceCategories.id, c.req.param("id")));
     return c.body(null, 204);
   }
+);
+
+adminRoutes.get(
+  "/interests",
+  requirePermission("catalog.read"),
+  async c => c.json({ data: await interestService.listForAdmin() }),
+);
+
+adminRoutes.post(
+  "/interests",
+  requirePermission("catalog.write"),
+  async c => {
+    const option = CreateInterestOptionSchema.parse(await c.req.json());
+    const created = await interestService.createOption(option);
+    const auth = c.get("auth");
+    await writeAudit({
+      actorId: auth.sub,
+      actorEmail: auth.email,
+      action: "interest_option.created",
+      entityType: "interest_option",
+      entityId: created.id,
+    });
+    return c.json({ data: created }, 201);
+  },
+);
+
+adminRoutes.put(
+  "/interests/:id",
+  requirePermission("catalog.write"),
+  async c => {
+    const option = UpdateInterestOptionSchema.parse(await c.req.json());
+    const updated = await interestService.updateOption(c.req.param("id"), option);
+    const auth = c.get("auth");
+    await writeAudit({
+      actorId: auth.sub,
+      actorEmail: auth.email,
+      action: "interest_option.updated",
+      entityType: "interest_option",
+      entityId: updated.id,
+    });
+    return c.json({ data: updated });
+  },
+);
+
+adminRoutes.delete(
+  "/interests/:id",
+  requirePermission("catalog.write"),
+  async c => {
+    const id = c.req.param("id");
+    await interestService.deleteOption(id);
+    const auth = c.get("auth");
+    await writeAudit({
+      actorId: auth.sub,
+      actorEmail: auth.email,
+      action: "interest_option.deleted",
+      entityType: "interest_option",
+      entityId: id,
+    });
+    return c.body(null, 204);
+  },
 );
 
 adminRoutes.get("/audit-logs", requirePermission("audit.read"), async (c) => {

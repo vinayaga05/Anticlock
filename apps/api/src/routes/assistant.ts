@@ -11,6 +11,24 @@ import { privacyService } from '../assistant/PrivacyService.js';
 import { requireAuth, type AppEnv } from '../middleware/auth.js';
 
 function httpError(err: unknown) {
+  if (err && typeof err === 'object' && (err as { name?: string }).name === 'ZodError') {
+    const issues = (err as { issues?: Array<{ path?: (string | number)[]; message?: string }> })
+      .issues;
+    const first = issues?.[0];
+    const field = first?.path?.join('.') || 'request';
+    return {
+      status: 400 as const,
+      body: {
+        error: {
+          code: 'validation_error',
+          message: first?.message
+            ? `${field}: ${first.message}`
+            : 'Invalid request. Please try again.',
+        },
+      },
+    };
+  }
+
   const e = err as { status?: number; code?: string; message?: string };
   const status = (e.status ?? 500) as 400 | 403 | 404 | 409 | 429 | 500;
   return {

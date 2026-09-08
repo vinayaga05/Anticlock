@@ -1,6 +1,9 @@
 # OSX
 .DS_Store
 
+# Android build artifacts
+*.apk
+
 # Xcode / iOS
 build/
 *.pbxuser

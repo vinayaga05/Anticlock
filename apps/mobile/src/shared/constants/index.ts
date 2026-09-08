@@ -6,6 +6,8 @@ export const STORAGE_KEYS = {
   PROVIDER_APPLICATIONS: 'provider_applications',
   ASSISTANT_ENABLED: 'assistant_enabled',
   ASSISTANT_OFFLINE_QUEUE: 'assistant_offline_queue',
+  ASSISTANT_BUTTON_POSITION: 'assistant_button_position',
+  CLIP_COMPOSER_DRAFT: 'clip_composer_draft',
 } as const;
 
 export const APP_NAME = 'Anticlock';

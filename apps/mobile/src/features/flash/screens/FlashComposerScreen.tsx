@@ -14,10 +14,7 @@ import { useTheme } from '@/shared/hooks/useTheme';
 import { Button } from '@/shared/components/Button';
 import { FilterPills } from '@/shared/components/FilterPills';
 import { PressableScale } from '@/shared/components/PressableScale';
-import {
-  PostMedia,
-  PostVisibility,
-} from '@/shared/data/flash/types';
+import { PostMedia, PostVisibility } from '@/shared/data/flash/types';
 import { useEngagementStore } from '@/shared/services/engagementRepository';
 import { CURRENT_USER } from '@/shared/data/flash';
 import { getFlashCloudflareVideo } from '@/shared/data/cloudflareVideos';
@@ -72,9 +69,14 @@ export function FlashComposerScreen() {
     if (!identityId && identities[0]) setIdentityId(identities[0].id);
   }, [identities, identityId]);
 
-  const identity = identities.find(item => item.id === identityId) ?? identities[0];
+  const identity =
+    identities.find(item => item.id === identityId) ?? identities[0];
   const identityPills = useMemo(
-    () => identities.map(item => ({ id: item.id, label: item.type === 'provider' ? item.name : 'Personal' })),
+    () =>
+      identities.map(item => ({
+        id: item.id,
+        label: item.type === 'provider' ? item.name : 'Personal',
+      })),
     [identities],
   );
 
@@ -120,22 +122,44 @@ export function FlashComposerScreen() {
           padding: theme.spacing.lg,
           paddingBottom: 120,
           gap: theme.spacing.lg,
-        }}>
+        }}
+      >
         <View style={styles.author}>
-          <Image source={{ uri: CURRENT_USER.avatarUrl }} style={styles.avatar} />
+          <Image
+            source={{ uri: CURRENT_USER.avatarUrl }}
+            style={styles.avatar}
+          />
           <View style={{ flex: 1 }}>
-            <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>
+            <Text
+              style={[
+                theme.typography.section,
+                { color: theme.colors.textPrimary },
+              ]}
+            >
               {identity?.name ?? CURRENT_USER.name}
             </Text>
-            <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
-              Publishing as {identity?.type === 'provider' ? 'business' : 'personal profile'}
+            <Text
+              style={[
+                theme.typography.caption,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              Publishing as{' '}
+              {identity?.type === 'provider' ? 'business' : 'personal profile'}
             </Text>
           </View>
         </View>
 
         {identityPills.length > 1 ? (
           <View style={styles.identityPicker}>
-            <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>Publishing as</Text>
+            <Text
+              style={[
+                theme.typography.caption,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              Publishing as
+            </Text>
             <FilterPills
               activeId={identity?.id ?? ''}
               onChange={setIdentityId}
@@ -143,6 +167,47 @@ export function FlashComposerScreen() {
             />
           </View>
         ) : null}
+
+        <PressableScale
+          onPress={() => navigation.navigate('ClipComposer')}
+          accessibilityLabel="Create a video clip"
+          style={[
+            styles.clipEntry,
+            {
+              borderColor: theme.colors.primary,
+              backgroundColor: theme.colors.primarySoft,
+              borderRadius: theme.radius.lg,
+            },
+          ]}
+        >
+          <View style={styles.clipEntryCopy}>
+            <Text
+              style={[
+                theme.typography.section,
+                { color: theme.colors.textPrimary },
+              ]}
+            >
+              Create a video clip
+            </Text>
+            <Text
+              style={[
+                theme.typography.caption,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              Upload a video with a cover, tags, location, and privacy settings.
+            </Text>
+          </View>
+          <Text
+            style={[
+              theme.typography.bodySmall,
+              styles.clipEntryAction,
+              { color: theme.colors.primary },
+            ]}
+          >
+            Open
+          </Text>
+        </PressableScale>
 
         <FilterPills
           activeId={visibility}
@@ -167,7 +232,12 @@ export function FlashComposerScreen() {
           ]}
         />
 
-        <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>
+        <Text
+          style={[
+            theme.typography.section,
+            { color: theme.colors.textPrimary },
+          ]}
+        >
           Add media (mock)
         </Text>
         <View style={styles.row}>
@@ -180,10 +250,13 @@ export function FlashComposerScreen() {
                 style={[
                   styles.mediaChip,
                   {
-                    borderColor: active ? theme.colors.primary : theme.colors.border,
+                    borderColor: active
+                      ? theme.colors.primary
+                      : theme.colors.border,
                     borderRadius: theme.radius.md,
                   },
-                ]}>
+                ]}
+              >
                 <Image
                   source={
                     typeof m.url === 'number' && !m.posterUrl
@@ -198,7 +271,12 @@ export function FlashComposerScreen() {
                   }
                   style={styles.mediaThumb}
                 />
-                <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
+                <Text
+                  style={[
+                    theme.typography.caption,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
                   {m.type}
                   {active ? ' · added' : ''}
                 </Text>
@@ -208,7 +286,12 @@ export function FlashComposerScreen() {
         </View>
         {media.length > 0 ? (
           <PressableScale onPress={() => setMedia([])}>
-            <Text style={[theme.typography.caption, { color: theme.colors.primary }]}>
+            <Text
+              style={[
+                theme.typography.caption,
+                { color: theme.colors.primary },
+              ]}
+            >
               Clear media
             </Text>
           </PressableScale>
@@ -223,8 +306,13 @@ export function FlashComposerScreen() {
             borderTopColor: theme.colors.border,
             backgroundColor: theme.colors.backgroundElevated,
           },
-        ]}>
-        <Button title="Publish" onPress={() => void publish()} loading={publishContent.isPending} />
+        ]}
+      >
+        <Button
+          title="Publish"
+          onPress={() => void publish()}
+          loading={publishContent.isPending}
+        />
       </View>
     </View>
   );
@@ -234,6 +322,15 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   author: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   identityPicker: { gap: 6 },
+  clipEntry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 14,
+  },
+  clipEntryCopy: { flex: 1, gap: 3 },
+  clipEntryAction: { fontWeight: '700' },
   avatar: { width: 48, height: 48, borderRadius: 24 },
   input: {
     minHeight: 140,

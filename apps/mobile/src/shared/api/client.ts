@@ -1,4 +1,4 @@
-import { API_BASE_URL, isApiEnabled } from './config';
+import { getApiBaseUrl, isApiEnabled } from './config';
 
 export class ApiError extends Error {
   constructor(
@@ -66,7 +66,7 @@ export async function apiRequest<T>(
 
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}${path}`, {
+    res = await fetch(`${getApiBaseUrl()}${path}`, {
       ...init,
       headers,
       signal: init.signal ?? controller.signal,
@@ -158,7 +158,7 @@ export async function apiStream<TEvent>(
       carry = consumeSseLines(chunk, carry, emit);
     };
 
-    xhr.open('POST', `${API_BASE_URL}${path}`);
+    xhr.open('POST', `${getApiBaseUrl()}${path}`);
     xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.setRequestHeader('Accept', 'text/event-stream');
     if (bearerToken) {

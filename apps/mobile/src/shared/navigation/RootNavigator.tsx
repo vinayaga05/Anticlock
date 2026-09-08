@@ -63,6 +63,7 @@ import { MyServiceRequestsScreen } from '@/features/services/screens/MyServiceRe
 import { MyOrdersScreen } from '@/features/services/screens/MyOrdersScreen';
 import { ComingSoonScreen } from '@/features/services/screens/ComingSoonScreen';
 import { FlashComposerScreen } from '@/features/flash/screens/FlashComposerScreen';
+import { ClipComposerScreen } from '@/features/reels/screens/ClipComposerScreen';
 import { FlashCommentsScreen } from '@/features/flash/screens/FlashCommentsScreen';
 import { StoryViewerScreen } from '@/features/flash/screens/StoryViewerScreen';
 import { StoryCreatorScreen } from '@/features/flash/screens/StoryCreatorScreen';
@@ -337,6 +338,19 @@ export function RootNavigator() {
               name="FlashComposer"
               component={FlashComposerScreen}
               options={{ title: 'Create post' }}
+            />
+            <Stack.Screen
+              name="ClipComposer"
+              component={ClipComposerScreen}
+              options={{
+                headerShown: false,
+                // Clips is the left-most tab. Its rightward empty-side swipe
+                // reveals the composer from the left, matching the gesture.
+                animation: 'slide_from_left',
+                animationDuration: 260,
+                gestureDirection: 'horizontal',
+                fullScreenGestureEnabled: true,
+              }}
             />
             <Stack.Screen
               name="FlashComments"

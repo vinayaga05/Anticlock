@@ -69,6 +69,7 @@ export type RootStackParamList = {
   MyOrders: undefined;
   ComingSoon: { title: string };
   FlashComposer: undefined;
+  ClipComposer: undefined;
   FlashComments: { postId: string };
   StoryViewer: { authorId: string };
   StoryCreator: undefined;

@@ -583,6 +583,39 @@ async function migrate() {
   `;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS content_post_view_events (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      content_post_id uuid NOT NULL REFERENCES content_posts(id) ON DELETE CASCADE,
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      event_id uuid NOT NULL,
+      watched_ms integer NOT NULL CHECK (watched_ms >= 1000),
+      created_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (content_post_id, mobile_user_id, event_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS content_post_view_events_post_created_idx
+      ON content_post_view_events (content_post_id, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS content_post_view_events_viewer_idx
+      ON content_post_view_events (content_post_id, mobile_user_id, created_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS content_post_likes (
+      content_post_id uuid NOT NULL REFERENCES content_posts(id) ON DELETE CASCADE,
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (content_post_id, mobile_user_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS content_post_likes_user_created_idx
+      ON content_post_likes (mobile_user_id, created_at DESC)
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS content_post_reports (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       content_post_id uuid NOT NULL REFERENCES content_posts(id) ON DELETE CASCADE,

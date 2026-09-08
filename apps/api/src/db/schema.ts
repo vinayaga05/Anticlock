@@ -430,17 +430,17 @@ export const mobileUserBlocks = pgTable(
       .references(() => mobileUsers.id, { onDelete: "cascade" }),
     blockedMobileUserId: uuid("blocked_mobile_user_id").references(
       () => mobileUsers.id,
-      { onDelete: "cascade" },
+      { onDelete: "cascade" }
     ),
     blockedProviderId: uuid("blocked_provider_id").references(
       () => providers.id,
-      { onDelete: "cascade" },
+      { onDelete: "cascade" }
     ),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
-  table => [
+  (table) => [
     // PostgreSQL treats NULLs as distinct in a normal unique index, so use
     // two partial unique indexes to make each target idempotent.
     uniqueIndex("mobile_user_blocks_user_target_uidx")
@@ -451,9 +451,9 @@ export const mobileUserBlocks = pgTable(
       .where(sql`${table.blockedProviderId} IS NOT NULL`),
     index("mobile_user_blocks_blocker_created_idx").on(
       table.blockerMobileUserId,
-      table.createdAt,
+      table.createdAt
     ),
-  ],
+  ]
 );
 
 /** Users who can act on behalf of an approved provider/business. */
@@ -475,13 +475,13 @@ export const providerMemberships = pgTable(
       .notNull()
       .defaultNow(),
   },
-  table => [
+  (table) => [
     unique("provider_memberships_member_uid").on(
       table.providerId,
-      table.mobileUserId,
+      table.mobileUserId
     ),
     index("provider_memberships_user_idx").on(table.mobileUserId),
-  ],
+  ]
 );
 
 /** A pre-publication request. It retains intent and target identity safely. */
@@ -494,18 +494,21 @@ export const contentContainers = pgTable(
       .references(() => mobileUsers.id, { onDelete: "cascade" }),
     authorMobileUserId: uuid("author_mobile_user_id").references(
       () => mobileUsers.id,
-      { onDelete: "cascade" },
+      { onDelete: "cascade" }
     ),
-    authorProviderId: uuid("author_provider_id").references(() => providers.id, {
-      onDelete: "cascade",
-    }),
+    authorProviderId: uuid("author_provider_id").references(
+      () => providers.id,
+      {
+        onDelete: "cascade",
+      }
+    ),
     format: text("format").notNull(),
     mediaType: text("media_type").notNull(),
     caption: text("caption").notNull().default(""),
     mediaIds: jsonb("media_ids").$type<string[]>().notNull().default([]),
     thumbnailMediaId: uuid("thumbnail_media_id").references(
       () => mediaAssets.id,
-      { onDelete: "set null" },
+      { onDelete: "set null" }
     ),
     hashtags: jsonb("hashtags").$type<string[]>().notNull().default([]),
     taggedMobileUserIds: jsonb("tagged_mobile_user_ids")
@@ -524,9 +527,9 @@ export const contentContainers = pgTable(
       .defaultNow(),
     publishedAt: timestamp("published_at", { withTimezone: true }),
   },
-  table => [
+  (table) => [
     index("content_containers_creator_idx").on(table.createdByMobileUserId),
-  ],
+  ]
 );
 
 /** Published, format-neutral post record used by Flash, Stories, and Clips. */
@@ -542,18 +545,21 @@ export const contentPosts = pgTable(
       .references(() => mobileUsers.id, { onDelete: "cascade" }),
     authorMobileUserId: uuid("author_mobile_user_id").references(
       () => mobileUsers.id,
-      { onDelete: "cascade" },
+      { onDelete: "cascade" }
     ),
-    authorProviderId: uuid("author_provider_id").references(() => providers.id, {
-      onDelete: "cascade",
-    }),
+    authorProviderId: uuid("author_provider_id").references(
+      () => providers.id,
+      {
+        onDelete: "cascade",
+      }
+    ),
     format: text("format").notNull(),
     mediaType: text("media_type").notNull(),
     caption: text("caption").notNull().default(""),
     mediaIds: jsonb("media_ids").$type<string[]>().notNull().default([]),
     thumbnailMediaId: uuid("thumbnail_media_id").references(
       () => mediaAssets.id,
-      { onDelete: "set null" },
+      { onDelete: "set null" }
     ),
     hashtags: jsonb("hashtags").$type<string[]>().notNull().default([]),
     taggedMobileUserIds: jsonb("tagged_mobile_user_ids")
@@ -581,11 +587,11 @@ export const contentPosts = pgTable(
       .notNull()
       .defaultNow(),
   },
-  table => [
+  (table) => [
     index("content_posts_feed_idx").on(table.format, table.publishedAt),
     index("content_posts_expiry_idx").on(table.expiresAt),
     index("content_posts_cluster_idx").on(table.duplicateClusterId),
-  ],
+  ]
 );
 
 /** Durable per-viewer post claims prevent the same post from returning for 90 days. */
@@ -603,13 +609,13 @@ export const contentPostDeliveries = pgTable(
       .defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   },
-  table => [
+  (table) => [
     primaryKey({ columns: [table.mobileUserId, table.contentPostId] }),
     index("content_post_deliveries_expiry_idx").on(
       table.mobileUserId,
-      table.expiresAt,
+      table.expiresAt
     ),
-  ],
+  ]
 );
 
 /** Separate short-lived claims ensure variants of one media item do not repeat together. */
@@ -625,13 +631,72 @@ export const contentClusterDeliveries = pgTable(
       .defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   },
-  table => [
+  (table) => [
     primaryKey({ columns: [table.mobileUserId, table.duplicateClusterId] }),
     index("content_cluster_deliveries_expiry_idx").on(
       table.mobileUserId,
-      table.expiresAt,
+      table.expiresAt
     ),
-  ],
+  ]
+);
+
+/** Idempotent viewer events back the aggregate view count used for ranking. */
+export const contentPostViewEvents = pgTable(
+  "content_post_view_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    contentPostId: uuid("content_post_id")
+      .notNull()
+      .references(() => contentPosts.id, { onDelete: "cascade" }),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id").notNull(),
+    watchedMs: integer("watched_ms").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("content_post_view_events_event_uid").on(
+      table.contentPostId,
+      table.mobileUserId,
+      table.eventId
+    ),
+    index("content_post_view_events_post_created_idx").on(
+      table.contentPostId,
+      table.createdAt
+    ),
+    // Used by the per-viewer view window before the aggregate is incremented.
+    index("content_post_view_events_viewer_idx").on(
+      table.contentPostId,
+      table.mobileUserId,
+      table.createdAt
+    ),
+  ]
+);
+
+/** A unique row per viewer keeps like/unlike state and counters race-safe. */
+export const contentPostLikes = pgTable(
+  "content_post_likes",
+  {
+    contentPostId: uuid("content_post_id")
+      .notNull()
+      .references(() => contentPosts.id, { onDelete: "cascade" }),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.contentPostId, table.mobileUserId] }),
+    index("content_post_likes_user_created_idx").on(
+      table.mobileUserId,
+      table.createdAt
+    ),
+  ]
 );
 
 /** Moderation queue for user- and business-published content, including Clips. */
@@ -652,16 +717,16 @@ export const contentPostReports = pgTable(
       .notNull()
       .defaultNow(),
   },
-  table => [
+  (table) => [
     unique("content_post_reports_reporter_uid").on(
       table.contentPostId,
-      table.reporterMobileUserId,
+      table.reporterMobileUserId
     ),
     index("content_post_reports_status_created_idx").on(
       table.status,
-      table.createdAt,
+      table.createdAt
     ),
-  ],
+  ]
 );
 
 export const providerServiceOfferings = pgTable(
@@ -680,7 +745,9 @@ export const providerServiceOfferings = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [unique("provider_service_offerings_uid").on(t.providerId, t.categoryId)]
+  (t) => [
+    unique("provider_service_offerings_uid").on(t.providerId, t.categoryId),
+  ]
 );
 
 export const providerApplications = pgTable("provider_applications", {
@@ -720,9 +787,7 @@ export const providerApplicationServices = pgTable(
       .notNull()
       .references(() => serviceCategories.id, { onDelete: "cascade" }),
   },
-  (t) => [
-    primaryKey({ columns: [t.applicationId, t.categoryId] }),
-  ]
+  (t) => [primaryKey({ columns: [t.applicationId, t.categoryId] })]
 );
 
 export const providerApplicationDocuments = pgTable(
@@ -816,16 +881,16 @@ export const userBehaviorEvents = pgTable(
       .notNull()
       .defaultNow(),
   },
-  table => [
+  (table) => [
     index("user_behavior_events_idempotency_idx").on(
       table.mobileUserId,
-      table.idempotencyKey,
+      table.idempotencyKey
     ),
     index("user_behavior_events_user_created_idx").on(
       table.mobileUserId,
-      table.createdAt,
+      table.createdAt
     ),
-  ],
+  ]
 );
 
 export const userPreferenceSettings = pgTable("user_preference_settings", {
@@ -863,17 +928,17 @@ export const userPreferenceScores = pgTable(
       .notNull()
       .defaultNow(),
   },
-  table => [
+  (table) => [
     uniqueIndex("user_preference_scores_user_entity_uidx").on(
       table.mobileUserId,
       table.entityType,
-      table.entityId,
+      table.entityId
     ),
     index("user_preference_scores_user_score_idx").on(
       table.mobileUserId,
-      table.score,
+      table.score
     ),
-  ],
+  ]
 );
 
 /** Server-managed interest choices shown in mobile onboarding and settings. */
@@ -892,7 +957,12 @@ export const interestOptions = pgTable(
       .notNull()
       .defaultNow(),
   },
-  table => [index("interest_options_active_order_idx").on(table.isActive, table.sortOrder)],
+  (table) => [
+    index("interest_options_active_order_idx").on(
+      table.isActive,
+      table.sortOrder
+    ),
+  ]
 );
 
 /** Explicit user choices; separate from inferred Genie preference scores. */
@@ -909,8 +979,8 @@ export const mobileUserInterests = pgTable(
       .notNull()
       .defaultNow(),
   },
-  table => [
+  (table) => [
     primaryKey({ columns: [table.mobileUserId, table.interestId] }),
     index("mobile_user_interests_interest_idx").on(table.interestId),
-  ],
+  ]
 );

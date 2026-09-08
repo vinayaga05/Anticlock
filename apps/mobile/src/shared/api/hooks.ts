@@ -1,24 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest, ApiError } from './client';
-import { isApiEnabled } from './config';
+import { isApiEnabled, isDevEnvironment } from './config';
 import { readStoredSession } from '@/shared/services/auth/authService';
 import type { ReelItem } from '@/shared/types';
-import {
-  fetchR2ReelsManifest,
-  buildClipsReelsFromManifest,
-  mergeReelFeeds,
-} from '@/shared/data/cloudflareVideos';
-
-const CANVA_REEL_TEMPLATE: ReelItem = {
-  id: 'canva-template',
-  title: 'Clip',
-  author: 'anticlock',
-  caption: '',
-  videoUrl: '',
-  posterUrl: '',
-  likeCount: 0,
-  commentCount: 0,
-};
 
 export type ApiServiceTree = {
   id: string;
@@ -45,7 +29,8 @@ export type ApiServiceCategory = {
 export type ApiReelFeedItem = {
   id: string;
   /** The API emits this only after the server-side publication gate passes. */
-  status: 'published';
+  /** The authenticated feed contains only published posts; optional for compatibility. */
+  status?: 'published';
   title: string;
   caption: string | null;
   creatorName: string;
@@ -56,7 +41,12 @@ export type ApiReelFeedItem = {
   commentCount: number;
   saveCount: number;
   cta: {
-    entityType: 'provider' | 'event' | 'course' | 'product' | 'service_category';
+    entityType:
+      | 'provider'
+      | 'event'
+      | 'course'
+      | 'product'
+      | 'service_category';
     entityId: string;
     ctaLabel?: string;
   } | null;
@@ -67,6 +57,47 @@ export type ApiReelFeedItem = {
     name: string;
     avatarUrl?: string | null;
   } | null;
+};
+
+/** Current shape of an item returned by GET /v1/content/feeds/clip. */
+export type ApiContentClipFeedItem = {
+  id: string;
+  format: 'clip';
+  mediaType: 'video';
+  status: 'published';
+  visibility: string;
+  caption: string | null;
+  hashtags: string[];
+  taggedUserIds: string[];
+  location: {
+    name: string;
+    latitude?: number;
+    longitude?: number;
+  } | null;
+  duplicateClusterId: string;
+  playbackUrl: string;
+  posterUrl: string | null;
+  likeCount: number;
+  commentCount: number;
+  viewCount: number;
+  /** The authenticated viewer's durable like state for this content Clip. */
+  viewerHasLiked: boolean;
+  shareCount: number;
+  createdAt: string;
+  publishedAt: string;
+  author: {
+    // The publishing API calls a business identity a provider; mobile calls
+    // the same visible profile a business.
+    type: 'user' | 'provider' | 'business';
+    id: string;
+    name: string;
+    avatarUrl: string | null;
+  };
+};
+
+export type ApiContentClipFeedResponse = {
+  items: ApiContentClipFeedItem[];
+  nextCursor: string | null;
 };
 
 export type ApiCmsBanner = {
@@ -106,8 +137,8 @@ export function mapApiReelToItem(r: ApiReelFeedItem): ReelItem {
           r.cta.entityType === 'product'
             ? ('cart' as const)
             : r.cta.entityType === 'event'
-              ? ('trip' as const)
-              : ('book' as const),
+            ? ('trip' as const)
+            : ('book' as const),
       }
     : undefined;
 
@@ -119,6 +150,8 @@ export function mapApiReelToItem(r: ApiReelFeedItem): ReelItem {
     authorProfile: r.author
       ? { type: r.author.type, id: r.author.id }
       : undefined,
+    reportTarget: { kind: 'legacy_reel', id: r.id },
+    feedSource: 'legacy_reel',
     caption: r.caption ?? '',
     videoUrl: r.playbackUrl,
     posterUrl: r.posterUrl ?? '',
@@ -128,23 +161,167 @@ export function mapApiReelToItem(r: ApiReelFeedItem): ReelItem {
   };
 }
 
-function isR2PlaybackUrl(url: string): boolean {
+function isRemoteMediaUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || !value.trim()) return false;
   try {
-    const host = new URL(url).hostname;
-    return host.endsWith('.r2.dev') || host.includes('r2.cloudflarestorage.com');
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:';
   } catch {
     return false;
   }
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function nonNegativeNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : 0;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter(isNonEmptyString) : [];
+}
+
+function contentLocation(
+  value: unknown,
+): NonNullable<ReelItem['contentMetadata']>['location'] {
+  if (!value || typeof value !== 'object') return null;
+  const location = value as {
+    name?: unknown;
+    latitude?: unknown;
+    longitude?: unknown;
+  };
+  if (!isNonEmptyString(location.name)) return null;
+  const latitude =
+    typeof location.latitude === 'number' && Number.isFinite(location.latitude)
+      ? location.latitude
+      : undefined;
+  const longitude =
+    typeof location.longitude === 'number' &&
+    Number.isFinite(location.longitude)
+      ? location.longitude
+      : undefined;
+  return { name: location.name, latitude, longitude };
+}
+
 function isPublishedReelFeedItem(
   value: ApiReelFeedItem,
 ): value is ApiReelFeedItem {
+  return value?.status === 'published' && isRemoteMediaUrl(value.playbackUrl);
+}
+
+function isPublishedContentClipFeedItem(
+  value: unknown,
+): value is ApiContentClipFeedItem {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Partial<ApiContentClipFeedItem>;
+  const author = item.author;
   return (
-    value?.status === 'published' &&
-    Boolean(value.playbackUrl) &&
-    isR2PlaybackUrl(value.playbackUrl)
+    isNonEmptyString(item.id) &&
+    item.format === 'clip' &&
+    item.mediaType === 'video' &&
+    (item.status === undefined || item.status === 'published') &&
+    item.visibility === 'public' &&
+    isRemoteMediaUrl(item.playbackUrl) &&
+    isNonEmptyString(item.duplicateClusterId) &&
+    Boolean(author) &&
+    (author?.type === 'user' ||
+      author?.type === 'provider' ||
+      author?.type === 'business') &&
+    isNonEmptyString(author?.id) &&
+    isNonEmptyString(author?.name)
   );
+}
+
+/** Convert a profile-backed content post into the stable visual Clip shape. */
+export function mapApiContentClipToItem(
+  item: ApiContentClipFeedItem,
+): ReelItem {
+  const author = item.author;
+  return {
+    id: item.id,
+    // Content posts deliberately have no separate audio/title field. Leaving
+    // this blank keeps the existing UI's "Original audio" fallback honest.
+    title: '',
+    author: author.name,
+    authorAvatarUrl: isRemoteMediaUrl(author.avatarUrl)
+      ? author.avatarUrl
+      : undefined,
+    authorProfile: {
+      type: author.type === 'user' ? 'user' : 'business',
+      id: author.id,
+    },
+    reportTarget: { kind: 'content_post', id: item.id },
+    feedSource: 'content_post',
+    contentMetadata: {
+      hashtags: stringArray(item.hashtags),
+      taggedUserIds: stringArray(item.taggedUserIds),
+      location: contentLocation(item.location),
+      visibility: item.visibility,
+      duplicateClusterId: item.duplicateClusterId,
+      publishedAt: isNonEmptyString(item.publishedAt)
+        ? item.publishedAt
+        : isNonEmptyString(item.createdAt)
+        ? item.createdAt
+        : null,
+      viewCount: nonNegativeNumber(item.viewCount),
+      shareCount: nonNegativeNumber(item.shareCount),
+    },
+    caption: typeof item.caption === 'string' ? item.caption : '',
+    videoUrl: item.playbackUrl,
+    posterUrl: isRemoteMediaUrl(item.posterUrl) ? item.posterUrl : '',
+    likeCount: nonNegativeNumber(item.likeCount),
+    commentCount: nonNegativeNumber(item.commentCount),
+    liked: item.viewerHasLiked === true,
+  };
+}
+
+function normalizedPlaybackUrl(value: ReelItem['videoUrl']): string | null {
+  if (typeof value !== 'string' || !isRemoteMediaUrl(value)) return null;
+  try {
+    const url = new URL(value);
+    // Signed delivery URLs for the same video can have different query
+    // strings. Their resource path is the useful duplicate signal.
+    return `${url.protocol}//${url.host}${url.pathname}`;
+  } catch {
+    return value;
+  }
+}
+
+/**
+ * Profile-published Clips take precedence, then editorial Reels fill any
+ * remaining slots. Deduping both media URLs and duplicate clusters means the
+ * legacy feed cannot reintroduce a video the personalized feed has excluded.
+ */
+function mergePublishedClipFeeds(
+  contentClips: ReelItem[],
+  legacyReels: ReelItem[],
+): ReelItem[] {
+  const seenIds = new Set<string>();
+  const seenMedia = new Set<string>();
+  const seenClusters = new Set<string>();
+  const merged: ReelItem[] = [];
+
+  for (const item of [...contentClips, ...legacyReels]) {
+    const mediaKey = normalizedPlaybackUrl(item.videoUrl);
+    const clusterId = item.contentMetadata?.duplicateClusterId;
+    if (
+      seenIds.has(item.id) ||
+      (mediaKey !== null && seenMedia.has(mediaKey)) ||
+      (clusterId !== undefined && seenClusters.has(clusterId))
+    ) {
+      continue;
+    }
+    seenIds.add(item.id);
+    if (mediaKey !== null) seenMedia.add(mediaKey);
+    if (clusterId !== undefined) seenClusters.add(clusterId);
+    merged.push(item);
+  }
+
+  return merged;
 }
 
 export function useServiceTreesQuery(fallback: ApiServiceTree[]) {
@@ -168,7 +345,9 @@ export function useCmsBannersQuery() {
     queryKey: ['cms', 'banners', isApiEnabled ? 'api' : 'mock'],
     queryFn: async () => {
       if (!isApiEnabled) return MOCK_CMS_BANNERS;
-      const res = await apiRequest<{ data: ApiCmsBanner[] }>('/v1/media/banners');
+      const res = await apiRequest<{ data: ApiCmsBanner[] }>(
+        '/v1/media/banners',
+      );
       const live = res.data.filter(b => Boolean(b.imageUrl));
       return live.length ? live : MOCK_CMS_BANNERS;
     },
@@ -203,64 +382,64 @@ export function useServiceCategoriesQuery(
   });
 }
 
-export function useReelsQuery(fallback: ReelItem[]) {
+/**
+ * In development this is the checked-in Cloudflare R2 Clip catalog. It keeps
+ * local UI work pointed at the same remote delivery layer as production,
+ * while production only accepts the server-personalized feed.
+ */
+export function useReelsQuery(developmentR2Clips: ReelItem[]) {
   return useQuery({
-    queryKey: ['reels', 'feed', isApiEnabled ? 'api' : 'mock'],
+    queryKey: ['reels', 'feed', 'content-first', isApiEnabled ? 'api' : 'mock'],
     queryFn: async () => {
-      // The public feed is API-authoritative in release builds. In particular,
-      // never substitute a bucket manifest when it is empty or unavailable:
-      // an object in storage is not necessarily a published Reel.
-      if (!isApiEnabled) return fallback;
-
-      let published: ReelItem[] = [];
-      try {
-        const res = await apiRequest<{ data: ApiReelFeedItem[] }>('/v1/reels');
-        // Treat the server's explicit publication signal as a second guard. A
-        // malformed or unexpectedly broad response must not surface a draft,
-        // review, or raw storage asset in the Clips feed.
-        published = res.data
-          .filter(isPublishedReelFeedItem)
-          .map(mapApiReelToItem);
-      } catch {
-        // Still try canva/ R2 clips below so a transient API error does not
-        // blank the entire Clips tab when bucket videos are available.
+      if (!isApiEnabled) {
+        return isDevEnvironment ? developmentR2Clips : [];
       }
+      await ensureAuthToken();
 
-      // Surface canva/ R2 clips immediately after upload, even before an
-      // operator runs importR2Clips on the VPS. Only canva/ keys are merged.
-      const manifest = await fetchR2ReelsManifest({ bustCache: true });
-      if (!manifest) return published;
-
-      const canvaManifest = {
-        ...manifest,
-        videos: (manifest.videos ?? []).filter(entry => {
-          const key = entry.objectKey ?? '';
-          const url = entry.playbackUrl ?? '';
-          return (
-            key.startsWith('canva/') ||
-            url.includes('/canva/') ||
-            url.includes('%2Fcanva%2F')
-          );
-        }),
-      };
-      if (!canvaManifest.videos.length) return published;
-
-      const canvaReels = buildClipsReelsFromManifest(canvaManifest, [
-        ...published,
-        CANVA_REEL_TEMPLATE,
+      const [contentResult, legacyResult] = await Promise.allSettled([
+        apiRequest<ApiContentClipFeedResponse>('/v1/content/feeds/clip'),
+        apiRequest<{ data: ApiReelFeedItem[] }>('/v1/reels'),
       ]);
-      return mergeReelFeeds(published, canvaReels);
+
+      const contentClips =
+        contentResult.status === 'fulfilled' &&
+        Array.isArray(contentResult.value.items)
+          ? contentResult.value.items
+              .filter(isPublishedContentClipFeedItem)
+              .map(mapApiContentClipToItem)
+          : [];
+      const legacyReels =
+        legacyResult.status === 'fulfilled' &&
+        Array.isArray(legacyResult.value.data)
+          ? legacyResult.value.data
+              .filter(isPublishedReelFeedItem)
+              .map(mapApiReelToItem)
+          : [];
+
+      const publishedClips = mergePublishedClipFeeds(
+        contentClips,
+        legacyReels,
+      );
+
+      if (publishedClips.length) return publishedClips;
+
+      // Local development intentionally previews the checked-in R2 catalog.
+      // This is not a device-media fallback: every URL is an R2 delivery URL.
+      // Release builds never bypass the personalized publishing feed.
+      return isDevEnvironment ? developmentR2Clips : [];
     },
-    // Keep a concrete empty value in API-enabled builds so consumers cannot
-    // substitute mock Reels while the request is loading or has failed.
-    // Mark it stale immediately so it does not delay the first API request.
-    initialData: isApiEnabled ? [] : fallback,
-    initialDataUpdatedAt: isApiEnabled ? 0 : undefined,
+    // Development starts with the R2 Clip catalog while the local API feed is
+    // being queried. It is not cached as an API response and is replaced by
+    // the published feed as soon as that feed returns results.
+    initialData:
+      !isApiEnabled && isDevEnvironment ? developmentR2Clips : undefined,
+    placeholderData: isDevEnvironment ? developmentR2Clips : undefined,
     staleTime: isApiEnabled ? 0 : 30_000,
     refetchOnMount: isApiEnabled ? 'always' : true,
-    refetchOnReconnect: true,
-    // Moderation/unpublish actions should disappear from an open feed without
-    // relying on a raw R2 object list or a full app restart.
-    refetchInterval: isApiEnabled ? 30_000 : false,
+    // A content-feed request reserves a viewer-specific batch. Background
+    // reconnects or polling would discard unseen clips, so the user refreshes
+    // explicitly when ready for another batch.
+    refetchOnReconnect: false,
+    refetchInterval: false,
   });
 }

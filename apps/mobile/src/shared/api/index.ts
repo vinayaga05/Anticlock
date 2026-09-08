@@ -1,5 +1,6 @@
 export {
   API_BASE_URL,
+  getApiBaseUrl,
   isApiEnabled,
   isDevEnvironment,
   isProductionEnvironment,

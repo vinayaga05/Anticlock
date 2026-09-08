@@ -42,7 +42,7 @@ type ModeTab = 'feed' | 'teams' | 'challenges';
 type TeamTab = 'mine' | 'discover';
 
 const MODE_TABS: { id: ModeTab; label: string }[] = [
-  { id: 'feed', label: 'Feed' },
+  { id: 'feed', label: 'Explore' },
   { id: 'teams', label: 'Teams' },
   { id: 'challenges', label: 'Challenges' },
 ];
@@ -66,11 +66,15 @@ export function CommunitiesScreen() {
   const isMember = useCommunityStore(s => s.isMember);
   const joinRequests = useCommunityStore(s => s.joinRequests);
   const challenges = useCommunityStore(s => s.challenges);
-  const getEligibleTeamsForChallenge = useCommunityStore(s => s.getEligibleTeamsForChallenge);
+  const getEligibleTeamsForChallenge = useCommunityStore(
+    s => s.getEligibleTeamsForChallenge,
+  );
 
   const quickPills = useMemo(
     () =>
-      exploreQuickFilters.filter(q => q.appliesTo === 'all' || q.appliesTo === filter),
+      exploreQuickFilters.filter(
+        q => q.appliesTo === 'all' || q.appliesTo === filter,
+      ),
     [filter],
   );
 
@@ -115,7 +119,10 @@ export function CommunitiesScreen() {
 
   const featured = filterExploreItems(featuredEvents, filter);
   const trending = filterExploreItems(trendingProducts, filter);
-  const near = applyQuickFilter(filterExploreItems(nearYouItems, filter), quick);
+  const near = applyQuickFilter(
+    filterExploreItems(nearYouItems, filter),
+    quick,
+  );
   const following = filterExploreItems(fromPeopleYouFollow, filter);
   const upcoming = filterExploreItems(upcomingEvents, filter);
   const mine = filterExploreItems(myExploreSubmissions, filter);
@@ -123,8 +130,10 @@ export function CommunitiesScreen() {
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
       <ScreenContainer scrollable padded={false} contentStyle={{ gap: 0 }}>
-        <View style={[styles.padded, { paddingTop: theme.spacing.sm, gap: 12 }]}>
-          <AppHeader title="Community" />
+        <View
+          style={[styles.padded, { paddingTop: theme.spacing.sm, gap: 12 }]}
+        >
+          <AppHeader title="Nexus" />
 
           <View style={styles.modeRow}>
             {MODE_TABS.map(t => {
@@ -140,18 +149,24 @@ export function CommunitiesScreen() {
                       backgroundColor: active
                         ? theme.colors.primarySoft
                         : theme.colors.surface,
-                      borderColor: active ? theme.colors.primary : theme.colors.border,
+                      borderColor: active
+                        ? theme.colors.primary
+                        : theme.colors.border,
                       borderRadius: theme.radius.md,
                     },
-                  ]}>
+                  ]}
+                >
                   <Text
                     style={[
                       theme.typography.caption,
                       {
-                        color: active ? theme.colors.primary : theme.colors.textSecondary,
+                        color: active
+                          ? theme.colors.primary
+                          : theme.colors.textSecondary,
                         fontWeight: '700',
                       },
-                    ]}>
+                    ]}
+                  >
                     {t.label}
                   </Text>
                 </PressableScale>
@@ -161,7 +176,12 @@ export function CommunitiesScreen() {
         </View>
 
         {mode === 'teams' ? (
-          <View style={[styles.padded, { gap: 14, marginTop: 12, paddingBottom: 24 }]}>
+          <View
+            style={[
+              styles.padded,
+              { gap: 14, marginTop: 12, paddingBottom: 24 },
+            ]}
+          >
             <View style={styles.teamTabRow}>
               {(['mine', 'discover'] as TeamTab[]).map(tab => {
                 const active = teamTab === tab;
@@ -172,19 +192,27 @@ export function CommunitiesScreen() {
                     style={[
                       styles.teamTab,
                       {
-                        backgroundColor: active ? theme.colors.surface : 'transparent',
-                        borderColor: active ? theme.colors.border : 'transparent',
+                        backgroundColor: active
+                          ? theme.colors.surface
+                          : 'transparent',
+                        borderColor: active
+                          ? theme.colors.border
+                          : 'transparent',
                         borderRadius: theme.radius.md,
                       },
-                    ]}>
+                    ]}
+                  >
                     <Text
                       style={[
                         theme.typography.caption,
                         {
-                          color: active ? theme.colors.textPrimary : theme.colors.textSecondary,
+                          color: active
+                            ? theme.colors.textPrimary
+                            : theme.colors.textSecondary,
                           fontWeight: '700',
                         },
-                      ]}>
+                      ]}
+                    >
                       {tab === 'mine' ? 'My Teams' : 'Discover'}
                     </Text>
                   </PressableScale>
@@ -200,15 +228,23 @@ export function CommunitiesScreen() {
 
             {teamTab === 'mine' ? (
               myTeams.length === 0 ? (
-                <Text style={[theme.typography.body, { color: theme.colors.textSecondary }]}>
-                  You are not on any teams yet. Discover squads or create your own.
+                <Text
+                  style={[
+                    theme.typography.body,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  You are not on any teams yet. Discover squads or create your
+                  own.
                 </Text>
               ) : (
                 myTeams.map(team => (
                   <TeamCard
                     key={team.id}
                     team={team}
-                    onPress={() => navigation.navigate('TeamDetail', { teamId: team.id })}
+                    onPress={() =>
+                      navigation.navigate('TeamDetail', { teamId: team.id })
+                    }
                   />
                 ))
               )
@@ -217,9 +253,12 @@ export function CommunitiesScreen() {
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 8 }}>
+                  contentContainerStyle={{ gap: 8 }}
+                >
                   {[...SPORT_TAGS, 'More'].map(tag => {
-                    const active = sportTag === tag || (tag === 'More' && sportTag === 'More');
+                    const active =
+                      sportTag === tag ||
+                      (tag === 'More' && sportTag === 'More');
                     return (
                       <PressableScale
                         key={tag}
@@ -232,13 +271,15 @@ export function CommunitiesScreen() {
                               : theme.colors.surfaceMuted,
                             borderRadius: theme.radius.pill,
                           },
-                        ]}>
+                        ]}
+                      >
                         <Text
                           style={{
                             color: active ? '#fff' : theme.colors.textSecondary,
                             fontSize: 12,
                             fontWeight: '700',
-                          }}>
+                          }}
+                        >
                           {tag}
                         </Text>
                       </PressableScale>
@@ -247,7 +288,12 @@ export function CommunitiesScreen() {
                 </ScrollView>
 
                 {discoverTeams.length === 0 ? (
-                  <Text style={[theme.typography.body, { color: theme.colors.textSecondary }]}>
+                  <Text
+                    style={[
+                      theme.typography.body,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
                     No teams match this filter.
                   </Text>
                 ) : (
@@ -263,19 +309,23 @@ export function CommunitiesScreen() {
                       <DiscoverTeamCard
                         key={team.id}
                         team={team}
-                        onView={() => navigation.navigate('TeamDetail', { teamId: team.id })}
+                        onView={() =>
+                          navigation.navigate('TeamDetail', { teamId: team.id })
+                        }
                         onJoin={() => {
                           const result = joinTeam(team.id);
                           if (result === 'joined') {
-                            navigation.navigate('TeamDetail', { teamId: team.id });
+                            navigation.navigate('TeamDetail', {
+                              teamId: team.id,
+                            });
                           }
                         }}
                         joinLabel={
                           member
                             ? 'Joined'
                             : pending
-                              ? 'Request pending'
-                              : undefined
+                            ? 'Request pending'
+                            : undefined
                         }
                         joinDisabled={member || pending}
                       />
@@ -288,9 +338,20 @@ export function CommunitiesScreen() {
         ) : null}
 
         {mode === 'challenges' ? (
-          <View style={[styles.padded, { gap: 14, marginTop: 12, paddingBottom: 24 }]}>
-            <Text style={[theme.typography.body, { color: theme.colors.textSecondary }]}>
-              Join challenges with your team. Select an eligible squad to participate.
+          <View
+            style={[
+              styles.padded,
+              { gap: 14, marginTop: 12, paddingBottom: 24 },
+            ]}
+          >
+            <Text
+              style={[
+                theme.typography.body,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              Join challenges with your team. Select an eligible squad to
+              participate.
             </Text>
             {challenges.map(challenge => {
               const eligible = getEligibleTeamsForChallenge(challenge.id)[0];
@@ -300,7 +361,9 @@ export function CommunitiesScreen() {
                   challenge={challenge}
                   eligibleTeam={eligible}
                   onPress={() =>
-                    navigation.navigate('ChallengeDetail', { challengeId: challenge.id })
+                    navigation.navigate('ChallengeDetail', {
+                      challengeId: challenge.id,
+                    })
                   }
                 />
               );
@@ -319,14 +382,22 @@ export function CommunitiesScreen() {
                     borderColor: theme.colors.border,
                     borderRadius: theme.radius.lg,
                   },
-                ]}>
-                <AppIcon name="search" size={18} color={theme.colors.textTertiary} />
+                ]}
+              >
+                <AppIcon
+                  name="search"
+                  size={18}
+                  color={theme.colors.textTertiary}
+                />
                 <TextInput
                   value={query}
                   onChangeText={setQuery}
                   placeholder="Search events, products..."
                   placeholderTextColor={theme.colors.textTertiary}
-                  style={[styles.searchInput, { color: theme.colors.textPrimary }]}
+                  style={[
+                    styles.searchInput,
+                    { color: theme.colors.textPrimary },
+                  ]}
                 />
               </View>
 
@@ -347,7 +418,8 @@ export function CommunitiesScreen() {
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 8 }}>
+                  contentContainerStyle={{ gap: 8 }}
+                >
                   {quickPills.map(q => {
                     const active = quick === q.id;
                     return (
@@ -362,13 +434,15 @@ export function CommunitiesScreen() {
                               : theme.colors.surfaceMuted,
                             borderRadius: theme.radius.pill,
                           },
-                        ]}>
+                        ]}
+                      >
                         <Text
                           style={{
                             color: active ? '#fff' : theme.colors.textSecondary,
                             fontSize: 12,
                             fontWeight: '700',
-                          }}>
+                          }}
+                        >
                           {q.label}
                         </Text>
                       </PressableScale>
@@ -383,7 +457,11 @@ export function CommunitiesScreen() {
                 <SectionHeader title="Search results" />
                 {searchResults.length === 0 ? (
                   <Text
-                    style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>
+                    style={[
+                      theme.typography.bodySmall,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
                     No matches. Try another keyword.
                   </Text>
                 ) : (
@@ -403,7 +481,8 @@ export function CommunitiesScreen() {
                     <ScrollView
                       horizontal
                       showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.hRow}>
+                      contentContainerStyle={styles.hRow}
+                    >
                       {mine.map(item => renderItem(item, true))}
                     </ScrollView>
                   </View>
@@ -417,7 +496,8 @@ export function CommunitiesScreen() {
                     <ScrollView
                       horizontal
                       showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.hRow}>
+                      contentContainerStyle={styles.hRow}
+                    >
                       {featured.map(item => renderItem(item, true))}
                     </ScrollView>
                   </View>
@@ -431,7 +511,8 @@ export function CommunitiesScreen() {
                     <ScrollView
                       horizontal
                       showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.hRow}>
+                      contentContainerStyle={styles.hRow}
+                    >
                       {trending.map(item => renderItem(item, true))}
                     </ScrollView>
                   </View>
@@ -462,7 +543,8 @@ export function CommunitiesScreen() {
                     <ScrollView
                       horizontal
                       showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.hRow}>
+                      contentContainerStyle={styles.hRow}
+                    >
                       {upcoming.map(item => renderItem(item, true))}
                     </ScrollView>
                   </View>
@@ -484,7 +566,8 @@ export function CommunitiesScreen() {
               bottom: TAB_BAR_VISIBLE_HEIGHT + Math.max(insets.bottom, 8) + 16,
               ...theme.shadows.float,
             },
-          ]}>
+          ]}
+        >
           <AppIcon name="plus" size={28} color="#fff" />
         </PressableScale>
       ) : null}
@@ -502,7 +585,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  teamTabRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  teamTabRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   teamTab: {
     paddingHorizontal: 14,
     paddingVertical: 8,

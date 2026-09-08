@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   FlatList,
   Image,
@@ -11,7 +17,11 @@ import {
   View,
   ViewToken,
 } from 'react-native';
-import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import {
+  useNavigation,
+  useRoute,
+  type RouteProp,
+} from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { VideoPlayer } from '@/features/video/components/VideoPlayer';
@@ -20,19 +30,29 @@ import {
   ClipMoreSheet,
 } from '@/features/reels/components/ClipMoreSheet';
 import { GuidedReportVideoSheet } from '@/features/reels/components/GuidedReportVideoSheet';
-import { reels as mockReels } from '@/shared/data/mocks';
+import { reels as r2Reels } from '@/shared/data/mocks';
 import { ReelItem } from '@/shared/types';
 import { useCartStore } from '@/shared/store/cartStore';
-import { blockProfile, reportReel } from '@/shared/api/reelSafety';
+import {
+  blockProfile,
+  listBlockedProfiles,
+  reportContentPost,
+  reportReel,
+} from '@/shared/api/reelSafety';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
+import { useClipPlaybackStore } from '@/shared/store/clipPlaybackStore';
 import { useReelsQuery } from '@/shared/api/hooks';
 import {
   createAnalyticsEventId,
   recordReelAnalyticsEvent,
 } from '@/shared/api/reelAnalytics';
+import {
+  recordContentClipView,
+  setContentClipLike,
+} from '@/shared/api/contentEngagement';
 import { useTabBarBottomInset } from '@/shared/navigation/tabBarInset';
 import type { MainTabParamList } from '@/shared/navigation/types';
 
@@ -143,7 +163,8 @@ function VerticalFade({
       width={width}
       height={height}
       style={StyleSheet.absoluteFill}
-      pointerEvents="none">
+      pointerEvents="none"
+    >
       <Defs>
         <LinearGradient id={id} x1="0" y1="0" x2="0" y2="1">
           {stops.map(s => (
@@ -177,17 +198,23 @@ export function ReelFeedScreen() {
   const addToCart = useCartStore(s => s.add);
   const [activeIndex, setActiveIndex] = useState(0);
   const [liked, setLiked] = useState<Record<string, boolean>>({});
+  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [menuReelId, setMenuReelId] = useState<string | null>(null);
-  const [reportReelId, setReportReelId] = useState<string | null>(null);
-  const [blockedProfileKeys, setBlockedProfileKeys] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+  const [reportTarget, setReportTarget] = useState<NonNullable<
+    ReelItem['reportTarget']
+  > | null>(null);
+  const [blockedProfileKeys, setBlockedProfileKeys] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const [autoScroll, setAutoScroll] = useState(false);
   const [isPullRefreshing, setIsPullRefreshing] = useState(false);
   const [coins] = useState(120);
   const viewedReelIds = useRef(new Set<string>());
   const completedReelIds = useRef(new Set<string>());
+  const likedByIdRef = useRef<Record<string, boolean>>({});
+  const likeCountByIdRef = useRef<Record<string, number>>({});
+  const likeRequestVersions = useRef<Record<string, number>>({});
   const listRef = useRef<FlatList<ReelItem>>(null);
   const activeIndexRef = useRef(activeIndex);
   const pageFrameRef = useRef({ width: pageWidth, height: pageHeight });
@@ -200,7 +227,43 @@ export function ReelFeedScreen() {
   );
   const playbackActive = useCommentsSheetStore(s => s.playbackActive);
   const openComments = useCommentsSheetStore(s => s.openComments);
-  const { data: queriedReels, refetch } = useReelsQuery(mockReels);
+  const setActiveClip = useClipPlaybackStore(s => s.setActiveClip);
+  const updateClipProgress = useClipPlaybackStore(s => s.updateProgress);
+  const registerClipSeekController = useClipPlaybackStore(
+    s => s.registerSeekController,
+  );
+  const clearClipPlayback = useClipPlaybackStore(s => s.clear);
+  const { data: queriedReels, refetch } = useReelsQuery(r2Reels);
+  // Content-feed results are already block-filtered on the server. Hydrate the
+  // same persisted block list for editorial/legacy Reels as well, whose public
+  // endpoint deliberately has no viewer-specific server filter.
+  useEffect(() => {
+    let active = true;
+
+    listBlockedProfiles()
+      .then(blocks => {
+        if (!active) return;
+        setBlockedProfileKeys(previous => {
+          const next = new Set(previous);
+          let changed = false;
+          for (const block of blocks) {
+            const key = profileKey(block);
+            if (!next.has(key)) {
+              next.add(key);
+              changed = true;
+            }
+          }
+          return changed ? next : previous;
+        });
+      })
+      // A signed-out, offline, or older-server session must not prevent the
+      // feed from rendering. A newly created local block still hides at once.
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, []);
   // `useReelsQuery` supplies demo data only when the API is deliberately
   // disabled for local development. Do not use the bundled/R2 demo list as a
   // production fallback: the public feed endpoint is the publication gate.
@@ -222,6 +285,12 @@ export function ReelFeedScreen() {
         r.author?.toLowerCase().includes(genieQ),
     );
   }, [blockedProfileKeys, feedReels, genieQ]);
+
+  useEffect(() => {
+    setActiveClip(reels[activeIndex]?.id ?? null);
+  }, [activeIndex, reels, setActiveClip]);
+
+  useEffect(() => clearClipPlayback, [clearClipPlayback]);
 
   useEffect(() => {
     const reelId = route.params?.reelId;
@@ -262,16 +331,31 @@ export function ReelFeedScreen() {
   }, [pageHeight, pageWidth]);
 
   const trackPlayback = useCallback(
-    (reelId: string, watchedMs: number, completed: boolean) => {
+    (reel: ReelItem, watchedMs: number, completed: boolean) => {
       if (!Number.isFinite(watchedMs) || watchedMs < 0) return;
 
+      const reelId = reel.id;
+      const contentPostId =
+        reel.reportTarget?.kind === 'content_post'
+          ? reel.reportTarget.id
+          : null;
       const shouldRecordView =
         !viewedReelIds.current.has(reelId) &&
         (watchedMs >= MINIMUM_VIEW_WATCH_MS || completed);
       if (shouldRecordView) {
         viewedReelIds.current.add(reelId);
-        // Intentionally fire-and-forget. This endpoint only records mobile
-        // analytics; it has no publishing, review, or media mutation path.
+        if (contentPostId) {
+          // Content Clips have a server-owned, idempotent view counter. A
+          // completed Clip is still only one view, not a second completion
+          // event, so ranking cannot be inflated by a single playback.
+          recordContentClipView(contentPostId, {
+            eventId: createAnalyticsEventId(),
+            watchedMs: Math.max(MINIMUM_VIEW_WATCH_MS, watchedMs),
+          }).catch(() => undefined);
+          return;
+        }
+
+        // Legacy Reels retain their existing analytics contract.
         recordReelAnalyticsEvent(reelId, {
           eventType: 'view',
           watchedMs,
@@ -279,6 +363,8 @@ export function ReelFeedScreen() {
           sessionId: analyticsSessionId.current ?? undefined,
         }).catch(() => undefined);
       }
+
+      if (contentPostId) return;
 
       if (completed && !completedReelIds.current.has(reelId)) {
         completedReelIds.current.add(reelId);
@@ -292,6 +378,72 @@ export function ReelFeedScreen() {
     },
     [],
   );
+
+  const toggleLike = useCallback((item: ReelItem) => {
+    const isCurrentlyLiked = likedByIdRef.current[item.id] ?? !!item.liked;
+    const nextLiked = !isCurrentlyLiked;
+    const contentPostId =
+      item.reportTarget?.kind === 'content_post' ? item.reportTarget.id : null;
+    const previousLikeCount =
+      likeCountByIdRef.current[item.id] ?? item.likeCount;
+    const requestVersion = (likeRequestVersions.current[item.id] ?? 0) + 1;
+    likeRequestVersions.current[item.id] = requestVersion;
+    likedByIdRef.current[item.id] = nextLiked;
+    const nextLikeCount = Math.max(0, previousLikeCount + (nextLiked ? 1 : -1));
+    likeCountByIdRef.current[item.id] = nextLikeCount;
+
+    setLiked(previous => ({ ...previous, [item.id]: nextLiked }));
+    setLikeCounts(previous => ({
+      ...previous,
+      [item.id]: nextLikeCount,
+    }));
+
+    if (!contentPostId) return;
+
+    setContentClipLike(contentPostId, nextLiked)
+      .then(result => {
+        // A quick double-tap can cause responses to arrive out of order.
+        // Only the latest set-state response may reconcile the UI.
+        if (likeRequestVersions.current[item.id] !== requestVersion) {
+          return;
+        }
+        // The engagement helper returns null for a handled network/API error.
+        // Treat it like a rejected request so an unsaved like never remains
+        // visible as though it reached the server.
+        if (!result) {
+          likedByIdRef.current[item.id] = isCurrentlyLiked;
+          likeCountByIdRef.current[item.id] = previousLikeCount;
+          setLiked(previous => ({ ...previous, [item.id]: isCurrentlyLiked }));
+          setLikeCounts(previous => ({
+            ...previous,
+            [item.id]: previousLikeCount,
+          }));
+          return;
+        }
+        likedByIdRef.current[item.id] = result.liked;
+        setLiked(previous => ({ ...previous, [item.id]: result.liked }));
+        const likeCount = result.likeCount;
+        if (typeof likeCount === 'number') {
+          likeCountByIdRef.current[item.id] = likeCount;
+          setLikeCounts(previous => ({
+            ...previous,
+            [item.id]: likeCount,
+          }));
+        }
+      })
+      .catch(() => {
+        // Keep optimistic state correct if the latest request was rejected;
+        // stale requests must never overwrite a newer user choice.
+        if (likeRequestVersions.current[item.id] !== requestVersion) return;
+        likedByIdRef.current[item.id] = isCurrentlyLiked;
+        likeCountByIdRef.current[item.id] = previousLikeCount;
+        setLiked(previous => ({ ...previous, [item.id]: isCurrentlyLiked }));
+        setLikeCounts(previous => ({
+          ...previous,
+          [item.id]: previousLikeCount,
+        }));
+      });
+  }, []);
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
@@ -320,7 +472,9 @@ export function ReelFeedScreen() {
     async (profile: NonNullable<ReelItem['authorProfile']>) => {
       try {
         await blockProfile(profile);
-        setBlockedProfileKeys(previous => new Set(previous).add(profileKey(profile)));
+        setBlockedProfileKeys(previous =>
+          new Set(previous).add(profileKey(profile)),
+        );
         // The local filter removes the clip immediately. Refetching then lets
         // the server apply the same block to future pages and devices.
         await refetch();
@@ -373,7 +527,8 @@ export function ReelFeedScreen() {
       }
       const { kind, id } = target;
       if (!kind || !id) return;
-      if (kind === 'doctor') navigation.navigate('DoctorProfile', { doctorId: id });
+      if (kind === 'doctor')
+        navigation.navigate('DoctorProfile', { doctorId: id });
       else if (kind === 'lab') navigation.navigate('LabDetail', { labId: id });
       else navigation.navigate('ClassDetail', { classId: id });
     },
@@ -419,7 +574,9 @@ export function ReelFeedScreen() {
           break;
         case 'report':
           setMenuReelId(null);
-          setReportReelId(reelId);
+          setReportTarget(
+            reel?.reportTarget ?? { kind: 'legacy_reel', id: reelId },
+          );
           break;
         case 'block': {
           const profile = reel?.authorProfile;
@@ -434,9 +591,7 @@ export function ReelFeedScreen() {
               {
                 text: 'Block',
                 style: 'destructive',
-                onPress: () => {
-                  void blockClipAuthor(profile);
-                },
+                onPress: () => blockClipAuthor(profile),
               },
             ],
           );
@@ -478,14 +633,17 @@ export function ReelFeedScreen() {
         <VideoPlayer
           uri={item.videoUrl}
           muted={false}
-          paused={
-            index !== activeIndex || (commentsOpen && !playbackActive)
+          paused={index !== activeIndex || (commentsOpen && !playbackActive)}
+          seekControllerId={index === activeIndex ? item.id : undefined}
+          onSeekControllerChange={
+            index === activeIndex ? registerClipSeekController : undefined
           }
           onPlaybackProgress={(currentTime, _duration) => {
             if (index !== activeIndex || (commentsOpen && !playbackActive)) {
               return;
             }
-            trackPlayback(item.id, currentTime * 1_000, false);
+            updateClipProgress(item.id, currentTime, _duration);
+            trackPlayback(item, currentTime * 1_000, false);
           }}
           onPlaybackComplete={duration => {
             if (
@@ -495,7 +653,7 @@ export function ReelFeedScreen() {
             ) {
               return;
             }
-            trackPlayback(item.id, duration * 1_000, true);
+            trackPlayback(item, duration * 1_000, true);
             if (autoScroll) {
               goToNextReel();
             }
@@ -503,7 +661,10 @@ export function ReelFeedScreen() {
         />
 
         {/* Top fade + chrome */}
-        <View style={[styles.topFade, { height: topFadeH }]} pointerEvents="none">
+        <View
+          style={[styles.topFade, { height: topFadeH }]}
+          pointerEvents="none"
+        >
           <VerticalFade width={windowWidth} height={topFadeH} fromTop />
         </View>
         <View style={[styles.topBar, { paddingTop: insets.top + 6 }]}>
@@ -516,14 +677,15 @@ export function ReelFeedScreen() {
             <PressableScale
               accessibilityLabel="Coins"
               onPress={() => {}}
-              style={styles.coinsChip}>
+              style={styles.coinsChip}
+            >
               <AppIcon name="coins" size={16} color="#FBBF24" strokeWidth={2} />
               <Text style={styles.coinsText}>{coins}</Text>
             </PressableScale>
             <TopChromeButton
               icon="circle-plus"
               accessibilityLabel="Create"
-              onPress={() => navigation.navigate('FlashComposer')}
+              onPress={() => navigation.navigate('ClipComposer')}
             />
             <TopChromeButton
               icon="profile"
@@ -537,10 +699,10 @@ export function ReelFeedScreen() {
         <View style={[styles.sideActions, { bottom: bottomSafe + 72 }]}>
           <SideAction
             icon="heart"
-            label={formatCount(item.likeCount + (isLiked ? 1 : 0))}
+            label={formatCount(likeCounts[item.id] ?? item.likeCount)}
             active={isLiked}
             accessibilityLabel="Like"
-            onPress={() => setLiked(prev => ({ ...prev, [item.id]: !isLiked }))}
+            onPress={() => toggleLike(item)}
           />
           <SideAction
             icon="comment"
@@ -565,18 +727,20 @@ export function ReelFeedScreen() {
         {/* Bottom fade + meta */}
         <View
           style={[styles.bottomFade, { height: bottomFadeH }]}
-          pointerEvents="none">
-          <VerticalFade width={windowWidth} height={bottomFadeH} fromTop={false} />
+          pointerEvents="none"
+        >
+          <VerticalFade
+            width={windowWidth}
+            height={bottomFadeH}
+            fromTop={false}
+          />
         </View>
-        <View
-          style={[
-            styles.meta,
-            { bottom: bottomSafe },
-          ]}>
+        <View style={[styles.meta, { bottom: bottomSafe }]}>
           <PressableScale
             accessibilityLabel={`Open ${item.author} profile`}
-          onPress={() => navigation.navigate('Profile')}
-          style={styles.creatorRow}>
+            onPress={() => navigation.navigate('Profile')}
+            style={styles.creatorRow}
+          >
             <Image
               source={{ uri: getAuthorAvatar(item) }}
               style={styles.creatorAvatar}
@@ -607,14 +771,15 @@ export function ReelFeedScreen() {
                 backgroundColor: theme.colors.primary,
                 borderRadius: theme.radius.pill,
               },
-            ]}>
+            ]}
+          >
             <AppIcon
               name={
                 action === 'cart'
                   ? 'cart'
                   : action === 'trip'
-                    ? 'globe'
-                    : 'calendar'
+                  ? 'globe'
+                  : 'calendar'
               }
               size={16}
               color="#042F2E"
@@ -623,8 +788,8 @@ export function ReelFeedScreen() {
               {action === 'cart'
                 ? 'Shop'
                 : action === 'trip'
-                  ? 'Book trip'
-                  : 'Book'}
+                ? 'Book trip'
+                : 'Book'}
             </Text>
           </PressableScale>
         ) : null}
@@ -684,11 +849,13 @@ export function ReelFeedScreen() {
         onAction={handleMoreAction}
       />
       <GuidedReportVideoSheet
-        visible={Boolean(reportReelId)}
-        onClose={() => setReportReelId(null)}
+        visible={Boolean(reportTarget)}
+        onClose={() => setReportTarget(null)}
         onSubmit={reason => {
-          if (!reportReelId) return;
-          return reportReel(reportReelId, reason);
+          if (!reportTarget) return;
+          return reportTarget.kind === 'content_post'
+            ? reportContentPost(reportTarget.id, reason)
+            : reportReel(reportTarget.id, reason);
         }}
       />
     </View>

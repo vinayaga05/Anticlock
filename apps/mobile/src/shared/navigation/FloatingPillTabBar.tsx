@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { PanResponder, Platform, StyleSheet, Text, View } from 'react-native';
 import {
   BottomTabBarHeightCallbackContext,
   BottomTabBarProps,
@@ -13,6 +13,7 @@ import { CommentsBottomSheetHost } from '@/shared/navigation/CommentsBottomSheet
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
 import { FloatingAssistantButton } from '@/features/assistant/components/FloatingAssistantButton';
 import { AssistantBottomSheetHost } from '@/features/assistant/components/AssistantBottomSheet';
+import { useClipPlaybackStore } from '@/shared/store/clipPlaybackStore';
 
 /** Visible control height for the floating pill (icons + labels). */
 export const TAB_BAR_VISIBLE_HEIGHT = 66;
@@ -25,6 +26,90 @@ const TAB_ICONS: Record<string, IconName> = {
   Knock: 'messages',
   Shop: 'shop',
 };
+
+function ClipProgressBar({
+  progress,
+  onSeekToRatio,
+}: {
+  progress: number;
+  onSeekToRatio: (ratio: number) => void;
+}) {
+  const trackWidth = React.useRef(1);
+  const startRatio = React.useRef(0);
+  const latestProgress = React.useRef(progress);
+  const longPressTimer = React.useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const scrubbing = React.useRef(false);
+  latestProgress.current = progress;
+
+  const stopLongPressTimer = React.useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  React.useEffect(() => stopLongPressTimer, [stopLongPressTimer]);
+
+  const seekFromDrag = React.useCallback(
+    (deltaX: number) => {
+      const next = Math.min(
+        1,
+        Math.max(0, startRatio.current + deltaX / trackWidth.current),
+      );
+      onSeekToRatio(next);
+    },
+    [onSeekToRatio],
+  );
+
+  const responder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          startRatio.current = latestProgress.current;
+          scrubbing.current = false;
+          stopLongPressTimer();
+          longPressTimer.current = setTimeout(() => {
+            scrubbing.current = true;
+          }, 260);
+        },
+        onPanResponderMove: (_event, gesture) => {
+          if (scrubbing.current) seekFromDrag(gesture.dx);
+        },
+        onPanResponderRelease: (_event, gesture) => {
+          stopLongPressTimer();
+          if (scrubbing.current) seekFromDrag(gesture.dx);
+          scrubbing.current = false;
+        },
+        onPanResponderTerminate: () => {
+          stopLongPressTimer();
+          scrubbing.current = false;
+        },
+      }),
+    [seekFromDrag, stopLongPressTimer],
+  );
+
+  return (
+    <View
+      {...responder.panHandlers}
+      style={styles.clipProgressHitArea}
+      onLayout={event => {
+        trackWidth.current = Math.max(1, event.nativeEvent.layout.width);
+      }}
+      accessibilityRole="adjustable"
+      accessibilityLabel="Video progress. Long press and drag left or right to seek."
+    >
+      <View style={styles.clipProgressTrack} pointerEvents="none">
+        <View
+          style={[styles.clipProgressFill, { width: `${progress * 100}%` }]}
+        />
+      </View>
+    </View>
+  );
+}
 
 export function FloatingPillTabBar({
   state,
@@ -40,6 +125,14 @@ export function FloatingPillTabBar({
 
   const focusedRoute = state.routes[state.index]?.name;
   const onPlayFeed = focusedRoute === 'PlayFeed';
+  const activeClipId = useClipPlaybackStore(s => s.activeClipId);
+  const currentClipTime = useClipPlaybackStore(s => s.currentTime);
+  const currentClipDuration = useClipPlaybackStore(s => s.duration);
+  const seekToClipRatio = useClipPlaybackStore(s => s.seekToRatio);
+  const clipProgress =
+    currentClipDuration > 0
+      ? Math.min(1, Math.max(0, currentClipTime / currentClipDuration))
+      : 0;
   const bottomPad = Math.max(insets.bottom, 8) + 8;
   const layoutHeight = TAB_BAR_VISIBLE_HEIGHT + bottomPad;
 
@@ -49,7 +142,10 @@ export function FloatingPillTabBar({
   }, [onHeightChange]);
 
   return (
-    <View pointerEvents="box-none" style={[styles.root, { zIndex: 100, elevation: 100 }]}>
+    <View
+      pointerEvents="box-none"
+      style={[styles.root, { zIndex: 100, elevation: 100 }]}
+    >
       {/* Invisible layout spacer so React Navigation still measures tab bar height */}
       <View
         pointerEvents="none"
@@ -59,16 +155,25 @@ export function FloatingPillTabBar({
       />
       <View
         pointerEvents="box-none"
-        style={[styles.wrap, { paddingBottom: bottomPad, zIndex: 30, elevation: 30 }]}>
+        style={[
+          styles.wrap,
+          { paddingBottom: bottomPad, zIndex: 30, elevation: 30 },
+        ]}
+      >
         <View
           style={[
             styles.bar,
             {
-              backgroundColor: onPlayFeed ? 'rgba(12,11,10,0.94)' : theme.colors.tabBar,
-              borderColor: onPlayFeed ? 'rgba(255,255,255,0.12)' : theme.colors.borderSoft,
+              backgroundColor: onPlayFeed
+                ? 'rgba(12,11,10,0.94)'
+                : theme.colors.tabBar,
+              borderColor: onPlayFeed
+                ? 'rgba(255,255,255,0.12)'
+                : theme.colors.borderSoft,
               ...theme.shadows.float,
             },
-          ]}>
+          ]}
+        >
           {state.routes.map((route, index) => {
             const focused = state.index === index;
             const { options } = descriptors[route.key];
@@ -104,7 +209,9 @@ export function FloatingPillTabBar({
             const inactiveColor = onPlayFeed
               ? 'rgba(255,255,255,0.55)'
               : theme.colors.tabIcon;
-            const activeColor = onPlayFeed ? '#FFFFFF' : theme.colors.tabIconActive;
+            const activeColor = onPlayFeed
+              ? '#FFFFFF'
+              : theme.colors.tabIconActive;
 
             return (
               <PressableScale
@@ -122,7 +229,8 @@ export function FloatingPillTabBar({
                         },
                       ]
                     : styles.item
-                }>
+                }
+              >
                 <View style={styles.iconHit}>
                   <AppIcon
                     name={icon}
@@ -131,7 +239,12 @@ export function FloatingPillTabBar({
                     strokeWidth={1.75}
                   />
                   {route.name === 'Shop' && cartCount > 0 ? (
-                    <View style={[styles.badge, { backgroundColor: theme.colors.like }]}>
+                    <View
+                      style={[
+                        styles.badge,
+                        { backgroundColor: theme.colors.like },
+                      ]}
+                    >
                       <Text style={styles.badgeText}>
                         {cartCount > 99 ? '99+' : cartCount}
                       </Text>
@@ -146,7 +259,8 @@ export function FloatingPillTabBar({
                       fontWeight: focused ? '700' : '500',
                     },
                   ]}
-                  numberOfLines={1}>
+                  numberOfLines={1}
+                >
                   {label}
                 </Text>
               </PressableScale>
@@ -157,11 +271,18 @@ export function FloatingPillTabBar({
 
       <View
         pointerEvents="box-none"
-        style={[styles.sheetLayer, { zIndex: 50, elevation: 50 }]}>
+        style={[styles.sheetLayer, { zIndex: 50, elevation: 50 }]}
+      >
         <CommentsBottomSheetHost />
         <AssistantBottomSheetHost />
       </View>
       <FloatingAssistantButton />
+      {onPlayFeed && activeClipId && currentClipDuration > 0 ? (
+        <ClipProgressBar
+          progress={clipProgress}
+          onSeekToRatio={seekToClipRatio}
+        />
+      ) : null}
     </View>
   );
 }
@@ -184,6 +305,25 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     overflow: 'visible',
+  },
+  clipProgressHitArea: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 18,
+    justifyContent: 'center',
+    zIndex: 120,
+    elevation: 120,
+  },
+  clipProgressTrack: {
+    height: 3,
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.35)',
+  },
+  clipProgressFill: {
+    height: '100%',
+    backgroundColor: '#fff',
   },
   wrap: {
     position: 'absolute',

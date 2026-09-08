@@ -11,7 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandLogo } from '@/shared/components/BrandLogo';
 import { Button } from '@/shared/components/Button';
-import { isDevEnvironment } from '@/shared/api/config';
+import { isDevEnvironment, getApiBaseUrl } from '@/shared/api/config';
 import { useAuth } from '@/shared/context/AuthProvider';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { AuthError } from '@/shared/services/auth/types';
@@ -27,7 +27,7 @@ function authErrorMessage(err: unknown, fallback: string): string {
 export function LoginScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { requestOtp, loginWithOtp, continueAsGuest } = useAuth();
+  const { requestOtp, loginWithOtp } = useAuth();
 
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
@@ -80,11 +80,6 @@ export function LoginScreen() {
     setStep('phone');
     setOtp('');
     setError(null);
-  };
-
-  const handleSkipLogin = () => {
-    setError(null);
-    continueAsGuest();
   };
 
   return (
@@ -173,9 +168,13 @@ export function LoginScreen() {
           </Text>
         ) : null}
 
-        {isDevEnvironment ? (
+        {__DEV__ ? (
           <Text style={[styles.devHint, { color: theme.colors.textTertiary }]}>
-            Dev login: +91 9999999999 or 8888888888 · OTP 123456
+            {isDevEnvironment
+              ? 'Local API · Dev login: +91 9999999999 or 8888888888 · OTP 123456'
+              : 'Production API · Dev login: +91 9999999999 or 8888888888 · OTP 123456'}
+            {'\n'}
+            API: {getApiBaseUrl()}
           </Text>
         ) : null}
 
@@ -198,15 +197,6 @@ export function LoginScreen() {
                 : otp.length < 6
             }
           />
-          {step === 'phone' ? (
-            <Button
-              title="Skip for now"
-              variant="ghost"
-              onPress={handleSkipLogin}
-              disabled={loading}
-              accessibilityLabel="Continue without signing in"
-            />
-          ) : null}
         </View>
       </View>
     </KeyboardAvoidingView>

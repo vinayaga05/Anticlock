@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   ActivityIndicator,
   AppState,
@@ -10,7 +16,11 @@ import {
   View,
 } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
-import Video, { OnLoadData, OnProgressData, VideoRef } from 'react-native-video';
+import Video, {
+  OnLoadData,
+  OnProgressData,
+  VideoRef,
+} from 'react-native-video';
 import { AppIcon } from '@/shared/components/AppIcon';
 
 export type VideoSource = string | number;
@@ -21,6 +31,13 @@ interface VideoPlayerProps {
   /** When true, playback has no audio. Clips/Reels should pass false. */
   muted?: boolean;
   poster?: string;
+  /** ID used by an external full-screen Clip playback controller. */
+  seekControllerId?: string;
+  /** Registers or clears an external seek handler for the current video. */
+  onSeekControllerChange?: (
+    id: string,
+    seekToTime: ((seconds: number) => void) | null,
+  ) => void;
   /** Optional, non-blocking playback signal for product analytics. */
   onPlaybackProgress?: (currentTime: number, duration: number) => void;
   /** Fired once each time native playback reaches the end. */
@@ -61,6 +78,8 @@ export function VideoPlayer({
   paused = false,
   muted = true,
   poster,
+  seekControllerId,
+  onSeekControllerChange,
   onPlaybackProgress,
   onPlaybackComplete,
 }: VideoPlayerProps) {
@@ -75,6 +94,7 @@ export function VideoPlayer({
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [duration, setDuration] = useState(0);
 
   const playbackUri = useMemo(() => resolvePlaybackUri(uri), [uri]);
   const source = useMemo(() => toSource(playbackUri), [playbackUri]);
@@ -96,24 +116,39 @@ export function VideoPlayer({
     setLocalPaused(false);
     setIsMuted(muted);
     durationRef.current = 0;
+    setDuration(0);
     // Reset mute to the caller's default only when the clip source changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- muted is an initial value per uri
   }, [playbackUri]);
 
   const handleLoad = (data: OnLoadData) => {
-    durationRef.current = Number.isFinite(data.duration) ? data.duration : 0;
+    const mediaDuration = Number.isFinite(data.duration) ? data.duration : 0;
+    durationRef.current = mediaDuration;
+    setDuration(mediaDuration);
     setReady(true);
     setFailed(false);
     setErrorMsg(null);
   };
 
   const handleProgress = (data: OnProgressData) => {
+    const mediaDuration = Math.max(0, durationRef.current);
+    const currentTime = Math.min(Math.max(0, data.currentTime), mediaDuration);
     if (isPaused) return;
-    onPlaybackProgress?.(
-      Math.max(0, data.currentTime),
-      Math.max(0, durationRef.current),
-    );
+    onPlaybackProgress?.(currentTime, mediaDuration);
   };
+
+  const seekToTime = useCallback((seconds: number) => {
+    const maxDuration = Math.max(0, durationRef.current);
+    if (maxDuration <= 0) return;
+    const target = Math.min(maxDuration, Math.max(0, seconds));
+    ref.current?.seek(target);
+  }, []);
+
+  useEffect(() => {
+    if (!seekControllerId || !onSeekControllerChange || duration <= 0) return;
+    onSeekControllerChange(seekControllerId, seekToTime);
+    return () => onSeekControllerChange(seekControllerId, null);
+  }, [duration, onSeekControllerChange, seekControllerId, seekToTime]);
 
   return (
     <Pressable
@@ -123,7 +158,8 @@ export function VideoPlayer({
         setLocalPaused(p => !p);
       }}
       accessibilityRole="button"
-      accessibilityLabel={isPaused ? 'Play video' : 'Pause video'}>
+      accessibilityLabel={isPaused ? 'Play video' : 'Pause video'}
+    >
       {source ? (
         <Video
           key={playbackUri}
@@ -144,7 +180,9 @@ export function VideoPlayer({
           shutterColor="transparent"
           onLoad={handleLoad}
           onProgress={handleProgress}
-          onEnd={() => onPlaybackComplete?.(Math.max(0, durationRef.current))}
+          onEnd={() => {
+            onPlaybackComplete?.(Math.max(0, durationRef.current));
+          }}
           onError={e => {
             const msg =
               e?.error?.errorString ||
@@ -186,7 +224,8 @@ export function VideoPlayer({
               }}
               hitSlop={10}
               accessibilityRole="button"
-              accessibilityLabel={isMuted ? 'Unmute audio' : 'Mute audio'}>
+              accessibilityLabel={isMuted ? 'Unmute audio' : 'Mute audio'}
+            >
               <AppIcon
                 name={isMuted ? 'mute' : 'volume'}
                 size={18}

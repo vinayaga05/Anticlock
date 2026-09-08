@@ -1,20 +1,27 @@
-import { and, eq } from 'drizzle-orm';
-import type { CreateContentPostReportRequest } from '@anticlock/contracts';
-import { db } from '../db/client.js';
+import { and, eq, gt, isNull, or } from "drizzle-orm";
+import type { CreateContentPostReportRequest } from "@anticlock/contracts";
+import { db } from "../db/client.js";
 import {
   contentPostReports,
   contentPosts,
+  mobileUserBlocks,
   mobileUsers,
-} from '../db/schema.js';
-import type { AuthClaims } from '../lib/auth.js';
+  providers,
+} from "../db/schema.js";
+import type { AuthClaims } from "../lib/auth.js";
+import { mediaService } from "../media/MediaService.js";
 
-function appError(message: string, code: string, status: 400 | 403 | 404 | 409) {
+function appError(
+  message: string,
+  code: string,
+  status: 400 | 403 | 404 | 409
+) {
   return Object.assign(new Error(message), { code, status });
 }
 
 async function requireMobileUser(auth: AuthClaims) {
-  if (auth.kind !== 'mobile') {
-    throw appError('A mobile session is required', 'forbidden', 403);
+  if (auth.kind !== "mobile") {
+    throw appError("A mobile session is required", "forbidden", 403);
   }
   const [user] = await db
     .select({ id: mobileUsers.id })
@@ -22,9 +29,91 @@ async function requireMobileUser(auth: AuthClaims) {
     .where(and(eq(mobileUsers.id, auth.sub), eq(mobileUsers.isActive, true)))
     .limit(1);
   if (!user) {
-    throw appError('Sign in to report a video', 'mobile_account_required', 403);
+    throw appError("Sign in to report a video", "mobile_account_required", 403);
   }
   return user;
+}
+
+function videoNotFound() {
+  return appError("Video not found", "not_found", 404);
+}
+
+/**
+ * Reporting follows the same visibility boundary as the current Clip feed:
+ * public, live, active-author videos only. When follower/friend Clip feeds
+ * are introduced, this should be replaced with their shared access-policy
+ * check rather than widening this route on its own.
+ */
+async function requireReportablePublicClip(
+  reporterMobileUserId: string,
+  contentPostId: string
+) {
+  const now = new Date();
+  const [post] = await db
+    .select({
+      id: contentPosts.id,
+      createdByMobileUserId: contentPosts.createdByMobileUserId,
+      authorMobileUserId: contentPosts.authorMobileUserId,
+      authorProviderId: contentPosts.authorProviderId,
+      mediaIds: contentPosts.mediaIds,
+    })
+    .from(contentPosts)
+    .where(
+      and(
+        eq(contentPosts.id, contentPostId),
+        eq(contentPosts.status, "published"),
+        eq(contentPosts.format, "clip"),
+        eq(contentPosts.mediaType, "video"),
+        eq(contentPosts.visibility, "public"),
+        or(isNull(contentPosts.expiresAt), gt(contentPosts.expiresAt, now))
+      )
+    )
+    .limit(1);
+  if (!post || !post.mediaIds[0]) throw videoNotFound();
+
+  const author = post.authorProviderId
+    ? { type: "provider" as const, id: post.authorProviderId }
+    : post.authorMobileUserId
+    ? { type: "user" as const, id: post.authorMobileUserId }
+    : null;
+  if (!author) throw videoNotFound();
+
+  const [activeAuthor, block, isDeliverable] = await Promise.all([
+    author.type === "provider"
+      ? db
+          .select({ id: providers.id })
+          .from(providers)
+          .where(
+            and(eq(providers.id, author.id), eq(providers.status, "active"))
+          )
+          .limit(1)
+      : db
+          .select({ id: mobileUsers.id })
+          .from(mobileUsers)
+          .where(
+            and(eq(mobileUsers.id, author.id), eq(mobileUsers.isActive, true))
+          )
+          .limit(1),
+    db
+      .select({ id: mobileUserBlocks.id })
+      .from(mobileUserBlocks)
+      .where(
+        author.type === "provider"
+          ? and(
+              eq(mobileUserBlocks.blockerMobileUserId, reporterMobileUserId),
+              eq(mobileUserBlocks.blockedProviderId, author.id)
+            )
+          : and(
+              eq(mobileUserBlocks.blockerMobileUserId, reporterMobileUserId),
+              eq(mobileUserBlocks.blockedMobileUserId, author.id)
+            )
+      )
+      .limit(1),
+    mediaService.isPublicContentDeliverable(post.mediaIds[0], "video"),
+  ]);
+  if (!activeAuthor[0] || block[0] || !isDeliverable) throw videoNotFound();
+
+  return { post, author };
 }
 
 /** Moderation write path for profile-backed Clips (`content_posts`). */
@@ -32,55 +121,64 @@ export class ContentReportService {
   async create(
     auth: AuthClaims,
     contentPostId: string,
-    body: CreateContentPostReportRequest,
+    body: CreateContentPostReportRequest
   ) {
     const reporter = await requireMobileUser(auth);
-    const [post] = await db
-      .select({
-        id: contentPosts.id,
-        createdByMobileUserId: contentPosts.createdByMobileUserId,
-        format: contentPosts.format,
-        mediaType: contentPosts.mediaType,
-        status: contentPosts.status,
-      })
-      .from(contentPosts)
-      .where(eq(contentPosts.id, contentPostId))
-      .limit(1);
-
-    // A report is only meaningful for a live Clip. Treat unavailable content
-    // as not found so clients cannot use this endpoint to probe private posts.
-    if (
-      !post ||
-      post.status !== 'published' ||
-      post.format !== 'clip' ||
-      post.mediaType !== 'video'
-    ) {
-      throw appError('Video not found', 'not_found', 404);
-    }
+    const { post, author } = await requireReportablePublicClip(
+      reporter.id,
+      contentPostId
+    );
     if (post.createdByMobileUserId === reporter.id) {
-      throw appError('You cannot report your own video', 'cannot_report_own_video', 400);
+      throw appError(
+        "You cannot report your own video",
+        "cannot_report_own_video",
+        400
+      );
     }
 
-    const [report] = await db
-      .insert(contentPostReports)
-      .values({
-        contentPostId: post.id,
-        reporterMobileUserId: reporter.id,
-        reason: body.reason,
-        details: body.details ?? null,
-      })
-      .onConflictDoNothing({
-        target: [
-          contentPostReports.contentPostId,
-          contentPostReports.reporterMobileUserId,
-        ],
-      })
-      .returning();
+    const report = await db.transaction(async (tx) => {
+      // A block may have been created while the author/media checks above
+      // were resolving. Recheck it immediately before the moderation write so
+      // a blocked profile can never be used as a report-target probe.
+      const [block] = await tx
+        .select({ id: mobileUserBlocks.id })
+        .from(mobileUserBlocks)
+        .where(
+          author.type === "provider"
+            ? and(
+                eq(mobileUserBlocks.blockerMobileUserId, reporter.id),
+                eq(mobileUserBlocks.blockedProviderId, author.id)
+              )
+            : and(
+                eq(mobileUserBlocks.blockerMobileUserId, reporter.id),
+                eq(mobileUserBlocks.blockedMobileUserId, author.id)
+              )
+        )
+        .limit(1);
+      if (block) throw videoNotFound();
+
+      const [created] = await tx
+        .insert(contentPostReports)
+        .values({
+          contentPostId: post.id,
+          reporterMobileUserId: reporter.id,
+          reason: body.reason,
+          details: body.details ?? null,
+        })
+        .onConflictDoNothing({
+          target: [
+            contentPostReports.contentPostId,
+            contentPostReports.reporterMobileUserId,
+          ],
+        })
+        .returning();
+      return created ?? null;
+    });
     if (!report) {
       throw appError(
-        'You have already reported this video',
-        'already_reported',
-        409,
+        "You have already reported this video",
+        "already_reported",
+        409
       );
     }
 

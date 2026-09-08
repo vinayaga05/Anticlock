@@ -1,48 +1,65 @@
-import { Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 
 /**
  * Global environment switch for the mobile app.
  *
- * `true`  → production API (https://api.anticlock.online)
- * `false` → local/dev API (OTP whitelist via the API: +91 9999999999 / 123456)
- *
- * Flip this to test against the VPS from Metro/Simulator.
- * Release builds should keep this `true`.
+ * Always use the hosted production API for development and device testing
+ * (`https://api.anticlock.online`). Set to `false` only when you deliberately
+ * need a local Docker/Metro API on the same Wi‑Fi.
  */
-export const USE_PRODUCTION_ENVIRONMENT = false;
+export const USE_PRODUCTION_ENVIRONMENT = true;
 
 export const isProductionEnvironment = USE_PRODUCTION_ENVIRONMENT;
 export const isDevEnvironment = !USE_PRODUCTION_ENVIRONMENT;
 
-/**
- * Development API host:
- * - iOS Simulator / iOS on Mac: localhost reaches the Mac’s API process.
- * - Android emulator: 10.0.2.2 is the host loopback alias.
- * - Physical device on Wi‑Fi: set DEV_LAN_HOST to your Mac’s LAN IP.
- */
 const DEV_LAN_HOST = '10.1.0.181';
 const DEV_API_PORT = 4000;
+const PRODUCTION_API_BASE_URL = 'https://api.anticlock.online';
 
-/** Set true when running on a physical phone against a Mac API on the same Wi‑Fi. */
-const USE_LAN_API_IN_DEV = false;
+/** Only used when USE_PRODUCTION_ENVIRONMENT is false. */
+const FORCE_LAN_API_IN_DEV = false;
+
+function metroDevHost(): string | null {
+  try {
+    const scriptURL = NativeModules.SourceCode?.scriptURL as string | undefined;
+    if (!scriptURL) return null;
+    const match = scriptURL.match(/^\w+:\/\/([^/:]+)(?::\d+)?/);
+    const host = match?.[1]?.trim();
+    if (!host) return null;
+    if (host === 'localhost' || host === '127.0.0.1') return null;
+    return host;
+  } catch {
+    return null;
+  }
+}
 
 function developmentApiBaseUrl(): string {
-  if (USE_LAN_API_IN_DEV) {
+  if (FORCE_LAN_API_IN_DEV) {
     return `http://${DEV_LAN_HOST}:${DEV_API_PORT}`;
   }
+
+  const fromMetro = metroDevHost();
+  if (fromMetro) {
+    return `http://${fromMetro}:${DEV_API_PORT}`;
+  }
+
   if (Platform.OS === 'android') {
     return `http://10.0.2.2:${DEV_API_PORT}`;
   }
   return `http://localhost:${DEV_API_PORT}`;
 }
 
-export const DEVELOPMENT_API_BASE_URL = developmentApiBaseUrl();
+/** Resolve at call time so Metro host is available after the bridge is ready. */
+export function getApiBaseUrl(): string {
+  return USE_PRODUCTION_ENVIRONMENT
+    ? PRODUCTION_API_BASE_URL
+    : developmentApiBaseUrl();
+}
+
 export const DEVELOPMENT_LAN_API_BASE_URL = `http://${DEV_LAN_HOST}:${DEV_API_PORT}`;
+export const DEVELOPMENT_API_BASE_URL = DEVELOPMENT_LAN_API_BASE_URL;
 
-const PRODUCTION_API_BASE_URL = 'https://api.anticlock.online';
+/** Prefer getApiBaseUrl() for request-time resolution. */
+export const API_BASE_URL = getApiBaseUrl();
 
-export const API_BASE_URL = USE_PRODUCTION_ENVIRONMENT
-  ? PRODUCTION_API_BASE_URL
-  : DEVELOPMENT_API_BASE_URL;
-
-export const isApiEnabled = Boolean(API_BASE_URL);
+export const isApiEnabled = Boolean(getApiBaseUrl());

@@ -1,22 +1,27 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const ProviderMembershipRoleSchema = z.enum([
-  'owner',
-  'admin',
-  'content_creator',
-  'analyst',
+  "owner",
+  "admin",
+  "content_creator",
+  "analyst",
 ]);
 export type ProviderMembershipRole = z.infer<
   typeof ProviderMembershipRoleSchema
 >;
 
-export const PublishingActorTypeSchema = z.enum(['user', 'provider']);
+export const PublishingActorTypeSchema = z.enum(["user", "provider"]);
 export type PublishingActorType = z.infer<typeof PublishingActorTypeSchema>;
 
-export const ContentFormatSchema = z.enum(['flash', 'story', 'clip']);
+export const ContentFormatSchema = z.enum(["flash", "story", "clip"]);
 export type ContentFormat = z.infer<typeof ContentFormatSchema>;
 
-export const ContentMediaTypeSchema = z.enum(['text', 'image', 'video', 'hybrid']);
+export const ContentMediaTypeSchema = z.enum([
+  "text",
+  "image",
+  "video",
+  "hybrid",
+]);
 export type ContentMediaType = z.infer<typeof ContentMediaTypeSchema>;
 
 /**
@@ -27,7 +32,7 @@ export const ContentHashtagSchema = z
   .string()
   .trim()
   .toLowerCase()
-  .regex(/^[a-z0-9][a-z0-9_]{0,49}$/, 'Use letters, numbers, and underscores');
+  .regex(/^[a-z0-9][a-z0-9_]{0,49}$/, "Use letters, numbers, and underscores");
 export type ContentHashtag = z.infer<typeof ContentHashtagSchema>;
 
 /** A human-readable place is sufficient; coordinates are optional and bounded. */
@@ -42,7 +47,7 @@ export const ContentLocationSchema = z
     if ((value.latitude === undefined) !== (value.longitude === undefined)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Latitude and longitude must be supplied together',
+        message: "Latitude and longitude must be supplied together",
       });
     }
   });
@@ -61,24 +66,38 @@ export const CreateContentContainerRequestSchema = z
   .object({
     format: ContentFormatSchema,
     mediaType: ContentMediaTypeSchema,
-    caption: z.string().trim().max(2_200).default(''),
+    caption: z.string().trim().max(2_200).default(""),
     mediaIds: z.array(z.string().uuid()).max(10).default([]),
     /** A custom cover is optional; the processor may provide a default poster. */
     thumbnailMediaId: z.string().uuid().nullable().optional(),
     hashtags: z.array(ContentHashtagSchema).max(30).default([]),
     taggedUserIds: z.array(z.string().uuid()).max(20).default([]),
     location: ContentLocationSchema.nullable().optional(),
-    visibility: z.enum(['public', 'followers', 'friends', 'community', 'only_me']).default('public'),
+    visibility: z
+      .enum(["public", "followers", "friends", "community", "only_me"])
+      .default("public"),
   })
   .superRefine((value, ctx) => {
-    if (value.mediaType === 'text' && value.caption.length === 0) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['caption'], message: 'Text is required' });
+    if (value.mediaType === "text" && value.caption.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["caption"],
+        message: "Text is required",
+      });
     }
-    if (value.mediaType !== 'text' && value.mediaIds.length === 0) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['mediaIds'], message: 'Media is required' });
+    if (value.mediaType !== "text" && value.mediaIds.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["mediaIds"],
+        message: "Media is required",
+      });
     }
-    if (value.format === 'clip' && value.mediaType !== 'video') {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['mediaType'], message: 'Clips must be videos' });
+    if (value.format === "clip" && value.mediaType !== "video") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["mediaType"],
+        message: "Clips must be videos",
+      });
     }
   });
 export type CreateContentContainerRequest = z.infer<
@@ -92,7 +111,7 @@ export type CreateContentContainerRequest = z.infer<
  */
 export const CreateContentUploadRequestSchema = z
   .object({
-    kind: z.enum(['video', 'image']),
+    kind: z.enum(["video", "image"]),
     filename: z.string().trim().min(1).max(255),
     contentType: z.string().trim().min(1),
     byteSize: z.number().int().positive(),
@@ -100,24 +119,24 @@ export const CreateContentUploadRequestSchema = z
     width: z.number().int().positive().max(10_000).optional(),
     height: z.number().int().positive().max(10_000).optional(),
     visibility: z
-      .enum(['public', 'followers', 'friends', 'community', 'only_me'])
-      .default('public'),
+      .enum(["public", "followers", "friends", "community", "only_me"])
+      .default("public"),
   })
   .strict()
   .superRefine((value, ctx) => {
-    if (value.kind === 'video') {
-      if (value.contentType.toLowerCase().split(';', 1)[0] !== 'video/mp4') {
+    if (value.kind === "video") {
+      if (value.contentType.toLowerCase().split(";", 1)[0] !== "video/mp4") {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ['contentType'],
-          message: 'Clips must be uploaded as MP4 video',
+          path: ["contentType"],
+          message: "Clips must be uploaded as MP4 video",
         });
       }
       if (!value.durationMs) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ['durationMs'],
-          message: 'Video duration is required',
+          path: ["durationMs"],
+          message: "Video duration is required",
         });
       }
     }
@@ -139,7 +158,7 @@ export type ContentVideoUploadSession = z.infer<
 
 export const ContentContainerSchema = z.object({
   id: z.string().uuid(),
-  status: z.enum(['draft', 'ready_to_publish', 'published', 'discarded']),
+  status: z.enum(["draft", "ready_to_publish", "published", "discarded"]),
   format: ContentFormatSchema,
   author: PublishingIdentitySchema,
   createdAt: z.string().datetime(),
@@ -163,20 +182,52 @@ export const ContentPostSchema = z.object({
 });
 export type ContentPost = z.infer<typeof ContentPostSchema>;
 
-export const ContentFeedSurfaceSchema = z.enum(['for_you', 'following']);
+export const ContentFeedSurfaceSchema = z.enum(["for_you", "following"]);
 export type ContentFeedSurface = z.infer<typeof ContentFeedSurfaceSchema>;
 
 export const ContentFeedQuerySchema = z.object({
-  surface: ContentFeedSurfaceSchema.default('for_you'),
+  surface: ContentFeedSurfaceSchema.default("for_you"),
   limit: z.coerce.number().int().min(1).max(30).default(12),
 });
 export type ContentFeedQuery = z.infer<typeof ContentFeedQuerySchema>;
 
+/**
+ * A client-generated event id makes a view/impression retry safe. The server
+ * owns the aggregate counter and only records a meaningful amount of watch
+ * time, rather than trusting a client-provided count.
+ */
+export const RecordContentClipViewRequestSchema = z
+  .object({
+    eventId: z.string().uuid(),
+    watchedMs: z
+      .number()
+      .int()
+      .min(1_000)
+      .max(10 * 60 * 1_000),
+  })
+  .strict();
+export type RecordContentClipViewRequest = z.infer<
+  typeof RecordContentClipViewRequestSchema
+>;
+
+/** A state-setting API is idempotent across retries and multiple devices. */
+export const SetContentClipLikeRequestSchema = z
+  .object({ liked: z.boolean() })
+  .strict();
+export type SetContentClipLikeRequest = z.infer<
+  typeof SetContentClipLikeRequestSchema
+>;
+
 export const ContentFeedItemSchema = ContentPostSchema.extend({
+  /** Feed rows are only emitted after the post is published. */
+  status: z.literal("published"),
+  publishedAt: z.string().datetime(),
   /** The first playable video in a Clip. Additional media stays in mediaIds. */
   playbackUrl: z.string().url(),
   posterUrl: z.string().url().nullable(),
   duplicateClusterId: z.string().min(1),
   trendingScore: z.number(),
+  /** Current viewer state is returned with the personalized feed item. */
+  viewerHasLiked: z.boolean(),
 });
 export type ContentFeedItem = z.infer<typeof ContentFeedItemSchema>;

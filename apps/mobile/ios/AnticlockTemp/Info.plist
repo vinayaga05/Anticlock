@@ -33,10 +33,20 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Anticlock uses the local network to reach the development API on your computer.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_http._tcp</string>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Anticlock uses your camera to record Clips.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string></string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Anticlock uses your photo library so you can choose videos and cover images for Clips.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Genie uses the microphone for voice input.</string>
+	<string>Anticlock uses the microphone for Genie voice input and Clip recordings.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Genie uses speech recognition to transcribe your requests.</string>
 	<key>RCTNewArchEnabled</key>

@@ -16,8 +16,8 @@
 # ---------------------------------------------------------------------------
 # App entry points
 # ---------------------------------------------------------------------------
--keep class com.anticlocktemp.MainActivity { *; }
--keep class com.anticlocktemp.MainApplication { *; }
+-keep class com.anticlock.app.MainActivity { *; }
+-keep class com.anticlock.app.MainApplication { *; }
 
 # ---------------------------------------------------------------------------
 # React Native / Hermes / JNI (bridge + New Architecture)

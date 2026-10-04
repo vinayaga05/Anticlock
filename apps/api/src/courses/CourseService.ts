@@ -11,25 +11,27 @@ import { courses, courseLessons, mediaAssets } from '../db/schema.js';
 
 export class CourseService {
   async createCourse(request: CreateCourseRequest): Promise<Course> {
+    const publishedAt = request.status === 'published' ? new Date() : null;
+    
     const [row] = await db
       .insert(courses)
       .values({
-        name: request.name,
         slug: request.slug,
+        name: request.name,
         shortDescription: request.shortDescription,
         description: request.description,
         difficulty: request.difficulty,
         durationHours: request.durationHours,
         price: request.price,
-        compareAtPrice: request.compareAtPrice ?? null,
-        imageId: request.imageId ?? null,
+        compareAtPrice: request.compareAtPrice,
+        imageId: request.imageId,
         instructorName: request.instructorName,
-        instructorBio: request.instructorBio ?? null,
-        learningOutcomes: (request.learningOutcomes ?? []) as unknown[],
-        prerequisites: (request.prerequisites ?? []) as unknown[],
+        instructorBio: request.instructorBio,
+        learningOutcomes: request.learningOutcomes as unknown[],
+        prerequisites: request.prerequisites as unknown[],
         status: request.status ?? 'draft',
-        metadata: request.metadata ?? null,
-        publishedAt: request.status === 'published' ? new Date() : null,
+        metadata: request.metadata,
+        publishedAt,
       })
       .returning();
 

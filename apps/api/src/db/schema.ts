@@ -984,3 +984,53 @@ export const mobileUserInterests = pgTable(
     index("mobile_user_interests_interest_idx").on(table.interestId),
   ]
 );
+
+/** Push notifications for mobile users */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    data: jsonb("data").$type<Record<string, unknown>>(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("notifications_user_created_idx").on(
+      table.mobileUserId,
+      table.createdAt
+    ),
+    index("notifications_user_unread_idx").on(table.mobileUserId, table.readAt)
+      .where(sql`${table.readAt} IS NULL`),
+  ]
+);
+
+/** FCM device tokens for push notifications */
+export const deviceTokens = pgTable(
+  "device_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    token: text("token").notNull(),
+    platform: text("platform").notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("device_tokens_token_uid").on(table.token),
+    index("device_tokens_user_idx").on(table.mobileUserId),
+  ]
+);

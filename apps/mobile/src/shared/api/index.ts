@@ -11,3 +11,11 @@ export {
   useServiceTreesQuery,
   useServiceCategoriesQuery,
 } from './hooks';
+export {
+  useProductsQuery,
+  useProductQuery,
+  useOrdersQuery,
+  useOrderQuery,
+  useCreateOrderMutation,
+  useCancelOrderMutation,
+} from './shopHooks';

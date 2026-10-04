@@ -21,6 +21,9 @@ import {
   users,
   mediaAssets,
   reels,
+  mobileUsers,
+  productCategories,
+  products,
 } from '../db/schema.js';
 import catalog from './catalog.json' with { type: 'json' };
 import {
@@ -374,6 +377,109 @@ async function seed() {
         publishedAt: new Date(),
       });
     }
+  }
+
+  // Seed product categories and products
+  const categorySeeds = [
+    {
+      id: 'cat-fitness',
+      name: 'Fitness Equipment',
+      slug: 'fitness-equipment',
+      description: 'Home and gym fitness equipment',
+      sortOrder: 1,
+      status: 'published',
+    },
+    {
+      id: 'cat-supplements',
+      name: 'Supplements',
+      slug: 'supplements',
+      description: 'Nutritional supplements and vitamins',
+      sortOrder: 2,
+      status: 'published',
+    },
+    {
+      id: 'cat-wellness',
+      name: 'Wellness',
+      slug: 'wellness',
+      description: 'Wellness and recovery products',
+      sortOrder: 3,
+      status: 'published',
+    },
+  ];
+
+  for (const cat of categorySeeds) {
+    await db.insert(productCategories).values(cat).onConflictDoNothing();
+  }
+
+  const shopProductSeeds = [
+    {
+      categoryId: 'cat-supplements',
+      name: 'Whey Protein Isolate 1kg',
+      slug: 'whey-protein-isolate-1kg',
+      description:
+        'Premium whey protein isolate with 25g protein per serving. Fast absorption for post-workout recovery.',
+      price: 2499,
+      compareAtPrice: 2999,
+      inventory: 50,
+      status: 'published',
+    },
+    {
+      categoryId: 'cat-fitness',
+      name: 'Premium Yoga Mat',
+      slug: 'premium-yoga-mat',
+      description:
+        'Non-slip, eco-friendly yoga mat with extra cushioning. Perfect for yoga, pilates, and floor exercises.',
+      price: 1299,
+      compareAtPrice: 1599,
+      inventory: 30,
+      status: 'published',
+    },
+    {
+      categoryId: 'cat-fitness',
+      name: 'Resistance Bands Set',
+      slug: 'resistance-bands-set',
+      description:
+        'Set of 5 resistance bands with varying resistance levels. Includes carry bag and door anchor.',
+      price: 899,
+      inventory: 45,
+      status: 'published',
+    },
+    {
+      categoryId: 'cat-supplements',
+      name: 'Multivitamin Complex',
+      slug: 'multivitamin-complex',
+      description:
+        'Complete daily multivitamin with essential vitamins and minerals. 60 tablets.',
+      price: 599,
+      compareAtPrice: 799,
+      inventory: 100,
+      status: 'published',
+    },
+    {
+      categoryId: 'cat-wellness',
+      name: 'Foam Roller',
+      slug: 'foam-roller',
+      description:
+        'High-density foam roller for muscle recovery and myofascial release. 33cm length.',
+      price: 799,
+      inventory: 25,
+      status: 'published',
+    },
+    {
+      categoryId: 'cat-fitness',
+      name: 'Adjustable Dumbbells',
+      slug: 'adjustable-dumbbells',
+      description:
+        'Space-saving adjustable dumbbells from 2kg to 12kg per hand. Quick adjustment mechanism.',
+      price: 3999,
+      compareAtPrice: 4999,
+      inventory: 15,
+      status: 'published',
+    },
+  ];
+
+  for (const product of shopProductSeeds) {
+    await db.insert(products).values(product).onConflictDoNothing();
   }
 
   console.log(

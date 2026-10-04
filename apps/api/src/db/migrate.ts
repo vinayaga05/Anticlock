@@ -936,6 +936,88 @@ async function migrate() {
       ON service_categories USING gin (search_vector)
   `;
 
+  /** Shop and Orders migration - append-only block to minimize merge conflicts */
+  await sql`
+    CREATE TABLE IF NOT EXISTS product_categories (
+      id text PRIMARY KEY,
+      name text NOT NULL,
+      slug text NOT NULL UNIQUE,
+      description text,
+      image_url text,
+      sort_order integer NOT NULL DEFAULT 0,
+      status text NOT NULL DEFAULT 'published',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS products (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      category_id text REFERENCES product_categories(id) ON DELETE SET NULL,
+      name text NOT NULL,
+      slug text NOT NULL,
+      description text NOT NULL,
+      price integer NOT NULL,
+      compare_at_price integer,
+      inventory integer,
+      status text NOT NULL DEFAULT 'draft',
+      image_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+      metadata jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS products_slug_uidx
+      ON products (slug)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS products_category_status_idx
+      ON products (category_id, status)
+      WHERE category_id IS NOT NULL
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS products_status_created_idx
+      ON products (status, created_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS orders (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      order_number text NOT NULL UNIQUE,
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      status text NOT NULL DEFAULT 'pending',
+      payment_status text NOT NULL DEFAULT 'pending',
+      items jsonb NOT NULL,
+      subtotal integer NOT NULL,
+      shipping_cost integer NOT NULL,
+      tax integer NOT NULL,
+      total integer NOT NULL,
+      shipping_address jsonb NOT NULL,
+      notes text,
+      metadata jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      cancelled_at timestamptz,
+      delivered_at timestamptz
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS orders_user_created_idx
+      ON orders (mobile_user_id, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS orders_status_created_idx
+      ON orders (status, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS orders_number_idx
+      ON orders (order_number)
+  `;
+
   console.log("Migrations applied.");
   await sql.end({ timeout: 5 });
 }

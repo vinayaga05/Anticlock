@@ -984,3 +984,86 @@ export const mobileUserInterests = pgTable(
     index("mobile_user_interests_interest_idx").on(table.interestId),
   ]
 );
+
+/** Shop and Orders tables - append-only block to minimize merge conflicts */
+export const productCategories = pgTable("product_categories", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  description: text("description"),
+  imageUrl: text("image_url"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  status: text("status").notNull().default("published"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const products = pgTable(
+  "products",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    categoryId: text("category_id").references(() => productCategories.id, {
+      onDelete: "set null",
+    }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description").notNull(),
+    price: integer("price").notNull(),
+    compareAtPrice: integer("compare_at_price"),
+    inventory: integer("inventory"),
+    status: text("status").notNull().default("draft"),
+    imageIds: jsonb("image_ids").$type<string[]>().notNull().default([]),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("products_slug_uidx").on(table.slug),
+    index("products_category_status_idx").on(table.categoryId, table.status),
+    index("products_status_created_idx").on(table.status, table.createdAt),
+  ]
+);
+
+export const orders = pgTable(
+  "orders",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orderNumber: text("order_number").notNull().unique(),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("pending"),
+    paymentStatus: text("payment_status").notNull().default("pending"),
+    items: jsonb("items").$type<unknown[]>().notNull(),
+    subtotal: integer("subtotal").notNull(),
+    shippingCost: integer("shipping_cost").notNull(),
+    tax: integer("tax").notNull(),
+    total: integer("total").notNull(),
+    shippingAddress: jsonb("shipping_address")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    notes: text("notes"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("orders_user_created_idx").on(table.mobileUserId, table.createdAt),
+    index("orders_status_created_idx").on(table.status, table.createdAt),
+    index("orders_number_idx").on(table.orderNumber),
+  ]
+);

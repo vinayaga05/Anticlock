@@ -52,15 +52,18 @@ communitiesMobileRoutes.get('/', async (c) => {
     const query = {
       search: c.req.query('search'),
       tags: c.req.query('tags')?.split(',').filter(Boolean),
-      status: 'published' as const,
+      status: 'published' as 'published',
       limit: c.req.query('limit') ? Number(c.req.query('limit')) : undefined,
       cursor: c.req.query('cursor'),
     };
     const validated = CommunityListQuerySchema.parse(query);
     const result = await communityService.listCommunities(
       {
-        ...validated,
+        search: validated.search,
         tags: validated.tags ? validated.tags.split(',').filter(Boolean) : undefined,
+        status: validated.status,
+        limit: validated.limit,
+        cursor: validated.cursor,
       },
       auth.sub,
     );
@@ -300,8 +303,13 @@ communitiesAdminRoutes.use('*', requireAuth, requirePermission('catalog.read'));
 
 communitiesAdminRoutes.get('/', async (c) => {
   try {
+    const statusParam = c.req.query('status');
+    let status: 'draft' | 'published' | 'archived' | undefined;
+    if (statusParam === 'draft' || statusParam === 'published' || statusParam === 'archived') {
+      status = statusParam;
+    }
     const query = {
-      status: c.req.query('status') as 'draft' | 'published' | 'archived' | undefined,
+      status,
       search: c.req.query('search'),
       limit: c.req.query('limit') ? Number(c.req.query('limit')) : undefined,
       cursor: c.req.query('cursor'),

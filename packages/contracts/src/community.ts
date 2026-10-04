@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import { ContentStatusSchema } from './rbac.js';
+
+export const CommunityStatusSchema = z.enum(['draft', 'published', 'archived']);
+export type CommunityStatus = z.infer<typeof CommunityStatusSchema>;
 
 export const CommunityRoleSchema = z.enum(['owner', 'moderator', 'member']);
 export type CommunityRole = z.infer<typeof CommunityRoleSchema>;
@@ -14,7 +16,7 @@ export const CommunitySchema = z.object({
   memberCount: z.number().int().nonnegative(),
   postCount: z.number().int().nonnegative(),
   tags: z.array(z.string()),
-  status: ContentStatusSchema,
+  status: CommunityStatusSchema,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   suspendedAt: z.string().datetime().nullable(),
@@ -41,7 +43,7 @@ export const UpdateCommunityRequestSchema = z.object({
   name: z.string().min(3).max(100).optional(),
   description: z.string().max(500).optional(),
   tags: z.array(z.string()).max(10).optional(),
-  status: ContentStatusSchema.optional(),
+  status: CommunityStatusSchema.optional(),
 });
 export type UpdateCommunityRequest = z.infer<typeof UpdateCommunityRequestSchema>;
 
@@ -59,7 +61,7 @@ export type CommunityMember = z.infer<typeof CommunityMemberSchema>;
 export const CommunityListQuerySchema = z.object({
   search: z.string().optional(),
   tags: z.string().optional(), // comma-separated
-  status: ContentStatusSchema.optional(),
+  status: CommunityStatusSchema.optional(),
   limit: z.number().int().positive().max(100).optional(),
   cursor: z.string().optional(),
 });
@@ -161,7 +163,7 @@ export const UpdateCommunityRoleRequestSchema = z.object({
 export type UpdateCommunityRoleRequest = z.infer<typeof UpdateCommunityRoleRequestSchema>;
 
 export const CommunityAdminQuerySchema = z.object({
-  status: ContentStatusSchema.optional(),
+  status: CommunityStatusSchema.optional(),
   search: z.string().optional(),
   limit: z.number().int().positive().max(100).optional(),
   cursor: z.string().optional(),

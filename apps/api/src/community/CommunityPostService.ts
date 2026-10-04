@@ -65,7 +65,7 @@ export class CommunityPostService {
           avatarUrl: mobileUsers.avatarUrl,
         },
         media: {
-          url: mediaAssets.url,
+          storageKey: mediaAssets.storageKey,
         },
       })
       .from(communityPosts)
@@ -101,7 +101,7 @@ export class CommunityPostService {
       authorName: row.author.displayName,
       authorAvatarUrl: row.author.avatarUrl ?? undefined,
       content: row.post.content,
-      mediaUrl: row.media?.url ?? undefined,
+      mediaUrl: row.media?.storageKey ?? undefined,
       likeCount: row.post.likeCount,
       commentCount: row.post.commentCount,
       isLiked,
@@ -130,7 +130,7 @@ export class CommunityPostService {
           avatarUrl: mobileUsers.avatarUrl,
         },
         media: {
-          url: mediaAssets.url,
+          storageKey: mediaAssets.storageKey,
         },
       })
       .from(communityPosts)
@@ -170,7 +170,7 @@ export class CommunityPostService {
       authorName: row.author.displayName,
       authorAvatarUrl: row.author.avatarUrl ?? undefined,
       content: row.post.content,
-      mediaUrl: row.media?.url ?? undefined,
+      mediaUrl: row.media?.storageKey ?? undefined,
       likeCount: row.post.likeCount,
       commentCount: row.post.commentCount,
       isLiked: likedPostIds.has(row.post.id),

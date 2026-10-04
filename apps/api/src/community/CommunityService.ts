@@ -38,12 +38,46 @@ export class CommunityService {
       role: 'owner',
     });
 
-    return this.getCommunityById(row!.id);
+    return {
+      id: row!.id,
+      name: row!.name,
+      slug: row!.slug,
+      description: row!.description ?? undefined,
+      imageUrl: row!.imageUrl ?? undefined,
+      coverUrl: row!.coverUrl ?? undefined,
+      memberCount: row!.memberCount,
+      postCount: row!.postCount,
+      tags: (row!.tags as string[]) ?? [],
+      status: row!.status as 'draft' | 'published' | 'archived',
+      createdAt: row!.createdAt.toISOString(),
+      updatedAt: row!.updatedAt.toISOString(),
+      suspendedAt: row!.suspendedAt?.toISOString() ?? null,
+    };
   }
 
   async getCommunity(communityId: string, viewerId?: string): Promise<CommunityDetail | null> {
-    const community = await this.getCommunityById(communityId);
-    if (!community) return null;
+    const [row] = await db
+      .select()
+      .from(communities)
+      .where(eq(communities.id, communityId));
+
+    if (!row) return null;
+
+    const community = {
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      description: row.description ?? undefined,
+      imageUrl: row.imageUrl ?? undefined,
+      coverUrl: row.coverUrl ?? undefined,
+      memberCount: row.memberCount,
+      postCount: row.postCount,
+      tags: (row.tags as string[]) ?? [],
+      status: row.status as 'draft' | 'published' | 'archived',
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+      suspendedAt: row.suspendedAt?.toISOString() ?? null,
+    };
 
     const [owner] = await db
       .select({
@@ -51,7 +85,7 @@ export class CommunityService {
         avatarUrl: mobileUsers.avatarUrl,
       })
       .from(mobileUsers)
-      .where(eq(mobileUsers.id, community.ownerId));
+      .where(eq(mobileUsers.id, row.ownerId));
 
     let membership = null;
     if (viewerId) {
@@ -75,7 +109,7 @@ export class CommunityService {
     };
   }
 
-  private async getCommunityById(communityId: string): Promise<Community> {
+  private async getCommunityRow(communityId: string) {
     const [row] = await db
       .select()
       .from(communities)
@@ -88,6 +122,16 @@ export class CommunityService {
       });
     }
 
+    return row;
+  }
+
+  async getCommunityBySlug(slug: string): Promise<Community | null> {
+    const [row] = await db
+      .select()
+      .from(communities)
+      .where(eq(communities.slug, slug));
+
+    if (!row) return null;
     return {
       id: row.id,
       name: row.name,
@@ -103,16 +147,6 @@ export class CommunityService {
       updatedAt: row.updatedAt.toISOString(),
       suspendedAt: row.suspendedAt?.toISOString() ?? null,
     };
-  }
-
-  async getCommunityBySlug(slug: string): Promise<Community | null> {
-    const [row] = await db
-      .select()
-      .from(communities)
-      .where(eq(communities.slug, slug));
-
-    if (!row) return null;
-    return this.getCommunityById(row.id);
   }
 
   async listCommunities(
@@ -225,7 +259,29 @@ export class CommunityService {
       });
     }
 
-    return this.getCommunityById(communityId);
+    const community = await this.getCommunity(communityId);
+    if (!community) {
+      throw Object.assign(new Error('Community not found'), {
+        code: 'not_found',
+        status: 404,
+      });
+    }
+
+    return {
+      id: community.id,
+      name: community.name,
+      slug: community.slug,
+      description: community.description,
+      imageUrl: community.imageUrl,
+      coverUrl: community.coverUrl,
+      memberCount: community.memberCount,
+      postCount: community.postCount,
+      tags: community.tags,
+      status: community.status,
+      createdAt: community.createdAt,
+      updatedAt: community.updatedAt,
+      suspendedAt: community.suspendedAt,
+    };
   }
 
   async deleteCommunity(communityId: string): Promise<void> {
@@ -250,7 +306,29 @@ export class CommunityService {
       });
     }
 
-    return this.getCommunityById(communityId);
+    const community = await this.getCommunity(communityId);
+    if (!community) {
+      throw Object.assign(new Error('Community not found'), {
+        code: 'not_found',
+        status: 404,
+      });
+    }
+
+    return {
+      id: community.id,
+      name: community.name,
+      slug: community.slug,
+      description: community.description,
+      imageUrl: community.imageUrl,
+      coverUrl: community.coverUrl,
+      memberCount: community.memberCount,
+      postCount: community.postCount,
+      tags: community.tags,
+      status: community.status,
+      createdAt: community.createdAt,
+      updatedAt: community.updatedAt,
+      suspendedAt: community.suspendedAt,
+    };
   }
 
   async joinCommunity(communityId: string, userId: string): Promise<CommunityMember> {

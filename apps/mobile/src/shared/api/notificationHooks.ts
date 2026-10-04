@@ -42,7 +42,7 @@ export function useUnreadCount() {
   return useQuery({
     queryKey: ['notifications', 'unread-count'],
     queryFn: async () => {
-      if (!isApiEnabled()) {
+      if (!isApiEnabled) {
         return { unreadCount: 0 };
       }
 
@@ -62,7 +62,7 @@ export function useMarkNotificationRead() {
 
   return useMutation({
     mutationFn: async (notificationId: string) => {
-      if (!isApiEnabled()) {
+      if (!isApiEnabled) {
         return { success: true };
       }
 
@@ -82,7 +82,7 @@ export function useMarkAllNotificationsRead() {
 
   return useMutation({
     mutationFn: async () => {
-      if (!isApiEnabled()) {
+      if (!isApiEnabled) {
         return { count: 0 };
       }
 
@@ -105,7 +105,7 @@ export function useDeleteNotification() {
 
   return useMutation({
     mutationFn: async (notificationId: string) => {
-      if (!isApiEnabled()) {
+      if (!isApiEnabled) {
         return { success: true };
       }
 
@@ -123,7 +123,7 @@ export function useDeleteNotification() {
 export function useRegisterDeviceToken() {
   return useMutation({
     mutationFn: async (params: { token: string; platform: Platform }) => {
-      if (!isApiEnabled()) {
+      if (!isApiEnabled) {
         console.log('[Notifications] Would register device token (API disabled):', params);
         return { success: true };
       }
@@ -140,7 +140,7 @@ export function useRegisterDeviceToken() {
 export function useUnregisterDeviceToken() {
   return useMutation({
     mutationFn: async (token: string) => {
-      if (!isApiEnabled()) {
+      if (!isApiEnabled) {
         console.log('[Notifications] Would unregister device token (API disabled):', token);
         return { success: true };
       }

@@ -11,28 +11,29 @@ import { courses, courseLessons, mediaAssets } from '../db/schema.js';
 
 export class CourseService {
   async createCourse(request: CreateCourseRequest): Promise<Course> {
-    const publishedAt = request.status === 'published' ? new Date() : null;
+    const values: any = {
+      slug: request.slug,
+      name: request.name,
+      shortDescription: request.shortDescription,
+      description: request.description,
+      difficulty: request.difficulty,
+      durationHours: request.durationHours,
+      price: request.price,
+      instructorName: request.instructorName,
+      status: request.status ?? 'draft',
+    };
+
+    if (request.compareAtPrice !== undefined) values.compareAtPrice = request.compareAtPrice;
+    if (request.imageId !== undefined) values.imageId = request.imageId;
+    if (request.instructorBio !== undefined) values.instructorBio = request.instructorBio;
+    if (request.learningOutcomes) values.learningOutcomes = request.learningOutcomes;
+    if (request.prerequisites) values.prerequisites = request.prerequisites;
+    if (request.metadata) values.metadata = request.metadata;
+    if (request.status === 'published') values.publishedAt = new Date();
     
     const [row] = await db
       .insert(courses)
-      .values({
-        slug: request.slug,
-        name: request.name,
-        shortDescription: request.shortDescription,
-        description: request.description,
-        difficulty: request.difficulty,
-        durationHours: request.durationHours,
-        price: request.price,
-        compareAtPrice: request.compareAtPrice,
-        imageId: request.imageId,
-        instructorName: request.instructorName,
-        instructorBio: request.instructorBio,
-        learningOutcomes: request.learningOutcomes as unknown[],
-        prerequisites: request.prerequisites as unknown[],
-        status: request.status ?? 'draft',
-        metadata: request.metadata,
-        publishedAt,
-      })
+      .values(values)
       .returning();
 
     return this.mapCourseRow(row!);

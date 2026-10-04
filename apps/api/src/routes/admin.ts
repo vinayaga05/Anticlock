@@ -14,6 +14,7 @@ import {
   serviceTrees,
   userRoles,
   users,
+  mobileUsers,
 } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
 import { searchService } from "../assistant/SearchService.js";
@@ -103,6 +104,35 @@ adminRoutes.get("/users", requirePermission("users.read"), async (c) => {
     createdAt: u.createdAt.toISOString(),
   }));
   return c.json({ data, meta: { nextCursor: null } });
+});
+
+adminRoutes.get("/users/mobile", requirePermission("catalog.read"), async (c) => {
+  const q = c.req.query("q")?.trim() ?? "";
+  const limit = Math.min(Number(c.req.query("limit")) || 20, 100);
+
+  let query = db.select().from(mobileUsers).where(eq(mobileUsers.isActive, true));
+
+  if (q) {
+    const { ilike, or } = await import("drizzle-orm");
+    query = query.where(
+      or(
+        ilike(mobileUsers.phone, `%${q}%`),
+        ilike(mobileUsers.displayName, `%${q}%`)
+      )
+    );
+  }
+
+  const rows = await query.orderBy(desc(mobileUsers.createdAt)).limit(limit);
+
+  return c.json({
+    data: rows.map((u) => ({
+      id: u.id,
+      phone: u.phone,
+      displayName: u.displayName,
+      avatarUrl: u.avatarUrl ?? undefined,
+      createdAt: u.createdAt.toISOString(),
+    })),
+  });
 });
 
 adminRoutes.get("/roles", requirePermission("roles.manage"), async (c) => {

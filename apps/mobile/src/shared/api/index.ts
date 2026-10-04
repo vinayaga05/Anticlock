@@ -19,3 +19,11 @@ export {
   useCreateOrderMutation,
   useCancelOrderMutation,
 } from './shopHooks';
+export {
+  useTripsQuery,
+  useTripQuery,
+  useTripBookingsQuery,
+  useTripBookingQuery,
+  useCreateTripBookingMutation,
+  useCancelTripBookingMutation,
+} from './tripsHooks';

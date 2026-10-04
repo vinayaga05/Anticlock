@@ -11,35 +11,131 @@ import { useTheme } from '@/shared/hooks/useTheme';
 import { getEvent } from '@/shared/data/services';
 import { useCommunityStore } from '@/shared/data/community';
 import { RootStackParamList } from '@/shared/navigation/types';
+import { useTripQuery, isApiEnabled } from '@/shared/api';
+
+function formatPrice(price: number) {
+  return `Rs ${(price / 100).toFixed(0)}`;
+}
 
 export function EventDetailScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<RootStackParamList, 'EventDetail'>>();
-  const event = getEvent(route.params.eventId);
+  
+  // Try to use API if enabled, otherwise fall back to mock
+  const { data: apiTrip, isLoading, error } = useTripQuery(route.params.eventId);
+  const mockEvent = getEvent(route.params.eventId);
+  
   const challenge = useCommunityStore(s =>
     s.getChallengeForEvent(route.params.eventId),
   );
 
-  if (!event) {
+  const useApi = isApiEnabled && apiTrip && !error;
+  const trip = useApi ? apiTrip : null;
+  const event = useApi ? null : mockEvent;
+
+  if (isLoading) {
     return (
       <ScreenContainer tabAware={false}>
-        <EmptyState icon="globe" title="Event not found" />
+        <EmptyState icon="globe" title="Loading trip..." description="Please wait" />
       </ScreenContainer>
     );
   }
 
+  if (!trip && !event) {
+    return (
+      <ScreenContainer tabAware={false}>
+        <EmptyState 
+          icon="globe" 
+          title={error ? 'Error loading trip' : 'Event not found'} 
+          description={error instanceof Error ? error.message : undefined}
+        />
+      </ScreenContainer>
+    );
+  }
+
+  // Render API trip data
+  if (trip) {
+    const firstImage = trip.images[0]?.url;
+    return (
+      <ScreenContainer scrollable tabAware={false}>
+        {firstImage && <Image source={{ uri: firstImage }} style={styles.hero} />}
+        <Text style={[theme.typography.largeTitle, { color: theme.colors.textPrimary }]}>
+          {trip.name}
+        </Text>
+        <Text style={[theme.typography.body, { color: theme.colors.textSecondary }]}>
+          {trip.destination} · {trip.durationDays} day{trip.durationDays !== 1 ? 's' : ''}
+        </Text>
+        <Text style={[theme.typography.bodySmall, { color: theme.colors.textTertiary, marginTop: 4 }]}>
+          Max {trip.maxGroupSize} travelers · {trip.difficulty}
+        </Text>
+        <Text style={[theme.typography.title, { color: theme.colors.primary, marginTop: 8 }]}>
+          {formatPrice(trip.basePrice)} per person
+        </Text>
+
+        <Card style={{ gap: 8, marginTop: 12 }}>
+          <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>
+            Itinerary
+          </Text>
+          {trip.itinerary.map((day, idx) => (
+            <View key={idx} style={{ marginBottom: 8 }}>
+              <Text style={[theme.typography.bodySmall, { color: theme.colors.textPrimary, fontWeight: '600' }]}>
+                Day {day.day}: {day.title}
+              </Text>
+              <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary, marginTop: 2 }]}>
+                {day.description}
+              </Text>
+            </View>
+          ))}
+        </Card>
+
+        {trip.inclusions.length > 0 && (
+          <Card style={{ gap: 6, marginTop: 12 }}>
+            <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>
+              Inclusions
+            </Text>
+            {trip.inclusions.map((item, idx) => (
+              <Text
+                key={idx}
+                style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>
+                · {item}
+              </Text>
+            ))}
+          </Card>
+        )}
+
+        <View style={{ marginTop: 16, gap: 10 }}>
+          <Button
+            title="Book trip"
+            icon="globe"
+            onPress={() =>
+              Alert.alert('Booking', 'Trip booking flow to be implemented', [
+                { text: 'OK' },
+              ])
+            }
+          />
+          <Button
+            title="View my trips"
+            variant="secondary"
+            onPress={() => navigation.navigate('MyTrips')}
+          />
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  // Render mock event data (fallback)
   return (
     <ScreenContainer scrollable tabAware={false}>
-      <Image source={{ uri: event.imageUrl }} style={styles.hero} />
+      <Image source={{ uri: event!.imageUrl }} style={styles.hero} />
       <Text style={[theme.typography.largeTitle, { color: theme.colors.textPrimary }]}>
-        {event.title}
+        {event!.title}
       </Text>
       <Text style={[theme.typography.body, { color: theme.colors.textSecondary }]}>
-        {event.destination} · {event.duration}
+        {event!.destination} · {event!.duration}
       </Text>
       <Text style={[theme.typography.bodySmall, { color: theme.colors.textTertiary, marginTop: 4 }]}>
-        {event.dateLabel} · {event.slotsLeft} slots left
+        {event!.dateLabel} · {event!.slotsLeft} slots left
       </Text>
       {challenge ? (
         <PressableScale
@@ -63,14 +159,14 @@ export function EventDetailScreen() {
         </PressableScale>
       ) : null}
       <Text style={[theme.typography.title, { color: theme.colors.primary, marginTop: 8 }]}>
-        Rs {event.price}
+        Rs {event!.price}
       </Text>
 
       <Card style={{ gap: 8, marginTop: 12 }}>
         <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>
           Itinerary
         </Text>
-        {event.itinerary.map(item => (
+        {event!.itinerary.map(item => (
           <Text
             key={item}
             style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>
@@ -78,7 +174,7 @@ export function EventDetailScreen() {
           </Text>
         ))}
         <Text style={[theme.typography.caption, { color: theme.colors.textTertiary, marginTop: 8 }]}>
-          Meet at {event.meetingPoint}
+          Meet at {event!.meetingPoint}
         </Text>
       </Card>
 
@@ -87,7 +183,7 @@ export function EventDetailScreen() {
           title="Book trip"
           icon="globe"
           onPress={() =>
-            Alert.alert('Trip booked', `${event.title} is confirmed.`, [
+            Alert.alert('Trip booked', `${event!.title} is confirmed.`, [
               { text: 'My trips', onPress: () => navigation.navigate('MyTrips') },
             ])
           }

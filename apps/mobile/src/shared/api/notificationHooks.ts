@@ -13,7 +13,7 @@ export function useNotifications(options?: { unreadOnly?: boolean }) {
   return useQuery({
     queryKey: ['notifications', options?.unreadOnly ? 'unread' : 'all'],
     queryFn: async () => {
-      if (!isApiEnabled()) {
+      if (!isApiEnabled) {
         // Return mock data when API is disabled
         return {
           notifications: [],

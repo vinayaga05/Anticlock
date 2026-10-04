@@ -1,6 +1,18 @@
 import { Platform, PermissionsAndroid, Alert } from 'react-native';
-import messaging from '@react-native-firebase/messaging';
-import type { FirebaseMessagingTypes } from '@react-native-firebase/messaging';
+import {
+  getMessaging,
+  getToken,
+  deleteToken as deleteMessagingToken,
+  onMessage,
+  onNotificationOpenedApp,
+  getInitialNotification,
+  onTokenRefresh,
+  requestPermission,
+  AuthorizationStatus,
+  type RemoteMessage,
+  type AuthorizationStatus as AuthorizationStatusType,
+} from '@react-native-firebase/messaging';
+import type { Messaging } from '@react-native-firebase/messaging/dist/typescript/lib/types/messaging';
 
 export type NotificationData = {
   notificationId?: string;
@@ -10,7 +22,7 @@ export type NotificationData = {
 
 export type NotificationHandler = (
   data: NotificationData,
-  notification?: FirebaseMessagingTypes.Notification
+  notification?: RemoteMessage['notification']
 ) => void;
 
 let foregroundHandler: NotificationHandler | null = null;
@@ -21,11 +33,13 @@ let backgroundHandler: NotificationHandler | null = null;
  */
 export async function requestNotificationPermission(): Promise<boolean> {
   try {
+    const messaging = getMessaging();
+
     if (Platform.OS === 'ios') {
-      const authStatus = await messaging().requestPermission();
+      const authStatus = await requestPermission(messaging);
       const enabled =
-        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+        authStatus === AuthorizationStatus.AUTHORIZED ||
+        authStatus === AuthorizationStatus.PROVISIONAL;
 
       if (!enabled) {
         console.log('[Notifications] iOS permission denied');
@@ -34,7 +48,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
       return enabled;
     } else {
       // Android
-      if (Platform.Version >= 33) {
+      if (typeof Platform.Version === 'number' && Platform.Version >= 33) {
         const granted = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
         );
@@ -54,14 +68,17 @@ export async function requestNotificationPermission(): Promise<boolean> {
  */
 export async function checkNotificationPermission(): Promise<boolean> {
   try {
+    const messaging = getMessaging();
+
     if (Platform.OS === 'ios') {
-      const authStatus = await messaging().hasPermission();
+      // Note: hasPermission doesn't exist in v26, using requestPermission as a check
+      const authStatus = await requestPermission(messaging);
       return (
-        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL
+        authStatus === AuthorizationStatus.AUTHORIZED ||
+        authStatus === AuthorizationStatus.PROVISIONAL
       );
     } else {
-      if (Platform.Version >= 33) {
+      if (typeof Platform.Version === 'number' && Platform.Version >= 33) {
         const result = await PermissionsAndroid.check(
           PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
         );
@@ -86,7 +103,8 @@ export async function getDeviceToken(): Promise<string | null> {
       return null;
     }
 
-    const token = await messaging().getToken();
+    const messaging = getMessaging();
+    const token = await getToken(messaging);
     console.log('[Notifications] FCM token obtained');
     return token;
   } catch (error) {
@@ -101,8 +119,10 @@ export async function getDeviceToken(): Promise<string | null> {
 export function setForegroundNotificationHandler(handler: NotificationHandler) {
   foregroundHandler = handler;
 
+  const messaging = getMessaging();
+
   // Register Firebase foreground listener
-  const unsubscribe = messaging().onMessage(async (remoteMessage) => {
+  const unsubscribe = onMessage(messaging, (remoteMessage: RemoteMessage) => {
     console.log('[Notifications] Foreground notification received:', remoteMessage);
 
     const data = (remoteMessage.data as NotificationData) || {};
@@ -131,8 +151,10 @@ export function setForegroundNotificationHandler(handler: NotificationHandler) {
 export function setBackgroundNotificationHandler(handler: NotificationHandler) {
   backgroundHandler = handler;
 
+  const messaging = getMessaging();
+
   // Background handler (app in background)
-  messaging().onNotificationOpenedApp((remoteMessage) => {
+  onNotificationOpenedApp(messaging, (remoteMessage: RemoteMessage) => {
     console.log('[Notifications] Background notification opened:', remoteMessage);
 
     const data = (remoteMessage.data as NotificationData) || {};
@@ -144,27 +166,26 @@ export function setBackgroundNotificationHandler(handler: NotificationHandler) {
   });
 
   // Quit handler (app was completely closed)
-  messaging()
-    .getInitialNotification()
-    .then((remoteMessage) => {
-      if (remoteMessage) {
-        console.log('[Notifications] Quit notification opened:', remoteMessage);
+  getInitialNotification(messaging).then((remoteMessage: RemoteMessage | null) => {
+    if (remoteMessage) {
+      console.log('[Notifications] Quit notification opened:', remoteMessage);
 
-        const data = (remoteMessage.data as NotificationData) || {};
-        const notification = remoteMessage.notification;
+      const data = (remoteMessage.data as NotificationData) || {};
+      const notification = remoteMessage.notification;
 
-        if (backgroundHandler) {
-          backgroundHandler(data, notification);
-        }
+      if (backgroundHandler) {
+        backgroundHandler(data, notification);
       }
-    });
+    }
+  });
 }
 
 /**
  * Set up token refresh handler
  */
 export function setTokenRefreshHandler(handler: (token: string) => void) {
-  return messaging().onTokenRefresh((token) => {
+  const messaging = getMessaging();
+  return onTokenRefresh(messaging, (token: string) => {
     console.log('[Notifications] FCM token refreshed');
     handler(token);
   });
@@ -175,7 +196,8 @@ export function setTokenRefreshHandler(handler: (token: string) => void) {
  */
 export async function deleteDeviceToken(): Promise<void> {
   try {
-    await messaging().deleteToken();
+    const messaging = getMessaging();
+    await deleteMessagingToken(messaging);
     console.log('[Notifications] FCM token deleted');
   } catch (error) {
     console.error('[Notifications] Failed to delete FCM token:', error);

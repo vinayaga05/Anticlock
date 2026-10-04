@@ -12,7 +12,6 @@ import {
   useRegisterDeviceToken,
   useUnregisterDeviceToken,
 } from '../api/notificationHooks';
-import { isApiEnabled } from '../api/config';
 
 /**
  * Hook to set up push notifications for authenticated users.

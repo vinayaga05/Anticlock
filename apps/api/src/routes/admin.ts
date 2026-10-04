@@ -110,19 +110,25 @@ adminRoutes.get("/users/mobile", requirePermission("catalog.read"), async (c) =>
   const q = c.req.query("q")?.trim() ?? "";
   const limit = Math.min(Number(c.req.query("limit")) || 20, 100);
 
-  let query = db.select().from(mobileUsers).where(eq(mobileUsers.isActive, true));
+  const { ilike, or, and, sql: sqlOp } = await import("drizzle-orm");
+
+  const conditions = [eq(mobileUsers.isActive, true)];
 
   if (q) {
-    const { ilike, or } = await import("drizzle-orm");
-    query = query.where(
+    conditions.push(
       or(
         ilike(mobileUsers.phone, `%${q}%`),
         ilike(mobileUsers.displayName, `%${q}%`)
-      )
+      )!
     );
   }
 
-  const rows = await query.orderBy(desc(mobileUsers.createdAt)).limit(limit);
+  const rows = await db
+    .select()
+    .from(mobileUsers)
+    .where(and(...conditions))
+    .orderBy(desc(mobileUsers.createdAt))
+    .limit(limit);
 
   return c.json({
     data: rows.map((u) => ({

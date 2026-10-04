@@ -47,7 +47,16 @@ moderationAdminRoutes.get('/reports', async c => {
   const contentTypeFilter = query.contentType as ContentType | undefined;
   const reasonFilter = query.reason;
 
-  let reelReportsQuery = db
+  // Build where conditions for reel reports
+  const reelWhereConditions = [eq(reelReports.status, statusFilter)];
+  if (reasonFilter) {
+    reelWhereConditions.push(eq(reelReports.reason, reasonFilter));
+  }
+  if (cursorParam) {
+    reelWhereConditions.push(sql`${reelReports.createdAt} < ${cursorParam}`);
+  }
+
+  const reelReportsQuery = db
     .select({
       id: reelReports.id,
       contentId: reelReports.reelId,
@@ -71,19 +80,20 @@ moderationAdminRoutes.get('/reports', async c => {
     })
     .from(reelReports)
     .innerJoin(reels, eq(reelReports.reelId, reels.id))
-    .where(eq(reelReports.status, statusFilter))
+    .where(and(...reelWhereConditions))
     .orderBy(desc(reelReports.createdAt))
     .limit(limit + 1);
 
+  // Build where conditions for content post reports
+  const contentPostWhereConditions = [eq(contentPostReports.status, statusFilter)];
   if (reasonFilter) {
-    reelReportsQuery = reelReportsQuery.where(eq(reelReports.reason, reasonFilter));
+    contentPostWhereConditions.push(eq(contentPostReports.reason, reasonFilter));
   }
-
   if (cursorParam) {
-    reelReportsQuery = reelReportsQuery.where(sql`${reelReports.createdAt} < ${cursorParam}`);
+    contentPostWhereConditions.push(sql`${contentPostReports.createdAt} < ${cursorParam}`);
   }
 
-  let contentPostReportsQuery = db
+  const contentPostReportsQuery = db
     .select({
       id: contentPostReports.id,
       contentId: contentPostReports.contentPostId,
@@ -107,21 +117,9 @@ moderationAdminRoutes.get('/reports', async c => {
     })
     .from(contentPostReports)
     .innerJoin(contentPosts, eq(contentPostReports.contentPostId, contentPosts.id))
-    .where(eq(contentPostReports.status, statusFilter))
+    .where(and(...contentPostWhereConditions))
     .orderBy(desc(contentPostReports.createdAt))
     .limit(limit + 1);
-
-  if (reasonFilter) {
-    contentPostReportsQuery = contentPostReportsQuery.where(
-      eq(contentPostReports.reason, reasonFilter)
-    );
-  }
-
-  if (cursorParam) {
-    contentPostReportsQuery = contentPostReportsQuery.where(
-      sql`${contentPostReports.createdAt} < ${cursorParam}`
-    );
-  }
 
   // Fetch based on content type filter
   let allReports: any[] = [];

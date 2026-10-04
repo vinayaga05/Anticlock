@@ -1,10 +1,12 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 import { 
   Heart, Dumbbell, Trophy, Leaf, Plane, Scissors, GraduationCap, Home, ShoppingBag 
 } from 'lucide-react';
 import { serviceTrees } from '@/config/content';
+import { getCategoryImage } from '@/config/images';
 
 const iconMap: Record<string, any> = {
   'heart-pulse': Heart,
@@ -50,6 +52,7 @@ export function ServicesSection() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {serviceTrees.map((tree, index) => {
             const Icon = iconMap[tree.icon] || Leaf;
+            const categoryImage = getCategoryImage(tree.id);
 
             return (
               <motion.div
@@ -71,11 +74,25 @@ export function ServicesSection() {
                     style={{ background: tree.color }}
                   ></div>
                   <div className="relative">
-                    <div
-                      className="inline-flex p-3 rounded-xl mb-4"
-                      style={{ backgroundColor: `${tree.color}15` }}
-                    >
-                      <Icon size={28} style={{ color: tree.color }} />
+                    {/* Category artwork */}
+                    <div className="mb-4 relative w-20 h-20 rounded-xl overflow-hidden" style={{ backgroundColor: `${tree.color}10` }}>
+                      {categoryImage ? (
+                        <Image
+                          src={categoryImage}
+                          alt={tree.name}
+                          fill
+                          sizes="80px"
+                          className="object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div
+                          className="inline-flex p-3 rounded-xl"
+                          style={{ backgroundColor: `${tree.color}15` }}
+                        >
+                          <Icon size={28} style={{ color: tree.color }} />
+                        </div>
+                      )}
                     </div>
                     <h3 className="text-xl font-bold mb-2 text-gray-900">{tree.name}</h3>
                     <p className="text-gray-600 leading-relaxed">{tree.description}</p>

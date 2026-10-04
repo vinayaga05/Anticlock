@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
 import { Linking } from 'react-native';
-import { useNavigation, useNavigationContainerRef } from '@react-navigation/native';
-import { MMKV } from 'react-native-mmkv';
+import { useNavigationContainerRef } from '@react-navigation/native';
+import { createMMKV } from 'react-native-mmkv';
 
-const storage = new MMKV({ id: 'deep-link-storage' });
+const storage = createMMKV({ id: 'deep-link-storage' });
 const PENDING_LINK_KEY = 'pending_deep_link';
 
 /**
@@ -20,7 +20,7 @@ export function storePendingDeepLink(url: string): void {
 export function consumePendingDeepLink(): string | undefined {
   const url = storage.getString(PENDING_LINK_KEY);
   if (url) {
-    storage.delete(PENDING_LINK_KEY);
+    storage.remove(PENDING_LINK_KEY);
   }
   return url;
 }
@@ -29,7 +29,7 @@ export function consumePendingDeepLink(): string | undefined {
  * Clear any pending deep link without consuming it.
  */
 export function clearPendingDeepLink(): void {
-  storage.delete(PENDING_LINK_KEY);
+  storage.remove(PENDING_LINK_KEY);
 }
 
 /**

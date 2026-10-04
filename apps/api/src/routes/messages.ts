@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { requireMobileAuth } from '../middleware/auth.js';
+import { requireAuth, type AppEnv } from '../middleware/auth.js';
 import { getStreamClient, isStreamConfigured } from '../lib/stream.js';
 import { StreamChatService } from '../messages/StreamChatService.js';
 import {
@@ -8,10 +8,24 @@ import {
   streamTokenResponseSchema,
 } from '@anticlock/contracts';
 
-const messagesRoutes = new Hono();
+const messagesRoutes = new Hono<AppEnv>();
+
+// Helper to require mobile auth
+function requireMobileAuth(c: { get: (k: 'auth') => { kind: string; sub: string } }) {
+  const auth = c.get('auth');
+  if (auth.kind !== 'mobile') {
+    throw Object.assign(new Error('Mobile session required'), {
+      code: 'forbidden',
+      status: 403,
+    });
+  }
+  return auth.sub;
+}
 
 // POST /v1/messages/token - Get Stream Chat token
-messagesRoutes.post('/token', requireMobileAuth, async (c) => {
+messagesRoutes.post('/token', requireAuth, async (c) => {
+  const userId = requireMobileAuth(c);
+  
   if (!isStreamConfigured()) {
     return c.json(
       { error: { code: 'stream_not_configured', message: 'Stream Chat is not configured' } },
@@ -19,17 +33,16 @@ messagesRoutes.post('/token', requireMobileAuth, async (c) => {
     );
   }
 
-  const user = c.get('mobileUser');
   const streamClient = getStreamClient();
   const service = new StreamChatService(streamClient);
 
   try {
-    const token = await service.createUserToken(user.id);
+    const token = await service.createUserToken(userId);
     const apiKey = process.env.STREAM_API_KEY!;
 
     const response = streamTokenResponseSchema.parse({
       apiKey,
-      userId: user.id,
+      userId,
       token,
     });
 
@@ -44,7 +57,9 @@ messagesRoutes.post('/token', requireMobileAuth, async (c) => {
 });
 
 // POST /v1/messages/channels - Create or get 1:1 channel
-messagesRoutes.post('/channels', requireMobileAuth, async (c) => {
+messagesRoutes.post('/channels', requireAuth, async (c) => {
+  const userId = requireMobileAuth(c);
+  
   if (!isStreamConfigured()) {
     return c.json(
       { error: { code: 'stream_not_configured', message: 'Stream Chat is not configured' } },
@@ -52,7 +67,6 @@ messagesRoutes.post('/channels', requireMobileAuth, async (c) => {
     );
   }
 
-  const user = c.get('mobileUser');
   const body = await c.req.json();
   
   const parsed = createChannelRequestSchema.safeParse(body);
@@ -68,7 +82,7 @@ messagesRoutes.post('/channels', requireMobileAuth, async (c) => {
   const service = new StreamChatService(streamClient);
 
   try {
-    const channelId = await service.createOrGetChannel(user.id, otherUserId);
+    const channelId = await service.createOrGetChannel(userId, otherUserId);
 
     const response = createChannelResponseSchema.parse({
       channelId,

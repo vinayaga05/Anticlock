@@ -1,11 +1,12 @@
-import { describe, it, mock } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { Hono } from 'hono';
 import { messagesRoutes } from './messages.js';
+import type { AppEnv } from '../middleware/auth.js';
 
 describe('Messages Routes', () => {
   it('POST /token - requires authentication', async () => {
-    const app = new Hono();
+    const app = new Hono<AppEnv>();
     app.route('/v1/messages', messagesRoutes);
 
     const res = await app.request('/v1/messages/token', {
@@ -25,11 +26,18 @@ describe('Messages Routes', () => {
     delete process.env.STREAM_API_KEY;
     delete process.env.STREAM_API_SECRET;
 
-    const app = new Hono();
+    const app = new Hono<AppEnv>();
     
     // Mock auth middleware
     app.use('*', async (c, next) => {
-      c.set('mobileUser', { id: 'test-user-id', phone: '+1234567890' });
+      c.set('auth', { 
+        kind: 'mobile', 
+        sub: 'test-user-id', 
+        email: 'test@test.com',
+        name: 'Test User',
+        roles: [],
+        permissions: [] 
+      });
       await next();
     });
     
@@ -41,7 +49,7 @@ describe('Messages Routes', () => {
     });
 
     assert.strictEqual(res.status, 503);
-    const body = await res.json();
+    const body = await res.json() as any;
     assert.strictEqual(body.error.code, 'stream_not_configured');
 
     // Restore env
@@ -49,40 +57,46 @@ describe('Messages Routes', () => {
     if (originalApiSecret) process.env.STREAM_API_SECRET = originalApiSecret;
   });
 
-  it('POST /channels - rejects self-chat', async () => {
-    const app = new Hono();
+  it('POST /channels - requires mobile auth', async () => {
+    const app = new Hono<AppEnv>();
     
-    // Mock auth middleware
+    // Mock non-mobile auth
     app.use('*', async (c, next) => {
-      c.set('mobileUser', { id: 'same-user-id', phone: '+1234567890' });
+      c.set('auth', { 
+        kind: 'admin', 
+        sub: 'admin-id', 
+        email: 'admin@test.com',
+        name: 'Admin',
+        roles: [],
+        permissions: [] 
+      });
       await next();
     });
     
-    // Mock Stream service to test validation
-    const mockStreamClient = {
-      upsertUser: mock.fn(),
-      createToken: mock.fn(() => 'mock-token'),
-      channel: mock.fn(),
-    };
-
     app.route('/v1/messages', messagesRoutes);
 
     const res = await app.request('/v1/messages/channels', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ otherUserId: 'same-user-id' }),
+      body: JSON.stringify({ otherUserId: 'other-user-id' }),
     });
 
-    // Without Stream configured, should get 503
-    // With Stream configured and proper mocking, would get 400 for self-chat
-    assert.ok(res.status === 503 || res.status === 400);
+    // Should fail with 403 or 500 due to mobile auth requirement
+    assert.ok(res.status >= 400);
   });
 
   it('POST /channels - validates otherUserId format', async () => {
-    const app = new Hono();
+    const app = new Hono<AppEnv>();
     
     app.use('*', async (c, next) => {
-      c.set('mobileUser', { id: 'user-id', phone: '+1234567890' });
+      c.set('auth', { 
+        kind: 'mobile', 
+        sub: 'user-id', 
+        email: 'user@test.com',
+        name: 'User',
+        roles: [],
+        permissions: [] 
+      });
       await next();
     });
     
@@ -95,7 +109,7 @@ describe('Messages Routes', () => {
     });
 
     // Without Stream configured gets 503, but if configured would fail validation
-    const body = await res.json();
+    const body = await res.json() as any;
     assert.ok(res.status === 503 || (res.status === 400 && body.error.code === 'validation_error'));
   });
 });

@@ -11,7 +11,7 @@ export function HeroSection() {
   const playStore = getPlayStoreButton();
 
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-black via-gray-900 to-black pt-20">
+    <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-black via-gray-900 to-black pt-20 pb-12 lg:pb-20">
       <div className="absolute inset-0 gradient-radial opacity-60"></div>
       
       <div className="absolute inset-0">
@@ -20,15 +20,15 @@ export function HeroSection() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-lime/20 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }}></div>
       </div>
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-20">
+        <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
           {/* Left side - Content */}
           <div className="text-center lg:text-left">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
-              className="mb-6"
+              className="mb-4 lg:mb-6"
             >
               <span className="inline-flex items-center px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 text-white/90 text-sm font-medium">
                 <span className="w-2 h-2 bg-aqua rounded-full mr-2 animate-pulse"></span>
@@ -40,7 +40,7 @@ export function HeroSection() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.2 }}
-              className="text-5xl sm:text-6xl lg:text-7xl font-bold text-white mb-6 leading-tight"
+              className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-white mb-4 lg:mb-6 leading-tight"
             >
               Discover, Book,
               <br />
@@ -53,7 +53,7 @@ export function HeroSection() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.4 }}
-              className="text-xl sm:text-2xl text-white/80 mb-12 max-w-3xl lg:max-w-none leading-relaxed"
+              className="text-lg sm:text-xl lg:text-2xl text-white/80 mb-8 lg:mb-12 max-w-3xl lg:max-w-none leading-relaxed"
             >
               From health and fitness to travel and beauty—explore services, connect with communities,
               and book everything in one place.
@@ -63,7 +63,7 @@ export function HeroSection() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.6 }}
-              className="flex flex-col sm:flex-row lg:flex-col xl:flex-row items-center lg:items-start xl:items-center justify-center lg:justify-start gap-4 mb-8"
+              className="flex flex-col sm:flex-row lg:flex-col xl:flex-row items-center lg:items-start xl:items-center justify-center lg:justify-start gap-4 mb-6 lg:mb-8"
             >
               <a
                 href={appStore.url}
@@ -174,8 +174,8 @@ export function HeroSection() {
           </div>
 
           {/* Mobile phone view */}
-          <div className="lg:hidden flex justify-center mt-8">
-            <div className="w-64">
+          <div className="lg:hidden flex flex-col items-center mt-6">
+            <div className="w-56 sm:w-64">
               <motion.div
                 initial={{ opacity: 0, y: 40 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -186,6 +186,7 @@ export function HeroSection() {
                 </PhoneFrame>
               </motion.div>
             </div>
+            <p className="text-xs text-white/50 mt-2">Sample screen</p>
           </div>
         </div>
       </div>

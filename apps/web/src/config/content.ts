@@ -199,7 +199,7 @@ export const differentiators = [
 ];
 
 export const providerBenefits = [
-  'Reach thousands of lifestyle-conscious users',
+  'Connect with lifestyle-conscious users seeking your services',
   'Manage bookings and clients through an integrated dashboard',
   'Showcase your services through video content',
   'Build community around your brand',

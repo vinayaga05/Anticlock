@@ -15,6 +15,13 @@ import { Heart, MessageCircle, Share2, Play, Calendar, MapPin, Star, TrendingUp,
  * Home Feed Screen - Shows category grid with real artwork
  */
 export function HomeScreen() {
+  const stories = [
+    { name: 'Trending', image: '/app/fitness-gym.webp' },
+    { name: 'Fitness', image: '/app/fitness-yoga.webp' },
+    { name: 'Wellness', image: '/app/wellness-nutrition-diet.webp' },
+    { name: 'Travel', image: '/app/tours-trekking.webp' },
+  ];
+
   const categories = [
     { name: 'Fitness', image: '/app/fitness-gym.webp', color: '#84CC16' },
     { name: 'Health', image: '/app/health-doctor-consultation.webp', color: '#5BB8E8' },
@@ -31,12 +38,21 @@ export function HomeScreen() {
       {/* Flash stories row */}
       <div className="px-4 mb-6">
         <div className="flex gap-3 overflow-x-auto pb-2">
-          {['Trending', 'Fitness', 'Wellness', 'Travel'].map((story, i) => (
+          {stories.map((story, i) => (
             <div key={i} className="flex flex-col items-center gap-1 flex-shrink-0">
               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-aqua to-coral p-0.5">
-                <div className="w-full h-full rounded-full bg-gray-200" />
+                <div className="w-full h-full rounded-full overflow-hidden bg-white">
+                  <Image
+                    src={story.image}
+                    alt={story.name}
+                    width={64}
+                    height={64}
+                    sizes="64px"
+                    className="object-cover w-full h-full"
+                  />
+                </div>
               </div>
-              <span className="text-xs text-gray-600">{story}</span>
+              <span className="text-xs text-gray-600 max-w-[64px] truncate text-center">{story.name}</span>
             </div>
           ))}
         </div>
@@ -60,6 +76,70 @@ export function HomeScreen() {
               <span className="text-xs font-medium text-gray-700 text-center">{cat.name}</span>
             </div>
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Flash Stories Screen - Ephemeral stories feed
+ */
+export function FlashScreen() {
+  return (
+    <div className="h-full bg-gray-900 relative">
+      {/* Story rings at top */}
+      <div className="absolute top-0 left-0 right-0 z-20 pt-16 px-4 pb-3">
+        <div className="flex gap-2 overflow-x-auto">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className={`w-10 h-10 rounded-full flex-shrink-0 ${i === 1 ? 'ring-2 ring-white' : 'opacity-60'}`}>
+              <div className="w-full h-full rounded-full bg-gradient-to-br from-aqua to-coral p-0.5">
+                <div className="w-full h-full rounded-full bg-gray-700" />
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Progress bars */}
+        <div className="flex gap-1 mt-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex-1 h-0.5 bg-white/30 rounded-full overflow-hidden">
+              {i === 2 && <div className="h-full w-1/2 bg-white" />}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Full-bleed story content */}
+      <div className="absolute inset-0 bg-gradient-to-br from-aqua/30 to-coral/30">
+        <Image
+          src="/app/fitness-yoga.webp"
+          alt="Story"
+          fill
+          sizes="100vw"
+          className="object-cover"
+        />
+      </div>
+
+      {/* Story overlay info */}
+      <div className="absolute top-28 left-4 right-4 z-20 text-white">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur" />
+          <div>
+            <p className="font-semibold text-sm">Wellness Center</p>
+            <p className="text-xs opacity-90">2h ago</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Reply field at bottom */}
+      <div className="absolute bottom-6 left-4 right-4 z-20">
+        <div className="flex items-center gap-2">
+          <div className="flex-1 bg-white/20 backdrop-blur rounded-full px-4 py-3 text-white/70 text-sm border border-white/30">
+            Send message...
+          </div>
+          <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur flex items-center justify-center border border-white/30">
+            <Heart size={20} className="text-white" />
+          </div>
         </div>
       </div>
     </div>
@@ -120,10 +200,10 @@ export function ClipsScreen() {
  */
 export function MarketplaceScreen() {
   const items = [
-    { name: 'Yoga Mat Premium', price: '₹1,299', image: '/app/shop-fitness-3d.webp' },
-    { name: 'Resistance Bands', price: '₹899', image: '/app/shop-sports-3d.webp' },
-    { name: 'Wellness Kit', price: '₹2,499', image: '/app/shop-health-3d.webp' },
-    { name: 'Beauty Essentials', price: '₹1,799', image: '/app/shop-beauty-3d.webp' },
+    { name: 'Yoga Mat Premium', price: '₹1,299', image: '/app/shop-fitness-3d.webp', color: '#84CC16' },
+    { name: 'Resistance Bands', price: '₹899', image: '/app/ecom-fitness.webp', color: '#38BDF8' },
+    { name: 'Wellness Kit', price: '₹2,499', image: '/app/shop-health-3d.webp', color: '#A78BFA' },
+    { name: 'Beauty Essentials', price: '₹1,799', image: '/app/shop-beauty-3d.webp', color: '#F472B6' },
   ];
 
   return (
@@ -133,7 +213,7 @@ export function MarketplaceScreen() {
         <div className="grid grid-cols-2 gap-4">
           {items.map((item, i) => (
             <div key={i} className="bg-gray-50 rounded-xl overflow-hidden">
-              <div className="aspect-square bg-gray-100 relative">
+              <div className="aspect-square bg-gray-100 relative rounded-xl overflow-hidden" style={{ backgroundColor: `${item.color}15` }}>
                 <Image
                   src={item.image}
                   alt={item.name}
@@ -206,22 +286,24 @@ export function BookingScreen() {
  * Community Feed Screen
  */
 export function CommunityScreen() {
+  const communities = [
+    { name: 'Morning Runners', description: 'Daily group runs' },
+    { name: 'Yoga Lovers', description: 'Wellness & mindfulness' },
+    { name: 'Fitness Challenge', description: 'Weekly goals & support' },
+  ];
+
   return (
     <div className="h-full bg-white pt-16 pb-20 overflow-y-auto">
       <div className="px-4">
         <h2 className="text-lg font-bold mb-4 text-gray-900">Communities</h2>
         
-        {[
-          { name: 'Morning Runners' },
-          { name: 'Yoga Lovers' },
-          { name: 'Fitness Challenge' },
-        ].map((community, i) => (
+        {communities.map((community, i) => (
           <div key={i} className="bg-gray-50 rounded-xl p-4 mb-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-gradient-to-br from-aqua to-coral" />
               <div>
                 <h3 className="font-semibold text-gray-900">{community.name}</h3>
-                <p className="text-sm text-gray-600">Active community</p>
+                <p className="text-sm text-gray-600">{community.description}</p>
               </div>
             </div>
             <div className="flex items-center gap-1 text-aqua text-sm font-semibold">

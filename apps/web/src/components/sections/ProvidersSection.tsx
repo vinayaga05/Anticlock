@@ -29,8 +29,7 @@ export function ProvidersSection() {
               With Anticlock
             </h2>
             <p className="text-lg md:text-xl text-white/80 mb-8 leading-relaxed">
-              Join thousands of service providers reaching lifestyle-conscious customers. From
-              health practitioners to fitness trainers, beauty professionals to tour operators—grow
+              Service providers from health practitioners to fitness trainers, beauty professionals to tour operators—grow
               your business on Anticlock.
             </p>
             <div className="space-y-3 md:space-y-4 mb-8">
@@ -63,13 +62,14 @@ export function ProvidersSection() {
             initial={{ opacity: 0, x: 30 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
-            className="flex justify-center lg:justify-end"
+            className="flex flex-col items-center lg:items-end"
           >
             <div className="w-64 md:w-72">
               <PhoneFrame delay={0.3}>
                 <ProviderScreen />
               </PhoneFrame>
             </div>
+            <p className="text-xs text-white/50 mt-2">Sample screen</p>
           </motion.div>
         </div>
       </div>

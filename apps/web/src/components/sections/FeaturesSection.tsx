@@ -8,7 +8,7 @@ import { features } from '@/config/content';
 import { PhoneFrame } from '@/components/ui/PhoneFrame';
 import { 
   ClipsScreen, 
-  HomeScreen, 
+  FlashScreen,
   MarketplaceScreen, 
   BookingScreen, 
   CommunityScreen, 
@@ -36,7 +36,7 @@ const categoryColors: Record<string, string> = {
 
 const screenMap: Record<string, React.ComponentType> = {
   clips: ClipsScreen,
-  flash: HomeScreen,
+  flash: FlashScreen,
   marketplace: MarketplaceScreen,
   bookings: BookingScreen,
   communities: CommunityScreen,
@@ -141,13 +141,14 @@ export function FeaturesSection() {
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true, margin: "-100px" }}
                   transition={{ delay: 0.3, duration: 0.6 }}
-                  className={`flex justify-center ${isEven ? '' : 'lg:col-start-1 lg:row-start-1'}`}
+                  className={`flex flex-col items-center ${isEven ? '' : 'lg:col-start-1 lg:row-start-1'}`}
                 >
                   <div className="w-64 md:w-72">
                     <PhoneFrame delay={0.4}>
                       <ScreenComponent />
                     </PhoneFrame>
                   </div>
+                  <p className="text-xs text-gray-500 mt-2 text-center">Sample screen</p>
                 </motion.div>
               </motion.div>
             );

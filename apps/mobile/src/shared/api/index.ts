@@ -11,3 +11,4 @@ export {
   useServiceTreesQuery,
   useServiceCategoriesQuery,
 } from './hooks';
+export * from './coursesHooks';

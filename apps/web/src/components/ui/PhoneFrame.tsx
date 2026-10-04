@@ -22,7 +22,13 @@ export function PhoneFrame({ children, className = '', delay = 0, variant = 'def
       initial={{ opacity: 0, y: 40, scale: 0.9 }}
       whileInView={{ opacity: 1, y: 0, scale: 1 }}
       viewport={{ once: true }}
-      transition={{ delay, duration: 0.6 }}
+      transition={{ 
+        delay, 
+        duration: 0.6,
+        opacity: { duration: 0.6 },
+        y: { duration: 0.6 },
+        scale: { duration: 0.6 }
+      }}
       className={`relative ${className}`}
       style={{ transform: `rotate(${rotation}deg)` }}
     >

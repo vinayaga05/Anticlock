@@ -23,7 +23,7 @@ export function CTASection() {
           className="mb-8"
         >
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-aqua to-coral mb-6">
-            <Smartphone className="text-white" size={40} />
+            <Smartphone className="text-white" size={48} />
           </div>
         </motion.div>
 

@@ -6,7 +6,7 @@ import { differentiators } from '@/config/content';
 
 export function WhyAnticlockSection() {
   return (
-    <section className="py-24 bg-white">
+    <section className="py-16 md:py-24 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <motion.h2
@@ -32,7 +32,7 @@ export function WhyAnticlockSection() {
           </motion.p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
           {differentiators.map((item, index) => (
             <motion.div
               key={item.title}
@@ -40,16 +40,16 @@ export function WhyAnticlockSection() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: index * 0.1 }}
-              className="flex gap-4"
+              className="flex gap-3 md:gap-4"
             >
               <div className="flex-shrink-0">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-aqua to-aqua-deep flex items-center justify-center">
-                  <Check className="text-white" size={24} />
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-gradient-to-br from-aqua to-aqua-deep flex items-center justify-center">
+                  <Check className="text-white" size={20} />
                 </div>
               </div>
               <div>
-                <h3 className="text-xl font-bold mb-2 text-gray-900">{item.title}</h3>
-                <p className="text-gray-600 leading-relaxed">{item.description}</p>
+                <h3 className="text-lg md:text-xl font-bold mb-1 md:mb-2 text-gray-900">{item.title}</h3>
+                <p className="text-sm md:text-base text-gray-600 leading-relaxed">{item.description}</p>
               </div>
             </motion.div>
           ))}

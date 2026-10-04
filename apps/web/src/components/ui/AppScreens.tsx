@@ -53,7 +53,7 @@ export function HomeScreen() {
                   src={cat.image}
                   alt={cat.name}
                   fill
-                  sizes="80px"
+                  sizes="(max-width: 768px) 20vw, 80px"
                   className="object-cover"
                 />
               </div>
@@ -90,10 +90,6 @@ export function ClipsScreen() {
             <MapPin size={14} />
             <span>Mumbai</span>
           </div>
-          <div className="flex items-center gap-1">
-            <Users size={14} />
-            <span>2.4K</span>
-          </div>
         </div>
       </div>
       
@@ -103,19 +99,16 @@ export function ClipsScreen() {
           <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
             <Heart size={24} />
           </div>
-          <span className="text-xs">12K</span>
         </div>
         <div className="flex flex-col items-center gap-1">
           <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
             <MessageCircle size={24} />
           </div>
-          <span className="text-xs">432</span>
         </div>
         <div className="flex flex-col items-center gap-1">
           <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
             <Share2 size={24} />
           </div>
-          <span className="text-xs">Share</span>
         </div>
       </div>
     </div>
@@ -145,7 +138,7 @@ export function MarketplaceScreen() {
                   src={item.image}
                   alt={item.name}
                   fill
-                  sizes="150px"
+                  sizes="(max-width: 768px) 40vw, 150px"
                   className="object-cover"
                 />
               </div>
@@ -219,21 +212,20 @@ export function CommunityScreen() {
         <h2 className="text-lg font-bold mb-4 text-gray-900">Communities</h2>
         
         {[
-          { name: 'Morning Runners', members: '2.4K', trend: '+45' },
-          { name: 'Yoga Lovers', members: '5.1K', trend: '+123' },
-          { name: 'Fitness Challenge', members: '3.8K', trend: '+89' },
+          { name: 'Morning Runners' },
+          { name: 'Yoga Lovers' },
+          { name: 'Fitness Challenge' },
         ].map((community, i) => (
           <div key={i} className="bg-gray-50 rounded-xl p-4 mb-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-gradient-to-br from-aqua to-coral" />
               <div>
                 <h3 className="font-semibold text-gray-900">{community.name}</h3>
-                <p className="text-sm text-gray-600">{community.members} members</p>
+                <p className="text-sm text-gray-600">Active community</p>
               </div>
             </div>
             <div className="flex items-center gap-1 text-aqua text-sm font-semibold">
               <TrendingUp size={16} />
-              <span>{community.trend}</span>
             </div>
           </div>
         ))}
@@ -289,11 +281,11 @@ export function ProviderScreen() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-sm opacity-90 mb-1">Bookings</p>
-              <p className="text-3xl font-bold">24</p>
+              <p className="text-3xl font-bold">--</p>
             </div>
             <div>
               <p className="text-sm opacity-90 mb-1">Revenue</p>
-              <p className="text-3xl font-bold">₹12K</p>
+              <p className="text-3xl font-bold">--</p>
             </div>
           </div>
         </div>

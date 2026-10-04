@@ -109,7 +109,7 @@ export function HeroSection() {
             </motion.div>
           </div>
 
-          {/* Right side - Phone mockups */}
+          {/* Right side - Phone mockups (desktop) */}
           <div className="hidden lg:block relative h-[600px]">
             {/* Phone 1 - Home Screen (center) */}
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-64 z-20">
@@ -168,6 +168,21 @@ export function HeroSection() {
               >
                 <PhoneFrame delay={0.7} variant="tilted-right">
                   <MarketplaceScreen />
+                </PhoneFrame>
+              </motion.div>
+            </div>
+          </div>
+
+          {/* Mobile phone view */}
+          <div className="lg:hidden flex justify-center mt-8">
+            <div className="w-64">
+              <motion.div
+                initial={{ opacity: 0, y: 40 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, delay: 1 }}
+              >
+                <PhoneFrame delay={0}>
+                  <HomeScreen />
                 </PhoneFrame>
               </motion.div>
             </div>

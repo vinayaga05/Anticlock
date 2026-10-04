@@ -1,0 +1,28 @@
+services:
+  anticlock-web:
+    image: ghcr.io/vinayaga05/anticlock-web:latest
+    container_name: anticlock-web
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    networks:
+      - ${TRAEFIK_NETWORK:-traefik}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.anticlock-web.rule=Host(`${WEB_HOST:-site.anticlock.online}`)"
+      - "traefik.http.routers.anticlock-web.entrypoints=websecure"
+      - "traefik.http.routers.anticlock-web.tls=true"
+      - "traefik.http.routers.anticlock-web.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      - "traefik.http.services.anticlock-web.loadbalancer.server.port=3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik}

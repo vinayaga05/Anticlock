@@ -81,6 +81,7 @@ app.get('/health', async c =>
   }),
 );
 
+app.route('/', deepLinksRoutes);
 app.route('/auth', authRoutes);
 app.route('/v1/catalog', catalogRoutes);
 app.route('/v1/media', mediaPublicRoutes);

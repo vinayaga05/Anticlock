@@ -379,6 +379,258 @@ async function seed() {
   console.log(
     `Seeded ${catalog.trees.length} trees and ${catalog.categories.length} categories, including demo data.`,
   );
+
+  /** Seed demo courses */
+  const courseSeeds = [
+    {
+      slug: 'introduction-to-wellness',
+      name: 'Introduction to Wellness and Mindfulness',
+      shortDescription: 'Learn the fundamentals of wellness and mindfulness practices',
+      description:
+        'This comprehensive course covers the basics of wellness, meditation, and mindfulness techniques to improve your daily life. Perfect for beginners looking to start their wellness journey.',
+      difficulty: 'beginner',
+      durationHours: 8,
+      price: 4999,
+      compareAtPrice: 7999,
+      instructorName: 'Dr. Priya Sharma',
+      instructorBio:
+        'Dr. Priya Sharma is a certified wellness coach with over 15 years of experience in mindfulness and meditation practices.',
+      learningOutcomes: [
+        'Understand the principles of wellness',
+        'Practice basic meditation techniques',
+        'Develop a daily mindfulness routine',
+        'Manage stress effectively',
+      ],
+      prerequisites: ['None - suitable for beginners'],
+      status: 'published',
+      publishedAt: new Date(),
+      lessons: [
+        {
+          moduleNumber: 1,
+          moduleName: 'Introduction to Wellness',
+          lessonNumber: 1,
+          title: 'What is Wellness?',
+          description: 'Understanding the core concepts of wellness',
+          type: 'video',
+          durationMinutes: 20,
+          sortOrder: 1,
+          isFree: true,
+        },
+        {
+          moduleNumber: 1,
+          moduleName: 'Introduction to Wellness',
+          lessonNumber: 2,
+          title: 'The Mind-Body Connection',
+          description: 'Exploring how mental and physical health are interconnected',
+          type: 'article',
+          durationMinutes: 15,
+          sortOrder: 2,
+          isFree: true,
+        },
+        {
+          moduleNumber: 2,
+          moduleName: 'Meditation Basics',
+          lessonNumber: 1,
+          title: 'Breathing Techniques',
+          description: 'Learn fundamental breathing exercises for relaxation',
+          type: 'video',
+          durationMinutes: 25,
+          sortOrder: 3,
+          isFree: false,
+        },
+        {
+          moduleNumber: 2,
+          moduleName: 'Meditation Basics',
+          lessonNumber: 2,
+          title: 'Guided Meditation Practice',
+          description: 'Follow along with a guided meditation session',
+          type: 'video',
+          durationMinutes: 30,
+          sortOrder: 4,
+          isFree: false,
+        },
+        {
+          moduleNumber: 3,
+          moduleName: 'Daily Practice',
+          lessonNumber: 1,
+          title: 'Creating Your Wellness Routine',
+          description: 'Build a sustainable daily wellness practice',
+          type: 'article',
+          durationMinutes: 20,
+          sortOrder: 5,
+          isFree: false,
+        },
+      ],
+    },
+    {
+      slug: 'yoga-for-beginners',
+      name: 'Yoga for Beginners: Foundation Course',
+      shortDescription: 'Master the fundamentals of yoga practice',
+      description:
+        'Start your yoga journey with this beginner-friendly course. Learn essential poses, proper alignment, and breathing techniques in a supportive environment.',
+      difficulty: 'beginner',
+      durationHours: 12,
+      price: 5999,
+      compareAtPrice: 9999,
+      instructorName: 'Ravi Kumar',
+      instructorBio:
+        'Ravi Kumar is a certified yoga instructor with 10 years of teaching experience and expertise in Hatha and Vinyasa yoga.',
+      learningOutcomes: [
+        'Learn 20+ fundamental yoga poses',
+        'Understand proper alignment and form',
+        'Master breathing techniques (Pranayama)',
+        'Build strength and flexibility safely',
+      ],
+      prerequisites: ['No prior yoga experience required', 'Comfortable clothing and a yoga mat'],
+      status: 'published',
+      publishedAt: new Date(),
+      lessons: [
+        {
+          moduleNumber: 1,
+          moduleName: 'Yoga Foundations',
+          lessonNumber: 1,
+          title: 'Introduction to Yoga Philosophy',
+          type: 'video',
+          durationMinutes: 25,
+          sortOrder: 1,
+          isFree: true,
+        },
+        {
+          moduleNumber: 1,
+          moduleName: 'Yoga Foundations',
+          lessonNumber: 2,
+          title: 'Standing Poses',
+          type: 'video',
+          durationMinutes: 35,
+          sortOrder: 2,
+          isFree: false,
+        },
+        {
+          moduleNumber: 2,
+          moduleName: 'Building Strength',
+          lessonNumber: 1,
+          title: 'Core Strengthening Poses',
+          type: 'video',
+          durationMinutes: 30,
+          sortOrder: 3,
+          isFree: false,
+        },
+      ],
+    },
+    {
+      slug: 'advanced-nutrition-science',
+      name: 'Advanced Nutrition Science',
+      shortDescription: 'Deep dive into nutritional biochemistry and dietary strategies',
+      description:
+        'An advanced course exploring the science of nutrition, metabolism, and evidence-based dietary approaches for optimal health.',
+      difficulty: 'advanced',
+      durationHours: 20,
+      price: 12999,
+      compareAtPrice: 19999,
+      instructorName: 'Dr. Anjali Mehta',
+      instructorBio:
+        'Dr. Anjali Mehta holds a PhD in Nutritional Biochemistry and has published over 30 research papers in peer-reviewed journals.',
+      learningOutcomes: [
+        'Understand macronutrient metabolism',
+        'Evaluate nutrition research critically',
+        'Design evidence-based meal plans',
+        'Understand nutrient-gene interactions',
+      ],
+      prerequisites: [
+        'Basic understanding of biology and chemistry',
+        'Prior knowledge of nutrition fundamentals recommended',
+      ],
+      status: 'published',
+      publishedAt: new Date(),
+      lessons: [
+        {
+          moduleNumber: 1,
+          moduleName: 'Nutritional Biochemistry',
+          lessonNumber: 1,
+          title: 'Carbohydrate Metabolism',
+          type: 'video',
+          durationMinutes: 45,
+          sortOrder: 1,
+          isFree: true,
+        },
+        {
+          moduleNumber: 1,
+          moduleName: 'Nutritional Biochemistry',
+          lessonNumber: 2,
+          title: 'Protein Synthesis and Breakdown',
+          type: 'article',
+          durationMinutes: 40,
+          sortOrder: 2,
+          isFree: false,
+        },
+      ],
+    },
+  ];
+
+  for (const courseSeed of courseSeeds) {
+    const { lessons, ...courseData } = courseSeed;
+    
+    const [existingCourse] = await sql`
+      SELECT id FROM courses WHERE slug = ${courseData.slug}
+    `;
+
+    if (existingCourse) {
+      console.log(`Course "${courseData.name}" already exists, skipping...`);
+      continue;
+    }
+
+    const [course] = await sql`
+      INSERT INTO courses (
+        slug, name, short_description, description, difficulty, duration_hours,
+        price, compare_at_price, instructor_name, instructor_bio,
+        learning_outcomes, prerequisites, status, published_at
+      )
+      VALUES (
+        ${courseData.slug},
+        ${courseData.name},
+        ${courseData.shortDescription},
+        ${courseData.description},
+        ${courseData.difficulty},
+        ${courseData.durationHours},
+        ${courseData.price},
+        ${courseData.compareAtPrice ?? null},
+        ${courseData.instructorName},
+        ${courseData.instructorBio},
+        ${JSON.stringify(courseData.learningOutcomes)},
+        ${JSON.stringify(courseData.prerequisites)},
+        ${courseData.status},
+        ${courseData.publishedAt}
+      )
+      RETURNING id
+    `;
+
+    const courseId = course.id;
+
+    for (const lesson of lessons) {
+      await sql`
+        INSERT INTO course_lessons (
+          course_id, module_number, module_name, lesson_number, title,
+          description, type, duration_minutes, sort_order, is_free
+        )
+        VALUES (
+          ${courseId},
+          ${lesson.moduleNumber},
+          ${lesson.moduleName},
+          ${lesson.lessonNumber},
+          ${lesson.title},
+          ${lesson.description ?? null},
+          ${lesson.type},
+          ${lesson.durationMinutes},
+          ${lesson.sortOrder},
+          ${lesson.isFree}
+        )
+      `;
+    }
+
+    console.log(`Seeded course: ${courseData.name}`);
+  }
+
+  console.log('Seeding complete.');
   await sql.end({ timeout: 5 });
 }
 

@@ -14,6 +14,7 @@ import {
   type StoryTrayEntry,
   type UserStory,
 } from '@/shared/data/flash/storyTypes';
+import { isApiEnabled } from '@/shared/api/config';
 
 type PublishStoryInput = {
   type: StoryItem['type'];
@@ -29,6 +30,7 @@ type StoryState = {
   archive: StoryArchiveEntry[];
   trayVisibleCount: number;
 
+  setApiStories: (apiStories: UserStory[]) => void;
   getTrayEntries: () => StoryTrayEntry[];
   getAllTrayEntries: () => StoryTrayEntry[];
   hasMoreTrayStories: () => boolean;
@@ -84,6 +86,20 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   viewedByAuthor: { ...seedViewedStoryItems },
   archive: [],
   trayVisibleCount: STORY_TRAY_PAGE_SIZE,
+
+  setApiStories: (apiStories: UserStory[]) => {
+    if (!isApiEnabled) return;
+    set(state => {
+      const existingMap = new Map(state.stories.map(s => [s.authorId, s]));
+      const updatedStories = [...apiStories];
+      state.stories.forEach(story => {
+        if (!apiStories.find(s => s.authorId === story.authorId)) {
+          updatedStories.push(story);
+        }
+      });
+      return { stories: updatedStories };
+    });
+  },
 
   getTrayEntries: () => {
     get().pruneExpired();

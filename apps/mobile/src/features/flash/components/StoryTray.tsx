@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -12,6 +12,8 @@ import { useTheme } from '@/shared/hooks/useTheme';
 import { StoryRing } from '@/features/flash/components/StoryRing';
 import { useStoryStore } from '@/shared/data/flash/storyStore';
 import { RootStackParamList } from '@/shared/navigation/types';
+import { useStoriesQuery } from '@/shared/api/storyHooks';
+import { isApiEnabled } from '@/shared/api/config';
 
 const LOAD_THRESHOLD = 56;
 
@@ -25,7 +27,15 @@ export function StoryTray() {
   const getTrayEntries = useStoryStore(s => s.getTrayEntries);
   const loadMoreTrayStories = useStoryStore(s => s.loadMoreTrayStories);
   const hasMoreTrayStories = useStoryStore(s => s.hasMoreTrayStories);
+  const setApiStories = useStoryStore(s => s.setApiStories);
   const loadingMoreRef = useRef(false);
+  const { data: apiStories } = useStoriesQuery();
+
+  useEffect(() => {
+    if (isApiEnabled && apiStories && apiStories.length > 0) {
+      setApiStories(apiStories);
+    }
+  }, [apiStories, setApiStories]);
 
   const entries = useMemo(
     () => getTrayEntries(),

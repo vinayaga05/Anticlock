@@ -7,9 +7,10 @@ services:
       - NODE_ENV=production
       - PORT=3000
     networks:
-      - ${TRAEFIK_NETWORK:-traefik}
+      - ${TRAEFIK_NETWORK:-anticlock_edge}
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-anticlock_edge}"
       - "traefik.http.routers.anticlock-web.rule=Host(`${WEB_HOST:-site.anticlock.online}`)"
       - "traefik.http.routers.anticlock-web.entrypoints=websecure"
       - "traefik.http.routers.anticlock-web.tls=true"
@@ -23,6 +24,6 @@ services:
       start_period: 10s
 
 networks:
-  traefik:
+  anticlock_edge:
     external: true
-    name: ${TRAEFIK_NETWORK:-traefik}
+    name: ${TRAEFIK_NETWORK:-anticlock_edge}

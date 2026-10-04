@@ -229,6 +229,7 @@ curl https://site.anticlock.online/api/health
 - [ ] Confirm VPS IP address
 - [ ] Confirm Traefik network name: `docker network ls`
 - [ ] Confirm Traefik cert resolver name (check Traefik config)
+- [ ] **IMPORTANT**: Ensure GHCR package is public, or authenticate with `docker login ghcr.io` using a Personal Access Token with `read:packages` scope
 - [ ] Create DNS A record: `site.anticlock.online` → VPS IP
 - [ ] Wait for DNS propagation (5-15 minutes)
 - [ ] Verify DNS: `dig site.anticlock.online`
@@ -374,10 +375,14 @@ docker logs traefik
 
 ### Pull Image Authentication Error
 
+**Note**: The GitHub Container Registry (GHCR) package must be set to **public visibility** in the GitHub repository package settings, OR the VPS must authenticate with a Personal Access Token that has the `read:packages` scope.
+
 ```bash
 # If image is private, authenticate first:
 echo YOUR_GITHUB_TOKEN | docker login ghcr.io -u YOUR_USERNAME --password-stdin
 ```
+
+To make the package public: Go to the repository on GitHub → Packages → anticlock-web → Package settings → Change visibility to Public.
 
 ---
 

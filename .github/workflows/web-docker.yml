@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - cursor/marketing-website-d56f
     paths:
       - 'apps/web/**'
       - 'packages/tsconfig/**'
@@ -42,7 +43,8 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix={{branch}}-
+            type=sha,prefix={{branch}}-,enable={{is_default_branch}}
+            type=sha,suffix=-preview,enable=${{ github.ref != 'refs/heads/main' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6

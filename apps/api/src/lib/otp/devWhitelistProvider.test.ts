@@ -10,76 +10,47 @@ describe('DevWhitelistOtpProvider', () => {
     provider = new DevWhitelistOtpProvider();
   });
 
-  describe('test accounts', () => {
-    it('accepts test account and returns requestId', async () => {
-      const result = await provider.sendOtp('+919876543210');
-      assert.ok(result.requestId);
-      assert.equal(result.expiresInSeconds, 600);
-    });
-
-    it('accepts test account OTP 123456 when enabled', async () => {
-      delete process.env.TEST_LOGIN_DISABLED;
-      const { requestId } = await provider.sendOtp('+919876543210');
-      const verified = await provider.verifyOtp('+919876543210', '123456', requestId);
+  describe('dev whitelist', () => {
+    it('accepts dev whitelist number +918888888888', async () => {
+      const { requestId } = await provider.sendOtp('+918888888888');
+      const verified = await provider.verifyOtp('+918888888888', '123456', requestId);
       assert.equal(verified, true);
     });
 
-    it('rejects wrong OTP for test account', async () => {
-      delete process.env.TEST_LOGIN_DISABLED;
-      const { requestId } = await provider.sendOtp('+919876543211');
-      const verified = await provider.verifyOtp('+919876543211', '999999', requestId);
-      assert.equal(verified, false);
+    it('accepts dev whitelist number +919999999999', async () => {
+      const { requestId } = await provider.sendOtp('+919999999999');
+      const verified = await provider.verifyOtp('+919999999999', '123456', requestId);
+      assert.equal(verified, true);
     });
 
-    it('rejects test account when TEST_LOGIN_DISABLED=true', async () => {
-      process.env.TEST_LOGIN_DISABLED = 'true';
+    it('rejects non-whitelisted number', async () => {
       await assert.rejects(
-        async () => provider.sendOtp('+919876543210'),
+        async () => provider.sendOtp('+911234567890'),
         (err: Error) => {
           assert.ok(err instanceof OtpError);
           assert.equal((err as OtpError).code, 'phone_not_allowed');
           return true;
         },
       );
-      delete process.env.TEST_LOGIN_DISABLED;
     });
 
-    it('all 5 test accounts work', async () => {
-      delete process.env.TEST_LOGIN_DISABLED;
-      const testNumbers = [
-        '+919876543210',
-        '+919876543211',
-        '+919876543212',
-        '+919876543213',
-        '+919999999999',
-      ];
-
-      for (const phone of testNumbers) {
-        const { requestId } = await provider.sendOtp(phone);
-        const verified = await provider.verifyOtp(phone, '123456', requestId);
-        assert.equal(verified, true, `Test account ${phone} should verify`);
-      }
-    });
-  });
-
-  describe('dev whitelist', () => {
-    it('accepts dev whitelist number in non-production', async () => {
+    it('rejects wrong OTP for whitelisted number', async () => {
       const { requestId } = await provider.sendOtp('+918888888888');
-      const verified = await provider.verifyOtp('+918888888888', '123456', requestId);
-      assert.equal(verified, true);
+      const verified = await provider.verifyOtp('+918888888888', '999999', requestId);
+      assert.equal(verified, false);
     });
   });
 
   describe('rate limiting', () => {
     it('allows up to 3 send requests per minute', async () => {
-      const phone = '+919876543210';
+      const phone = '+918888888888';
       await provider.sendOtp(phone);
       await provider.sendOtp(phone);
       await provider.sendOtp(phone);
     });
 
     it('rejects 4th send request within a minute', async () => {
-      const phone = '+919876543211';
+      const phone = '+919999999999';
       await provider.sendOtp(phone);
       await provider.sendOtp(phone);
       await provider.sendOtp(phone);
@@ -97,7 +68,7 @@ describe('DevWhitelistOtpProvider', () => {
 
   describe('attempt limits', () => {
     it('allows up to 5 verification attempts', async () => {
-      const phone = '+919876543212';
+      const phone = '+918888888888';
       const { requestId } = await provider.sendOtp(phone);
 
       for (let i = 0; i < 5; i++) {
@@ -107,7 +78,7 @@ describe('DevWhitelistOtpProvider', () => {
     });
 
     it('throws error on 6th failed verification attempt', async () => {
-      const phone = '+919876543213';
+      const phone = '+919999999999';
       const { requestId } = await provider.sendOtp(phone);
 
       for (let i = 0; i < 5; i++) {
@@ -125,7 +96,7 @@ describe('DevWhitelistOtpProvider', () => {
     });
 
     it('successful verification consumes the challenge', async () => {
-      const phone = '+919999999999';
+      const phone = '+918888888888';
       const { requestId } = await provider.sendOtp(phone);
       
       const verified = await provider.verifyOtp(phone, '123456', requestId);
@@ -138,25 +109,21 @@ describe('DevWhitelistOtpProvider', () => {
 
   describe('phone normalization', () => {
     it('normalizes 10-digit number to +91 format', async () => {
-      const { requestId } = await provider.sendOtp('9876543210');
-      const verified = await provider.verifyOtp('9876543210', '123456', requestId);
+      const { requestId } = await provider.sendOtp('8888888888');
+      const verified = await provider.verifyOtp('8888888888', '123456', requestId);
       assert.equal(verified, true);
     });
 
     it('accepts already normalized +91 format', async () => {
-      const { requestId } = await provider.sendOtp('+919876543210');
-      const verified = await provider.verifyOtp('+919876543210', '123456', requestId);
+      const { requestId } = await provider.sendOtp('+918888888888');
+      const verified = await provider.verifyOtp('+918888888888', '123456', requestId);
       assert.equal(verified, true);
     });
   });
 
   describe('expiry', () => {
-    it('rejects expired requestId', async () => {
-      const phone = '+919876543210';
-      const { requestId } = await provider.sendOtp(phone);
-      
-      // This test would need to mock time or wait 10 minutes
-      // For now, just verify the behavior with a non-existent requestId
+    it('rejects expired or non-existent requestId', async () => {
+      const phone = '+918888888888';
       const verified = await provider.verifyOtp(phone, '123456', 'non-existent-id');
       assert.equal(verified, false);
     });

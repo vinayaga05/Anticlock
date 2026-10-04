@@ -193,8 +193,12 @@ authRoutes.post('/mobile/otp/send', async c => {
     return c.json(result);
   } catch (err) {
     if (err instanceof OtpError) {
-      const status = err.code === 'invalid_phone' ? 400 : 403;
-      return c.json({ error: { code: err.code, message: err.message } }, status);
+      const statusCode = 
+        err.code === 'rate_limit_exceeded' ? 429 :
+        err.code === 'invalid_phone' ? 400 :
+        err.code === 'phone_not_allowed' ? 403 :
+        503;
+      return c.json({ error: { code: err.code, message: err.message } }, statusCode);
     }
     throw err;
   }

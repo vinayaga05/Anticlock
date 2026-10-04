@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { OtpError, type OtpProvider, type OtpSendResult, normalizePhone } from './types.js';
-import { isTestAccount, TEST_LOGIN_OTP } from './testLogin.js';
 
 const DEV_OTP_WHITELIST: Record<string, string> = {
   '+919999999999': '123456',
@@ -28,10 +27,10 @@ const challenges = new Map<string, Challenge>();
 const sendRateLimits = new Map<string, RateLimitEntry>();
 
 /**
- * Fixed OTP whitelist for staging / pre-MSG91 production.
- * Selected only when OTP_DEV_WHITELIST=true (or NODE_ENV !== production).
+ * Fixed OTP whitelist for development / staging / pre-MSG91 environments.
+ * Selected only when OTP_DEV_WHITELIST=true or NODE_ENV !== 'production'.
  * 
- * Also handles test login accounts (see testLogin.ts) regardless of environment.
+ * These numbers (+919999999999, +918888888888) are NOT valid in production.
  */
 export class DevWhitelistOtpProvider implements OtpProvider {
   private checkSendRateLimit(phone: string): void {
@@ -59,13 +58,10 @@ export class DevWhitelistOtpProvider implements OtpProvider {
   async sendOtp(rawPhone: string): Promise<OtpSendResult> {
     const phone = normalizePhone(rawPhone);
     
-    // Rate limiting applies to all numbers (including test accounts)
+    // Rate limiting applies to all numbers
     this.checkSendRateLimit(phone);
 
-    // Check if this is a test account (enabled in production by default)
-    const isTest = isTestAccount(phone);
-    const code = isTest ? TEST_LOGIN_OTP : DEV_OTP_WHITELIST[phone];
-
+    const code = DEV_OTP_WHITELIST[phone];
     if (!code) {
       throw new OtpError(
         'phone_not_allowed',
@@ -81,11 +77,7 @@ export class DevWhitelistOtpProvider implements OtpProvider {
       attempts: 0,
     });
 
-    if (isTest) {
-      console.log(`[test-login] ${phone} → ${code} (requestId=${requestId})`);
-    } else {
-      console.log(`[dev-otp] ${phone} → ${code} (requestId=${requestId})`);
-    }
+    console.log(`[dev-otp] ${phone} → ${code} (requestId=${requestId})`);
 
     return { requestId, expiresInSeconds: CHALLENGE_TTL_MS / 1000 };
   }

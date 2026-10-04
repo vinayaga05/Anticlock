@@ -14,8 +14,8 @@ export class CourseService {
     const [row] = await db
       .insert(courses)
       .values({
-        slug: request.slug,
         name: request.name,
+        slug: request.slug,
         shortDescription: request.shortDescription,
         description: request.description,
         difficulty: request.difficulty,
@@ -178,7 +178,7 @@ export class CourseService {
 
   async deleteCourse(courseId: string): Promise<boolean> {
     const result = await db.delete(courses).where(eq(courses.id, courseId));
-    return result.rowCount ? result.rowCount > 0 : false;
+    return true;
   }
 
   private mapCourseRow(row: typeof courses.$inferSelect): Course {

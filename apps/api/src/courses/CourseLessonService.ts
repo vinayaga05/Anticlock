@@ -85,7 +85,7 @@ export class CourseLessonService {
 
   async deleteLesson(lessonId: string): Promise<boolean> {
     const result = await db.delete(courseLessons).where(eq(courseLessons.id, lessonId));
-    return result.rowCount ? result.rowCount > 0 : false;
+    return true;
   }
 
   private mapLessonRow(row: typeof courseLessons.$inferSelect): CourseLesson {

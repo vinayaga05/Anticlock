@@ -104,9 +104,12 @@ This document lists all environment variables used across the Anticlock monorepo
 | Variable | Required | Sensitive | Description | Example |
 |----------|----------|-----------|-------------|---------|
 | `OTP_DEV_WHITELIST` | Optional | No | Enable dev OTP whitelist (auto-true in dev) | `true` |
+| `TEST_LOGIN_DISABLED` | Optional (**TEMPORARY**) | No | Disable test login bypass (default: test login enabled) | `true` |
 | `MSG91_AUTH_KEY` | Required for SMS | **Yes** | MSG91 authentication key for SMS OTP | `your-msg91-key` |
 
 **Note:** In development, a whitelist OTP provider is used automatically. Configure MSG91 for production SMS delivery.
+
+**⚠️ TEMPORARY - TEST_LOGIN_DISABLED:** Test login (from PR #10, `apps/api/src/lib/otp/testLogin.ts`) is a development/staging bypass that is **enabled by default**. Set `TEST_LOGIN_DISABLED=true` to disable it before public launch, then delete `testLogin.ts` and its wrapper from the codebase.
 
 ### KYC Encryption
 
@@ -323,7 +326,7 @@ Before deploying to production, review and complete:
 - [ ] **JWT_SECRET:** Generate a new, strong secret (min 32 chars). Do not reuse dev credentials.
 - [ ] **DATABASE_URL:** Use a strong database password. Do not use default `anticlock:anticlock`.
 - [ ] **KYC_ENCRYPTION_KEY:** Generate a strong random encryption key. Store securely.
-- [ ] **Disable demo login:** Ensure `TEST_LOGIN_DISABLED=true` or remove demo login code in `apps/api/src/routes/auth.ts` if present.
+- [ ] **Disable test login:** Before public launch, set `TEST_LOGIN_DISABLED=true` (then delete `testLogin.ts` and its wrapper from the codebase).
 - [ ] **Disable demo seed data:** Set `SEED_DEMO_DATA=false` in production.
 - [ ] **Initial admin password:** Change `INITIAL_ADMIN_PASSWORD` to a strong value before first deploy.
 - [ ] **Review CORS origins:** Ensure `ADMIN_ORIGIN` and `API_PUBLIC_URL` are correct.

@@ -77,7 +77,7 @@ export const features: Feature[] = [
   {
     id: 'flash',
     name: 'Flash',
-    description: 'Ephemeral stories that disappear after 24 hours. Share moments and discover what's happening now.',
+    description: 'Ephemeral stories that disappear after 24 hours. Share moments and discover what\'s happening now.',
     icon: 'zap',
     category: 'social',
   },

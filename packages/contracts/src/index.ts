@@ -7,4 +7,4 @@ export * from './provider.js';
 export * from './assistant.js';
 export * from './interests.js';
 export * from './publishing.js';
-export * from './messages.js';
+export * from './stream-chat.js';

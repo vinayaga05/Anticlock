@@ -23,6 +23,7 @@ import { interestRoutes } from './routes/interests.js';
 import { contentMobileRoutes, contentPublicRoutes } from './routes/content.js';
 import { profileBlockRoutes } from './routes/blocks.js';
 import { contentSafetyRoutes } from './routes/contentSafety.js';
+import { messagesRoutes } from './routes/messages.js';
 import { startAssistantLifecycleJob } from './assistant/PrivacyService.js';
 import { redisHealthCheck } from './lib/redis.js';
 import {
@@ -91,6 +92,7 @@ app.route('/v1/content', contentMobileRoutes);
 app.route('/v1/content', contentPublicRoutes);
 app.route('/v1/content', contentSafetyRoutes);
 app.route('/v1/blocks', profileBlockRoutes);
+app.route('/v1/messages', messagesRoutes);
 app.route('/admin', adminRoutes);
 app.route('/admin/provider', providerAdminRoutes);
 app.route('/admin/media', mediaAdminRoutes);

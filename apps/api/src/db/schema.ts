@@ -1067,3 +1067,78 @@ export const orders = pgTable(
     index("orders_number_idx").on(table.orderNumber),
   ]
 );
+
+/** Trips and Trip Bookings tables - append-only block to minimize merge conflicts */
+export const trips = pgTable(
+  "trips",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description").notNull(),
+    destination: text("destination").notNull(),
+    durationDays: integer("duration_days").notNull(),
+    basePrice: integer("base_price").notNull(),
+    maxGroupSize: integer("max_group_size").notNull(),
+    itinerary: jsonb("itinerary").$type<unknown[]>().notNull(),
+    inclusions: jsonb("inclusions").$type<string[]>().notNull().default([]),
+    exclusions: jsonb("exclusions").$type<string[]>().notNull().default([]),
+    difficulty: text("difficulty").notNull(),
+    imageIds: jsonb("image_ids").$type<string[]>().notNull().default([]),
+    status: text("status").notNull().default("draft"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("trips_slug_uidx").on(table.slug),
+    index("trips_destination_status_idx").on(table.destination, table.status),
+    index("trips_status_created_idx").on(table.status, table.createdAt),
+  ]
+);
+
+export const tripBookings = pgTable(
+  "trip_bookings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    bookingNumber: text("booking_number").notNull().unique(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    startDate: timestamp("start_date", { withTimezone: true }).notNull(),
+    numberOfTravelers: integer("number_of_travelers").notNull(),
+    totalPrice: integer("total_price").notNull(),
+    status: text("status").notNull().default("pending"),
+    paymentStatus: text("payment_status").notNull().default("pending"),
+    travelerDetails: jsonb("traveler_details").$type<unknown[]>().notNull(),
+    specialRequests: text("special_requests"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("trip_bookings_trip_start_idx").on(table.tripId, table.startDate),
+    index("trip_bookings_user_created_idx").on(
+      table.mobileUserId,
+      table.createdAt
+    ),
+    index("trip_bookings_status_created_idx").on(
+      table.status,
+      table.createdAt
+    ),
+    index("trip_bookings_number_idx").on(table.bookingNumber),
+  ]
+);

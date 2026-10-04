@@ -24,6 +24,7 @@ import {
   mobileUsers,
   productCategories,
   products,
+  trips,
 } from '../db/schema.js';
 import catalog from './catalog.json' with { type: 'json' };
 import {
@@ -480,6 +481,164 @@ async function seed() {
 
   for (const product of shopProductSeeds) {
     await db.insert(products).values(product).onConflictDoNothing();
+  }
+
+  // Seed trips
+  const tripSeeds = [
+    {
+      name: 'Yercaud Weekend Adventure',
+      slug: 'yercaud-weekend-adventure',
+      description:
+        'Escape to the scenic hills of Yercaud for a refreshing weekend getaway. Experience misty mornings, serene lakes, and lush coffee plantations in this charming hill station of Tamil Nadu.',
+      destination: 'Yercaud, Tamil Nadu',
+      durationDays: 2,
+      basePrice: 4999,
+      maxGroupSize: 20,
+      itinerary: [
+        {
+          day: 1,
+          title: 'Arrival and Lake Tour',
+          description:
+            'Arrive in Yercaud and check into your comfortable accommodation',
+          activities: [
+            'Visit Yercaud Lake and enjoy a boat ride',
+            'Explore Lady\'s Seat viewpoint for panoramic valley views',
+            'Evening bonfire and group activities',
+          ],
+          meals: ['Lunch', 'Dinner'],
+        },
+        {
+          day: 2,
+          title: 'Coffee Estate and Departure',
+          description: 'Explore the famous coffee plantations and natural beauty',
+          activities: [
+            'Guided tour of coffee plantation',
+            'Visit Killiyur Falls (seasonal)',
+            'Shopping at local markets',
+            'Departure by evening',
+          ],
+          meals: ['Breakfast', 'Lunch'],
+        },
+      ],
+      inclusions: [
+        'Accommodation for 1 night',
+        'All meals as per itinerary',
+        'Transportation in AC vehicle',
+        'Experienced tour guide',
+        'Entry fees to viewpoints',
+      ],
+      exclusions: [
+        'Personal expenses',
+        'Adventure activities (optional)',
+        'Travel insurance',
+      ],
+      difficulty: 'easy',
+      status: 'published',
+    },
+    {
+      name: 'Mahabalipuram Heritage Tour',
+      slug: 'mahabalipuram-heritage-tour',
+      description:
+        'Discover the ancient rock-cut temples and UNESCO World Heritage sites of Mahabalipuram. A perfect blend of history, culture, and coastal beauty.',
+      destination: 'Mahabalipuram, Tamil Nadu',
+      durationDays: 1,
+      basePrice: 1999,
+      maxGroupSize: 25,
+      itinerary: [
+        {
+          day: 1,
+          title: 'Heritage Sites Tour',
+          description: 'Full day exploration of ancient monuments and beach',
+          activities: [
+            'Visit Shore Temple at sunrise',
+            'Explore Arjuna\'s Penance and Krishna\'s Butter Ball',
+            'Tour the Five Rathas (Pancha Rathas)',
+            'Relax at Mahabalipuram Beach',
+            'Visit local handicraft stores',
+          ],
+          meals: ['Breakfast', 'Lunch'],
+        },
+      ],
+      inclusions: [
+        'AC transportation from Chennai',
+        'Professional heritage guide',
+        'All entry fees',
+        'Breakfast and lunch',
+        'Bottled water',
+      ],
+      exclusions: ['Dinner', 'Shopping expenses', 'Tips for guide'],
+      difficulty: 'easy',
+      status: 'published',
+    },
+    {
+      name: 'Kodaikanal Nature Retreat',
+      slug: 'kodaikanal-nature-retreat',
+      description:
+        'Immerse yourself in the pristine beauty of Kodaikanal, the "Princess of Hill Stations". Trek through pine forests, visit stunning viewpoints, and experience the tranquility of hill country.',
+      destination: 'Kodaikanal, Tamil Nadu',
+      durationDays: 3,
+      basePrice: 8999,
+      maxGroupSize: 15,
+      itinerary: [
+        {
+          day: 1,
+          title: 'Arrival and Lake Exploration',
+          description: 'Settle in and explore the famous Kodaikanal Lake area',
+          activities: [
+            'Check-in and welcome refreshments',
+            'Evening walk around Kodaikanal Lake',
+            'Visit Bryant Park',
+            'Shopping at local markets',
+          ],
+          meals: ['Dinner'],
+        },
+        {
+          day: 2,
+          title: 'Viewpoints and Waterfalls',
+          description: 'Full day tour of scenic viewpoints and natural wonders',
+          activities: [
+            'Coaker\'s Walk at sunrise',
+            'Trek to Dolphin\'s Nose',
+            'Visit Pillar Rocks',
+            'Explore Bear Shola Falls',
+            'Evening bonfire at hotel',
+          ],
+          meals: ['Breakfast', 'Lunch', 'Dinner'],
+        },
+        {
+          day: 3,
+          title: 'Pine Forest Trek and Departure',
+          description: 'Morning nature walk and departure',
+          activities: [
+            'Guided trek through Pine Forest',
+            'Visit Guna Caves (Devil\'s Kitchen)',
+            'Last minute shopping',
+            'Departure by afternoon',
+          ],
+          meals: ['Breakfast', 'Lunch'],
+        },
+      ],
+      inclusions: [
+        'Accommodation for 2 nights',
+        'All meals as per itinerary',
+        'AC transportation',
+        'Experienced trekking guide',
+        'Entry fees to all attractions',
+        'First aid kit',
+      ],
+      exclusions: [
+        'Adventure activities (rock climbing, etc.)',
+        'Personal expenses',
+        'Camera fees at monuments',
+        'Travel insurance',
+      ],
+      difficulty: 'moderate',
+      status: 'published',
+    },
+  ];
+
+  for (const trip of tripSeeds) {
+    await db.insert(trips).values(trip).onConflictDoNothing();
   }
 
   console.log(

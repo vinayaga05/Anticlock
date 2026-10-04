@@ -1018,6 +1018,80 @@ async function migrate() {
       ON orders (order_number)
   `;
 
+  /** Trips and Trip Bookings migration - append-only block to minimize merge conflicts */
+  await sql`
+    CREATE TABLE IF NOT EXISTS trips (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      name text NOT NULL,
+      slug text NOT NULL,
+      description text NOT NULL,
+      destination text NOT NULL,
+      duration_days integer NOT NULL,
+      base_price integer NOT NULL,
+      max_group_size integer NOT NULL,
+      itinerary jsonb NOT NULL,
+      inclusions jsonb NOT NULL DEFAULT '[]'::jsonb,
+      exclusions jsonb NOT NULL DEFAULT '[]'::jsonb,
+      difficulty text NOT NULL,
+      image_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+      status text NOT NULL DEFAULT 'draft',
+      metadata jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS trips_slug_uidx
+      ON trips (slug)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS trips_destination_status_idx
+      ON trips (destination, status)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS trips_status_created_idx
+      ON trips (status, created_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS trip_bookings (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      booking_number text NOT NULL UNIQUE,
+      trip_id uuid NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      start_date timestamptz NOT NULL,
+      number_of_travelers integer NOT NULL,
+      total_price integer NOT NULL,
+      status text NOT NULL DEFAULT 'pending',
+      payment_status text NOT NULL DEFAULT 'pending',
+      traveler_details jsonb NOT NULL,
+      special_requests text,
+      metadata jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      cancelled_at timestamptz,
+      completed_at timestamptz
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS trip_bookings_trip_start_idx
+      ON trip_bookings (trip_id, start_date)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS trip_bookings_user_created_idx
+      ON trip_bookings (mobile_user_id, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS trip_bookings_status_created_idx
+      ON trip_bookings (status, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS trip_bookings_number_idx
+      ON trip_bookings (booking_number)
+  `;
+
   console.log("Migrations applied.");
   await sql.end({ timeout: 5 });
 }

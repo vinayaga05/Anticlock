@@ -131,6 +131,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/commerce', label: 'Commerce', permission: 'orders.manage' },
   { href: '/operations', label: 'Operations', permission: 'bookings.manage' },
   { href: '/community', label: 'Community', permission: 'moderation.act' },
+  { href: '/moderation', label: 'Moderation', permission: 'moderation.act' },
   { href: '/settings', label: 'Settings', permission: 'settings.write' },
 ];
 

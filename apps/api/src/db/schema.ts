@@ -713,9 +713,15 @@ export const contentPostReports = pgTable(
     reason: text("reason").notNull(),
     details: text("details"),
     status: text("status").notNull().default("open"),
+    resolutionAction: text("resolution_action"),
+    resolutionNote: text("resolution_note"),
+    resolvedBy: uuid("resolved_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
   },
   (table) => [
     unique("content_post_reports_reporter_uid").on(

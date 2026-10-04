@@ -20,8 +20,13 @@ export class OrderService {
     mobileUserId: string,
     request: CreateOrderRequest,
   ): Promise<Order> {
-    const orderItems: OrderItem[] = [];
+    let orderItems: OrderItem[] = [];
     let subtotal = 0;
+    let shipping = 0;
+    let tax = 0;
+    let total = 0;
+    let orderNumber = '';
+    let orderId = '';
 
     await db.transaction(async (tx) => {
       for (const cartItem of request.items) {
@@ -51,7 +56,7 @@ export class OrderService {
           );
         }
 
-        await productService.decrementInventory(cartItem.productId, cartItem.quantity);
+        await productService.decrementInventory(cartItem.productId, cartItem.quantity, tx as any);
 
         const itemTotal = product.price * cartItem.quantity;
         subtotal += itemTotal;
@@ -65,32 +70,39 @@ export class OrderService {
           imageUrl: product.images[0]?.url,
         });
       }
+
+      shipping = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : FLAT_SHIPPING_RATE;
+      tax = Math.round(subtotal * TAX_RATE);
+      total = subtotal + shipping + tax;
+
+      orderNumber = this.generateOrderNumber();
+
+      const [row] = await tx
+        .insert(orders)
+        .values({
+          orderNumber,
+          mobileUserId,
+          items: orderItems as unknown as Record<string, unknown>[],
+          subtotal,
+          shipping,
+          tax,
+          total,
+          shippingAddress: request.shippingAddress as Record<string, unknown>,
+          status: 'pending',
+          paymentStatus: 'pending',
+          metadata: request.metadata ?? null,
+        })
+        .returning();
+
+      orderId = row!.id;
     });
 
-    const shipping = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : FLAT_SHIPPING_RATE;
-    const tax = Math.round(subtotal * TAX_RATE);
-    const total = subtotal + shipping + tax;
+    const [order] = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.id, orderId));
 
-    const orderNumber = this.generateOrderNumber();
-
-    const [row] = await db
-      .insert(orders)
-      .values({
-        orderNumber,
-        mobileUserId,
-        items: orderItems as unknown as Record<string, unknown>[],
-        subtotal,
-        shipping,
-        tax,
-        total,
-        shippingAddress: request.shippingAddress as Record<string, unknown>,
-        status: 'pending',
-        paymentStatus: 'pending',
-        metadata: request.metadata ?? null,
-      })
-      .returning();
-
-    return this.mapOrderRow(row!);
+    return this.mapOrderRow(order!);
   }
 
   async getOrder(orderId: string, mobileUserId: string): Promise<Order | null> {

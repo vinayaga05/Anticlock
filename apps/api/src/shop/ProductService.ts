@@ -208,8 +208,14 @@ export class ProductService {
     await db.delete(products).where(eq(products.id, productId));
   }
 
-  async decrementInventory(productId: string, quantity: number): Promise<void> {
-    const [product] = await db
+  async decrementInventory(
+    productId: string,
+    quantity: number,
+    tx?: typeof db,
+  ): Promise<void> {
+    const dbInstance = tx ?? db;
+
+    const [product] = await dbInstance
       .select({ inventory: products.inventory })
       .from(products)
       .where(eq(products.id, productId));
@@ -228,7 +234,7 @@ export class ProductService {
       });
     }
 
-    await db
+    await dbInstance
       .update(products)
       .set({ inventory: product.inventory - quantity })
       .where(eq(products.id, productId));

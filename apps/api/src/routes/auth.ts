@@ -242,7 +242,12 @@ authRoutes.post('/mobile/otp/verify', async c => {
     return c.json(session);
   } catch (err) {
     if (err instanceof OtpError) {
-      return c.json({ error: { code: err.code, message: err.message } }, 503);
+      const statusCode = 
+        err.code === 'max_attempts_exceeded' ? 429 :
+        err.code === 'rate_limit_exceeded' ? 429 :
+        err.code === 'invalid_phone' ? 400 :
+        503;
+      return c.json({ error: { code: err.code, message: err.message } }, statusCode);
     }
     throw err;
   }

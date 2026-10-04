@@ -1024,3 +1024,108 @@ export const bookings = pgTable(
     index("bookings_status_starts_idx").on(table.status, table.startsAt),
   ]
 );
+
+/** Product categories for shop */
+export const productCategories = pgTable(
+  "product_categories",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull().unique(),
+    description: text("description"),
+    imageUrl: text("image_url"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    status: text("status").notNull().default("published"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("product_categories_status_sort_idx").on(table.status, table.sortOrder)]
+);
+
+/** Products for shop */
+export const products = pgTable(
+  "products",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    categoryId: uuid("category_id")
+      .notNull()
+      .references(() => productCategories.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull().unique(),
+    name: text("name").notNull(),
+    description: text("description"),
+    price: integer("price").notNull(),
+    compareAtPrice: integer("compare_at_price"),
+    inventory: integer("inventory").notNull().default(0),
+    status: text("status").notNull().default("draft"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("products_category_status_idx").on(table.categoryId, table.status),
+    index("products_slug_idx").on(table.slug),
+  ]
+);
+
+/** Product images linking to media assets */
+export const productImages = pgTable(
+  "product_images",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    mediaAssetId: uuid("media_asset_id")
+      .notNull()
+      .references(() => mediaAssets.id, { onDelete: "cascade" }),
+    alt: text("alt"),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => [
+    index("product_images_product_idx").on(table.productId, table.sortOrder),
+  ]
+);
+
+/** Orders table for shop checkout and fulfillment */
+export const orders = pgTable(
+  "orders",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orderNumber: text("order_number").notNull().unique(),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    items: jsonb("items").$type<Record<string, unknown>[]>().notNull(),
+    subtotal: integer("subtotal").notNull(),
+    shipping: integer("shipping").notNull(),
+    tax: integer("tax").notNull(),
+    total: integer("total").notNull(),
+    shippingAddress: jsonb("shipping_address")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    status: text("status").notNull().default("pending"),
+    paymentStatus: text("payment_status").notNull().default("pending"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("orders_user_created_idx").on(table.mobileUserId, table.createdAt),
+    index("orders_status_created_idx").on(table.status, table.createdAt),
+    index("orders_number_idx").on(table.orderNumber),
+  ]
+);

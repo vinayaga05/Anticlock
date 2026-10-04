@@ -21,6 +21,8 @@ import {
   users,
   mediaAssets,
   reels,
+  mobileUsers,
+  bookings,
 } from '../db/schema.js';
 import catalog from './catalog.json' with { type: 'json' };
 import {
@@ -373,6 +375,87 @@ async function seed() {
         createdBy: adminId,
         publishedAt: new Date(),
       });
+    }
+  }
+
+  // Seed demo bookings if mobile users exist
+  const [demoMobileUser] = await db
+    .select()
+    .from(mobileUsers)
+    .limit(1);
+
+  if (demoMobileUser) {
+    const now = new Date();
+    const bookingSeeds = [
+      {
+        mobileUserId: demoMobileUser.id,
+        category: 'appointment',
+        status: 'confirmed',
+        serviceMode: 'online',
+        startsAt: new Date(now.getTime() + 3 * 60 * 60 * 1000), // 3 hours from now
+        durationMinutes: 30,
+        amount: 500,
+        paymentStatus: 'paid',
+        detail: {
+          serviceTitle: 'Online Consultation',
+          providerName: 'Dr. Remya Kumar',
+          providerRole: 'General Physician',
+          locationLabel: 'Video consultation',
+        },
+      },
+      {
+        mobileUserId: demoMobileUser.id,
+        category: 'class',
+        status: 'confirmed',
+        serviceMode: 'center',
+        startsAt: new Date(now.getTime() + 24 * 60 * 60 * 1000), // Tomorrow
+        durationMinutes: 60,
+        amount: 599,
+        paymentStatus: 'paid',
+        detail: {
+          serviceTitle: 'Beginner Yoga',
+          providerName: 'Meera',
+          providerRole: 'Fit Studio',
+          locationLabel: 'Studio · 2.4 km',
+        },
+      },
+      {
+        mobileUserId: demoMobileUser.id,
+        category: 'lab',
+        status: 'provider_assigned',
+        serviceMode: 'home',
+        startsAt: new Date(now.getTime() + 26 * 60 * 60 * 1000), // Tomorrow morning
+        durationMinutes: 30,
+        amount: 400,
+        paymentStatus: 'paid',
+        detail: {
+          serviceTitle: 'Vitamin B12 Test',
+          providerName: 'Apollo Diagnostics',
+          providerRole: 'Home collection',
+          locationLabel: 'Home collection',
+        },
+      },
+      {
+        mobileUserId: demoMobileUser.id,
+        category: 'appointment',
+        status: 'completed',
+        serviceMode: 'center',
+        startsAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
+        durationMinutes: 45,
+        amount: 800,
+        paymentStatus: 'paid',
+        completedAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000 + 45 * 60 * 1000),
+        detail: {
+          serviceTitle: 'Sports Physiotherapy',
+          providerName: 'Dr. Sathish Kumar',
+          providerRole: 'Sports Physiotherapist',
+          locationLabel: 'Anticlock Clinic',
+        },
+      },
+    ];
+
+    for (const booking of bookingSeeds) {
+      await db.insert(bookings).values(booking).onConflictDoNothing();
     }
   }
 

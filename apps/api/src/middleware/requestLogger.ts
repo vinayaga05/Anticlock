@@ -1,13 +1,18 @@
 import { createMiddleware } from 'hono/factory';
 import { randomUUID } from 'node:crypto';
 
-export const requestLogger = createMiddleware(async (c, next) => {
+export type RequestLoggerEnv = {
+  Variables: {
+    requestId: string;
+  };
+};
+
+export const requestLogger = createMiddleware<RequestLoggerEnv>(async (c, next) => {
   const requestId = randomUUID();
   const start = Date.now();
   const method = c.req.method;
   const path = c.req.path;
 
-  // Store request ID in context for use in handlers
   c.set('requestId', requestId);
 
   console.log(

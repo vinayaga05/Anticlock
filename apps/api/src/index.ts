@@ -29,7 +29,7 @@ import {
   loadAiProviderConfig,
   logAiProviderStartup,
 } from './config/ai-provider.config.js';
-import { requestLogger } from './middleware/requestLogger.js';
+import { requestLogger, type RequestLoggerEnv } from './middleware/requestLogger.js';
 import { initSentry, captureException } from './lib/sentry.js';
 import { sql } from './db/client.js';
 
@@ -64,7 +64,8 @@ logAiProviderStartup(aiConfig);
 
 initSentry();
 
-const app = new Hono();
+type AppEnvWithLogger = RequestLoggerEnv & { Variables: { requestId: string } };
+const app = new Hono<AppEnvWithLogger>();
 
 app.use(
   '*',

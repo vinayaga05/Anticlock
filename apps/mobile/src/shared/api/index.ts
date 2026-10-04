@@ -11,3 +11,18 @@ export {
   useServiceTreesQuery,
   useServiceCategoriesQuery,
 } from './hooks';
+export {
+  useCommunitiesQuery,
+  useMyCommunitiesQuery,
+  useCommunityQuery,
+  useCreateCommunityMutation,
+  useJoinCommunityMutation,
+  useLeaveCommunityMutation,
+  useCommunityPostsQuery,
+  useCreatePostMutation,
+  useLikePostMutation,
+  useUnlikePostMutation,
+  usePostCommentsQuery,
+  useCreateCommentMutation,
+  useReportPostMutation,
+} from './communityHooks';

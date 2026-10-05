@@ -23,6 +23,7 @@ import { interestRoutes } from './routes/interests.js';
 import { contentMobileRoutes, contentPublicRoutes } from './routes/content.js';
 import { profileBlockRoutes } from './routes/blocks.js';
 import { contentSafetyRoutes } from './routes/contentSafety.js';
+import { deepLinksRoutes } from './routes/deepLinks.js';
 import { startAssistantLifecycleJob } from './assistant/PrivacyService.js';
 import { redisHealthCheck } from './lib/redis.js';
 import {
@@ -112,6 +113,7 @@ app.get('/ready', async c => {
   );
 });
 
+app.route('/', deepLinksRoutes);
 app.route('/auth', authRoutes);
 app.route('/v1/catalog', catalogRoutes);
 app.route('/v1/media', mediaPublicRoutes);

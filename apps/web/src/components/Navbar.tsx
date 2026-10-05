@@ -28,16 +28,17 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 md:h-20">
           <Link href="/" className="flex items-center space-x-2 md:space-x-3">
-            <div className="relative w-32 h-8 md:w-40 md:h-10">
+            <div className="relative w-10 h-10 md:w-11 md:h-11 flex-shrink-0">
               <Image
-                src="/brand/logo-full.png"
+                src="/brand/logo-square.png"
                 alt="Anticlock"
                 fill
-                sizes="(max-width: 768px) 128px, 160px"
-                className="object-contain object-left"
+                sizes="(max-width: 768px) 40px, 44px"
+                className="object-contain"
                 priority
               />
             </div>
+            <span className="text-xl md:text-2xl font-bold text-white">Anticlock</span>
           </Link>
 
           <div className="hidden md:flex items-center space-x-8">

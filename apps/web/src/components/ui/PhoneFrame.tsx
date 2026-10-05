@@ -19,18 +19,15 @@ export function PhoneFrame({ children, className = '', delay = 0, variant = 'def
   
   return (
     <motion.div
-      initial={{ opacity: 0, y: 40, scale: 0.9 }}
-      whileInView={{ opacity: 1, y: 0, scale: 1 }}
+      initial={false}
+      animate={{ rotate: rotation }}
+      whileInView={{ y: 0, scale: 1 }}
       viewport={{ once: true }}
       transition={{ 
-        delay, 
-        duration: 0.6,
-        opacity: { duration: 0.6 },
-        y: { duration: 0.6 },
-        scale: { duration: 0.6 }
+        duration: 0.4,
+        ease: "easeOut"
       }}
       className={`relative ${className}`}
-      style={{ transform: `rotate(${rotation}deg)` }}
     >
       {/* Phone shadow */}
       <div className="absolute inset-0 bg-gradient-to-br from-gray-900/20 to-gray-900/40 blur-2xl transform translate-y-8 scale-95 rounded-[3rem]" />

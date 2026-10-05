@@ -10,16 +10,17 @@ export function Footer() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
           <div className="lg:col-span-2">
-            <Link href="/" className="inline-block mb-4">
-              <div className="relative w-48 h-12">
+            <Link href="/" className="inline-flex items-center space-x-3 mb-4">
+              <div className="relative w-12 h-12 flex-shrink-0">
                 <Image
-                  src="/brand/logo-full.png"
+                  src="/brand/logo-square.png"
                   alt="Anticlock"
                   fill
-                  sizes="192px"
-                  className="object-contain object-left"
+                  sizes="48px"
+                  className="object-contain"
                 />
               </div>
+              <span className="text-2xl font-bold">Anticlock</span>
             </Link>
             <p className="text-white/70 max-w-sm mb-6">
               Your lifestyle, simplified. Discover services, connect with communities, and book

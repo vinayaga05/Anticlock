@@ -18,7 +18,10 @@ export function HeroSection() {
       <div className="absolute inset-0" suppressHydrationWarning>
         <div className="blur-orb absolute top-20 left-10 w-72 h-72 bg-aqua/20 rounded-full blur-2xl animate-float"></div>
         <div className="blur-orb absolute bottom-20 right-10 w-96 h-96 bg-coral/20 rounded-full blur-2xl animate-float" style={{ animationDelay: '1s' }}></div>
-        <div className="blur-orb absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-lime/20 rounded-full blur-2xl animate-float" style={{ animationDelay: '2s' }}></div>
+        {/* Centered lime orb - use container for positioning, inner div for animation */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64">
+          <div className="blur-orb w-full h-full bg-lime/20 rounded-full blur-2xl animate-float" style={{ animationDelay: '2s' }}></div>
+        </div>
       </div>
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-20">

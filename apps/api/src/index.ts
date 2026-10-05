@@ -26,6 +26,9 @@ import { contentMobileRoutes, contentPublicRoutes } from './routes/content.js';
 import { profileBlockRoutes } from './routes/blocks.js';
 import { contentSafetyRoutes } from './routes/contentSafety.js';
 <<<<<<< HEAD
+import { moderationAdminRoutes } from './routes/moderation.js';
+=======
+<<<<<<< HEAD
 import {
   notificationsMobileRoutes,
   devicesMobileRoutes,
@@ -39,6 +42,7 @@ import { messagesRoutes } from './routes/messages.js';
 import { communitiesMobileRoutes, communitiesAdminRoutes } from './routes/communities.js';
 =======
 import { coursesMobileRoutes, coursesAdminRoutes } from './routes/courses.js';
+>>>>>>> origin/main
 >>>>>>> origin/main
 >>>>>>> origin/main
 >>>>>>> origin/main
@@ -138,9 +142,13 @@ app.route('/admin/media', mediaAdminRoutes);
 app.route('/admin/stubs', stubDomainRoutes);
 app.route('/admin/reels', reelsAdminRoutes);
 <<<<<<< HEAD
+app.route('/admin/moderation', moderationAdminRoutes);
+=======
+<<<<<<< HEAD
 app.route('/admin/notifications', notificationsAdminRoutes);
 =======
 app.route('/admin/communities', communitiesAdminRoutes);
+>>>>>>> origin/main
 >>>>>>> origin/main
 app.route('/webhooks/cloudflare/stream', streamWebhookRoutes);
 

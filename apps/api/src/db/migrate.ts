@@ -632,6 +632,15 @@ async function migrate() {
       ON content_post_reports (status, created_at DESC)
   `;
 
+  // Add resolution fields to content_post_reports for moderation workflow
+  await sql`
+    ALTER TABLE content_post_reports
+      ADD COLUMN IF NOT EXISTS resolution_action text,
+      ADD COLUMN IF NOT EXISTS resolution_note text,
+      ADD COLUMN IF NOT EXISTS resolved_by uuid REFERENCES users(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS resolved_at timestamptz
+  `;
+
   await sql`
     CREATE TABLE IF NOT EXISTS providers (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

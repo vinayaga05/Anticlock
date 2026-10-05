@@ -1,4 +1,4 @@
-package com.anticlocktemp
+package com.anticlock.app
 
 import android.app.Application
 import com.facebook.react.PackageList

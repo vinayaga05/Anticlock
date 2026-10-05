@@ -18,6 +18,8 @@ import {
   providerAdminRoutes,
   providerMobileRoutes,
 } from './routes/provider.js';
+import { shopAdminRoutes, shopMobileRoutes } from './routes/shop.js';
+import { tripsAdminRoutes, tripsMobileRoutes } from './routes/trips.js';
 import { assistantRoutes } from './routes/assistant.js';
 import { interestRoutes } from './routes/interests.js';
 import { contentMobileRoutes, contentPublicRoutes } from './routes/content.js';
@@ -86,6 +88,8 @@ app.route('/v1/catalog', catalogRoutes);
 app.route('/v1/media', mediaPublicRoutes);
 app.route('/v1/reels', reelsPublicRoutes);
 app.route('/v1/provider', providerMobileRoutes);
+app.route('/v1/shop', shopMobileRoutes);
+app.route('/v1/trips', tripsMobileRoutes);
 app.route('/v1/assistant', assistantRoutes);
 app.route('/v1/interests', interestRoutes);
 app.route('/v1/content', contentMobileRoutes);
@@ -97,6 +101,8 @@ app.route('/admin', adminRoutes);
 app.route('/admin/courses', coursesAdminRoutes);
 app.route('/admin/courses', coursesAdminRoutes);
 app.route('/admin/provider', providerAdminRoutes);
+app.route('/admin/shop', shopAdminRoutes);
+app.route('/admin/trips', tripsAdminRoutes);
 app.route('/admin/media', mediaAdminRoutes);
 app.route('/admin/stubs', stubDomainRoutes);
 app.route('/admin/reels', reelsAdminRoutes);

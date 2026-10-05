@@ -984,3 +984,43 @@ export const mobileUserInterests = pgTable(
     index("mobile_user_interests_interest_idx").on(table.interestId),
   ]
 );
+
+/** Bookings table for end-to-end booking flow */
+export const bookings = pgTable(
+  "bookings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    providerId: uuid("provider_id").references(() => providers.id, {
+      onDelete: "set null",
+    }),
+    categoryId: text("category_id").references(() => serviceCategories.id, {
+      onDelete: "set null",
+    }),
+    category: text("category").notNull(),
+    status: text("status").notNull().default("pending"),
+    serviceMode: text("service_mode").notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    durationMinutes: integer("duration_minutes"),
+    amount: integer("amount"),
+    paymentStatus: text("payment_status").notNull().default("pending"),
+    detail: jsonb("detail").$type<Record<string, unknown>>().notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("bookings_user_starts_idx").on(table.mobileUserId, table.startsAt),
+    index("bookings_provider_starts_idx").on(table.providerId, table.startsAt),
+    index("bookings_status_starts_idx").on(table.status, table.startsAt),
+  ]
+);

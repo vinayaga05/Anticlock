@@ -936,6 +936,44 @@ async function migrate() {
       ON service_categories USING gin (search_vector)
   `;
 
+  /** Bookings table migration - append-only block to minimize merge conflicts */
+  await sql`
+    CREATE TABLE IF NOT EXISTS bookings (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      provider_id uuid REFERENCES providers(id) ON DELETE SET NULL,
+      category_id text REFERENCES service_categories(id) ON DELETE SET NULL,
+      category text NOT NULL,
+      status text NOT NULL DEFAULT 'pending',
+      service_mode text NOT NULL,
+      starts_at timestamptz NOT NULL,
+      ends_at timestamptz,
+      duration_minutes integer,
+      amount integer,
+      payment_status text NOT NULL DEFAULT 'pending',
+      detail jsonb NOT NULL,
+      metadata jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      cancelled_at timestamptz,
+      completed_at timestamptz
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS bookings_user_starts_idx
+      ON bookings (mobile_user_id, starts_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS bookings_provider_starts_idx
+      ON bookings (provider_id, starts_at DESC)
+      WHERE provider_id IS NOT NULL
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS bookings_status_starts_idx
+      ON bookings (status, starts_at DESC)
+  `;
+
   console.log("Migrations applied.");
   await sql.end({ timeout: 5 });
 }

@@ -26,12 +26,20 @@ import { contentMobileRoutes, contentPublicRoutes } from './routes/content.js';
 import { profileBlockRoutes } from './routes/blocks.js';
 import { contentSafetyRoutes } from './routes/contentSafety.js';
 <<<<<<< HEAD
+import {
+  notificationsMobileRoutes,
+  devicesMobileRoutes,
+  notificationsAdminRoutes,
+} from './routes/notifications.js';
+=======
+<<<<<<< HEAD
 import { messagesRoutes } from './routes/messages.js';
 =======
 <<<<<<< HEAD
 import { communitiesMobileRoutes, communitiesAdminRoutes } from './routes/communities.js';
 =======
 import { coursesMobileRoutes, coursesAdminRoutes } from './routes/courses.js';
+>>>>>>> origin/main
 >>>>>>> origin/main
 >>>>>>> origin/main
 import { startAssistantLifecycleJob } from './assistant/PrivacyService.js';
@@ -105,12 +113,17 @@ app.route('/v1/content', contentPublicRoutes);
 app.route('/v1/content', contentSafetyRoutes);
 app.route('/v1/blocks', profileBlockRoutes);
 <<<<<<< HEAD
+app.route('/v1/notifications', notificationsMobileRoutes);
+app.route('/v1/devices', devicesMobileRoutes);
+=======
+<<<<<<< HEAD
 app.route('/v1/messages', messagesRoutes);
 =======
 <<<<<<< HEAD
 app.route('/v1/communities', communitiesMobileRoutes);
 =======
 app.route('/v1/courses', coursesMobileRoutes);
+>>>>>>> origin/main
 >>>>>>> origin/main
 >>>>>>> origin/main
 app.route('/admin', adminRoutes);
@@ -122,7 +135,11 @@ app.route('/admin/trips', tripsAdminRoutes);
 app.route('/admin/media', mediaAdminRoutes);
 app.route('/admin/stubs', stubDomainRoutes);
 app.route('/admin/reels', reelsAdminRoutes);
+<<<<<<< HEAD
+app.route('/admin/notifications', notificationsAdminRoutes);
+=======
 app.route('/admin/communities', communitiesAdminRoutes);
+>>>>>>> origin/main
 app.route('/webhooks/cloudflare/stream', streamWebhookRoutes);
 
 app.onError((err, c) => {

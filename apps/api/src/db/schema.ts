@@ -986,6 +986,21 @@ export const mobileUserInterests = pgTable(
 );
 
 <<<<<<< HEAD
+/** Push notifications for mobile users */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    data: jsonb("data").$type<Record<string, unknown>>(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+=======
+<<<<<<< HEAD
 /** Communities for user-created groups with posts and membership */
 export const communities = pgTable(
   "communities",
@@ -1146,11 +1161,36 @@ export const communityPostLikes = pgTable(
     mobileUserId: uuid("mobile_user_id")
       .notNull()
       .references(() => mobileUsers.id, { onDelete: "cascade" }),
+>>>>>>> origin/main
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
+<<<<<<< HEAD
+    index("notifications_user_created_idx").on(
+      table.mobileUserId,
+      table.createdAt
+    ),
+    index("notifications_user_unread_idx").on(table.mobileUserId, table.readAt)
+      .where(sql`${table.readAt} IS NULL`),
+  ]
+);
+
+/** FCM device tokens for push notifications */
+export const deviceTokens = pgTable(
+  "device_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    token: text("token").notNull(),
+    platform: text("platform").notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+=======
     primaryKey({ columns: [table.postId, table.mobileUserId] }),
     index("community_post_likes_user_created_idx").on(
       table.mobileUserId,
@@ -1171,11 +1211,16 @@ export const communityPostComments = pgTable(
       .notNull()
       .references(() => mobileUsers.id, { onDelete: "cascade" }),
     content: text("content").notNull(),
+>>>>>>> origin/main
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
+<<<<<<< HEAD
+    unique("device_tokens_token_uid").on(table.token),
+    index("device_tokens_user_idx").on(table.mobileUserId),
+=======
     index("community_post_comments_post_created_idx").on(
       table.postId,
       table.createdAt
@@ -1413,6 +1458,7 @@ export const tripBookings = pgTable(
       table.createdAt
     ),
     index("trip_bookings_number_idx").on(table.bookingNumber),
+>>>>>>> origin/main
 >>>>>>> origin/main
 >>>>>>> origin/main
   ]

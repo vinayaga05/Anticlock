@@ -937,6 +937,17 @@ async function migrate() {
   `;
 
 <<<<<<< HEAD
+  await sql`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      type text NOT NULL,
+      title text NOT NULL,
+      body text NOT NULL,
+      data jsonb,
+      read_at timestamptz,
+=======
+<<<<<<< HEAD
   // Communities feature tables
   await sql`
     CREATE TABLE IF NOT EXISTS communities (
@@ -1090,10 +1101,36 @@ async function migrate() {
       post_id uuid NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
       author_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
       content text NOT NULL,
+>>>>>>> origin/main
       created_at timestamptz NOT NULL DEFAULT now()
     )
   `;
   await sql`
+<<<<<<< HEAD
+    CREATE INDEX IF NOT EXISTS notifications_user_created_idx
+      ON notifications (mobile_user_id, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS notifications_user_unread_idx
+      ON notifications (mobile_user_id, read_at)
+      WHERE read_at IS NULL
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS device_tokens (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      token text NOT NULL,
+      platform text NOT NULL CHECK (platform IN ('android', 'ios')),
+      last_seen_at timestamptz NOT NULL DEFAULT now(),
+      created_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (token)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS device_tokens_user_idx
+      ON device_tokens (mobile_user_id)
+=======
     CREATE INDEX IF NOT EXISTS community_post_comments_post_created_idx
       ON community_post_comments (post_id, created_at DESC)
   `;
@@ -1299,6 +1336,7 @@ async function migrate() {
   await sql`
     CREATE INDEX IF NOT EXISTS trip_bookings_number_idx
       ON trip_bookings (booking_number)
+>>>>>>> origin/main
 >>>>>>> origin/main
 >>>>>>> origin/main
   `;

@@ -48,6 +48,7 @@ import {
   loadAiProviderConfig,
   logAiProviderStartup,
 } from './config/ai-provider.config.js';
+import { logTestLoginWarning } from './lib/otp/testLogin.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -77,6 +78,7 @@ assertProductionConfiguration();
 
 const aiConfig = loadAiProviderConfig();
 logAiProviderStartup(aiConfig);
+logTestLoginWarning();
 
 const app = new Hono();
 

@@ -985,29 +985,72 @@ export const mobileUserInterests = pgTable(
   ]
 );
 
-/** Bookings table for end-to-end booking flow */
-export const bookings = pgTable(
-  "bookings",
+/** Shop and Orders tables - append-only block to minimize merge conflicts */
+export const productCategories = pgTable("product_categories", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  description: text("description"),
+  imageUrl: text("image_url"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  status: text("status").notNull().default("published"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const products = pgTable(
+  "products",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    categoryId: text("category_id").references(() => productCategories.id, {
+      onDelete: "set null",
+    }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description").notNull(),
+    price: integer("price").notNull(),
+    compareAtPrice: integer("compare_at_price"),
+    inventory: integer("inventory"),
+    status: text("status").notNull().default("draft"),
+    imageIds: jsonb("image_ids").$type<string[]>().notNull().default([]),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("products_slug_uidx").on(table.slug),
+    index("products_category_status_idx").on(table.categoryId, table.status),
+    index("products_status_created_idx").on(table.status, table.createdAt),
+  ]
+);
+
+export const orders = pgTable(
+  "orders",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orderNumber: text("order_number").notNull().unique(),
     mobileUserId: uuid("mobile_user_id")
       .notNull()
       .references(() => mobileUsers.id, { onDelete: "cascade" }),
-    providerId: uuid("provider_id").references(() => providers.id, {
-      onDelete: "set null",
-    }),
-    categoryId: text("category_id").references(() => serviceCategories.id, {
-      onDelete: "set null",
-    }),
-    category: text("category").notNull(),
     status: text("status").notNull().default("pending"),
-    serviceMode: text("service_mode").notNull(),
-    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
-    endsAt: timestamp("ends_at", { withTimezone: true }),
-    durationMinutes: integer("duration_minutes"),
-    amount: integer("amount"),
     paymentStatus: text("payment_status").notNull().default("pending"),
-    detail: jsonb("detail").$type<Record<string, unknown>>().notNull(),
+    items: jsonb("items").$type<unknown[]>().notNull(),
+    subtotal: integer("subtotal").notNull(),
+    shippingCost: integer("shipping_cost").notNull(),
+    tax: integer("tax").notNull(),
+    total: integer("total").notNull(),
+    shippingAddress: jsonb("shipping_address")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    notes: text("notes"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -1016,50 +1059,32 @@ export const bookings = pgTable(
       .notNull()
       .defaultNow(),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
-    completedAt: timestamp("completed_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
   },
   (table) => [
-    index("bookings_user_starts_idx").on(table.mobileUserId, table.startsAt),
-    index("bookings_provider_starts_idx").on(table.providerId, table.startsAt),
-    index("bookings_status_starts_idx").on(table.status, table.startsAt),
+    index("orders_user_created_idx").on(table.mobileUserId, table.createdAt),
+    index("orders_status_created_idx").on(table.status, table.createdAt),
+    index("orders_number_idx").on(table.orderNumber),
   ]
 );
 
-/** Product categories for shop */
-export const productCategories = pgTable(
-  "product_categories",
+/** Trips and Trip Bookings tables - append-only block to minimize merge conflicts */
+export const trips = pgTable(
+  "trips",
   {
     id: uuid("id").defaultRandom().primaryKey(),
     name: text("name").notNull(),
-    slug: text("slug").notNull().unique(),
-    description: text("description"),
-    imageUrl: text("image_url"),
-    sortOrder: integer("sort_order").notNull().default(0),
-    status: text("status").notNull().default("published"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [index("product_categories_status_sort_idx").on(table.status, table.sortOrder)]
-);
-
-/** Products for shop */
-export const products = pgTable(
-  "products",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    categoryId: uuid("category_id")
-      .notNull()
-      .references(() => productCategories.id, { onDelete: "cascade" }),
-    slug: text("slug").notNull().unique(),
-    name: text("name").notNull(),
-    description: text("description"),
-    price: integer("price").notNull(),
-    compareAtPrice: integer("compare_at_price"),
-    inventory: integer("inventory").notNull().default(0),
+    slug: text("slug").notNull(),
+    description: text("description").notNull(),
+    destination: text("destination").notNull(),
+    durationDays: integer("duration_days").notNull(),
+    basePrice: integer("base_price").notNull(),
+    maxGroupSize: integer("max_group_size").notNull(),
+    itinerary: jsonb("itinerary").$type<unknown[]>().notNull(),
+    inclusions: jsonb("inclusions").$type<string[]>().notNull().default([]),
+    exclusions: jsonb("exclusions").$type<string[]>().notNull().default([]),
+    difficulty: text("difficulty").notNull(),
+    imageIds: jsonb("image_ids").$type<string[]>().notNull().default([]),
     status: text("status").notNull().default("draft"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -1070,49 +1095,30 @@ export const products = pgTable(
       .defaultNow(),
   },
   (table) => [
-    index("products_category_status_idx").on(table.categoryId, table.status),
-    index("products_slug_idx").on(table.slug),
+    uniqueIndex("trips_slug_uidx").on(table.slug),
+    index("trips_destination_status_idx").on(table.destination, table.status),
+    index("trips_status_created_idx").on(table.status, table.createdAt),
   ]
 );
 
-/** Product images linking to media assets */
-export const productImages = pgTable(
-  "product_images",
+export const tripBookings = pgTable(
+  "trip_bookings",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    productId: uuid("product_id")
+    bookingNumber: text("booking_number").notNull().unique(),
+    tripId: uuid("trip_id")
       .notNull()
-      .references(() => products.id, { onDelete: "cascade" }),
-    mediaAssetId: uuid("media_asset_id")
-      .notNull()
-      .references(() => mediaAssets.id, { onDelete: "cascade" }),
-    alt: text("alt"),
-    sortOrder: integer("sort_order").notNull().default(0),
-  },
-  (table) => [
-    index("product_images_product_idx").on(table.productId, table.sortOrder),
-  ]
-);
-
-/** Orders table for shop checkout and fulfillment */
-export const orders = pgTable(
-  "orders",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    orderNumber: text("order_number").notNull().unique(),
+      .references(() => trips.id, { onDelete: "cascade" }),
     mobileUserId: uuid("mobile_user_id")
       .notNull()
       .references(() => mobileUsers.id, { onDelete: "cascade" }),
-    items: jsonb("items").$type<Record<string, unknown>[]>().notNull(),
-    subtotal: integer("subtotal").notNull(),
-    shipping: integer("shipping").notNull(),
-    tax: integer("tax").notNull(),
-    total: integer("total").notNull(),
-    shippingAddress: jsonb("shipping_address")
-      .$type<Record<string, unknown>>()
-      .notNull(),
+    startDate: timestamp("start_date", { withTimezone: true }).notNull(),
+    numberOfTravelers: integer("number_of_travelers").notNull(),
+    totalPrice: integer("total_price").notNull(),
     status: text("status").notNull().default("pending"),
     paymentStatus: text("payment_status").notNull().default("pending"),
+    travelerDetails: jsonb("traveler_details").$type<unknown[]>().notNull(),
+    specialRequests: text("special_requests"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -1124,8 +1130,15 @@ export const orders = pgTable(
     completedAt: timestamp("completed_at", { withTimezone: true }),
   },
   (table) => [
-    index("orders_user_created_idx").on(table.mobileUserId, table.createdAt),
-    index("orders_status_created_idx").on(table.status, table.createdAt),
-    index("orders_number_idx").on(table.orderNumber),
+    index("trip_bookings_trip_start_idx").on(table.tripId, table.startDate),
+    index("trip_bookings_user_created_idx").on(
+      table.mobileUserId,
+      table.createdAt
+    ),
+    index("trip_bookings_status_created_idx").on(
+      table.status,
+      table.createdAt
+    ),
+    index("trip_bookings_number_idx").on(table.bookingNumber),
   ]
 );

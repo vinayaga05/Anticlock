@@ -7,5 +7,5 @@ export * from './provider.js';
 export * from './assistant.js';
 export * from './interests.js';
 export * from './publishing.js';
-export * from './booking.js';
 export * from './shop.js';
+export * from './trips.js';

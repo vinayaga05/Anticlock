@@ -12,13 +12,6 @@ export {
   useServiceCategoriesQuery,
 } from './hooks';
 export {
-  useBookingsQuery,
-  useBookingQuery,
-  useCreateBookingMutation,
-  useUpdateBookingMutation,
-  useCancelBookingMutation,
-} from './bookingHooks';
-export {
   useProductsQuery,
   useProductQuery,
   useOrdersQuery,
@@ -26,3 +19,11 @@ export {
   useCreateOrderMutation,
   useCancelOrderMutation,
 } from './shopHooks';
+export {
+  useTripsQuery,
+  useTripQuery,
+  useTripBookingsQuery,
+  useTripBookingQuery,
+  useCreateTripBookingMutation,
+  useCancelTripBookingMutation,
+} from './tripsHooks';

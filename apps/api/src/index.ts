@@ -18,23 +18,19 @@ import {
   providerAdminRoutes,
   providerMobileRoutes,
 } from './routes/provider.js';
-import { bookingAdminRoutes, bookingMobileRoutes } from './routes/bookings.js';
 import { shopAdminRoutes, shopMobileRoutes } from './routes/shop.js';
+import { tripsAdminRoutes, tripsMobileRoutes } from './routes/trips.js';
 import { assistantRoutes } from './routes/assistant.js';
 import { interestRoutes } from './routes/interests.js';
 import { contentMobileRoutes, contentPublicRoutes } from './routes/content.js';
 import { profileBlockRoutes } from './routes/blocks.js';
 import { contentSafetyRoutes } from './routes/contentSafety.js';
-import { deepLinksRoutes } from './routes/deepLinks.js';
 import { startAssistantLifecycleJob } from './assistant/PrivacyService.js';
 import { redisHealthCheck } from './lib/redis.js';
 import {
   loadAiProviderConfig,
   logAiProviderStartup,
 } from './config/ai-provider.config.js';
-import { requestLogger, type RequestLoggerEnv } from './middleware/requestLogger.js';
-import { initSentry, captureException } from './lib/sentry.js';
-import { sql } from './db/client.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -65,10 +61,7 @@ assertProductionConfiguration();
 const aiConfig = loadAiProviderConfig();
 logAiProviderStartup(aiConfig);
 
-initSentry();
-
-type AppEnvWithLogger = RequestLoggerEnv & { Variables: { requestId: string } };
-const app = new Hono<AppEnvWithLogger>();
+const app = new Hono();
 
 app.use(
   '*',
@@ -80,8 +73,6 @@ app.use(
   }),
 );
 
-app.use('*', requestLogger);
-
 app.get('/health', async c =>
   c.json({
     ok: true,
@@ -91,38 +82,13 @@ app.get('/health', async c =>
   }),
 );
 
-app.get('/ready', async c => {
-  const redisOk = await redisHealthCheck();
-  let dbOk = false;
-  try {
-    await sql`SELECT 1 AS health_check`;
-    dbOk = true;
-  } catch (error) {
-    console.error('Database health check failed:', error);
-  }
-
-  const ready = redisOk && dbOk;
-  return c.json(
-    {
-      ok: ready,
-      service: 'anticlock-api',
-      checks: {
-        redis: redisOk,
-        database: dbOk,
-      },
-    },
-    ready ? 200 : 503,
-  );
-});
-
-app.route('/', deepLinksRoutes);
 app.route('/auth', authRoutes);
 app.route('/v1/catalog', catalogRoutes);
 app.route('/v1/media', mediaPublicRoutes);
 app.route('/v1/reels', reelsPublicRoutes);
 app.route('/v1/provider', providerMobileRoutes);
-app.route('/v1/bookings', bookingMobileRoutes);
 app.route('/v1/shop', shopMobileRoutes);
+app.route('/v1/trips', tripsMobileRoutes);
 app.route('/v1/assistant', assistantRoutes);
 app.route('/v1/interests', interestRoutes);
 app.route('/v1/content', contentMobileRoutes);
@@ -131,32 +97,21 @@ app.route('/v1/content', contentSafetyRoutes);
 app.route('/v1/blocks', profileBlockRoutes);
 app.route('/admin', adminRoutes);
 app.route('/admin/provider', providerAdminRoutes);
-app.route('/admin/bookings', bookingAdminRoutes);
 app.route('/admin/shop', shopAdminRoutes);
+app.route('/admin/trips', tripsAdminRoutes);
 app.route('/admin/media', mediaAdminRoutes);
 app.route('/admin/stubs', stubDomainRoutes);
 app.route('/admin/reels', reelsAdminRoutes);
 app.route('/webhooks/cloudflare/stream', streamWebhookRoutes);
 
 app.onError((err, c) => {
-  const requestId = c.get('requestId') ?? 'unknown';
-  console.error(JSON.stringify({
-    type: 'error',
-    requestId,
-    error: err.message,
-    stack: err.stack,
-    timestamp: new Date().toISOString(),
-  }));
-
+  console.error(err);
   if (err.name === 'ZodError') {
-    captureException(err, { requestId, type: 'validation_error' });
     return c.json(
       { error: { code: 'validation_error', message: err.message, details: err } },
       400,
     );
   }
-
-  captureException(err, { requestId, path: c.req.path, method: c.req.method });
   return c.json(
     { error: { code: 'internal_error', message: 'Unexpected server error' } },
     500,

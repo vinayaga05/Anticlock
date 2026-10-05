@@ -22,9 +22,9 @@ import {
   mediaAssets,
   reels,
   mobileUsers,
-  bookings,
   productCategories,
   products,
+  trips,
 } from '../db/schema.js';
 import catalog from './catalog.json' with { type: 'json' };
 import {
@@ -380,189 +380,265 @@ async function seed() {
     }
   }
 
-  // Seed demo bookings if mobile users exist
-  const [demoMobileUser] = await db
-    .select()
-    .from(mobileUsers)
-    .limit(1);
+  // Seed product categories and products
+  const categorySeeds = [
+    {
+      id: 'cat-fitness',
+      name: 'Fitness Equipment',
+      slug: 'fitness-equipment',
+      description: 'Home and gym fitness equipment',
+      sortOrder: 1,
+      status: 'published',
+    },
+    {
+      id: 'cat-supplements',
+      name: 'Supplements',
+      slug: 'supplements',
+      description: 'Nutritional supplements and vitamins',
+      sortOrder: 2,
+      status: 'published',
+    },
+    {
+      id: 'cat-wellness',
+      name: 'Wellness',
+      slug: 'wellness',
+      description: 'Wellness and recovery products',
+      sortOrder: 3,
+      status: 'published',
+    },
+  ];
 
-  if (demoMobileUser) {
-    const now = new Date();
-    const bookingSeeds = [
-      {
-        mobileUserId: demoMobileUser.id,
-        category: 'appointment',
-        status: 'confirmed',
-        serviceMode: 'online',
-        startsAt: new Date(now.getTime() + 3 * 60 * 60 * 1000), // 3 hours from now
-        durationMinutes: 30,
-        amount: 500,
-        paymentStatus: 'paid',
-        detail: {
-          serviceTitle: 'Online Consultation',
-          providerName: 'Dr. Remya Kumar',
-          providerRole: 'General Physician',
-          locationLabel: 'Video consultation',
+  for (const cat of categorySeeds) {
+    await db.insert(productCategories).values(cat).onConflictDoNothing();
+  }
+
+  const shopProductSeeds = [
+    {
+      categoryId: 'cat-supplements',
+      name: 'Whey Protein Isolate 1kg',
+      slug: 'whey-protein-isolate-1kg',
+      description:
+        'Premium whey protein isolate with 25g protein per serving. Fast absorption for post-workout recovery.',
+      price: 2499,
+      compareAtPrice: 2999,
+      inventory: 50,
+      status: 'published',
+    },
+    {
+      categoryId: 'cat-fitness',
+      name: 'Premium Yoga Mat',
+      slug: 'premium-yoga-mat',
+      description:
+        'Non-slip, eco-friendly yoga mat with extra cushioning. Perfect for yoga, pilates, and floor exercises.',
+      price: 1299,
+      compareAtPrice: 1599,
+      inventory: 30,
+      status: 'published',
+    },
+    {
+      categoryId: 'cat-fitness',
+      name: 'Resistance Bands Set',
+      slug: 'resistance-bands-set',
+      description:
+        'Set of 5 resistance bands with varying resistance levels. Includes carry bag and door anchor.',
+      price: 899,
+      inventory: 45,
+      status: 'published',
+    },
+    {
+      categoryId: 'cat-supplements',
+      name: 'Multivitamin Complex',
+      slug: 'multivitamin-complex',
+      description:
+        'Complete daily multivitamin with essential vitamins and minerals. 60 tablets.',
+      price: 599,
+      compareAtPrice: 799,
+      inventory: 100,
+      status: 'published',
+    },
+    {
+      categoryId: 'cat-wellness',
+      name: 'Foam Roller',
+      slug: 'foam-roller',
+      description:
+        'High-density foam roller for muscle recovery and myofascial release. 33cm length.',
+      price: 799,
+      inventory: 25,
+      status: 'published',
+    },
+    {
+      categoryId: 'cat-fitness',
+      name: 'Adjustable Dumbbells',
+      slug: 'adjustable-dumbbells',
+      description:
+        'Space-saving adjustable dumbbells from 2kg to 12kg per hand. Quick adjustment mechanism.',
+      price: 3999,
+      compareAtPrice: 4999,
+      inventory: 15,
+      status: 'published',
+    },
+  ];
+
+  for (const product of shopProductSeeds) {
+    await db.insert(products).values(product).onConflictDoNothing();
+  }
+
+  // Seed trips
+  const tripSeeds = [
+    {
+      name: 'Yercaud Weekend Adventure',
+      slug: 'yercaud-weekend-adventure',
+      description:
+        'Escape to the scenic hills of Yercaud for a refreshing weekend getaway. Experience misty mornings, serene lakes, and lush coffee plantations in this charming hill station of Tamil Nadu.',
+      destination: 'Yercaud, Tamil Nadu',
+      durationDays: 2,
+      basePrice: 4999,
+      maxGroupSize: 20,
+      itinerary: [
+        {
+          day: 1,
+          title: 'Arrival and Lake Tour',
+          description:
+            'Arrive in Yercaud and check into your comfortable accommodation',
+          activities: [
+            'Visit Yercaud Lake and enjoy a boat ride',
+            'Explore Lady\'s Seat viewpoint for panoramic valley views',
+            'Evening bonfire and group activities',
+          ],
+          meals: ['Lunch', 'Dinner'],
         },
-      },
-      {
-        mobileUserId: demoMobileUser.id,
-        category: 'class',
-        status: 'confirmed',
-        serviceMode: 'center',
-        startsAt: new Date(now.getTime() + 24 * 60 * 60 * 1000), // Tomorrow
-        durationMinutes: 60,
-        amount: 599,
-        paymentStatus: 'paid',
-        detail: {
-          serviceTitle: 'Beginner Yoga',
-          providerName: 'Meera',
-          providerRole: 'Fit Studio',
-          locationLabel: 'Studio · 2.4 km',
+        {
+          day: 2,
+          title: 'Coffee Estate and Departure',
+          description: 'Explore the famous coffee plantations and natural beauty',
+          activities: [
+            'Guided tour of coffee plantation',
+            'Visit Killiyur Falls (seasonal)',
+            'Shopping at local markets',
+            'Departure by evening',
+          ],
+          meals: ['Breakfast', 'Lunch'],
         },
-      },
-      {
-        mobileUserId: demoMobileUser.id,
-        category: 'lab',
-        status: 'provider_assigned',
-        serviceMode: 'home',
-        startsAt: new Date(now.getTime() + 26 * 60 * 60 * 1000), // Tomorrow morning
-        durationMinutes: 30,
-        amount: 400,
-        paymentStatus: 'paid',
-        detail: {
-          serviceTitle: 'Vitamin B12 Test',
-          providerName: 'Apollo Diagnostics',
-          providerRole: 'Home collection',
-          locationLabel: 'Home collection',
+      ],
+      inclusions: [
+        'Accommodation for 1 night',
+        'All meals as per itinerary',
+        'Transportation in AC vehicle',
+        'Experienced tour guide',
+        'Entry fees to viewpoints',
+      ],
+      exclusions: [
+        'Personal expenses',
+        'Adventure activities (optional)',
+        'Travel insurance',
+      ],
+      difficulty: 'easy',
+      status: 'published',
+    },
+    {
+      name: 'Mahabalipuram Heritage Tour',
+      slug: 'mahabalipuram-heritage-tour',
+      description:
+        'Discover the ancient rock-cut temples and UNESCO World Heritage sites of Mahabalipuram. A perfect blend of history, culture, and coastal beauty.',
+      destination: 'Mahabalipuram, Tamil Nadu',
+      durationDays: 1,
+      basePrice: 1999,
+      maxGroupSize: 25,
+      itinerary: [
+        {
+          day: 1,
+          title: 'Heritage Sites Tour',
+          description: 'Full day exploration of ancient monuments and beach',
+          activities: [
+            'Visit Shore Temple at sunrise',
+            'Explore Arjuna\'s Penance and Krishna\'s Butter Ball',
+            'Tour the Five Rathas (Pancha Rathas)',
+            'Relax at Mahabalipuram Beach',
+            'Visit local handicraft stores',
+          ],
+          meals: ['Breakfast', 'Lunch'],
         },
-      },
-      {
-        mobileUserId: demoMobileUser.id,
-        category: 'appointment',
-        status: 'completed',
-        serviceMode: 'center',
-        startsAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
-        durationMinutes: 45,
-        amount: 800,
-        paymentStatus: 'paid',
-        completedAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000 + 45 * 60 * 1000),
-        detail: {
-          serviceTitle: 'Sports Physiotherapy',
-          providerName: 'Dr. Sathish Kumar',
-          providerRole: 'Sports Physiotherapist',
-          locationLabel: 'Anticlock Clinic',
+      ],
+      inclusions: [
+        'AC transportation from Chennai',
+        'Professional heritage guide',
+        'All entry fees',
+        'Breakfast and lunch',
+        'Bottled water',
+      ],
+      exclusions: ['Dinner', 'Shopping expenses', 'Tips for guide'],
+      difficulty: 'easy',
+      status: 'published',
+    },
+    {
+      name: 'Kodaikanal Nature Retreat',
+      slug: 'kodaikanal-nature-retreat',
+      description:
+        'Immerse yourself in the pristine beauty of Kodaikanal, the "Princess of Hill Stations". Trek through pine forests, visit stunning viewpoints, and experience the tranquility of hill country.',
+      destination: 'Kodaikanal, Tamil Nadu',
+      durationDays: 3,
+      basePrice: 8999,
+      maxGroupSize: 15,
+      itinerary: [
+        {
+          day: 1,
+          title: 'Arrival and Lake Exploration',
+          description: 'Settle in and explore the famous Kodaikanal Lake area',
+          activities: [
+            'Check-in and welcome refreshments',
+            'Evening walk around Kodaikanal Lake',
+            'Visit Bryant Park',
+            'Shopping at local markets',
+          ],
+          meals: ['Dinner'],
         },
-      },
-    ];
+        {
+          day: 2,
+          title: 'Viewpoints and Waterfalls',
+          description: 'Full day tour of scenic viewpoints and natural wonders',
+          activities: [
+            'Coaker\'s Walk at sunrise',
+            'Trek to Dolphin\'s Nose',
+            'Visit Pillar Rocks',
+            'Explore Bear Shola Falls',
+            'Evening bonfire at hotel',
+          ],
+          meals: ['Breakfast', 'Lunch', 'Dinner'],
+        },
+        {
+          day: 3,
+          title: 'Pine Forest Trek and Departure',
+          description: 'Morning nature walk and departure',
+          activities: [
+            'Guided trek through Pine Forest',
+            'Visit Guna Caves (Devil\'s Kitchen)',
+            'Last minute shopping',
+            'Departure by afternoon',
+          ],
+          meals: ['Breakfast', 'Lunch'],
+        },
+      ],
+      inclusions: [
+        'Accommodation for 2 nights',
+        'All meals as per itinerary',
+        'AC transportation',
+        'Experienced trekking guide',
+        'Entry fees to all attractions',
+        'First aid kit',
+      ],
+      exclusions: [
+        'Adventure activities (rock climbing, etc.)',
+        'Personal expenses',
+        'Camera fees at monuments',
+        'Travel insurance',
+      ],
+      difficulty: 'moderate',
+      status: 'published',
+    },
+  ];
 
-    for (const booking of bookingSeeds) {
-      await db.insert(bookings).values(booking).onConflictDoNothing();
-    }
-
-    const categorySeeds = [
-      {
-        name: 'Fitness Equipment',
-        slug: 'fitness-equipment',
-        description: 'Professional fitness and gym equipment',
-        sortOrder: 1,
-        status: 'published',
-      },
-      {
-        name: 'Supplements',
-        slug: 'supplements',
-        description: 'Sports nutrition and dietary supplements',
-        sortOrder: 2,
-        status: 'published',
-      },
-      {
-        name: 'Wellness',
-        slug: 'wellness',
-        description: 'Wellness and recovery products',
-        sortOrder: 3,
-        status: 'published',
-      },
-    ];
-
-    const categoryIds: Record<string, string> = {};
-    for (const category of categorySeeds) {
-      const [existing] = await db
-        .select()
-        .from(productCategories)
-        .where(eq(productCategories.slug, category.slug));
-
-      if (existing) {
-        categoryIds[category.slug] = existing.id;
-      } else {
-        const [inserted] = await db
-          .insert(productCategories)
-          .values(category)
-          .returning();
-        categoryIds[category.slug] = inserted!.id;
-      }
-    }
-
-    const productSeeds = [
-      {
-        categoryId: categoryIds['fitness-equipment']!,
-        slug: 'yoga-mat-premium',
-        name: 'Premium Yoga Mat',
-        description: 'High-quality non-slip yoga mat with carrying strap',
-        price: 2499,
-        compareAtPrice: 3499,
-        inventory: 50,
-        status: 'published',
-      },
-      {
-        categoryId: categoryIds['fitness-equipment']!,
-        slug: 'resistance-bands-set',
-        name: 'Resistance Bands Set',
-        description: 'Set of 5 resistance bands with different levels',
-        price: 1299,
-        inventory: 100,
-        status: 'published',
-      },
-      {
-        categoryId: categoryIds['supplements']!,
-        slug: 'whey-protein-1kg',
-        name: 'Whey Protein Isolate 1kg',
-        description: 'Premium whey protein isolate, chocolate flavor',
-        price: 3999,
-        inventory: 30,
-        status: 'published',
-      },
-      {
-        categoryId: categoryIds['supplements']!,
-        slug: 'bcaa-energy',
-        name: 'BCAA Energy Drink',
-        description: 'Branch chain amino acids with natural caffeine',
-        price: 1799,
-        inventory: 60,
-        status: 'published',
-      },
-      {
-        categoryId: categoryIds['wellness']!,
-        slug: 'foam-roller',
-        name: 'Foam Roller',
-        description: 'High-density foam roller for muscle recovery',
-        price: 899,
-        inventory: 40,
-        status: 'published',
-      },
-      {
-        categoryId: categoryIds['wellness']!,
-        slug: 'massage-ball-set',
-        name: 'Massage Ball Set',
-        description: 'Set of 3 massage balls for trigger point therapy',
-        price: 599,
-        inventory: 75,
-        status: 'published',
-      },
-    ];
-
-    for (const product of productSeeds) {
-      await db.insert(products).values(product).onConflictDoNothing();
-    }
+  for (const trip of tripSeeds) {
+    await db.insert(trips).values(trip).onConflictDoNothing();
   }
 
   console.log(

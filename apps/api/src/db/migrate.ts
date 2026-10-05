@@ -936,48 +936,10 @@ async function migrate() {
       ON service_categories USING gin (search_vector)
   `;
 
-  /** Bookings table migration - append-only block to minimize merge conflicts */
-  await sql`
-    CREATE TABLE IF NOT EXISTS bookings (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
-      provider_id uuid REFERENCES providers(id) ON DELETE SET NULL,
-      category_id text REFERENCES service_categories(id) ON DELETE SET NULL,
-      category text NOT NULL,
-      status text NOT NULL DEFAULT 'pending',
-      service_mode text NOT NULL,
-      starts_at timestamptz NOT NULL,
-      ends_at timestamptz,
-      duration_minutes integer,
-      amount integer,
-      payment_status text NOT NULL DEFAULT 'pending',
-      detail jsonb NOT NULL,
-      metadata jsonb,
-      created_at timestamptz NOT NULL DEFAULT now(),
-      updated_at timestamptz NOT NULL DEFAULT now(),
-      cancelled_at timestamptz,
-      completed_at timestamptz
-    )
-  `;
-
-  await sql`
-    CREATE INDEX IF NOT EXISTS bookings_user_starts_idx
-      ON bookings (mobile_user_id, starts_at DESC)
-  `;
-  await sql`
-    CREATE INDEX IF NOT EXISTS bookings_provider_starts_idx
-      ON bookings (provider_id, starts_at DESC)
-      WHERE provider_id IS NOT NULL
-  `;
-  await sql`
-    CREATE INDEX IF NOT EXISTS bookings_status_starts_idx
-      ON bookings (status, starts_at DESC)
-  `;
-
-  /** Shop tables migration - append-only block to minimize merge conflicts */
+  /** Shop and Orders migration - append-only block to minimize merge conflicts */
   await sql`
     CREATE TABLE IF NOT EXISTS product_categories (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      id text PRIMARY KEY,
       name text NOT NULL,
       slug text NOT NULL UNIQUE,
       description text,
@@ -990,20 +952,88 @@ async function migrate() {
   `;
 
   await sql`
-    CREATE INDEX IF NOT EXISTS product_categories_status_sort_idx
-      ON product_categories (status, sort_order)
+    CREATE TABLE IF NOT EXISTS products (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      category_id text REFERENCES product_categories(id) ON DELETE SET NULL,
+      name text NOT NULL,
+      slug text NOT NULL,
+      description text NOT NULL,
+      price integer NOT NULL,
+      compare_at_price integer,
+      inventory integer,
+      status text NOT NULL DEFAULT 'draft',
+      image_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+      metadata jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
   `;
 
   await sql`
-    CREATE TABLE IF NOT EXISTS products (
+    CREATE UNIQUE INDEX IF NOT EXISTS products_slug_uidx
+      ON products (slug)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS products_category_status_idx
+      ON products (category_id, status)
+      WHERE category_id IS NOT NULL
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS products_status_created_idx
+      ON products (status, created_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS orders (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      category_id uuid NOT NULL REFERENCES product_categories(id) ON DELETE CASCADE,
-      slug text NOT NULL UNIQUE,
+      order_number text NOT NULL UNIQUE,
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      status text NOT NULL DEFAULT 'pending',
+      payment_status text NOT NULL DEFAULT 'pending',
+      items jsonb NOT NULL,
+      subtotal integer NOT NULL,
+      shipping_cost integer NOT NULL,
+      tax integer NOT NULL,
+      total integer NOT NULL,
+      shipping_address jsonb NOT NULL,
+      notes text,
+      metadata jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      cancelled_at timestamptz,
+      delivered_at timestamptz
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS orders_user_created_idx
+      ON orders (mobile_user_id, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS orders_status_created_idx
+      ON orders (status, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS orders_number_idx
+      ON orders (order_number)
+  `;
+
+  /** Trips and Trip Bookings migration - append-only block to minimize merge conflicts */
+  await sql`
+    CREATE TABLE IF NOT EXISTS trips (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       name text NOT NULL,
-      description text,
-      price integer NOT NULL,
-      compare_at_price integer,
-      inventory integer NOT NULL DEFAULT 0,
+      slug text NOT NULL,
+      description text NOT NULL,
+      destination text NOT NULL,
+      duration_days integer NOT NULL,
+      base_price integer NOT NULL,
+      max_group_size integer NOT NULL,
+      itinerary jsonb NOT NULL,
+      inclusions jsonb NOT NULL DEFAULT '[]'::jsonb,
+      exclusions jsonb NOT NULL DEFAULT '[]'::jsonb,
+      difficulty text NOT NULL,
+      image_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
       status text NOT NULL DEFAULT 'draft',
       metadata jsonb,
       created_at timestamptz NOT NULL DEFAULT now(),
@@ -1012,43 +1042,31 @@ async function migrate() {
   `;
 
   await sql`
-    CREATE INDEX IF NOT EXISTS products_category_status_idx
-      ON products (category_id, status)
+    CREATE UNIQUE INDEX IF NOT EXISTS trips_slug_uidx
+      ON trips (slug)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS trips_destination_status_idx
+      ON trips (destination, status)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS trips_status_created_idx
+      ON trips (status, created_at DESC)
   `;
 
   await sql`
-    CREATE INDEX IF NOT EXISTS products_slug_idx
-      ON products (slug)
-  `;
-
-  await sql`
-    CREATE TABLE IF NOT EXISTS product_images (
+    CREATE TABLE IF NOT EXISTS trip_bookings (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      product_id uuid NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-      media_asset_id uuid NOT NULL REFERENCES media_assets(id) ON DELETE CASCADE,
-      alt text,
-      sort_order integer NOT NULL DEFAULT 0
-    )
-  `;
-
-  await sql`
-    CREATE INDEX IF NOT EXISTS product_images_product_idx
-      ON product_images (product_id, sort_order)
-  `;
-
-  await sql`
-    CREATE TABLE IF NOT EXISTS orders (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      order_number text NOT NULL UNIQUE,
+      booking_number text NOT NULL UNIQUE,
+      trip_id uuid NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
       mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
-      items jsonb NOT NULL,
-      subtotal integer NOT NULL,
-      shipping integer NOT NULL,
-      tax integer NOT NULL,
-      total integer NOT NULL,
-      shipping_address jsonb NOT NULL,
+      start_date timestamptz NOT NULL,
+      number_of_travelers integer NOT NULL,
+      total_price integer NOT NULL,
       status text NOT NULL DEFAULT 'pending',
       payment_status text NOT NULL DEFAULT 'pending',
+      traveler_details jsonb NOT NULL,
+      special_requests text,
       metadata jsonb,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now(),
@@ -1058,18 +1076,20 @@ async function migrate() {
   `;
 
   await sql`
-    CREATE INDEX IF NOT EXISTS orders_user_created_idx
-      ON orders (mobile_user_id, created_at DESC)
+    CREATE INDEX IF NOT EXISTS trip_bookings_trip_start_idx
+      ON trip_bookings (trip_id, start_date)
   `;
-
   await sql`
-    CREATE INDEX IF NOT EXISTS orders_status_created_idx
-      ON orders (status, created_at DESC)
+    CREATE INDEX IF NOT EXISTS trip_bookings_user_created_idx
+      ON trip_bookings (mobile_user_id, created_at DESC)
   `;
-
   await sql`
-    CREATE INDEX IF NOT EXISTS orders_number_idx
-      ON orders (order_number)
+    CREATE INDEX IF NOT EXISTS trip_bookings_status_created_idx
+      ON trip_bookings (status, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS trip_bookings_number_idx
+      ON trip_bookings (booking_number)
   `;
 
   console.log("Migrations applied.");

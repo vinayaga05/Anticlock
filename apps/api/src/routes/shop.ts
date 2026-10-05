@@ -1,14 +1,6 @@
 import { Hono } from 'hono';
 import {
   CreateOrderRequestSchema,
-<<<<<<< HEAD
-  CreateProductRequestSchema,
-  OrderAdminQuerySchema,
-  OrderListQuerySchema,
-  ProductListQuerySchema,
-  UpdateOrderRequestSchema,
-  UpdateProductRequestSchema,
-=======
   CancelOrderRequestSchema,
   OrderListQuerySchema,
   ProductListQuerySchema,
@@ -16,7 +8,6 @@ import {
   UpdateProductRequestSchema,
   OrderAdminQuerySchema,
   UpdateOrderRequestSchema,
->>>>>>> origin/main
 } from '@anticlock/contracts';
 import { productService } from '../shop/ProductService.js';
 import { orderService } from '../shop/OrderService.js';
@@ -53,20 +44,11 @@ function httpError(err: unknown) {
 export const shopMobileRoutes = new Hono<AppEnv>();
 shopMobileRoutes.use('*', requireAuth);
 
-<<<<<<< HEAD
-// Products
-shopMobileRoutes.get('/products', async c => {
-  try {
-    const query = {
-      categoryId: c.req.query('categoryId'),
-      status: c.req.query('status') || 'published',
-=======
 shopMobileRoutes.get('/products', async (c) => {
   try {
     const query = {
       categoryId: c.req.query('categoryId'),
       status: 'published' as const,
->>>>>>> origin/main
       search: c.req.query('search'),
       limit: c.req.query('limit') ? Number(c.req.query('limit')) : undefined,
       cursor: c.req.query('cursor'),
@@ -80,17 +62,10 @@ shopMobileRoutes.get('/products', async (c) => {
   }
 });
 
-<<<<<<< HEAD
-shopMobileRoutes.get('/products/:id', async c => {
-  try {
-    const product = await productService.getProductWithImages(c.req.param('id'));
-    if (!product) {
-=======
 shopMobileRoutes.get('/products/:id', async (c) => {
   try {
     const product = await productService.getProduct(c.req.param('id'));
     if (!product || product.status !== 'published') {
->>>>>>> origin/main
       return c.json(
         { error: { code: 'not_found', message: 'Product not found' } },
         404,
@@ -103,12 +78,7 @@ shopMobileRoutes.get('/products/:id', async (c) => {
   }
 });
 
-<<<<<<< HEAD
-// Orders
-shopMobileRoutes.post('/orders', async c => {
-=======
 shopMobileRoutes.post('/orders', async (c) => {
->>>>>>> origin/main
   try {
     const auth = requireMobileAuth(c);
     const body = CreateOrderRequestSchema.parse(await c.req.json());
@@ -120,11 +90,7 @@ shopMobileRoutes.post('/orders', async (c) => {
   }
 });
 
-<<<<<<< HEAD
-shopMobileRoutes.get('/orders', async c => {
-=======
 shopMobileRoutes.get('/orders', async (c) => {
->>>>>>> origin/main
   try {
     const auth = requireMobileAuth(c);
     const query = {
@@ -141,11 +107,7 @@ shopMobileRoutes.get('/orders', async (c) => {
   }
 });
 
-<<<<<<< HEAD
-shopMobileRoutes.get('/orders/:id', async c => {
-=======
 shopMobileRoutes.get('/orders/:id', async (c) => {
->>>>>>> origin/main
   try {
     const auth = requireMobileAuth(c);
     const order = await orderService.getOrder(c.req.param('id'), auth.sub);
@@ -162,15 +124,6 @@ shopMobileRoutes.get('/orders/:id', async (c) => {
   }
 });
 
-<<<<<<< HEAD
-shopMobileRoutes.post('/orders/:id/cancel', async c => {
-  try {
-    const auth = requireMobileAuth(c);
-    const order = await orderService.cancelOrder(c.req.param('id'), auth.sub);
-    if (!order) {
-      return c.json(
-        { error: { code: 'not_found', message: 'Order not found or cannot be cancelled' } },
-=======
 shopMobileRoutes.post('/orders/:id/cancel', async (c) => {
   try {
     const auth = requireMobileAuth(c);
@@ -284,7 +237,6 @@ shopAdminRoutes.get('/orders/:id', async (c) => {
     if (!order) {
       return c.json(
         { error: { code: 'not_found', message: 'Order not found' } },
->>>>>>> origin/main
         404,
       );
     }
@@ -295,175 +247,6 @@ shopAdminRoutes.get('/orders/:id', async (c) => {
   }
 });
 
-<<<<<<< HEAD
-export const shopAdminRoutes = new Hono<AppEnv>();
-shopAdminRoutes.use('*', requireAuth);
-
-// Products Admin
-shopAdminRoutes.get(
-  '/products',
-  requirePermission('catalog.read'),
-  async c => {
-    try {
-      const query = {
-        categoryId: c.req.query('categoryId'),
-        status: c.req.query('status'),
-        search: c.req.query('search'),
-        limit: c.req.query('limit') ? Number(c.req.query('limit')) : undefined,
-        cursor: c.req.query('cursor'),
-      };
-      const validated = ProductListQuerySchema.parse(query);
-      const result = await productService.listProducts(validated);
-      return c.json(result);
-    } catch (err) {
-      const { status, body } = httpError(err);
-      return c.json(body, status);
-    }
-  },
-);
-
-shopAdminRoutes.get(
-  '/products/:id',
-  requirePermission('catalog.read'),
-  async c => {
-    try {
-      const product = await productService.getProductWithImages(c.req.param('id'));
-      if (!product) {
-        return c.json(
-          { error: { code: 'not_found', message: 'Product not found' } },
-          404,
-        );
-      }
-      return c.json({ product });
-    } catch (err) {
-      const { status, body } = httpError(err);
-      return c.json(body, status);
-    }
-  },
-);
-
-shopAdminRoutes.post(
-  '/products',
-  requirePermission('catalog.write'),
-  async c => {
-    try {
-      const body = CreateProductRequestSchema.parse(await c.req.json());
-      const product = await productService.createProduct(body);
-      return c.json({ product }, 201);
-    } catch (err) {
-      const { status, body } = httpError(err);
-      return c.json(body, status);
-    }
-  },
-);
-
-shopAdminRoutes.patch(
-  '/products/:id',
-  requirePermission('catalog.write'),
-  async c => {
-    try {
-      const body = UpdateProductRequestSchema.parse(await c.req.json());
-      const product = await productService.updateProduct(c.req.param('id'), body);
-      if (!product) {
-        return c.json(
-          { error: { code: 'not_found', message: 'Product not found' } },
-          404,
-        );
-      }
-      return c.json({ product });
-    } catch (err) {
-      const { status, body } = httpError(err);
-      return c.json(body, status);
-    }
-  },
-);
-
-shopAdminRoutes.delete(
-  '/products/:id',
-  requirePermission('catalog.write'),
-  async c => {
-    try {
-      const deleted = await productService.deleteProduct(c.req.param('id'));
-      if (!deleted) {
-        return c.json(
-          { error: { code: 'not_found', message: 'Product not found' } },
-          404,
-        );
-      }
-      return c.json({ ok: true });
-    } catch (err) {
-      const { status, body } = httpError(err);
-      return c.json(body, status);
-    }
-  },
-);
-
-// Orders Admin
-shopAdminRoutes.get(
-  '/orders',
-  requirePermission('catalog.read'),
-  async c => {
-    try {
-      const query = {
-        userId: c.req.query('userId'),
-        status: c.req.query('status'),
-        from: c.req.query('from'),
-        to: c.req.query('to'),
-        search: c.req.query('search'),
-        limit: c.req.query('limit') ? Number(c.req.query('limit')) : undefined,
-        cursor: c.req.query('cursor'),
-      };
-      const validated = OrderAdminQuerySchema.parse(query);
-      const result = await orderService.listOrdersAdmin(validated);
-      return c.json(result);
-    } catch (err) {
-      const { status, body } = httpError(err);
-      return c.json(body, status);
-    }
-  },
-);
-
-shopAdminRoutes.get(
-  '/orders/:id',
-  requirePermission('catalog.read'),
-  async c => {
-    try {
-      const order = await orderService.getOrderAdmin(c.req.param('id'));
-      if (!order) {
-        return c.json(
-          { error: { code: 'not_found', message: 'Order not found' } },
-          404,
-        );
-      }
-      return c.json({ order });
-    } catch (err) {
-      const { status, body } = httpError(err);
-      return c.json(body, status);
-    }
-  },
-);
-
-shopAdminRoutes.patch(
-  '/orders/:id',
-  requirePermission('catalog.write'),
-  async c => {
-    try {
-      const body = UpdateOrderRequestSchema.parse(await c.req.json());
-      const order = await orderService.updateOrderAdmin(c.req.param('id'), body);
-      if (!order) {
-        return c.json(
-          { error: { code: 'not_found', message: 'Order not found' } },
-          404,
-        );
-      }
-      return c.json({ order });
-    } catch (err) {
-      const { status, body } = httpError(err);
-      return c.json(body, status);
-    }
-  },
-);
-=======
 shopAdminRoutes.patch('/orders/:id', async (c) => {
   try {
     requirePermission('catalog.write');
@@ -475,4 +258,3 @@ shopAdminRoutes.patch('/orders/:id', async (c) => {
     return c.json(body, status);
   }
 });
->>>>>>> origin/main

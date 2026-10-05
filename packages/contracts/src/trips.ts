@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PaymentStatusSchema, type PaymentStatus } from './payment.js';
 
 export const TripStatusSchema = z.enum(['draft', 'published', 'archived']);
 export type TripStatus = z.infer<typeof TripStatusSchema>;
@@ -84,13 +85,6 @@ export const TripBookingStatusSchema = z.enum([
 ]);
 export type TripBookingStatus = z.infer<typeof TripBookingStatusSchema>;
 
-export const PaymentStatusSchema = z.enum([
-  'pending',
-  'paid',
-  'failed',
-  'refunded',
-]);
-export type PaymentStatus = z.infer<typeof PaymentStatusSchema>;
 
 export const TripBookingSchema = z.object({
   id: z.string().uuid(),

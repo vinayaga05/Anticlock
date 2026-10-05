@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PaymentStatusSchema, type PaymentStatus } from './payment.js';
 
 export const BookingStatusSchema = z.enum([
   'pending',
@@ -26,13 +27,6 @@ export type BookingCategory = z.infer<typeof BookingCategorySchema>;
 export const ServiceModeSchema = z.enum(['online', 'center', 'home']);
 export type ServiceMode = z.infer<typeof ServiceModeSchema>;
 
-export const PaymentStatusSchema = z.enum([
-  'pending',
-  'paid',
-  'refunded',
-  'failed',
-]);
-export type PaymentStatus = z.infer<typeof PaymentStatusSchema>;
 
 export const BookingDetailSchema = z.object({
   providerName: z.string().optional(),

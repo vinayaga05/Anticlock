@@ -75,7 +75,7 @@ export class TripBookingService {
         totalPrice,
         status: 'pending',
         paymentStatus: 'pending',
-        travelerDetails: request.travelerDetails as unknown[],
+        travelerDetails: request.travelerDetails as Record<string, unknown>[],
         specialRequests: request.specialRequests ?? null,
       })
       .returning();

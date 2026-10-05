@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PaymentStatusSchema, type PaymentStatus } from './payment.js';
 
 export const CourseDifficultySchema = z.enum(['beginner', 'intermediate', 'advanced']);
 export type CourseDifficulty = z.infer<typeof CourseDifficultySchema>;
@@ -117,13 +118,6 @@ export type CourseListResponse = z.infer<typeof CourseListResponseSchema>;
 export const EnrollmentStatusSchema = z.enum(['active', 'completed', 'dropped']);
 export type EnrollmentStatus = z.infer<typeof EnrollmentStatusSchema>;
 
-export const PaymentStatusSchema = z.enum([
-  'pending',
-  'paid',
-  'failed',
-  'refunded',
-]);
-export type PaymentStatus = z.infer<typeof PaymentStatusSchema>;
 
 export const LessonProgressSchema = z.object({
   lessonId: z.string().uuid(),

@@ -18,6 +18,7 @@ import { useEngagementStore } from '@/shared/services/engagementRepository';
 import { useStoryStore } from '@/shared/data/flash/storyStore';
 import { AssistantPrivacySection } from '@/features/assistant/components/AssistantPrivacySection';
 import { useAssistantStore } from '@/features/assistant/store/assistantStore';
+import { useProviderApplicationsQuery } from '@/shared/api/providerHooks';
 
 type MenuItem = {
   id: string;
@@ -80,6 +81,8 @@ export function ProfileScreen() {
   const meta = getProfileMeta(profileId);
   const saved = useEngagementStore(s => s.saved);
   const storyRevision = useStoryStore(s => `${s.stories.length}-${s.archive.length}`);
+  const { data: providerApplications = [] } = useProviderApplicationsQuery();
+  const hasProviderApplications = providerApplications.length > 0;
 
   const shortcuts: Shortcut[] = useMemo(() => {
     return getProfileShortcuts(profileId).map(item => ({
@@ -128,10 +131,12 @@ export function ProfileScreen() {
       },
       {
         id: 'provider',
-        label: 'My businesses',
+        label: hasProviderApplications ? 'My businesses' : 'Become a service provider',
         icon: 'badge-check',
         onPress: () =>
-          navigation.navigate('ProviderBusinesses'),
+          hasProviderApplications
+            ? navigation.navigate('ProviderBusinesses')
+            : navigation.navigate('ProviderApplicationIntro'),
       },
       {
         id: 'saved',
@@ -158,7 +163,7 @@ export function ProfileScreen() {
         onPress: () => navigation.navigate('Main', { screen: 'Community' }),
       },
     ],
-    [navigation, user?.id],
+    [navigation, user?.id, hasProviderApplications],
   );
 
   const moreItems: MenuItem[] = useMemo(
@@ -240,13 +245,16 @@ export function ProfileScreen() {
         items: [
           { label: 'Anticlock Plus', onPress: () => navigation.navigate('ComingSoon', { title: 'Anticlock Plus' }) },
           {
-            label: 'My businesses',
-            onPress: () => navigation.navigate('ProviderBusinesses'),
+            label: hasProviderApplications ? 'My businesses' : 'Become a service provider',
+            onPress: () =>
+              hasProviderApplications
+                ? navigation.navigate('ProviderBusinesses')
+                : navigation.navigate('ProviderApplicationIntro'),
           },
         ],
       },
     ],
-    [mode, navigation, setMode, logout, user?.id],
+    [mode, navigation, setMode, logout, user?.id, hasProviderApplications],
   );
 
   const visibleItems = showMore ? [...primaryItems, ...moreItems] : primaryItems;

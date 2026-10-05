@@ -18,17 +18,41 @@ import {
   providerAdminRoutes,
   providerMobileRoutes,
 } from './routes/provider.js';
+import { shopAdminRoutes, shopMobileRoutes } from './routes/shop.js';
+import { tripsAdminRoutes, tripsMobileRoutes } from './routes/trips.js';
 import { assistantRoutes } from './routes/assistant.js';
 import { interestRoutes } from './routes/interests.js';
 import { contentMobileRoutes, contentPublicRoutes } from './routes/content.js';
 import { profileBlockRoutes } from './routes/blocks.js';
 import { contentSafetyRoutes } from './routes/contentSafety.js';
+<<<<<<< HEAD
+import { moderationAdminRoutes } from './routes/moderation.js';
+=======
+<<<<<<< HEAD
+import {
+  notificationsMobileRoutes,
+  devicesMobileRoutes,
+  notificationsAdminRoutes,
+} from './routes/notifications.js';
+=======
+<<<<<<< HEAD
+import { messagesRoutes } from './routes/messages.js';
+=======
+<<<<<<< HEAD
+import { communitiesMobileRoutes, communitiesAdminRoutes } from './routes/communities.js';
+=======
+import { coursesMobileRoutes, coursesAdminRoutes } from './routes/courses.js';
+>>>>>>> origin/main
+>>>>>>> origin/main
+>>>>>>> origin/main
+>>>>>>> origin/main
 import { startAssistantLifecycleJob } from './assistant/PrivacyService.js';
 import { redisHealthCheck } from './lib/redis.js';
 import {
   loadAiProviderConfig,
   logAiProviderStartup,
 } from './config/ai-provider.config.js';
+import { logTestLoginWarning } from './lib/otp/testLogin.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -58,6 +82,7 @@ assertProductionConfiguration();
 
 const aiConfig = loadAiProviderConfig();
 logAiProviderStartup(aiConfig);
+logTestLoginWarning();
 
 const app = new Hono();
 
@@ -85,17 +110,46 @@ app.route('/v1/catalog', catalogRoutes);
 app.route('/v1/media', mediaPublicRoutes);
 app.route('/v1/reels', reelsPublicRoutes);
 app.route('/v1/provider', providerMobileRoutes);
+app.route('/v1/shop', shopMobileRoutes);
+app.route('/v1/trips', tripsMobileRoutes);
 app.route('/v1/assistant', assistantRoutes);
 app.route('/v1/interests', interestRoutes);
 app.route('/v1/content', contentMobileRoutes);
 app.route('/v1/content', contentPublicRoutes);
 app.route('/v1/content', contentSafetyRoutes);
 app.route('/v1/blocks', profileBlockRoutes);
+<<<<<<< HEAD
+app.route('/v1/notifications', notificationsMobileRoutes);
+app.route('/v1/devices', devicesMobileRoutes);
+=======
+<<<<<<< HEAD
+app.route('/v1/messages', messagesRoutes);
+=======
+<<<<<<< HEAD
+app.route('/v1/communities', communitiesMobileRoutes);
+=======
+app.route('/v1/courses', coursesMobileRoutes);
+>>>>>>> origin/main
+>>>>>>> origin/main
+>>>>>>> origin/main
 app.route('/admin', adminRoutes);
+app.route('/admin/courses', coursesAdminRoutes);
+app.route('/admin/courses', coursesAdminRoutes);
 app.route('/admin/provider', providerAdminRoutes);
+app.route('/admin/shop', shopAdminRoutes);
+app.route('/admin/trips', tripsAdminRoutes);
 app.route('/admin/media', mediaAdminRoutes);
 app.route('/admin/stubs', stubDomainRoutes);
 app.route('/admin/reels', reelsAdminRoutes);
+<<<<<<< HEAD
+app.route('/admin/moderation', moderationAdminRoutes);
+=======
+<<<<<<< HEAD
+app.route('/admin/notifications', notificationsAdminRoutes);
+=======
+app.route('/admin/communities', communitiesAdminRoutes);
+>>>>>>> origin/main
+>>>>>>> origin/main
 app.route('/webhooks/cloudflare/stream', streamWebhookRoutes);
 
 app.onError((err, c) => {

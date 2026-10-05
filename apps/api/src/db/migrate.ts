@@ -937,6 +937,13 @@ async function migrate() {
   `;
 
 <<<<<<< HEAD
+  // Communities feature tables
+  await sql`
+    CREATE TABLE IF NOT EXISTS communities (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      owner_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+=======
+<<<<<<< HEAD
   /** Courses feature migration - append-only block to minimize merge conflicts */
   await sql`
     CREATE TABLE IF NOT EXISTS courses (
@@ -996,10 +1003,118 @@ async function migrate() {
   await sql`
     CREATE TABLE IF NOT EXISTS product_categories (
       id text PRIMARY KEY,
+>>>>>>> origin/main
       name text NOT NULL,
       slug text NOT NULL UNIQUE,
       description text,
       image_url text,
+<<<<<<< HEAD
+      cover_url text,
+      member_count integer NOT NULL DEFAULT 1,
+      post_count integer NOT NULL DEFAULT 0,
+      tags jsonb NOT NULL DEFAULT '[]'::jsonb,
+      status text NOT NULL DEFAULT 'published',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      suspended_at timestamptz
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS communities_status_created_idx
+      ON communities (status, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS communities_slug_idx
+      ON communities (slug)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS community_members (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      community_id uuid NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      role text NOT NULL DEFAULT 'member',
+      joined_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (community_id, mobile_user_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS community_members_user_idx
+      ON community_members (mobile_user_id)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS community_members_community_joined_idx
+      ON community_members (community_id, joined_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS community_posts (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      community_id uuid NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+      author_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      content text NOT NULL,
+      media_asset_id uuid REFERENCES media_assets(id) ON DELETE SET NULL,
+      like_count integer NOT NULL DEFAULT 0,
+      comment_count integer NOT NULL DEFAULT 0,
+      status text NOT NULL DEFAULT 'visible',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      removed_at timestamptz
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS community_posts_community_created_idx
+      ON community_posts (community_id, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS community_posts_author_idx
+      ON community_posts (author_id)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS community_post_likes (
+      post_id uuid NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (post_id, mobile_user_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS community_post_likes_user_created_idx
+      ON community_post_likes (mobile_user_id, created_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS community_post_comments (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      post_id uuid NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+      author_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      content text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS community_post_comments_post_created_idx
+      ON community_post_comments (post_id, created_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS community_post_reports (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      post_id uuid NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+      reporter_mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      reason text NOT NULL,
+      details text,
+      status text NOT NULL DEFAULT 'open',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      resolved_at timestamptz,
+      UNIQUE (post_id, reporter_mobile_user_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS community_post_reports_status_created_idx
+      ON community_post_reports (status, created_at DESC)
+=======
       sort_order integer NOT NULL DEFAULT 0,
       status text NOT NULL DEFAULT 'published',
 >>>>>>> origin/main
@@ -1184,6 +1299,7 @@ async function migrate() {
   await sql`
     CREATE INDEX IF NOT EXISTS trip_bookings_number_idx
       ON trip_bookings (booking_number)
+>>>>>>> origin/main
 >>>>>>> origin/main
   `;
 

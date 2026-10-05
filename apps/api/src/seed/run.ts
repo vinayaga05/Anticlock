@@ -21,10 +21,16 @@ import {
   users,
   mediaAssets,
   reels,
+<<<<<<< HEAD
+  communities,
+  communityMembers,
+  mobileUsers,
+=======
   mobileUsers,
   productCategories,
   products,
   trips,
+>>>>>>> origin/main
 } from '../db/schema.js';
 import catalog from './catalog.json' with { type: 'json' };
 import {
@@ -380,6 +386,58 @@ async function seed() {
     }
   }
 
+<<<<<<< HEAD
+  // Seed communities
+  const sampleCommunities = [
+    {
+      name: 'Chennai Cricket Fans',
+      slug: 'chennai-cricket-fans',
+      description: 'For everyone who loves cricket in Chennai! Share updates, organize meetups, and discuss matches.',
+      tags: ['Cricket', 'Sports', 'Chennai'],
+    },
+    {
+      name: 'Fitness & Wellness',
+      slug: 'fitness-wellness',
+      description: 'A community for fitness enthusiasts, wellness seekers, and healthy living advocates.',
+      tags: ['Fitness', 'Wellness', 'Health'],
+    },
+    {
+      name: 'Tech Talk Chennai',
+      slug: 'tech-talk-chennai',
+      description: 'Discuss the latest in technology, startups, and innovations happening in Chennai.',
+      tags: ['Technology', 'Startups', 'Chennai'],
+    },
+  ];
+
+  const existingUsers = await db.select().from(mobileUsers).limit(5);
+  if (existingUsers.length > 0) {
+    for (const communityData of sampleCommunities) {
+      const existing = await db
+        .select()
+        .from(communities)
+        .where(eq(communities.slug, communityData.slug))
+        .limit(1);
+
+      if (!existing[0]) {
+        const [community] = await db.insert(communities).values({
+          ownerId: existingUsers[0]!.id,
+          name: communityData.name,
+          slug: communityData.slug,
+          description: communityData.description,
+          tags: communityData.tags,
+          memberCount: 1,
+          postCount: 0,
+          status: 'published',
+        }).returning();
+
+        await db.insert(communityMembers).values({
+          communityId: community!.id,
+          mobileUserId: existingUsers[0]!.id,
+          role: 'owner',
+        });
+      }
+    }
+=======
   // Seed product categories and products
   const categorySeeds = [
     {
@@ -639,6 +697,7 @@ async function seed() {
 
   for (const trip of tripSeeds) {
     await db.insert(trips).values(trip).onConflictDoNothing();
+>>>>>>> origin/main
   }
 
   console.log(

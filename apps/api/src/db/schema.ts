@@ -986,6 +986,83 @@ export const mobileUserInterests = pgTable(
 );
 
 <<<<<<< HEAD
+/** Communities for user-created groups with posts and membership */
+export const communities = pgTable(
+  "communities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull().unique(),
+    description: text("description"),
+    imageUrl: text("image_url"),
+    coverUrl: text("cover_url"),
+    memberCount: integer("member_count").notNull().default(1),
+    postCount: integer("post_count").notNull().default(0),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
+    status: text("status").notNull().default("published"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("communities_status_created_idx").on(table.status, table.createdAt),
+    index("communities_slug_idx").on(table.slug),
+  ]
+);
+
+/** Community membership with roles */
+export const communityMembers = pgTable(
+  "community_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    communityId: uuid("community_id")
+      .notNull()
+      .references(() => communities.id, { onDelete: "cascade" }),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("member"),
+    joinedAt: timestamp("joined_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("community_members_uid").on(table.communityId, table.mobileUserId),
+    index("community_members_user_idx").on(table.mobileUserId),
+    index("community_members_community_joined_idx").on(
+      table.communityId,
+      table.joinedAt
+    ),
+  ]
+);
+
+/** Community posts */
+export const communityPosts = pgTable(
+  "community_posts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    communityId: uuid("community_id")
+      .notNull()
+      .references(() => communities.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    mediaAssetId: uuid("media_asset_id").references(() => mediaAssets.id, {
+      onDelete: "set null",
+    }),
+    likeCount: integer("like_count").notNull().default(0),
+    commentCount: integer("comment_count").notNull().default(0),
+    status: text("status").notNull().default("visible"),
+=======
+<<<<<<< HEAD
 /** Courses feature - append-only block to minimize merge conflicts */
 export const courses = pgTable(
   "courses",
@@ -1040,12 +1117,101 @@ export const products = pgTable(
     status: text("status").notNull().default("draft"),
     imageIds: jsonb("image_ids").$type<string[]>().notNull().default([]),
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+>>>>>>> origin/main
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+<<<<<<< HEAD
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("community_posts_community_created_idx").on(
+      table.communityId,
+      table.createdAt
+    ),
+    index("community_posts_author_idx").on(table.authorId),
+  ]
+);
+
+/** Community post likes */
+export const communityPostLikes = pgTable(
+  "community_post_likes",
+  {
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => communityPosts.id, { onDelete: "cascade" }),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.postId, table.mobileUserId] }),
+    index("community_post_likes_user_created_idx").on(
+      table.mobileUserId,
+      table.createdAt
+    ),
+  ]
+);
+
+/** Community post comments */
+export const communityPostComments = pgTable(
+  "community_post_comments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => communityPosts.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("community_post_comments_post_created_idx").on(
+      table.postId,
+      table.createdAt
+    ),
+  ]
+);
+
+/** Community post reports for moderation */
+export const communityPostReports = pgTable(
+  "community_post_reports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => communityPosts.id, { onDelete: "cascade" }),
+    reporterMobileUserId: uuid("reporter_mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    reason: text("reason").notNull(),
+    details: text("details"),
+    status: text("status").notNull().default("open"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (table) => [
+    unique("community_post_reports_reporter_uid").on(
+      table.postId,
+      table.reporterMobileUserId
+    ),
+    index("community_post_reports_status_created_idx").on(
+      table.status,
+      table.createdAt
+    ),
+=======
   },
   (table) => [
     uniqueIndex("products_slug_uidx").on(table.slug),
@@ -1247,6 +1413,7 @@ export const tripBookings = pgTable(
       table.createdAt
     ),
     index("trip_bookings_number_idx").on(table.bookingNumber),
+>>>>>>> origin/main
 >>>>>>> origin/main
   ]
 );

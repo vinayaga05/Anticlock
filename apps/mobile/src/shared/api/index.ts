@@ -12,6 +12,23 @@ export {
   useServiceCategoriesQuery,
 } from './hooks';
 <<<<<<< HEAD
+export {
+  useCommunitiesQuery,
+  useMyCommunitiesQuery,
+  useCommunityQuery,
+  useCreateCommunityMutation,
+  useJoinCommunityMutation,
+  useLeaveCommunityMutation,
+  useCommunityPostsQuery,
+  useCreatePostMutation,
+  useLikePostMutation,
+  useUnlikePostMutation,
+  usePostCommentsQuery,
+  useCreateCommentMutation,
+  useReportPostMutation,
+} from './communityHooks';
+=======
+<<<<<<< HEAD
 export * from './coursesHooks';
 =======
 export {
@@ -30,4 +47,5 @@ export {
   useCreateTripBookingMutation,
   useCancelTripBookingMutation,
 } from './tripsHooks';
+>>>>>>> origin/main
 >>>>>>> origin/main

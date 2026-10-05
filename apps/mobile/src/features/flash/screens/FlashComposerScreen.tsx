@@ -21,8 +21,16 @@ import { getFlashCloudflareVideo } from '@/shared/data/cloudflareVideos';
 import {
   usePublishContentMutation,
   usePublishingIdentitiesQuery,
+  uploadContentMedia,
 } from '@/shared/api/publishingHooks';
 import { isApiEnabled } from '@/shared/api/config';
+import {
+  pickClipVideo,
+  pickClipCover,
+  createVideoUploadFile,
+  createCoverUploadFile,
+} from '@/features/reels/media/clipMediaPicker';
+import type { PickedClipVideo, PickedClipCover } from '@/features/reels/media/clipMediaPicker';
 
 const canvaSampleVideo = getFlashCloudflareVideo();
 
@@ -64,6 +72,10 @@ export function FlashComposerScreen() {
   const [visibility, setVisibility] = useState<PostVisibility>('public');
   const [media, setMedia] = useState<PostMedia[]>([]);
   const [identityId, setIdentityId] = useState<string | null>(null);
+  const [pickedPhotos, setPickedPhotos] = useState<PickedClipCover[]>([]);
+  const [pickedVideos, setPickedVideos] = useState<PickedClipVideo[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
     if (!identityId && identities[0]) setIdentityId(identities[0].id);
@@ -80,9 +92,83 @@ export function FlashComposerScreen() {
     [identities],
   );
 
+  const handlePickPhoto = async () => {
+    try {
+      const photo = await pickClipCover();
+      if (photo) {
+        setPickedPhotos(prev => [...prev, photo]);
+      }
+    } catch (error) {
+      Alert.alert(
+        'Could not select photo',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
+    }
+  };
+
+  const handlePickVideo = async () => {
+    try {
+      const video = await pickClipVideo();
+      if (video) {
+        setPickedVideos(prev => [...prev, video]);
+      }
+    } catch (error) {
+      Alert.alert(
+        'Could not select video',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
+    }
+  };
+
   const publish = async () => {
-    if (!text.trim() && media.length === 0) return;
-    if (isApiEnabled && identity && media.length === 0) {
+    const hasRealMedia = pickedPhotos.length > 0 || pickedVideos.length > 0;
+    if (!text.trim() && media.length === 0 && !hasRealMedia) return;
+
+    if (isApiEnabled && identity && hasRealMedia) {
+      try {
+        setUploading(true);
+        setUploadProgress(0);
+        const mediaIds: string[] = [];
+        const totalMedia = pickedPhotos.length + pickedVideos.length;
+        let uploadedCount = 0;
+
+        for (const photo of pickedPhotos) {
+          const file = await createCoverUploadFile(photo);
+          const mediaId = await uploadContentMedia(identity, file, visibility);
+          mediaIds.push(mediaId);
+          uploadedCount++;
+          setUploadProgress(Math.round((uploadedCount / totalMedia) * 70));
+        }
+
+        for (const video of pickedVideos) {
+          const file = await createVideoUploadFile(video);
+          const mediaId = await uploadContentMedia(identity, file, visibility);
+          mediaIds.push(mediaId);
+          uploadedCount++;
+          setUploadProgress(Math.round((uploadedCount / totalMedia) * 70));
+        }
+
+        setUploadProgress(80);
+        await publishContent.mutateAsync({
+          format: 'flash',
+          mediaType: mediaIds.length > 1 ? 'hybrid' : pickedVideos.length > 0 ? 'video' : 'image',
+          caption: text.trim(),
+          mediaIds,
+          visibility,
+          identity,
+        });
+        setUploadProgress(100);
+      } catch (error) {
+        Alert.alert(
+          'Could not publish',
+          error instanceof Error ? error.message : 'Please try again.',
+        );
+        return;
+      } finally {
+        setUploading(false);
+        setUploadProgress(0);
+      }
+    } else if (isApiEnabled && identity && media.length === 0) {
       try {
         await publishContent.mutateAsync({
           format: 'flash',
@@ -99,6 +185,7 @@ export function FlashComposerScreen() {
         return;
       }
     }
+
     publishPost({
       text: text.trim(),
       visibility,
@@ -238,7 +325,85 @@ export function FlashComposerScreen() {
             { color: theme.colors.textPrimary },
           ]}
         >
-          Add media (mock)
+          Add media
+        </Text>
+        <View style={styles.row}>
+          <PressableScale
+            onPress={handlePickPhoto}
+            style={[
+              styles.mediaPickerButton,
+              {
+                borderColor: theme.colors.primary,
+                backgroundColor: theme.colors.primarySoft,
+                borderRadius: theme.radius.md,
+              },
+            ]}>
+            <Text style={[theme.typography.section, { color: theme.colors.primary }]}>
+              Photo
+            </Text>
+          </PressableScale>
+          <PressableScale
+            onPress={handlePickVideo}
+            style={[
+              styles.mediaPickerButton,
+              {
+                borderColor: theme.colors.primary,
+                backgroundColor: theme.colors.primarySoft,
+                borderRadius: theme.radius.md,
+              },
+            ]}>
+            <Text style={[theme.typography.section, { color: theme.colors.primary }]}>
+              Video
+            </Text>
+          </PressableScale>
+        </View>
+        {pickedPhotos.length > 0 || pickedVideos.length > 0 ? (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.mediaPreviewScroll}>
+              {pickedPhotos.map((photo, idx) => (
+                <View key={`photo-${idx}`} style={styles.mediaPreviewItem}>
+                  <Image
+                    source={{ uri: typeof photo.previewSource === 'string' ? photo.previewSource : undefined }}
+                    style={styles.mediaPreviewThumb}
+                    resizeMode="cover"
+                  />
+                  <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
+                    Photo
+                  </Text>
+                </View>
+              ))}
+              {pickedVideos.map((video, idx) => (
+                <View key={`video-${idx}`} style={styles.mediaPreviewItem}>
+                  <Image
+                    source={{ uri: typeof video.previewSource === 'string' ? video.previewSource : undefined }}
+                    style={styles.mediaPreviewThumb}
+                    resizeMode="cover"
+                  />
+                  <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
+                    {Math.round(video.durationMs / 1000)}s
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+            <PressableScale onPress={() => { setPickedPhotos([]); setPickedVideos([]); }}>
+              <Text
+                style={[
+                  theme.typography.caption,
+                  { color: theme.colors.primary },
+                ]}
+              >
+                Clear media
+              </Text>
+            </PressableScale>
+          </>
+        ) : null}
+        <Text
+          style={[
+            theme.typography.caption,
+            { color: theme.colors.textTertiary },
+          ]}
+        >
+          Or use sample media for testing
         </Text>
         <View style={styles.row}>
           {SAMPLE_MEDIA.map(m => {
@@ -292,7 +457,7 @@ export function FlashComposerScreen() {
                 { color: theme.colors.primary },
               ]}
             >
-              Clear media
+              Clear sample media
             </Text>
           </PressableScale>
         ) : null}
@@ -309,9 +474,9 @@ export function FlashComposerScreen() {
         ]}
       >
         <Button
-          title="Publish"
+          title={uploading ? `Uploading ${uploadProgress}%` : "Publish"}
           onPress={() => void publish()}
-          loading={publishContent.isPending}
+          loading={publishContent.isPending || uploading}
         />
       </View>
     </View>
@@ -348,6 +513,25 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   mediaThumb: { width: '100%', height: 90 },
+  mediaPickerButton: {
+    flex: 1,
+    padding: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+  },
+  mediaPreviewScroll: {
+    flexGrow: 0,
+  },
+  mediaPreviewItem: {
+    marginRight: 10,
+    alignItems: 'center',
+    gap: 4,
+  },
+  mediaPreviewThumb: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+  },
   footer: {
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 16,

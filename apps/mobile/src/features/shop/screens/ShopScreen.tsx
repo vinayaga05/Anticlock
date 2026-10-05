@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
 import type { ImageSourcePropType } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
@@ -22,6 +22,7 @@ import { useCartStore } from '@/shared/store/cartStore';
 import { AppIcon } from '@/shared/components/AppIcon';
 import { softFill, treeColors } from '@/shared/theme/colors';
 import type { MainTabParamList } from '@/shared/navigation/types';
+import { useProductsQuery, isApiEnabled } from '@/shared/api';
 
 const shopCategoryImages: Record<string, ImageSourcePropType> = {
   'ecom.sports': require('../../../shared/assets/categories/shop-sports-3d.png'),
@@ -53,19 +54,38 @@ export function ShopScreen() {
     }
   }, [route.params?.q, route.params?.categoryId]);
 
+  const {
+    data: apiData,
+    isLoading,
+    error,
+  } = useProductsQuery(categoryId ?? undefined);
+
   const products = useMemo(() => {
-    const base = categoryId
-      ? getProductsForCategory(categoryId)
-      : marketplaceProducts.filter(product => !product.isProperty);
+    if (!isApiEnabled) {
+      const base = categoryId
+        ? getProductsForCategory(categoryId)
+        : marketplaceProducts.filter(product => !product.isProperty);
+      const q = query.trim().toLowerCase();
+      if (!q) return base;
+      return base.filter(
+        p =>
+          p.name.toLowerCase().includes(q) ||
+          p.seller?.toLowerCase().includes(q) ||
+          p.description?.toLowerCase().includes(q),
+      );
+    }
+
+    const apiProducts = apiData?.products ?? [];
     const q = query.trim().toLowerCase();
-    if (!q) return base;
-    return base.filter(
-      p =>
-        p.name.toLowerCase().includes(q) ||
-        p.seller?.toLowerCase().includes(q) ||
-        p.description?.toLowerCase().includes(q),
-    );
-  }, [categoryId, query]);
+    if (!q) return apiProducts.map(mapApiProductToCard);
+    return apiProducts
+      .filter(
+        p =>
+          p.name.toLowerCase().includes(q) ||
+          p.description?.toLowerCase().includes(q),
+      )
+      .map(mapApiProductToCard);
+  }, [categoryId, query, apiData, isApiEnabled]);
 
   const selectedName =
     categories.find(c => c.id === categoryId)?.name ?? 'All products';
@@ -183,7 +203,17 @@ export function ShopScreen() {
         subtitle={`${products.length} items`}
       />
 
-      {products.length === 0 ? (
+      {isLoading && isApiEnabled ? (
+        <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      ) : error && isApiEnabled ? (
+        <EmptyState
+          icon="alert-circle"
+          title="Error loading products"
+          description={(error as Error).message}
+        />
+      ) : products.length === 0 ? (
         <EmptyState
           icon="shopping-bag"
           title="No products"
@@ -208,6 +238,19 @@ export function ShopScreen() {
       )}
     </ScreenContainer>
   );
+}
+
+function mapApiProductToCard(apiProduct: any): any {
+  return {
+    id: apiProduct.id,
+    name: apiProduct.name,
+    description: apiProduct.description || '',
+    price: Math.round(apiProduct.price / 100),
+    rating: 4.5,
+    seller: 'Anticlock Shop',
+    imageUrl: apiProduct.images[0]?.url || 'https://placehold.co/400x400/png',
+    isProperty: false,
+  };
 }
 
 const styles = StyleSheet.create({

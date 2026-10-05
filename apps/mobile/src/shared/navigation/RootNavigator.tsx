@@ -1,11 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   NavigationContainer,
   DarkTheme,
   DefaultTheme,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { assistantLinking } from '@/features/assistant/navigation/assistantNavigation';
+import { Linking } from 'react-native';
+import { linking } from '@/shared/navigation/linking';
+import { 
+  storePendingDeepLink, 
+  usePendingDeepLink 
+} from '@/shared/navigation/usePendingDeepLink';
 import { useAssistantStore } from '@/features/assistant/store/assistantStore';
 import { MainNavigator } from '@/shared/navigation/MainNavigator';
 import { RootStackParamList } from '@/shared/navigation/types';
@@ -88,6 +93,31 @@ export function RootNavigator() {
   const { data: interests, isLoading: interestsLoading } =
     useMyInterestsQuery(shouldLoadInterests);
 
+  // Handle pending deep links after authentication
+  const isAuthenticated = Boolean(user);
+  usePendingDeepLink(isAuthenticated);
+
+  // Store deep links when unauthenticated
+  useEffect(() => {
+    if (!user) {
+      const handleUrl = ({ url }: { url: string }) => {
+        // Store the link to navigate after login
+        storePendingDeepLink(url);
+      };
+
+      // Handle initial URL (cold start)
+      Linking.getInitialURL().then(url => {
+        if (url) {
+          storePendingDeepLink(url);
+        }
+      });
+
+      // Handle incoming URLs (warm start)
+      const subscription = Linking.addEventListener('url', handleUrl);
+      return () => subscription.remove();
+    }
+  }, [user]);
+
   const navigationTheme =
     theme.mode === 'dark'
       ? {
@@ -126,7 +156,7 @@ export function RootNavigator() {
   return (
     <NavigationContainer
       theme={navigationTheme}
-      linking={assistantLinking}
+      linking={linking}
       onStateChange={state => {
         if (!state) return;
         const route = state.routes[state.index];

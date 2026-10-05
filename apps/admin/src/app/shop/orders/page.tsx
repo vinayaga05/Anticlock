@@ -23,7 +23,11 @@ export default function OrdersPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (input: { id: string; status: string; paymentStatus: string }) =>
+    mutationFn: (input: {
+      id: string;
+      status?: string;
+      paymentStatus?: string;
+    }) =>
       apiFetch(`/admin/shop/orders/${input.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
@@ -46,7 +50,7 @@ export default function OrdersPage() {
   }
 
   function handleUpdate() {
-    if (selectedOrder && editStatus && editPaymentStatus) {
+    if (selectedOrder && (editStatus || editPaymentStatus)) {
       updateMutation.mutate({
         id: selectedOrder.id,
         status: editStatus,
@@ -65,8 +69,8 @@ export default function OrdersPage() {
     });
   }
 
-  function formatPrice(price: number) {
-    return `₹${(price / 100).toFixed(2)}`;
+  function formatPrice(paise: number) {
+    return `₹${(paise / 100).toFixed(2)}`;
   }
 
   function getStatusBadgeClass(status: string) {
@@ -77,8 +81,10 @@ export default function OrdersPage() {
       case 'confirmed':
         return 'badge-warning';
       case 'cancelled':
-      case 'refunded':
         return 'badge-error';
+      case 'processing':
+      case 'shipped':
+        return 'badge-info';
       default:
         return 'badge';
     }
@@ -88,7 +94,7 @@ export default function OrdersPage() {
     <AdminShell>
       <h1 className="page-title">Orders</h1>
       <p className="page-sub">
-        Manage all orders. View order details and update status for fulfillment.
+        Manage all shop orders. View details and update status.
       </p>
 
       <div className="card">
@@ -99,7 +105,7 @@ export default function OrdersPage() {
           <table className="table">
             <thead>
               <tr>
-                <th>Order #</th>
+                <th>Order</th>
                 <th>Customer</th>
                 <th>Items</th>
                 <th>Total</th>
@@ -120,26 +126,33 @@ export default function OrdersPage() {
                     <div className="muted">{order.userPhone}</div>
                   </td>
                   <td>
-                    {order.items.length} item{order.items.length !== 1 ? 's' : ''}
+                    {order.items.map((item, idx) => (
+                      <div key={idx}>
+                        {item.productName} × {item.quantity}
+                      </div>
+                    ))}
                   </td>
                   <td>
                     <strong>{formatPrice(order.total)}</strong>
+                    <div className="muted">
+                      Sub: {formatPrice(order.subtotal)}
+                      <br />
+                      Ship: {formatPrice(order.shipping)}
+                      <br />
+                      Tax: {formatPrice(order.tax)}
+                    </div>
                   </td>
                   <td>
-                    <span className={`badge ${getStatusBadgeClass(order.status)}`}>
+                    <span
+                      className={`badge ${getStatusBadgeClass(order.status)}`}
+                    >
                       {order.status}
                     </span>
                   </td>
                   <td>
-                    <span
-                      className={`badge ${getStatusBadgeClass(order.paymentStatus)}`}
-                    >
-                      {order.paymentStatus}
-                    </span>
+                    <span className="badge">{order.paymentStatus}</span>
                   </td>
-                  <td>
-                    <div className="muted">{formatDate(order.createdAt)}</div>
-                  </td>
+                  <td>{formatDate(order.createdAt)}</td>
                   <td>
                     {hasPermission('catalog.write') ? (
                       <button
@@ -163,10 +176,10 @@ export default function OrdersPage() {
       {selectedOrder && (
         <div className="modal-overlay" onClick={() => setSelectedOrder(null)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h2>Edit Order Status</h2>
+            <h2>Edit Order</h2>
             <div className="form-group">
               <label>Order Number</label>
-              <p>{selectedOrder.orderNumber}</p>
+              <p className="muted">{selectedOrder.orderNumber}</p>
             </div>
             <div className="form-group">
               <label>Customer</label>
@@ -176,13 +189,11 @@ export default function OrdersPage() {
             </div>
             <div className="form-group">
               <label>Items</label>
-              <ul className="items-list">
-                {selectedOrder.items.map((item, idx) => (
-                  <li key={idx}>
-                    {item.productName} × {item.quantity} - {formatPrice(item.totalPrice)}
-                  </li>
-                ))}
-              </ul>
+              {selectedOrder.items.map((item, idx) => (
+                <p key={idx}>
+                  {item.productName} × {item.quantity} = {formatPrice(item.price * item.quantity)}
+                </p>
+              ))}
             </div>
             <div className="form-group">
               <label htmlFor="status">Order Status</label>
@@ -198,7 +209,6 @@ export default function OrdersPage() {
                 <option value="shipped">Shipped</option>
                 <option value="delivered">Delivered</option>
                 <option value="cancelled">Cancelled</option>
-                <option value="refunded">Refunded</option>
               </select>
             </div>
             <div className="form-group">
@@ -211,8 +221,8 @@ export default function OrdersPage() {
               >
                 <option value="pending">Pending</option>
                 <option value="paid">Paid</option>
-                <option value="failed">Failed</option>
                 <option value="refunded">Refunded</option>
+                <option value="failed">Failed</option>
               </select>
             </div>
             <div className="modal-actions">
@@ -232,76 +242,9 @@ export default function OrdersPage() {
                 {updateMutation.isPending ? 'Updating…' : 'Update'}
               </button>
             </div>
-            {updateMutation.isError && (
-              <p className="error">{(updateMutation.error as Error).message}</p>
-            )}
           </div>
         </div>
       )}
-
-      <style jsx>{`
-        .items-list {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-        }
-        .items-list li {
-          padding: 0.25rem 0;
-          font-size: 0.9rem;
-        }
-        .modal-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(0, 0, 0, 0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-        }
-        .modal-content {
-          background: white;
-          padding: 2rem;
-          border-radius: 8px;
-          max-width: 600px;
-          width: 90%;
-          max-height: 90vh;
-          overflow-y: auto;
-        }
-        .modal-actions {
-          display: flex;
-          gap: 0.5rem;
-          margin-top: 1rem;
-          justify-content: flex-end;
-        }
-        .form-group {
-          margin-bottom: 1rem;
-        }
-        .form-input {
-          width: 100%;
-          padding: 0.5rem;
-          border: 1px solid #ddd;
-          border-radius: 4px;
-        }
-        .badge-success {
-          background: #d4edda;
-          color: #155724;
-        }
-        .badge-warning {
-          background: #fff3cd;
-          color: #856404;
-        }
-        .badge-error {
-          background: #f8d7da;
-          color: #721c24;
-        }
-        .small {
-          padding: 0.25rem 0.5rem;
-          font-size: 0.875rem;
-        }
-      `}</style>
     </AdminShell>
   );
 }

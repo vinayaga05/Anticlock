@@ -16,8 +16,8 @@
 # ---------------------------------------------------------------------------
 # App entry points
 # ---------------------------------------------------------------------------
--keep class com.anticlocktemp.MainActivity { *; }
--keep class com.anticlocktemp.MainApplication { *; }
+-keep class com.anticlock.app.MainActivity { *; }
+-keep class com.anticlock.app.MainApplication { *; }
 
 # ---------------------------------------------------------------------------
 # React Native / Hermes / JNI (bridge + New Architecture)
@@ -71,16 +71,47 @@
 # ---------------------------------------------------------------------------
 # Native modules used by this app
 # ---------------------------------------------------------------------------
+
+# react-native-reanimated (worklets, shared values, animations)
 -keep class com.swmansion.reanimated.** { *; }
+-keep class com.facebook.react.turbomodule.** { *; }
+-keep class com.facebook.react.fabric.** { *; }
+
+# react-native-worklets (worklet runtime for Reanimated, VisionCamera, etc.)
 -keep class com.swmansion.worklets.** { *; }
+
+# react-native-screens (native stack navigator, screen optimization)
 -keep class com.swmansion.rnscreens.** { *; }
+
+# react-native-gesture-handler (touch gestures, swipe, pan, etc.)
 -keep class com.swmansion.gesturehandler.** { *; }
+
+# react-native-safe-area-context (notch, insets, safe area)
 -keep class com.th3rdwave.safeareacontext.** { *; }
+
+# react-native-svg (vector graphics rendering)
 -keep public class com.horcrux.svg.** { *; }
+
+# react-native-mmkv (fast key-value storage via C++ JSI)
+# Also includes nitro-modules for Nitro Modules architecture
 -keep class com.mrousavy.mmkv.** { *; }
 -keep class com.margelo.nitro.** { *; }
+
+# react-native-video (video playback via ExoPlayer)
 -keep class com.brentvatne.react.** { *; }
+
+# @react-native-community/blur (native blur views)
 -keep class com.reactnativecommunity.blurview.** { *; }
+
+# react-native-image-picker (camera & gallery access)
+-keep class com.imagepicker.** { *; }
+-keep class com.imagepicker.permissions.** { *; }
+
+# @react-native-voice/voice (speech recognition)
+-keep class com.wenkesj.voice.** { *; }
+-keepclassmembers class com.wenkesj.voice.** {
+    <methods>;
+}
 
 # ---------------------------------------------------------------------------
 # Okio / common Android

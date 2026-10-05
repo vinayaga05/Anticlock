@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { and, desc, eq, gte, ilike, lt, or } from 'drizzle-orm';
+=======
+import { and, desc, eq, gte, lt, lte } from 'drizzle-orm';
+>>>>>>> origin/main
 import type {
   Order,
   OrderAdminListItem,
@@ -8,13 +12,23 @@ import type {
   OrderItem,
 } from '@anticlock/contracts';
 import { db } from '../db/client.js';
+<<<<<<< HEAD
 import { orders, products, mobileUsers } from '../db/schema.js';
+=======
+import { orders, mobileUsers, products } from '../db/schema.js';
+import { productService } from './ProductService.js';
+
+const FREE_SHIPPING_THRESHOLD = 50000;
+const FLAT_SHIPPING_RATE = 500;
+const TAX_RATE = 0.18;
+>>>>>>> origin/main
 
 export class OrderService {
   async createOrder(
     mobileUserId: string,
     request: CreateOrderRequest,
   ): Promise<Order> {
+<<<<<<< HEAD
     // Fetch products to validate and build order items
     const productIds = request.items.map(item => item.productId);
     const productRows = await db
@@ -104,6 +118,91 @@ export class OrderService {
       .returning();
 
     return this.mapOrderRow(row!);
+=======
+    let orderItems: OrderItem[] = [];
+    let subtotal = 0;
+    let shipping = 0;
+    let tax = 0;
+    let total = 0;
+    let orderNumber = '';
+    let orderId = '';
+
+    await db.transaction(async (tx) => {
+      for (const cartItem of request.items) {
+        const product = await productService.getProduct(cartItem.productId);
+
+        if (!product) {
+          throw Object.assign(new Error(`Product ${cartItem.productId} not found`), {
+            code: 'product_not_found',
+            status: 404,
+          });
+        }
+
+        if (product.status !== 'published') {
+          throw Object.assign(new Error(`Product ${product.name} is not available`), {
+            code: 'product_unavailable',
+            status: 400,
+          });
+        }
+
+        if (product.inventory < cartItem.quantity) {
+          throw Object.assign(
+            new Error(`Insufficient inventory for ${product.name}`),
+            {
+              code: 'insufficient_inventory',
+              status: 409,
+            },
+          );
+        }
+
+        await productService.decrementInventory(cartItem.productId, cartItem.quantity, tx as any);
+
+        const itemTotal = product.price * cartItem.quantity;
+        subtotal += itemTotal;
+
+        orderItems.push({
+          productId: product.id,
+          productName: product.name,
+          productSlug: product.slug,
+          quantity: cartItem.quantity,
+          price: product.price,
+          imageUrl: product.images[0]?.url,
+        });
+      }
+
+      shipping = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : FLAT_SHIPPING_RATE;
+      tax = Math.round(subtotal * TAX_RATE);
+      total = subtotal + shipping + tax;
+
+      orderNumber = this.generateOrderNumber();
+
+      const [row] = await tx
+        .insert(orders)
+        .values({
+          orderNumber,
+          mobileUserId,
+          items: orderItems as unknown as Record<string, unknown>[],
+          subtotal,
+          shipping,
+          tax,
+          total,
+          shippingAddress: request.shippingAddress as Record<string, unknown>,
+          status: 'pending',
+          paymentStatus: 'pending',
+          metadata: request.metadata ?? null,
+        })
+        .returning();
+
+      orderId = row!.id;
+    });
+
+    const [order] = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.id, orderId));
+
+    return this.mapOrderRow(order!);
+>>>>>>> origin/main
   }
 
   async getOrder(orderId: string, mobileUserId: string): Promise<Order | null> {
@@ -126,8 +225,19 @@ export class OrderService {
     const limit = Math.min(options.limit ?? 20, 100);
 
     const conditions = [eq(orders.mobileUserId, mobileUserId)];
+<<<<<<< HEAD
     if (options.status) conditions.push(eq(orders.status, options.status));
     if (options.cursor) conditions.push(lt(orders.createdAt, new Date(options.cursor)));
+=======
+
+    if (options.cursor) {
+      conditions.push(lt(orders.createdAt, new Date(options.cursor)));
+    }
+
+    if (options.status) {
+      conditions.push(eq(orders.status, options.status));
+    }
+>>>>>>> origin/main
 
     const rows = await db
       .select()
@@ -137,14 +247,22 @@ export class OrderService {
       .limit(limit + 1);
 
     const hasMore = rows.length > limit;
+<<<<<<< HEAD
     const items = rows.slice(0, limit);
 
     return {
       orders: items.map(row => this.mapOrderRow(row)),
+=======
+    const items = hasMore ? rows.slice(0, limit) : rows;
+
+    return {
+      orders: items.map((row) => this.mapOrderRow(row)),
+>>>>>>> origin/main
       nextCursor: hasMore ? items[items.length - 1]!.createdAt.toISOString() : null,
     };
   }
 
+<<<<<<< HEAD
   async updateOrder(
     orderId: string,
     mobileUserId: string,
@@ -178,10 +296,38 @@ export class OrderService {
 
   async cancelOrder(orderId: string, mobileUserId: string): Promise<Order | null> {
     const [row] = await db
+=======
+  async cancelOrder(
+    orderId: string,
+    mobileUserId: string,
+    reason?: string,
+  ): Promise<Order> {
+    const [row] = await db
+      .select()
+      .from(orders)
+      .where(and(eq(orders.id, orderId), eq(orders.mobileUserId, mobileUserId)));
+
+    if (!row) {
+      throw Object.assign(new Error('Order not found'), {
+        code: 'not_found',
+        status: 404,
+      });
+    }
+
+    if (!['pending', 'confirmed'].includes(row.status)) {
+      throw Object.assign(new Error('Order cannot be cancelled'), {
+        code: 'cannot_cancel',
+        status: 400,
+      });
+    }
+
+    const [updated] = await db
+>>>>>>> origin/main
       .update(orders)
       .set({
         status: 'cancelled',
         cancelledAt: new Date(),
+<<<<<<< HEAD
         updatedAt: new Date(),
       })
       .where(
@@ -197,10 +343,25 @@ export class OrderService {
   }
 
   async listOrdersAdmin(filters: {
+=======
+        metadata: {
+          ...(row.metadata as Record<string, unknown>),
+          cancelReason: reason,
+        },
+      })
+      .where(eq(orders.id, orderId))
+      .returning();
+
+    return this.mapOrderRow(updated!);
+  }
+
+  async listAdminOrders(options: {
+>>>>>>> origin/main
     userId?: string;
     status?: OrderStatus;
     from?: string;
     to?: string;
+<<<<<<< HEAD
     search?: string;
     limit?: number;
     cursor?: string;
@@ -216,11 +377,44 @@ export class OrderService {
       conditions.push(ilike(orders.orderNumber, `%${filters.search}%`));
     }
     if (filters.cursor) conditions.push(lt(orders.createdAt, new Date(filters.cursor)));
+=======
+    limit?: number;
+    cursor?: string;
+  } = {}): Promise<{ orders: OrderAdminListItem[]; nextCursor: string | null }> {
+    const limit = Math.min(options.limit ?? 50, 100);
+
+    const conditions = [];
+
+    if (options.cursor) {
+      conditions.push(lt(orders.createdAt, new Date(options.cursor)));
+    }
+
+    if (options.userId) {
+      conditions.push(eq(orders.mobileUserId, options.userId));
+    }
+
+    if (options.status) {
+      conditions.push(eq(orders.status, options.status));
+    }
+
+    if (options.from) {
+      conditions.push(gte(orders.createdAt, new Date(options.from)));
+    }
+
+    if (options.to) {
+      conditions.push(lte(orders.createdAt, new Date(options.to)));
+    }
+>>>>>>> origin/main
 
     const rows = await db
       .select({
         order: orders,
+<<<<<<< HEAD
         user: mobileUsers,
+=======
+        userName: mobileUsers.displayName,
+        userPhone: mobileUsers.phone,
+>>>>>>> origin/main
       })
       .from(orders)
       .innerJoin(mobileUsers, eq(orders.mobileUserId, mobileUsers.id))
@@ -229,6 +423,7 @@ export class OrderService {
       .limit(limit + 1);
 
     const hasMore = rows.length > limit;
+<<<<<<< HEAD
     const items = rows.slice(0, limit);
 
     return {
@@ -236,6 +431,15 @@ export class OrderService {
         ...this.mapOrderRow(order),
         userName: user.displayName,
         userPhone: user.phone,
+=======
+    const items = hasMore ? rows.slice(0, limit) : rows;
+
+    return {
+      orders: items.map((row) => ({
+        ...this.mapOrderRow(row.order),
+        userName: row.userName,
+        userPhone: row.userPhone,
+>>>>>>> origin/main
       })),
       nextCursor: hasMore
         ? items[items.length - 1]!.order.createdAt.toISOString()
@@ -243,11 +447,20 @@ export class OrderService {
     };
   }
 
+<<<<<<< HEAD
   async getOrderAdmin(orderId: string): Promise<OrderAdminListItem | null> {
     const [row] = await db
       .select({
         order: orders,
         user: mobileUsers,
+=======
+  async getAdminOrder(orderId: string): Promise<OrderAdminListItem | null> {
+    const [row] = await db
+      .select({
+        order: orders,
+        userName: mobileUsers.displayName,
+        userPhone: mobileUsers.phone,
+>>>>>>> origin/main
       })
       .from(orders)
       .innerJoin(mobileUsers, eq(orders.mobileUserId, mobileUsers.id))
@@ -257,6 +470,7 @@ export class OrderService {
 
     return {
       ...this.mapOrderRow(row.order),
+<<<<<<< HEAD
       userName: row.user.displayName,
       userPhone: row.user.phone,
     };
@@ -304,6 +518,48 @@ export class OrderService {
       .from(products)
       .limit(1);
     return asset?.storageKey ? String(asset.storageKey) : null;
+=======
+      userName: row.userName,
+      userPhone: row.userPhone,
+    };
+  }
+
+  async updateAdminOrder(
+    orderId: string,
+    request: UpdateOrderRequest,
+  ): Promise<Order> {
+    const updateData: Record<string, unknown> = { updatedAt: new Date() };
+
+    if (request.status !== undefined) {
+      updateData.status = request.status;
+      if (request.status === 'delivered') {
+        updateData.completedAt = new Date();
+      }
+    }
+
+    if (request.paymentStatus !== undefined) {
+      updateData.paymentStatus = request.paymentStatus;
+    }
+
+    if (request.metadata !== undefined) {
+      updateData.metadata = request.metadata;
+    }
+
+    const [row] = await db
+      .update(orders)
+      .set(updateData)
+      .where(eq(orders.id, orderId))
+      .returning();
+
+    if (!row) {
+      throw Object.assign(new Error('Order not found'), {
+        code: 'not_found',
+        status: 404,
+      });
+    }
+
+    return this.mapOrderRow(row);
+>>>>>>> origin/main
   }
 
   private mapOrderRow(row: typeof orders.$inferSelect): Order {
@@ -311,6 +567,7 @@ export class OrderService {
       id: row.id,
       orderNumber: row.orderNumber,
       mobileUserId: row.mobileUserId,
+<<<<<<< HEAD
       status: row.status as Order['status'],
       paymentStatus: row.paymentStatus as Order['paymentStatus'],
       items: row.items as Order['items'],
@@ -327,6 +584,35 @@ export class OrderService {
       deliveredAt: row.deliveredAt?.toISOString() ?? null,
     };
   }
+=======
+      items: row.items as unknown as OrderItem[],
+      subtotal: row.subtotal,
+      shipping: row.shipping,
+      tax: row.tax,
+      total: row.total,
+      shippingAddress: row.shippingAddress as any,
+      status: row.status as OrderStatus,
+      paymentStatus: row.paymentStatus as
+        | 'pending'
+        | 'paid'
+        | 'refunded'
+        | 'failed',
+      metadata: row.metadata as Record<string, unknown> | undefined,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+      cancelledAt: row.cancelledAt?.toISOString() ?? null,
+      completedAt: row.completedAt?.toISOString() ?? null,
+    };
+  }
+
+  private generateOrderNumber(): string {
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 10000)
+      .toString()
+      .padStart(4, '0');
+    return `ORD-${timestamp}-${random}`;
+  }
+>>>>>>> origin/main
 }
 
 export const orderService = new OrderService();

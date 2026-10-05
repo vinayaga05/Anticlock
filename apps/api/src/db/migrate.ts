@@ -936,6 +936,62 @@ async function migrate() {
       ON service_categories USING gin (search_vector)
   `;
 
+<<<<<<< HEAD
+  /** Courses feature migration - append-only block to minimize merge conflicts */
+  await sql`
+    CREATE TABLE IF NOT EXISTS courses (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      slug text NOT NULL,
+      name text NOT NULL,
+      short_description text NOT NULL,
+      description text NOT NULL,
+      difficulty text NOT NULL,
+      duration_hours integer NOT NULL,
+      price integer NOT NULL,
+      compare_at_price integer,
+      image_id uuid REFERENCES media_assets(id) ON DELETE SET NULL,
+      instructor_name text NOT NULL,
+      instructor_bio text,
+      learning_outcomes jsonb NOT NULL DEFAULT '[]'::jsonb,
+      prerequisites jsonb NOT NULL DEFAULT '[]'::jsonb,
+      status text NOT NULL DEFAULT 'draft',
+      metadata jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      published_at timestamptz
+    )
+  `;
+
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS courses_slug_uidx
+      ON courses (slug)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS courses_status_created_idx
+      ON courses (status, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS courses_difficulty_status_idx
+      ON courses (difficulty, status)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS course_lessons (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      course_id uuid NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      module_number integer NOT NULL,
+      module_name text NOT NULL,
+      lesson_number integer NOT NULL,
+      title text NOT NULL,
+      description text,
+      type text NOT NULL,
+      duration_minutes integer,
+      content_url text,
+      content_text text,
+      media_id uuid REFERENCES media_assets(id) ON DELETE SET NULL,
+      sort_order integer NOT NULL DEFAULT 0,
+      is_free boolean NOT NULL DEFAULT false,
+=======
   /** Shop and Orders migration - append-only block to minimize merge conflicts */
   await sql`
     CREATE TABLE IF NOT EXISTS product_categories (
@@ -946,12 +1002,37 @@ async function migrate() {
       image_url text,
       sort_order integer NOT NULL DEFAULT 0,
       status text NOT NULL DEFAULT 'published',
+>>>>>>> origin/main
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )
   `;
 
   await sql`
+<<<<<<< HEAD
+    CREATE INDEX IF NOT EXISTS course_lessons_course_sort_idx
+      ON course_lessons (course_id, sort_order)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS course_lessons_course_module_idx
+      ON course_lessons (course_id, module_number, lesson_number)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS course_enrollments (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      course_id uuid NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      status text NOT NULL DEFAULT 'active',
+      payment_status text NOT NULL DEFAULT 'pending',
+      payment_amount integer NOT NULL,
+      progress jsonb NOT NULL DEFAULT '[]'::jsonb,
+      completed_lessons_count integer NOT NULL DEFAULT 0,
+      total_lessons_count integer NOT NULL DEFAULT 0,
+      last_accessed_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+=======
     CREATE TABLE IF NOT EXISTS products (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       category_id text REFERENCES product_categories(id) ON DELETE SET NULL,
@@ -1071,11 +1152,24 @@ async function migrate() {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now(),
       cancelled_at timestamptz,
+>>>>>>> origin/main
       completed_at timestamptz
     )
   `;
 
   await sql`
+<<<<<<< HEAD
+    CREATE UNIQUE INDEX IF NOT EXISTS course_enrollments_user_course_uidx
+      ON course_enrollments (mobile_user_id, course_id)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS course_enrollments_user_created_idx
+      ON course_enrollments (mobile_user_id, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS course_enrollments_course_status_idx
+      ON course_enrollments (course_id, status)
+=======
     CREATE INDEX IF NOT EXISTS trip_bookings_trip_start_idx
       ON trip_bookings (trip_id, start_date)
   `;
@@ -1090,6 +1184,7 @@ async function migrate() {
   await sql`
     CREATE INDEX IF NOT EXISTS trip_bookings_number_idx
       ON trip_bookings (booking_number)
+>>>>>>> origin/main
   `;
 
   console.log("Migrations applied.");

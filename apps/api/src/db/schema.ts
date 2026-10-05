@@ -985,6 +985,28 @@ export const mobileUserInterests = pgTable(
   ]
 );
 
+<<<<<<< HEAD
+/** Courses feature - append-only block to minimize merge conflicts */
+export const courses = pgTable(
+  "courses",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    shortDescription: text("short_description").notNull(),
+    description: text("description").notNull(),
+    difficulty: text("difficulty").notNull(),
+    durationHours: integer("duration_hours").notNull(),
+    price: integer("price").notNull(),
+    compareAtPrice: integer("compare_at_price"),
+    imageId: uuid("image_id").references(() => mediaAssets.id, {
+      onDelete: "set null",
+    }),
+    instructorName: text("instructor_name").notNull(),
+    instructorBio: text("instructor_bio"),
+    learningOutcomes: jsonb("learning_outcomes").$type<string[]>().notNull().default([]),
+    prerequisites: jsonb("prerequisites").$type<string[]>().notNull().default([]),
+=======
 /** Shop and Orders tables - append-only block to minimize merge conflicts */
 export const productCategories = pgTable("product_categories", {
   id: text("id").primaryKey(),
@@ -1085,6 +1107,7 @@ export const trips = pgTable(
     exclusions: jsonb("exclusions").$type<string[]>().notNull().default([]),
     difficulty: text("difficulty").notNull(),
     imageIds: jsonb("image_ids").$type<string[]>().notNull().default([]),
+>>>>>>> origin/main
     status: text("status").notNull().default("draft"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -1093,6 +1116,72 @@ export const trips = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+<<<<<<< HEAD
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("courses_slug_uidx").on(table.slug),
+    index("courses_status_created_idx").on(table.status, table.createdAt),
+    index("courses_difficulty_status_idx").on(table.difficulty, table.status),
+  ]
+);
+
+export const courseLessons = pgTable(
+  "course_lessons",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    moduleNumber: integer("module_number").notNull(),
+    moduleName: text("module_name").notNull(),
+    lessonNumber: integer("lesson_number").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    type: text("type").notNull(),
+    durationMinutes: integer("duration_minutes"),
+    contentUrl: text("content_url"),
+    contentText: text("content_text"),
+    mediaId: uuid("media_id").references(() => mediaAssets.id, {
+      onDelete: "set null",
+    }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    isFree: boolean("is_free").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("course_lessons_course_sort_idx").on(table.courseId, table.sortOrder),
+    index("course_lessons_course_module_idx").on(
+      table.courseId,
+      table.moduleNumber,
+      table.lessonNumber
+    ),
+  ]
+);
+
+export const courseEnrollments = pgTable(
+  "course_enrollments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("active"),
+    paymentStatus: text("payment_status").notNull().default("pending"),
+    paymentAmount: integer("payment_amount").notNull(),
+    progress: jsonb("progress").$type<unknown[]>().notNull().default([]),
+    completedLessonsCount: integer("completed_lessons_count").notNull().default(0),
+    totalLessonsCount: integer("total_lessons_count").notNull().default(0),
+    lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true }),
+=======
   },
   (table) => [
     uniqueIndex("trips_slug_uidx").on(table.slug),
@@ -1120,12 +1209,30 @@ export const tripBookings = pgTable(
     travelerDetails: jsonb("traveler_details").$type<unknown[]>().notNull(),
     specialRequests: text("special_requests"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+>>>>>>> origin/main
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+<<<<<<< HEAD
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("course_enrollments_user_course_uidx").on(
+      table.mobileUserId,
+      table.courseId
+    ),
+    index("course_enrollments_user_created_idx").on(
+      table.mobileUserId,
+      table.createdAt
+    ),
+    index("course_enrollments_course_status_idx").on(
+      table.courseId,
+      table.status
+    ),
+=======
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
   },
@@ -1140,5 +1247,6 @@ export const tripBookings = pgTable(
       table.createdAt
     ),
     index("trip_bookings_number_idx").on(table.bookingNumber),
+>>>>>>> origin/main
   ]
 );

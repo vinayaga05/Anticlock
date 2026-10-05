@@ -11,6 +11,9 @@ export {
   useServiceTreesQuery,
   useServiceCategoriesQuery,
 } from './hooks';
+<<<<<<< HEAD
+export * from './coursesHooks';
+=======
 export {
   useProductsQuery,
   useProductQuery,
@@ -27,3 +30,4 @@ export {
   useCreateTripBookingMutation,
   useCancelTripBookingMutation,
 } from './tripsHooks';
+>>>>>>> origin/main

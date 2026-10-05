@@ -7,22 +7,60 @@ const DEV_OTP_WHITELIST: Record<string, string> = {
 };
 
 const CHALLENGE_TTL_MS = 10 * 60 * 1000;
+const MAX_VERIFY_ATTEMPTS = 5;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const MAX_SEND_REQUESTS_PER_WINDOW = 3;
 
 type Challenge = {
   phone: string;
   code: string;
   expiresAt: number;
+  attempts: number;
+};
+
+type RateLimitEntry = {
+  count: number;
+  resetAt: number;
 };
 
 const challenges = new Map<string, Challenge>();
+const sendRateLimits = new Map<string, RateLimitEntry>();
 
 /**
- * Fixed OTP whitelist for staging / pre-MSG91 production.
- * Selected only when OTP_DEV_WHITELIST=true (or NODE_ENV !== production).
+ * Fixed OTP whitelist for development / staging / pre-MSG91 environments.
+ * Selected only when OTP_DEV_WHITELIST=true or NODE_ENV !== 'production'.
+ * 
+ * These numbers (+919999999999, +918888888888) are NOT valid in production.
  */
 export class DevWhitelistOtpProvider implements OtpProvider {
+  private checkSendRateLimit(phone: string): void {
+    const now = Date.now();
+    const entry = sendRateLimits.get(phone);
+
+    if (!entry || entry.resetAt < now) {
+      sendRateLimits.set(phone, {
+        count: 1,
+        resetAt: now + RATE_LIMIT_WINDOW_MS,
+      });
+      return;
+    }
+
+    if (entry.count >= MAX_SEND_REQUESTS_PER_WINDOW) {
+      throw new OtpError(
+        'rate_limit_exceeded',
+        'Too many OTP requests. Please wait a minute and try again.',
+      );
+    }
+
+    entry.count += 1;
+  }
+
   async sendOtp(rawPhone: string): Promise<OtpSendResult> {
     const phone = normalizePhone(rawPhone);
+    
+    // Rate limiting applies to all numbers
+    this.checkSendRateLimit(phone);
+
     const code = DEV_OTP_WHITELIST[phone];
     if (!code) {
       throw new OtpError(
@@ -36,6 +74,7 @@ export class DevWhitelistOtpProvider implements OtpProvider {
       phone,
       code,
       expiresAt: Date.now() + CHALLENGE_TTL_MS,
+      attempts: 0,
     });
 
     console.log(`[dev-otp] ${phone} → ${code} (requestId=${requestId})`);
@@ -46,15 +85,33 @@ export class DevWhitelistOtpProvider implements OtpProvider {
   async verifyOtp(rawPhone: string, code: string, requestId: string): Promise<boolean> {
     const phone = normalizePhone(rawPhone);
     const challenge = challenges.get(requestId);
+    
     if (!challenge) return false;
+    
     if (challenge.expiresAt < Date.now()) {
       challenges.delete(requestId);
       return false;
     }
+    
     if (challenge.phone !== phone) return false;
 
+    // Check attempt limit
+    if (challenge.attempts >= MAX_VERIFY_ATTEMPTS) {
+      challenges.delete(requestId);
+      throw new OtpError(
+        'max_attempts_exceeded',
+        'Maximum verification attempts exceeded. Please request a new OTP.',
+      );
+    }
+
     const ok = challenge.code === code;
-    if (ok) challenges.delete(requestId);
+    
+    if (ok) {
+      challenges.delete(requestId);
+    } else {
+      challenge.attempts += 1;
+    }
+    
     return ok;
   }
 }

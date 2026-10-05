@@ -1,10 +1,12 @@
 import { createMiddleware } from 'hono/factory';
 import type { Permission } from '@anticlock/contracts';
 import { verifyToken, type AuthClaims } from '../lib/auth.js';
+import type { RequestLoggerEnv } from './requestLogger.js';
 
-export type AppEnv = {
+export type AppEnv = RequestLoggerEnv & {
   Variables: {
     auth: AuthClaims;
+    requestId: string;
   };
 };
 

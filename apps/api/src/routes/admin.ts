@@ -14,6 +14,7 @@ import {
   serviceTrees,
   userRoles,
   users,
+  mobileUsers,
 } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
 import { searchService } from "../assistant/SearchService.js";
@@ -103,6 +104,41 @@ adminRoutes.get("/users", requirePermission("users.read"), async (c) => {
     createdAt: u.createdAt.toISOString(),
   }));
   return c.json({ data, meta: { nextCursor: null } });
+});
+
+adminRoutes.get("/users/mobile", requirePermission("catalog.read"), async (c) => {
+  const q = c.req.query("q")?.trim() ?? "";
+  const limit = Math.min(Number(c.req.query("limit")) || 20, 100);
+
+  const { ilike, or, and, sql: sqlOp } = await import("drizzle-orm");
+
+  const conditions = [eq(mobileUsers.isActive, true)];
+
+  if (q) {
+    conditions.push(
+      or(
+        ilike(mobileUsers.phone, `%${q}%`),
+        ilike(mobileUsers.displayName, `%${q}%`)
+      )!
+    );
+  }
+
+  const rows = await db
+    .select()
+    .from(mobileUsers)
+    .where(and(...conditions))
+    .orderBy(desc(mobileUsers.createdAt))
+    .limit(limit);
+
+  return c.json({
+    data: rows.map((u) => ({
+      id: u.id,
+      phone: u.phone,
+      displayName: u.displayName,
+      avatarUrl: u.avatarUrl ?? undefined,
+      createdAt: u.createdAt.toISOString(),
+    })),
+  });
 });
 
 adminRoutes.get("/roles", requirePermission("roles.manage"), async (c) => {

@@ -945,6 +945,411 @@ async function migrate() {
       ON service_categories USING gin (search_vector)
   `;
 
+<<<<<<< HEAD
+  await sql`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      type text NOT NULL,
+      title text NOT NULL,
+      body text NOT NULL,
+      data jsonb,
+      read_at timestamptz,
+=======
+<<<<<<< HEAD
+  // Communities feature tables
+  await sql`
+    CREATE TABLE IF NOT EXISTS communities (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      owner_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+=======
+<<<<<<< HEAD
+  /** Courses feature migration - append-only block to minimize merge conflicts */
+  await sql`
+    CREATE TABLE IF NOT EXISTS courses (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      slug text NOT NULL,
+      name text NOT NULL,
+      short_description text NOT NULL,
+      description text NOT NULL,
+      difficulty text NOT NULL,
+      duration_hours integer NOT NULL,
+      price integer NOT NULL,
+      compare_at_price integer,
+      image_id uuid REFERENCES media_assets(id) ON DELETE SET NULL,
+      instructor_name text NOT NULL,
+      instructor_bio text,
+      learning_outcomes jsonb NOT NULL DEFAULT '[]'::jsonb,
+      prerequisites jsonb NOT NULL DEFAULT '[]'::jsonb,
+      status text NOT NULL DEFAULT 'draft',
+      metadata jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      published_at timestamptz
+    )
+  `;
+
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS courses_slug_uidx
+      ON courses (slug)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS courses_status_created_idx
+      ON courses (status, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS courses_difficulty_status_idx
+      ON courses (difficulty, status)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS course_lessons (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      course_id uuid NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      module_number integer NOT NULL,
+      module_name text NOT NULL,
+      lesson_number integer NOT NULL,
+      title text NOT NULL,
+      description text,
+      type text NOT NULL,
+      duration_minutes integer,
+      content_url text,
+      content_text text,
+      media_id uuid REFERENCES media_assets(id) ON DELETE SET NULL,
+      sort_order integer NOT NULL DEFAULT 0,
+      is_free boolean NOT NULL DEFAULT false,
+=======
+  /** Shop and Orders migration - append-only block to minimize merge conflicts */
+  await sql`
+    CREATE TABLE IF NOT EXISTS product_categories (
+      id text PRIMARY KEY,
+>>>>>>> origin/main
+      name text NOT NULL,
+      slug text NOT NULL UNIQUE,
+      description text,
+      image_url text,
+<<<<<<< HEAD
+      cover_url text,
+      member_count integer NOT NULL DEFAULT 1,
+      post_count integer NOT NULL DEFAULT 0,
+      tags jsonb NOT NULL DEFAULT '[]'::jsonb,
+      status text NOT NULL DEFAULT 'published',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      suspended_at timestamptz
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS communities_status_created_idx
+      ON communities (status, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS communities_slug_idx
+      ON communities (slug)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS community_members (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      community_id uuid NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      role text NOT NULL DEFAULT 'member',
+      joined_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (community_id, mobile_user_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS community_members_user_idx
+      ON community_members (mobile_user_id)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS community_members_community_joined_idx
+      ON community_members (community_id, joined_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS community_posts (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      community_id uuid NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+      author_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      content text NOT NULL,
+      media_asset_id uuid REFERENCES media_assets(id) ON DELETE SET NULL,
+      like_count integer NOT NULL DEFAULT 0,
+      comment_count integer NOT NULL DEFAULT 0,
+      status text NOT NULL DEFAULT 'visible',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      removed_at timestamptz
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS community_posts_community_created_idx
+      ON community_posts (community_id, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS community_posts_author_idx
+      ON community_posts (author_id)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS community_post_likes (
+      post_id uuid NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (post_id, mobile_user_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS community_post_likes_user_created_idx
+      ON community_post_likes (mobile_user_id, created_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS community_post_comments (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      post_id uuid NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+      author_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      content text NOT NULL,
+>>>>>>> origin/main
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`
+<<<<<<< HEAD
+    CREATE INDEX IF NOT EXISTS notifications_user_created_idx
+      ON notifications (mobile_user_id, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS notifications_user_unread_idx
+      ON notifications (mobile_user_id, read_at)
+      WHERE read_at IS NULL
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS device_tokens (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      token text NOT NULL,
+      platform text NOT NULL CHECK (platform IN ('android', 'ios')),
+      last_seen_at timestamptz NOT NULL DEFAULT now(),
+      created_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (token)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS device_tokens_user_idx
+      ON device_tokens (mobile_user_id)
+=======
+    CREATE INDEX IF NOT EXISTS community_post_comments_post_created_idx
+      ON community_post_comments (post_id, created_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS community_post_reports (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      post_id uuid NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+      reporter_mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      reason text NOT NULL,
+      details text,
+      status text NOT NULL DEFAULT 'open',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      resolved_at timestamptz,
+      UNIQUE (post_id, reporter_mobile_user_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS community_post_reports_status_created_idx
+      ON community_post_reports (status, created_at DESC)
+=======
+      sort_order integer NOT NULL DEFAULT 0,
+      status text NOT NULL DEFAULT 'published',
+>>>>>>> origin/main
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+<<<<<<< HEAD
+    CREATE INDEX IF NOT EXISTS course_lessons_course_sort_idx
+      ON course_lessons (course_id, sort_order)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS course_lessons_course_module_idx
+      ON course_lessons (course_id, module_number, lesson_number)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS course_enrollments (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      course_id uuid NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      status text NOT NULL DEFAULT 'active',
+      payment_status text NOT NULL DEFAULT 'pending',
+      payment_amount integer NOT NULL,
+      progress jsonb NOT NULL DEFAULT '[]'::jsonb,
+      completed_lessons_count integer NOT NULL DEFAULT 0,
+      total_lessons_count integer NOT NULL DEFAULT 0,
+      last_accessed_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+=======
+    CREATE TABLE IF NOT EXISTS products (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      category_id text REFERENCES product_categories(id) ON DELETE SET NULL,
+      name text NOT NULL,
+      slug text NOT NULL,
+      description text NOT NULL,
+      price integer NOT NULL,
+      compare_at_price integer,
+      inventory integer,
+      status text NOT NULL DEFAULT 'draft',
+      image_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+      metadata jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS products_slug_uidx
+      ON products (slug)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS products_category_status_idx
+      ON products (category_id, status)
+      WHERE category_id IS NOT NULL
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS products_status_created_idx
+      ON products (status, created_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS orders (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      order_number text NOT NULL UNIQUE,
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      status text NOT NULL DEFAULT 'pending',
+      payment_status text NOT NULL DEFAULT 'pending',
+      items jsonb NOT NULL,
+      subtotal integer NOT NULL,
+      shipping_cost integer NOT NULL,
+      tax integer NOT NULL,
+      total integer NOT NULL,
+      shipping_address jsonb NOT NULL,
+      notes text,
+      metadata jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      cancelled_at timestamptz,
+      delivered_at timestamptz
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS orders_user_created_idx
+      ON orders (mobile_user_id, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS orders_status_created_idx
+      ON orders (status, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS orders_number_idx
+      ON orders (order_number)
+  `;
+
+  /** Trips and Trip Bookings migration - append-only block to minimize merge conflicts */
+  await sql`
+    CREATE TABLE IF NOT EXISTS trips (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      name text NOT NULL,
+      slug text NOT NULL,
+      description text NOT NULL,
+      destination text NOT NULL,
+      duration_days integer NOT NULL,
+      base_price integer NOT NULL,
+      max_group_size integer NOT NULL,
+      itinerary jsonb NOT NULL,
+      inclusions jsonb NOT NULL DEFAULT '[]'::jsonb,
+      exclusions jsonb NOT NULL DEFAULT '[]'::jsonb,
+      difficulty text NOT NULL,
+      image_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+      status text NOT NULL DEFAULT 'draft',
+      metadata jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS trips_slug_uidx
+      ON trips (slug)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS trips_destination_status_idx
+      ON trips (destination, status)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS trips_status_created_idx
+      ON trips (status, created_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS trip_bookings (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      booking_number text NOT NULL UNIQUE,
+      trip_id uuid NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      start_date timestamptz NOT NULL,
+      number_of_travelers integer NOT NULL,
+      total_price integer NOT NULL,
+      status text NOT NULL DEFAULT 'pending',
+      payment_status text NOT NULL DEFAULT 'pending',
+      traveler_details jsonb NOT NULL,
+      special_requests text,
+      metadata jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      cancelled_at timestamptz,
+>>>>>>> origin/main
+      completed_at timestamptz
+    )
+  `;
+
+  await sql`
+<<<<<<< HEAD
+    CREATE UNIQUE INDEX IF NOT EXISTS course_enrollments_user_course_uidx
+      ON course_enrollments (mobile_user_id, course_id)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS course_enrollments_user_created_idx
+      ON course_enrollments (mobile_user_id, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS course_enrollments_course_status_idx
+      ON course_enrollments (course_id, status)
+=======
+    CREATE INDEX IF NOT EXISTS trip_bookings_trip_start_idx
+      ON trip_bookings (trip_id, start_date)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS trip_bookings_user_created_idx
+      ON trip_bookings (mobile_user_id, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS trip_bookings_status_created_idx
+      ON trip_bookings (status, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS trip_bookings_number_idx
+      ON trip_bookings (booking_number)
+>>>>>>> origin/main
+>>>>>>> origin/main
+>>>>>>> origin/main
+  `;
+
   console.log("Migrations applied.");
   await sql.end({ timeout: 5 });
 }

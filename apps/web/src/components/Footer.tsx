@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { navigation, siteConfig } from '@/config/site';
 
 export function Footer() {
@@ -9,11 +10,16 @@ export function Footer() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
           <div className="lg:col-span-2">
-            <Link href="/" className="flex items-center space-x-2 mb-4">
-              <div className="w-10 h-10 bg-gradient-to-br from-aqua to-coral rounded-xl flex items-center justify-center">
-                <span className="text-white font-bold text-xl">A</span>
+            <Link href="/" className="inline-block mb-4">
+              <div className="relative w-48 h-12">
+                <Image
+                  src="/brand/logo-full.png"
+                  alt="Anticlock"
+                  fill
+                  sizes="192px"
+                  className="object-contain object-left"
+                />
               </div>
-              <span className="text-2xl font-bold">Anticlock</span>
             </Link>
             <p className="text-white/70 max-w-sm mb-6">
               Your lifestyle, simplified. Discover services, connect with communities, and book

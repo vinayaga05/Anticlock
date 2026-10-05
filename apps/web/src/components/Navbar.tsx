@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Menu, X } from 'lucide-react';
 import { navigation } from '@/config/site';
 
@@ -26,11 +27,17 @@ export function Navbar() {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 md:h-20">
-          <Link href="/" className="flex items-center space-x-2">
-            <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-aqua to-coral rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-lg md:text-xl">A</span>
+          <Link href="/" className="flex items-center space-x-2 md:space-x-3">
+            <div className="relative w-32 h-8 md:w-40 md:h-10">
+              <Image
+                src="/brand/logo-full.png"
+                alt="Anticlock"
+                fill
+                sizes="(max-width: 768px) 128px, 160px"
+                className="object-contain object-left"
+                priority
+              />
             </div>
-            <span className="text-xl md:text-2xl font-bold text-white">Anticlock</span>
           </Link>
 
           <div className="hidden md:flex items-center space-x-8">

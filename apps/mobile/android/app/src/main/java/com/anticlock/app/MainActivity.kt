@@ -1,4 +1,4 @@
-package com.anticlocktemp
+package com.anticlock.app
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "919939645074",
+    "project_id": "anticlock-ba9db",
+    "storage_bucket": "anticlock-ba9db.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:919939645074:android:37bbf5f4a4b6793beb704b",
+        "android_client_info": {
+          "package_name": "com.anticlock.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD_7zs3gEpTgOrtA2B_cT1LrWak4WKRFxY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

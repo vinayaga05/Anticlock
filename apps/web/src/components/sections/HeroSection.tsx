@@ -14,18 +14,19 @@ export function HeroSection() {
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-black via-gray-900 to-black pt-20 pb-12 lg:pb-20">
       <div className="absolute inset-0 gradient-radial opacity-60"></div>
       
-      <div className="absolute inset-0">
-        <div className="absolute top-20 left-10 w-72 h-72 bg-aqua/20 rounded-full blur-3xl animate-float"></div>
-        <div className="absolute bottom-20 right-10 w-96 h-96 bg-coral/20 rounded-full blur-3xl animate-float" style={{ animationDelay: '1s' }}></div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-lime/20 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }}></div>
+      {/* Optimized blur orbs with reduced blur and GPU acceleration */}
+      <div className="absolute inset-0" suppressHydrationWarning>
+        <div className="blur-orb absolute top-20 left-10 w-72 h-72 bg-aqua/20 rounded-full blur-2xl animate-float"></div>
+        <div className="blur-orb absolute bottom-20 right-10 w-96 h-96 bg-coral/20 rounded-full blur-2xl animate-float" style={{ animationDelay: '1s' }}></div>
+        <div className="blur-orb absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-lime/20 rounded-full blur-2xl animate-float" style={{ animationDelay: '2s' }}></div>
       </div>
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-20">
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
           {/* Left side - Content */}
-          <div className="text-center lg:text-left">
+          <div className="text-center lg:text-left" suppressHydrationWarning>
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={false}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
               className="mb-4 lg:mb-6"
@@ -37,7 +38,7 @@ export function HeroSection() {
             </motion.div>
 
             <motion.h1
-              initial={{ opacity: 0, y: 20 }}
+              initial={false}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.2 }}
               className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-white mb-4 lg:mb-6 leading-tight"
@@ -50,7 +51,7 @@ export function HeroSection() {
             </motion.h1>
 
             <motion.p
-              initial={{ opacity: 0, y: 20 }}
+              initial={false}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.4 }}
               className="text-lg sm:text-xl lg:text-2xl text-white/80 mb-8 lg:mb-12 max-w-3xl lg:max-w-none leading-relaxed"
@@ -60,7 +61,7 @@ export function HeroSection() {
             </motion.p>
 
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={false}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.6 }}
               className="flex flex-col sm:flex-row lg:flex-col xl:flex-row items-center lg:items-start xl:items-center justify-center lg:justify-start gap-4 mb-6 lg:mb-8"
@@ -92,7 +93,7 @@ export function HeroSection() {
             </motion.div>
 
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
+              initial={false}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 1, delay: 0.8 }}
               className="flex flex-wrap items-center justify-center lg:justify-start gap-3 text-white/70 text-sm"
@@ -110,18 +111,18 @@ export function HeroSection() {
           </div>
 
           {/* Right side - Phone mockups (desktop) */}
-          <div className="hidden lg:block relative h-[600px]">
+          <div className="hidden lg:block relative h-[600px]" suppressHydrationWarning>
             {/* Phone 1 - Home Screen (center) */}
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-64 z-20">
               <motion.div
-                initial={{ opacity: 0, y: 60 }}
+                initial={false}
                 animate={{ 
                   opacity: 1, 
                   y: [0, -10, 0],
                 }}
                 transition={{ 
                   opacity: { duration: 0.8, delay: 0.3 },
-                  y: { duration: 4, repeat: Infinity, ease: "easeInOut" }
+                  y: { duration: 4, repeat: Infinity, ease: "easeInOut", repeatType: "loop" }
                 }}
               >
                 <PhoneFrame delay={0.3}>
@@ -133,7 +134,7 @@ export function HeroSection() {
             {/* Phone 2 - Clips (left, behind) */}
             <div className="absolute left-0 top-1/2 -translate-y-1/2 w-56 z-10 opacity-80">
               <motion.div
-                initial={{ opacity: 0, x: -60 }}
+                initial={false}
                 animate={{ 
                   opacity: 0.8, 
                   x: 0,
@@ -142,7 +143,7 @@ export function HeroSection() {
                 transition={{ 
                   opacity: { duration: 0.8, delay: 0.5 },
                   x: { duration: 0.8, delay: 0.5 },
-                  y: { duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }
+                  y: { duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1, repeatType: "loop" }
                 }}
               >
                 <PhoneFrame delay={0.5} variant="tilted-left">
@@ -154,7 +155,7 @@ export function HeroSection() {
             {/* Phone 3 - Marketplace (right, behind) */}
             <div className="absolute right-0 top-1/2 -translate-y-1/2 w-56 z-10 opacity-80">
               <motion.div
-                initial={{ opacity: 0, x: 60 }}
+                initial={false}
                 animate={{ 
                   opacity: 0.8, 
                   x: 0,
@@ -163,7 +164,7 @@ export function HeroSection() {
                 transition={{ 
                   opacity: { duration: 0.8, delay: 0.7 },
                   x: { duration: 0.8, delay: 0.7 },
-                  y: { duration: 4.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }
+                  y: { duration: 4.5, repeat: Infinity, ease: "easeInOut", delay: 0.5, repeatType: "loop" }
                 }}
               >
                 <PhoneFrame delay={0.7} variant="tilted-right">
@@ -174,10 +175,10 @@ export function HeroSection() {
           </div>
 
           {/* Mobile phone view */}
-          <div className="lg:hidden flex flex-col items-center mt-6">
+          <div className="lg:hidden flex flex-col items-center mt-6" suppressHydrationWarning>
             <div className="w-56 sm:w-64">
               <motion.div
-                initial={{ opacity: 0, y: 40 }}
+                initial={false}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.8, delay: 1 }}
               >

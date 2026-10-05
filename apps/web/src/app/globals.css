@@ -22,6 +22,11 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  
+  .animate-float,
+  .animate-pulse {
+    animation: none !important;
+  }
 }
 
 body {
@@ -59,4 +64,19 @@ body {
     rgba(20, 184, 166, 0.08) 0%, 
     rgba(249, 112, 102, 0.06) 50%,
     rgba(132, 204, 22, 0.08) 100%);
+}
+
+/* GPU-accelerated animated elements */
+.animate-float {
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Optimize blur performance */
+.blur-orb {
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  contain: layout style paint;
 }

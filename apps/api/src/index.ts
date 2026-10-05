@@ -26,9 +26,13 @@ import { contentMobileRoutes, contentPublicRoutes } from './routes/content.js';
 import { profileBlockRoutes } from './routes/blocks.js';
 import { contentSafetyRoutes } from './routes/contentSafety.js';
 <<<<<<< HEAD
+import { messagesRoutes } from './routes/messages.js';
+=======
+<<<<<<< HEAD
 import { communitiesMobileRoutes, communitiesAdminRoutes } from './routes/communities.js';
 =======
 import { coursesMobileRoutes, coursesAdminRoutes } from './routes/courses.js';
+>>>>>>> origin/main
 >>>>>>> origin/main
 import { startAssistantLifecycleJob } from './assistant/PrivacyService.js';
 import { redisHealthCheck } from './lib/redis.js';
@@ -101,9 +105,13 @@ app.route('/v1/content', contentPublicRoutes);
 app.route('/v1/content', contentSafetyRoutes);
 app.route('/v1/blocks', profileBlockRoutes);
 <<<<<<< HEAD
+app.route('/v1/messages', messagesRoutes);
+=======
+<<<<<<< HEAD
 app.route('/v1/communities', communitiesMobileRoutes);
 =======
 app.route('/v1/courses', coursesMobileRoutes);
+>>>>>>> origin/main
 >>>>>>> origin/main
 app.route('/admin', adminRoutes);
 app.route('/admin/courses', coursesAdminRoutes);

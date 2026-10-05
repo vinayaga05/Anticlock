@@ -9,6 +9,9 @@ import { BookingFilterSheet } from '@/features/booking/components/BookingFilterS
 import { BookingTimelineSection } from '@/features/booking/components/BookingTimelineSection';
 import { NextUpBookingCard } from '@/features/booking/components/NextUpBookingCard';
 import { UnifiedBookingCard } from '@/features/booking/components/UnifiedBookingCard';
+import { useBookingsQuery } from '@/shared/api';
+import { isApiEnabled } from '@/shared/api/config';
+import { mapApiBookingToConsolidated } from '@/shared/utils/bookingMappers';
 import {
   applyAdvancedFilters,
   BookingAction,
@@ -44,11 +47,22 @@ export function BookingsTimeline({
   const sheetOpen = filterSheetOpen ?? internalSheetOpen;
   const setSheetOpen = onFilterSheetOpenChange ?? setInternalSheetOpen;
 
+  // Fetch bookings from API (with mock fallback)
+  const { data: apiData, isLoading, error } = useBookingsQuery('all');
+
+  const allBookings = useMemo(() => {
+    // If API is enabled and we have data, use it
+    if (isApiEnabled && apiData?.bookings) {
+      return apiData.bookings.map(mapApiBookingToConsolidated);
+    }
+    // Otherwise fall back to mock data
+    return getConsolidatedBookings();
+  }, [apiData]);
+
   const filtered = useMemo(() => {
-    const all = getConsolidatedBookings();
-    const tabbed = filterBookings(all, filter);
+    const tabbed = filterBookings(allBookings, filter);
     return applyAdvancedFilters(tabbed, advanced);
-  }, [filter, advanced]);
+  }, [allBookings, filter, advanced]);
 
   const { nextUp, sections } = useMemo(
     () => groupBookingsByTimeline(filtered),
@@ -79,6 +93,42 @@ export function BookingsTimeline({
   };
 
   const hasUpcoming = nextUp || sections.some(s => s.items.length > 0);
+
+  if (isLoading) {
+    return (
+      <View style={styles.wrap}>
+        <BookingFilterBar
+          active={filter}
+          onChange={setFilter}
+          onOpenFilters={showFilterButton ? () => setSheetOpen(true) : undefined}
+        />
+        <View style={styles.timeline}>
+          <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
+            Loading bookings...
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.wrap}>
+        <BookingFilterBar
+          active={filter}
+          onChange={setFilter}
+          onOpenFilters={showFilterButton ? () => setSheetOpen(true) : undefined}
+        />
+        <EmptyState
+          icon="alert-circle"
+          title="Failed to load bookings"
+          description="Please check your connection and try again."
+          actionLabel="Retry"
+          onAction={() => {}}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.wrap}>
@@ -171,4 +221,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   pastList: { gap: 10 },
+  loadingText: {
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
 });

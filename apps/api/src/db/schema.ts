@@ -984,3 +984,436 @@ export const mobileUserInterests = pgTable(
     index("mobile_user_interests_interest_idx").on(table.interestId),
   ]
 );
+
+<<<<<<< HEAD
+/** Communities for user-created groups with posts and membership */
+export const communities = pgTable(
+  "communities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull().unique(),
+    description: text("description"),
+    imageUrl: text("image_url"),
+    coverUrl: text("cover_url"),
+    memberCount: integer("member_count").notNull().default(1),
+    postCount: integer("post_count").notNull().default(0),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
+    status: text("status").notNull().default("published"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("communities_status_created_idx").on(table.status, table.createdAt),
+    index("communities_slug_idx").on(table.slug),
+  ]
+);
+
+/** Community membership with roles */
+export const communityMembers = pgTable(
+  "community_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    communityId: uuid("community_id")
+      .notNull()
+      .references(() => communities.id, { onDelete: "cascade" }),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("member"),
+    joinedAt: timestamp("joined_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("community_members_uid").on(table.communityId, table.mobileUserId),
+    index("community_members_user_idx").on(table.mobileUserId),
+    index("community_members_community_joined_idx").on(
+      table.communityId,
+      table.joinedAt
+    ),
+  ]
+);
+
+/** Community posts */
+export const communityPosts = pgTable(
+  "community_posts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    communityId: uuid("community_id")
+      .notNull()
+      .references(() => communities.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    mediaAssetId: uuid("media_asset_id").references(() => mediaAssets.id, {
+      onDelete: "set null",
+    }),
+    likeCount: integer("like_count").notNull().default(0),
+    commentCount: integer("comment_count").notNull().default(0),
+    status: text("status").notNull().default("visible"),
+=======
+<<<<<<< HEAD
+/** Courses feature - append-only block to minimize merge conflicts */
+export const courses = pgTable(
+  "courses",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    shortDescription: text("short_description").notNull(),
+    description: text("description").notNull(),
+    difficulty: text("difficulty").notNull(),
+    durationHours: integer("duration_hours").notNull(),
+    price: integer("price").notNull(),
+    compareAtPrice: integer("compare_at_price"),
+    imageId: uuid("image_id").references(() => mediaAssets.id, {
+      onDelete: "set null",
+    }),
+    instructorName: text("instructor_name").notNull(),
+    instructorBio: text("instructor_bio"),
+    learningOutcomes: jsonb("learning_outcomes").$type<string[]>().notNull().default([]),
+    prerequisites: jsonb("prerequisites").$type<string[]>().notNull().default([]),
+=======
+/** Shop and Orders tables - append-only block to minimize merge conflicts */
+export const productCategories = pgTable("product_categories", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  description: text("description"),
+  imageUrl: text("image_url"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  status: text("status").notNull().default("published"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const products = pgTable(
+  "products",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    categoryId: text("category_id").references(() => productCategories.id, {
+      onDelete: "set null",
+    }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description").notNull(),
+    price: integer("price").notNull(),
+    compareAtPrice: integer("compare_at_price"),
+    inventory: integer("inventory"),
+    status: text("status").notNull().default("draft"),
+    imageIds: jsonb("image_ids").$type<string[]>().notNull().default([]),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+>>>>>>> origin/main
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+<<<<<<< HEAD
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("community_posts_community_created_idx").on(
+      table.communityId,
+      table.createdAt
+    ),
+    index("community_posts_author_idx").on(table.authorId),
+  ]
+);
+
+/** Community post likes */
+export const communityPostLikes = pgTable(
+  "community_post_likes",
+  {
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => communityPosts.id, { onDelete: "cascade" }),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.postId, table.mobileUserId] }),
+    index("community_post_likes_user_created_idx").on(
+      table.mobileUserId,
+      table.createdAt
+    ),
+  ]
+);
+
+/** Community post comments */
+export const communityPostComments = pgTable(
+  "community_post_comments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => communityPosts.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("community_post_comments_post_created_idx").on(
+      table.postId,
+      table.createdAt
+    ),
+  ]
+);
+
+/** Community post reports for moderation */
+export const communityPostReports = pgTable(
+  "community_post_reports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => communityPosts.id, { onDelete: "cascade" }),
+    reporterMobileUserId: uuid("reporter_mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    reason: text("reason").notNull(),
+    details: text("details"),
+    status: text("status").notNull().default("open"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (table) => [
+    unique("community_post_reports_reporter_uid").on(
+      table.postId,
+      table.reporterMobileUserId
+    ),
+    index("community_post_reports_status_created_idx").on(
+      table.status,
+      table.createdAt
+    ),
+=======
+  },
+  (table) => [
+    uniqueIndex("products_slug_uidx").on(table.slug),
+    index("products_category_status_idx").on(table.categoryId, table.status),
+    index("products_status_created_idx").on(table.status, table.createdAt),
+  ]
+);
+
+export const orders = pgTable(
+  "orders",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orderNumber: text("order_number").notNull().unique(),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("pending"),
+    paymentStatus: text("payment_status").notNull().default("pending"),
+    items: jsonb("items").$type<unknown[]>().notNull(),
+    subtotal: integer("subtotal").notNull(),
+    shippingCost: integer("shipping_cost").notNull(),
+    tax: integer("tax").notNull(),
+    total: integer("total").notNull(),
+    shippingAddress: jsonb("shipping_address")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    notes: text("notes"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("orders_user_created_idx").on(table.mobileUserId, table.createdAt),
+    index("orders_status_created_idx").on(table.status, table.createdAt),
+    index("orders_number_idx").on(table.orderNumber),
+  ]
+);
+
+/** Trips and Trip Bookings tables - append-only block to minimize merge conflicts */
+export const trips = pgTable(
+  "trips",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description").notNull(),
+    destination: text("destination").notNull(),
+    durationDays: integer("duration_days").notNull(),
+    basePrice: integer("base_price").notNull(),
+    maxGroupSize: integer("max_group_size").notNull(),
+    itinerary: jsonb("itinerary").$type<unknown[]>().notNull(),
+    inclusions: jsonb("inclusions").$type<string[]>().notNull().default([]),
+    exclusions: jsonb("exclusions").$type<string[]>().notNull().default([]),
+    difficulty: text("difficulty").notNull(),
+    imageIds: jsonb("image_ids").$type<string[]>().notNull().default([]),
+>>>>>>> origin/main
+    status: text("status").notNull().default("draft"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+<<<<<<< HEAD
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("courses_slug_uidx").on(table.slug),
+    index("courses_status_created_idx").on(table.status, table.createdAt),
+    index("courses_difficulty_status_idx").on(table.difficulty, table.status),
+  ]
+);
+
+export const courseLessons = pgTable(
+  "course_lessons",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    moduleNumber: integer("module_number").notNull(),
+    moduleName: text("module_name").notNull(),
+    lessonNumber: integer("lesson_number").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    type: text("type").notNull(),
+    durationMinutes: integer("duration_minutes"),
+    contentUrl: text("content_url"),
+    contentText: text("content_text"),
+    mediaId: uuid("media_id").references(() => mediaAssets.id, {
+      onDelete: "set null",
+    }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    isFree: boolean("is_free").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("course_lessons_course_sort_idx").on(table.courseId, table.sortOrder),
+    index("course_lessons_course_module_idx").on(
+      table.courseId,
+      table.moduleNumber,
+      table.lessonNumber
+    ),
+  ]
+);
+
+export const courseEnrollments = pgTable(
+  "course_enrollments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("active"),
+    paymentStatus: text("payment_status").notNull().default("pending"),
+    paymentAmount: integer("payment_amount").notNull(),
+    progress: jsonb("progress").$type<unknown[]>().notNull().default([]),
+    completedLessonsCount: integer("completed_lessons_count").notNull().default(0),
+    totalLessonsCount: integer("total_lessons_count").notNull().default(0),
+    lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true }),
+=======
+  },
+  (table) => [
+    uniqueIndex("trips_slug_uidx").on(table.slug),
+    index("trips_destination_status_idx").on(table.destination, table.status),
+    index("trips_status_created_idx").on(table.status, table.createdAt),
+  ]
+);
+
+export const tripBookings = pgTable(
+  "trip_bookings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    bookingNumber: text("booking_number").notNull().unique(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    startDate: timestamp("start_date", { withTimezone: true }).notNull(),
+    numberOfTravelers: integer("number_of_travelers").notNull(),
+    totalPrice: integer("total_price").notNull(),
+    status: text("status").notNull().default("pending"),
+    paymentStatus: text("payment_status").notNull().default("pending"),
+    travelerDetails: jsonb("traveler_details").$type<unknown[]>().notNull(),
+    specialRequests: text("special_requests"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+>>>>>>> origin/main
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+<<<<<<< HEAD
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("course_enrollments_user_course_uidx").on(
+      table.mobileUserId,
+      table.courseId
+    ),
+    index("course_enrollments_user_created_idx").on(
+      table.mobileUserId,
+      table.createdAt
+    ),
+    index("course_enrollments_course_status_idx").on(
+      table.courseId,
+      table.status
+    ),
+=======
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("trip_bookings_trip_start_idx").on(table.tripId, table.startDate),
+    index("trip_bookings_user_created_idx").on(
+      table.mobileUserId,
+      table.createdAt
+    ),
+    index("trip_bookings_status_created_idx").on(
+      table.status,
+      table.createdAt
+    ),
+    index("trip_bookings_number_idx").on(table.bookingNumber),
+>>>>>>> origin/main
+>>>>>>> origin/main
+  ]
+);

@@ -18,3 +18,11 @@ export {
   useUpdateBookingMutation,
   useCancelBookingMutation,
 } from './bookingHooks';
+export {
+  useProductsQuery,
+  useProductQuery,
+  useOrdersQuery,
+  useOrderQuery,
+  useCreateOrderMutation,
+  useCancelOrderMutation,
+} from './shopHooks';

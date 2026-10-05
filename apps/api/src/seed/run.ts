@@ -23,6 +23,8 @@ import {
   reels,
   mobileUsers,
   bookings,
+  productCategories,
+  products,
 } from '../db/schema.js';
 import catalog from './catalog.json' with { type: 'json' };
 import {
@@ -456,6 +458,110 @@ async function seed() {
 
     for (const booking of bookingSeeds) {
       await db.insert(bookings).values(booking).onConflictDoNothing();
+    }
+
+    const categorySeeds = [
+      {
+        name: 'Fitness Equipment',
+        slug: 'fitness-equipment',
+        description: 'Professional fitness and gym equipment',
+        sortOrder: 1,
+        status: 'published',
+      },
+      {
+        name: 'Supplements',
+        slug: 'supplements',
+        description: 'Sports nutrition and dietary supplements',
+        sortOrder: 2,
+        status: 'published',
+      },
+      {
+        name: 'Wellness',
+        slug: 'wellness',
+        description: 'Wellness and recovery products',
+        sortOrder: 3,
+        status: 'published',
+      },
+    ];
+
+    const categoryIds: Record<string, string> = {};
+    for (const category of categorySeeds) {
+      const [existing] = await db
+        .select()
+        .from(productCategories)
+        .where(eq(productCategories.slug, category.slug));
+
+      if (existing) {
+        categoryIds[category.slug] = existing.id;
+      } else {
+        const [inserted] = await db
+          .insert(productCategories)
+          .values(category)
+          .returning();
+        categoryIds[category.slug] = inserted!.id;
+      }
+    }
+
+    const productSeeds = [
+      {
+        categoryId: categoryIds['fitness-equipment']!,
+        slug: 'yoga-mat-premium',
+        name: 'Premium Yoga Mat',
+        description: 'High-quality non-slip yoga mat with carrying strap',
+        price: 2499,
+        compareAtPrice: 3499,
+        inventory: 50,
+        status: 'published',
+      },
+      {
+        categoryId: categoryIds['fitness-equipment']!,
+        slug: 'resistance-bands-set',
+        name: 'Resistance Bands Set',
+        description: 'Set of 5 resistance bands with different levels',
+        price: 1299,
+        inventory: 100,
+        status: 'published',
+      },
+      {
+        categoryId: categoryIds['supplements']!,
+        slug: 'whey-protein-1kg',
+        name: 'Whey Protein Isolate 1kg',
+        description: 'Premium whey protein isolate, chocolate flavor',
+        price: 3999,
+        inventory: 30,
+        status: 'published',
+      },
+      {
+        categoryId: categoryIds['supplements']!,
+        slug: 'bcaa-energy',
+        name: 'BCAA Energy Drink',
+        description: 'Branch chain amino acids with natural caffeine',
+        price: 1799,
+        inventory: 60,
+        status: 'published',
+      },
+      {
+        categoryId: categoryIds['wellness']!,
+        slug: 'foam-roller',
+        name: 'Foam Roller',
+        description: 'High-density foam roller for muscle recovery',
+        price: 899,
+        inventory: 40,
+        status: 'published',
+      },
+      {
+        categoryId: categoryIds['wellness']!,
+        slug: 'massage-ball-set',
+        name: 'Massage Ball Set',
+        description: 'Set of 3 massage balls for trigger point therapy',
+        price: 599,
+        inventory: 75,
+        status: 'published',
+      },
+    ];
+
+    for (const product of productSeeds) {
+      await db.insert(products).values(product).onConflictDoNothing();
     }
   }
 

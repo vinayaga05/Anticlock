@@ -30,6 +30,9 @@ import {
   loadAiProviderConfig,
   logAiProviderStartup,
 } from './config/ai-provider.config.js';
+import { requestLogger, type RequestLoggerEnv } from './middleware/requestLogger.js';
+import { initSentry, captureException } from './lib/sentry.js';
+import { sql } from './db/client.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -60,7 +63,10 @@ assertProductionConfiguration();
 const aiConfig = loadAiProviderConfig();
 logAiProviderStartup(aiConfig);
 
-const app = new Hono();
+initSentry();
+
+type AppEnvWithLogger = RequestLoggerEnv & { Variables: { requestId: string } };
+const app = new Hono<AppEnvWithLogger>();
 
 app.use(
   '*',
@@ -72,6 +78,8 @@ app.use(
   }),
 );
 
+app.use('*', requestLogger);
+
 app.get('/health', async c =>
   c.json({
     ok: true,
@@ -80,6 +88,30 @@ app.get('/health', async c =>
     redis: await redisHealthCheck(),
   }),
 );
+
+app.get('/ready', async c => {
+  const redisOk = await redisHealthCheck();
+  let dbOk = false;
+  try {
+    await sql`SELECT 1 AS health_check`;
+    dbOk = true;
+  } catch (error) {
+    console.error('Database health check failed:', error);
+  }
+
+  const ready = redisOk && dbOk;
+  return c.json(
+    {
+      ok: ready,
+      service: 'anticlock-api',
+      checks: {
+        redis: redisOk,
+        database: dbOk,
+      },
+    },
+    ready ? 200 : 503,
+  );
+});
 
 app.route('/', deepLinksRoutes);
 app.route('/auth', authRoutes);
@@ -101,13 +133,24 @@ app.route('/admin/reels', reelsAdminRoutes);
 app.route('/webhooks/cloudflare/stream', streamWebhookRoutes);
 
 app.onError((err, c) => {
-  console.error(err);
+  const requestId = c.get('requestId') ?? 'unknown';
+  console.error(JSON.stringify({
+    type: 'error',
+    requestId,
+    error: err.message,
+    stack: err.stack,
+    timestamp: new Date().toISOString(),
+  }));
+
   if (err.name === 'ZodError') {
+    captureException(err, { requestId, type: 'validation_error' });
     return c.json(
       { error: { code: 'validation_error', message: err.message, details: err } },
       400,
     );
   }
+
+  captureException(err, { requestId, path: c.req.path, method: c.req.method });
   return c.json(
     { error: { code: 'internal_error', message: 'Unexpected server error' } },
     500,

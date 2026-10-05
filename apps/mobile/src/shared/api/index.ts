@@ -11,7 +11,6 @@ export {
   useServiceTreesQuery,
   useServiceCategoriesQuery,
 } from './hooks';
-<<<<<<< HEAD
 export {
   useCommunitiesQuery,
   useMyCommunitiesQuery,
@@ -27,10 +26,7 @@ export {
   useCreateCommentMutation,
   useReportPostMutation,
 } from './communityHooks';
-=======
-<<<<<<< HEAD
 export * from './coursesHooks';
-=======
 export {
   useProductsQuery,
   useProductQuery,
@@ -47,5 +43,3 @@ export {
   useCreateTripBookingMutation,
   useCancelTripBookingMutation,
 } from './tripsHooks';
->>>>>>> origin/main
->>>>>>> origin/main

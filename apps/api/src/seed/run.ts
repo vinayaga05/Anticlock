@@ -21,16 +21,13 @@ import {
   users,
   mediaAssets,
   reels,
-<<<<<<< HEAD
-  communities,
-  communityMembers,
   mobileUsers,
-=======
-  mobileUsers,
+  bookings,
   productCategories,
   products,
+  communities,
+  communityMembers,
   trips,
->>>>>>> origin/main
 } from '../db/schema.js';
 import catalog from './catalog.json' with { type: 'json' };
 import {
@@ -386,31 +383,215 @@ async function seed() {
     }
   }
 
-<<<<<<< HEAD
-  // Seed communities
-  const sampleCommunities = [
-    {
-      name: 'Chennai Cricket Fans',
-      slug: 'chennai-cricket-fans',
-      description: 'For everyone who loves cricket in Chennai! Share updates, organize meetups, and discuss matches.',
-      tags: ['Cricket', 'Sports', 'Chennai'],
-    },
-    {
-      name: 'Fitness & Wellness',
-      slug: 'fitness-wellness',
-      description: 'A community for fitness enthusiasts, wellness seekers, and healthy living advocates.',
-      tags: ['Fitness', 'Wellness', 'Health'],
-    },
-    {
-      name: 'Tech Talk Chennai',
-      slug: 'tech-talk-chennai',
-      description: 'Discuss the latest in technology, startups, and innovations happening in Chennai.',
-      tags: ['Technology', 'Startups', 'Chennai'],
-    },
-  ];
+  // Seed demo bookings if mobile users exist
+  const [demoMobileUser] = await db
+    .select()
+    .from(mobileUsers)
+    .limit(1);
 
-  const existingUsers = await db.select().from(mobileUsers).limit(5);
-  if (existingUsers.length > 0) {
+  if (demoMobileUser) {
+    const now = new Date();
+    const bookingSeeds = [
+      {
+        mobileUserId: demoMobileUser.id,
+        category: 'appointment',
+        status: 'confirmed',
+        serviceMode: 'online',
+        startsAt: new Date(now.getTime() + 3 * 60 * 60 * 1000), // 3 hours from now
+        durationMinutes: 30,
+        amount: 500,
+        paymentStatus: 'paid',
+        detail: {
+          serviceTitle: 'Online Consultation',
+          providerName: 'Dr. Remya Kumar',
+          providerRole: 'General Physician',
+          locationLabel: 'Video consultation',
+        },
+      },
+      {
+        mobileUserId: demoMobileUser.id,
+        category: 'class',
+        status: 'confirmed',
+        serviceMode: 'center',
+        startsAt: new Date(now.getTime() + 24 * 60 * 60 * 1000), // Tomorrow
+        durationMinutes: 60,
+        amount: 599,
+        paymentStatus: 'paid',
+        detail: {
+          serviceTitle: 'Beginner Yoga',
+          providerName: 'Meera',
+          providerRole: 'Fit Studio',
+          locationLabel: 'Studio · 2.4 km',
+        },
+      },
+      {
+        mobileUserId: demoMobileUser.id,
+        category: 'lab',
+        status: 'provider_assigned',
+        serviceMode: 'home',
+        startsAt: new Date(now.getTime() + 26 * 60 * 60 * 1000), // Tomorrow morning
+        durationMinutes: 30,
+        amount: 400,
+        paymentStatus: 'paid',
+        detail: {
+          serviceTitle: 'Vitamin B12 Test',
+          providerName: 'Apollo Diagnostics',
+          providerRole: 'Home collection',
+          locationLabel: 'Home collection',
+        },
+      },
+      {
+        mobileUserId: demoMobileUser.id,
+        category: 'appointment',
+        status: 'completed',
+        serviceMode: 'center',
+        startsAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
+        durationMinutes: 45,
+        amount: 800,
+        paymentStatus: 'paid',
+        completedAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000 + 45 * 60 * 1000),
+        detail: {
+          serviceTitle: 'Sports Physiotherapy',
+          providerName: 'Dr. Sathish Kumar',
+          providerRole: 'Sports Physiotherapist',
+          locationLabel: 'Anticlock Clinic',
+        },
+      },
+    ];
+
+    for (const booking of bookingSeeds) {
+      await db.insert(bookings).values(booking).onConflictDoNothing();
+    }
+
+    const categorySeeds = [
+      {
+        name: 'Fitness Equipment',
+        slug: 'fitness-equipment',
+        description: 'Professional fitness and gym equipment',
+        sortOrder: 1,
+        status: 'published',
+      },
+      {
+        name: 'Supplements',
+        slug: 'supplements',
+        description: 'Sports nutrition and dietary supplements',
+        sortOrder: 2,
+        status: 'published',
+      },
+      {
+        name: 'Wellness',
+        slug: 'wellness',
+        description: 'Wellness and recovery products',
+        sortOrder: 3,
+        status: 'published',
+      },
+    ];
+
+    const categoryIds: Record<string, string> = {};
+    for (const category of categorySeeds) {
+      const [existing] = await db
+        .select()
+        .from(productCategories)
+        .where(eq(productCategories.slug, category.slug));
+
+      if (existing) {
+        categoryIds[category.slug] = existing.id;
+      } else {
+        const [inserted] = await db
+          .insert(productCategories)
+          .values(category)
+          .returning();
+        categoryIds[category.slug] = inserted!.id;
+      }
+    }
+
+    const productSeeds = [
+      {
+        categoryId: categoryIds['fitness-equipment']!,
+        slug: 'yoga-mat-premium',
+        name: 'Premium Yoga Mat',
+        description: 'High-quality non-slip yoga mat with carrying strap',
+        price: 2499,
+        compareAtPrice: 3499,
+        inventory: 50,
+        status: 'published',
+      },
+      {
+        categoryId: categoryIds['fitness-equipment']!,
+        slug: 'resistance-bands-set',
+        name: 'Resistance Bands Set',
+        description: 'Set of 5 resistance bands with different levels',
+        price: 1299,
+        inventory: 100,
+        status: 'published',
+      },
+      {
+        categoryId: categoryIds['supplements']!,
+        slug: 'whey-protein-1kg',
+        name: 'Whey Protein Isolate 1kg',
+        description: 'Premium whey protein isolate, chocolate flavor',
+        price: 3999,
+        inventory: 30,
+        status: 'published',
+      },
+      {
+        categoryId: categoryIds['supplements']!,
+        slug: 'bcaa-energy',
+        name: 'BCAA Energy Drink',
+        description: 'Branch chain amino acids with natural caffeine',
+        price: 1799,
+        inventory: 60,
+        status: 'published',
+      },
+      {
+        categoryId: categoryIds['wellness']!,
+        slug: 'foam-roller',
+        name: 'Foam Roller',
+        description: 'High-density foam roller for muscle recovery',
+        price: 899,
+        inventory: 40,
+        status: 'published',
+      },
+      {
+        categoryId: categoryIds['wellness']!,
+        slug: 'massage-ball-set',
+        name: 'Massage Ball Set',
+        description: 'Set of 3 massage balls for trigger point therapy',
+        price: 599,
+        inventory: 75,
+        status: 'published',
+      },
+    ];
+
+    for (const product of productSeeds) {
+      await db.insert(products).values(product).onConflictDoNothing();
+    }
+
+    // Seed communities
+    const sampleCommunities = [
+      {
+        name: 'Chennai Cricket Fans',
+        slug: 'chennai-cricket-fans',
+        description:
+          'For everyone who loves cricket in Chennai! Share updates, organize meetups, and discuss matches.',
+        tags: ['Cricket', 'Sports', 'Chennai'],
+      },
+      {
+        name: 'Fitness & Wellness',
+        slug: 'fitness-wellness',
+        description:
+          'A community for fitness enthusiasts, wellness seekers, and healthy living advocates.',
+        tags: ['Fitness', 'Wellness', 'Health'],
+      },
+      {
+        name: 'Tech Talk Chennai',
+        slug: 'tech-talk-chennai',
+        description:
+          'Discuss the latest in technology, startups, and innovations happening in Chennai.',
+        tags: ['Technology', 'Startups', 'Chennai'],
+      },
+    ];
+
     for (const communityData of sampleCommunities) {
       const existing = await db
         .select()
@@ -419,135 +600,36 @@ async function seed() {
         .limit(1);
 
       if (!existing[0]) {
-        const [community] = await db.insert(communities).values({
-          ownerId: existingUsers[0]!.id,
-          name: communityData.name,
-          slug: communityData.slug,
-          description: communityData.description,
-          tags: communityData.tags,
-          memberCount: 1,
-          postCount: 0,
-          status: 'published',
-        }).returning();
+        const [community] = await db
+          .insert(communities)
+          .values({
+            ownerId: demoMobileUser.id,
+            name: communityData.name,
+            slug: communityData.slug,
+            description: communityData.description,
+            tags: communityData.tags,
+            memberCount: 1,
+            postCount: 0,
+            status: 'published',
+          })
+          .returning();
 
         await db.insert(communityMembers).values({
           communityId: community!.id,
-          mobileUserId: existingUsers[0]!.id,
+          mobileUserId: demoMobileUser.id,
           role: 'owner',
         });
       }
     }
-=======
-  // Seed product categories and products
-  const categorySeeds = [
-    {
-      id: 'cat-fitness',
-      name: 'Fitness Equipment',
-      slug: 'fitness-equipment',
-      description: 'Home and gym fitness equipment',
-      sortOrder: 1,
-      status: 'published',
-    },
-    {
-      id: 'cat-supplements',
-      name: 'Supplements',
-      slug: 'supplements',
-      description: 'Nutritional supplements and vitamins',
-      sortOrder: 2,
-      status: 'published',
-    },
-    {
-      id: 'cat-wellness',
-      name: 'Wellness',
-      slug: 'wellness',
-      description: 'Wellness and recovery products',
-      sortOrder: 3,
-      status: 'published',
-    },
-  ];
-
-  for (const cat of categorySeeds) {
-    await db.insert(productCategories).values(cat).onConflictDoNothing();
   }
 
-  const shopProductSeeds = [
-    {
-      categoryId: 'cat-supplements',
-      name: 'Whey Protein Isolate 1kg',
-      slug: 'whey-protein-isolate-1kg',
-      description:
-        'Premium whey protein isolate with 25g protein per serving. Fast absorption for post-workout recovery.',
-      price: 2499,
-      compareAtPrice: 2999,
-      inventory: 50,
-      status: 'published',
-    },
-    {
-      categoryId: 'cat-fitness',
-      name: 'Premium Yoga Mat',
-      slug: 'premium-yoga-mat',
-      description:
-        'Non-slip, eco-friendly yoga mat with extra cushioning. Perfect for yoga, pilates, and floor exercises.',
-      price: 1299,
-      compareAtPrice: 1599,
-      inventory: 30,
-      status: 'published',
-    },
-    {
-      categoryId: 'cat-fitness',
-      name: 'Resistance Bands Set',
-      slug: 'resistance-bands-set',
-      description:
-        'Set of 5 resistance bands with varying resistance levels. Includes carry bag and door anchor.',
-      price: 899,
-      inventory: 45,
-      status: 'published',
-    },
-    {
-      categoryId: 'cat-supplements',
-      name: 'Multivitamin Complex',
-      slug: 'multivitamin-complex',
-      description:
-        'Complete daily multivitamin with essential vitamins and minerals. 60 tablets.',
-      price: 599,
-      compareAtPrice: 799,
-      inventory: 100,
-      status: 'published',
-    },
-    {
-      categoryId: 'cat-wellness',
-      name: 'Foam Roller',
-      slug: 'foam-roller',
-      description:
-        'High-density foam roller for muscle recovery and myofascial release. 33cm length.',
-      price: 799,
-      inventory: 25,
-      status: 'published',
-    },
-    {
-      categoryId: 'cat-fitness',
-      name: 'Adjustable Dumbbells',
-      slug: 'adjustable-dumbbells',
-      description:
-        'Space-saving adjustable dumbbells from 2kg to 12kg per hand. Quick adjustment mechanism.',
-      price: 3999,
-      compareAtPrice: 4999,
-      inventory: 15,
-      status: 'published',
-    },
-  ];
-
-  for (const product of shopProductSeeds) {
-    await db.insert(products).values(product).onConflictDoNothing();
-  }
-
-  // Seed trips
+  // Seed trips (independent of mobile user)
   const tripSeeds = [
     {
       name: 'Yercaud Weekend Adventure',
       slug: 'yercaud-weekend-adventure',
       description:
-        'Escape to the scenic hills of Yercaud for a refreshing weekend getaway. Experience misty mornings, serene lakes, and lush coffee plantations in this charming hill station of Tamil Nadu.',
+        'Escape to the scenic hills of Yercaud for a refreshing weekend getaway.',
       destination: 'Yercaud, Tamil Nadu',
       durationDays: 2,
       basePrice: 4999,
@@ -556,25 +638,15 @@ async function seed() {
         {
           day: 1,
           title: 'Arrival and Lake Tour',
-          description:
-            'Arrive in Yercaud and check into your comfortable accommodation',
-          activities: [
-            'Visit Yercaud Lake and enjoy a boat ride',
-            'Explore Lady\'s Seat viewpoint for panoramic valley views',
-            'Evening bonfire and group activities',
-          ],
+          description: 'Arrive in Yercaud and check into accommodation',
+          activities: ['Visit Yercaud Lake', "Explore Lady's Seat viewpoint"],
           meals: ['Lunch', 'Dinner'],
         },
         {
           day: 2,
           title: 'Coffee Estate and Departure',
-          description: 'Explore the famous coffee plantations and natural beauty',
-          activities: [
-            'Guided tour of coffee plantation',
-            'Visit Killiyur Falls (seasonal)',
-            'Shopping at local markets',
-            'Departure by evening',
-          ],
+          description: 'Explore coffee plantations',
+          activities: ['Coffee plantation tour', 'Shopping at local markets'],
           meals: ['Breakfast', 'Lunch'],
         },
       ],
@@ -582,14 +654,8 @@ async function seed() {
         'Accommodation for 1 night',
         'All meals as per itinerary',
         'Transportation in AC vehicle',
-        'Experienced tour guide',
-        'Entry fees to viewpoints',
       ],
-      exclusions: [
-        'Personal expenses',
-        'Adventure activities (optional)',
-        'Travel insurance',
-      ],
+      exclusions: ['Personal expenses', 'Travel insurance'],
       difficulty: 'easy',
       status: 'published',
     },
@@ -597,7 +663,7 @@ async function seed() {
       name: 'Mahabalipuram Heritage Tour',
       slug: 'mahabalipuram-heritage-tour',
       description:
-        'Discover the ancient rock-cut temples and UNESCO World Heritage sites of Mahabalipuram. A perfect blend of history, culture, and coastal beauty.',
+        'Discover the ancient rock-cut temples and UNESCO World Heritage sites of Mahabalipuram.',
       destination: 'Mahabalipuram, Tamil Nadu',
       durationDays: 1,
       basePrice: 1999,
@@ -609,10 +675,8 @@ async function seed() {
           description: 'Full day exploration of ancient monuments and beach',
           activities: [
             'Visit Shore Temple at sunrise',
-            'Explore Arjuna\'s Penance and Krishna\'s Butter Ball',
-            'Tour the Five Rathas (Pancha Rathas)',
-            'Relax at Mahabalipuram Beach',
-            'Visit local handicraft stores',
+            "Explore Arjuna's Penance",
+            'Tour the Five Rathas',
           ],
           meals: ['Breakfast', 'Lunch'],
         },
@@ -621,345 +685,20 @@ async function seed() {
         'AC transportation from Chennai',
         'Professional heritage guide',
         'All entry fees',
-        'Breakfast and lunch',
-        'Bottled water',
       ],
-      exclusions: ['Dinner', 'Shopping expenses', 'Tips for guide'],
+      exclusions: ['Dinner', 'Shopping expenses'],
       difficulty: 'easy',
-      status: 'published',
-    },
-    {
-      name: 'Kodaikanal Nature Retreat',
-      slug: 'kodaikanal-nature-retreat',
-      description:
-        'Immerse yourself in the pristine beauty of Kodaikanal, the "Princess of Hill Stations". Trek through pine forests, visit stunning viewpoints, and experience the tranquility of hill country.',
-      destination: 'Kodaikanal, Tamil Nadu',
-      durationDays: 3,
-      basePrice: 8999,
-      maxGroupSize: 15,
-      itinerary: [
-        {
-          day: 1,
-          title: 'Arrival and Lake Exploration',
-          description: 'Settle in and explore the famous Kodaikanal Lake area',
-          activities: [
-            'Check-in and welcome refreshments',
-            'Evening walk around Kodaikanal Lake',
-            'Visit Bryant Park',
-            'Shopping at local markets',
-          ],
-          meals: ['Dinner'],
-        },
-        {
-          day: 2,
-          title: 'Viewpoints and Waterfalls',
-          description: 'Full day tour of scenic viewpoints and natural wonders',
-          activities: [
-            'Coaker\'s Walk at sunrise',
-            'Trek to Dolphin\'s Nose',
-            'Visit Pillar Rocks',
-            'Explore Bear Shola Falls',
-            'Evening bonfire at hotel',
-          ],
-          meals: ['Breakfast', 'Lunch', 'Dinner'],
-        },
-        {
-          day: 3,
-          title: 'Pine Forest Trek and Departure',
-          description: 'Morning nature walk and departure',
-          activities: [
-            'Guided trek through Pine Forest',
-            'Visit Guna Caves (Devil\'s Kitchen)',
-            'Last minute shopping',
-            'Departure by afternoon',
-          ],
-          meals: ['Breakfast', 'Lunch'],
-        },
-      ],
-      inclusions: [
-        'Accommodation for 2 nights',
-        'All meals as per itinerary',
-        'AC transportation',
-        'Experienced trekking guide',
-        'Entry fees to all attractions',
-        'First aid kit',
-      ],
-      exclusions: [
-        'Adventure activities (rock climbing, etc.)',
-        'Personal expenses',
-        'Camera fees at monuments',
-        'Travel insurance',
-      ],
-      difficulty: 'moderate',
       status: 'published',
     },
   ];
 
   for (const trip of tripSeeds) {
     await db.insert(trips).values(trip).onConflictDoNothing();
->>>>>>> origin/main
   }
 
   console.log(
     `Seeded ${catalog.trees.length} trees and ${catalog.categories.length} categories, including demo data.`,
   );
-
-  /** Seed demo courses */
-  const courseSeeds = [
-    {
-      slug: 'introduction-to-wellness',
-      name: 'Introduction to Wellness and Mindfulness',
-      shortDescription: 'Learn the fundamentals of wellness and mindfulness practices',
-      description:
-        'This comprehensive course covers the basics of wellness, meditation, and mindfulness techniques to improve your daily life. Perfect for beginners looking to start their wellness journey.',
-      difficulty: 'beginner',
-      durationHours: 8,
-      price: 4999,
-      compareAtPrice: 7999,
-      instructorName: 'Dr. Priya Sharma',
-      instructorBio:
-        'Dr. Priya Sharma is a certified wellness coach with over 15 years of experience in mindfulness and meditation practices.',
-      learningOutcomes: [
-        'Understand the principles of wellness',
-        'Practice basic meditation techniques',
-        'Develop a daily mindfulness routine',
-        'Manage stress effectively',
-      ],
-      prerequisites: ['None - suitable for beginners'],
-      status: 'published',
-      publishedAt: new Date(),
-      lessons: [
-        {
-          moduleNumber: 1,
-          moduleName: 'Introduction to Wellness',
-          lessonNumber: 1,
-          title: 'What is Wellness?',
-          description: 'Understanding the core concepts of wellness',
-          type: 'video',
-          durationMinutes: 20,
-          sortOrder: 1,
-          isFree: true,
-        },
-        {
-          moduleNumber: 1,
-          moduleName: 'Introduction to Wellness',
-          lessonNumber: 2,
-          title: 'The Mind-Body Connection',
-          description: 'Exploring how mental and physical health are interconnected',
-          type: 'article',
-          durationMinutes: 15,
-          sortOrder: 2,
-          isFree: true,
-        },
-        {
-          moduleNumber: 2,
-          moduleName: 'Meditation Basics',
-          lessonNumber: 1,
-          title: 'Breathing Techniques',
-          description: 'Learn fundamental breathing exercises for relaxation',
-          type: 'video',
-          durationMinutes: 25,
-          sortOrder: 3,
-          isFree: false,
-        },
-        {
-          moduleNumber: 2,
-          moduleName: 'Meditation Basics',
-          lessonNumber: 2,
-          title: 'Guided Meditation Practice',
-          description: 'Follow along with a guided meditation session',
-          type: 'video',
-          durationMinutes: 30,
-          sortOrder: 4,
-          isFree: false,
-        },
-        {
-          moduleNumber: 3,
-          moduleName: 'Daily Practice',
-          lessonNumber: 1,
-          title: 'Creating Your Wellness Routine',
-          description: 'Build a sustainable daily wellness practice',
-          type: 'article',
-          durationMinutes: 20,
-          sortOrder: 5,
-          isFree: false,
-        },
-      ],
-    },
-    {
-      slug: 'yoga-for-beginners',
-      name: 'Yoga for Beginners: Foundation Course',
-      shortDescription: 'Master the fundamentals of yoga practice',
-      description:
-        'Start your yoga journey with this beginner-friendly course. Learn essential poses, proper alignment, and breathing techniques in a supportive environment.',
-      difficulty: 'beginner',
-      durationHours: 12,
-      price: 5999,
-      compareAtPrice: 9999,
-      instructorName: 'Ravi Kumar',
-      instructorBio:
-        'Ravi Kumar is a certified yoga instructor with 10 years of teaching experience and expertise in Hatha and Vinyasa yoga.',
-      learningOutcomes: [
-        'Learn 20+ fundamental yoga poses',
-        'Understand proper alignment and form',
-        'Master breathing techniques (Pranayama)',
-        'Build strength and flexibility safely',
-      ],
-      prerequisites: ['No prior yoga experience required', 'Comfortable clothing and a yoga mat'],
-      status: 'published',
-      publishedAt: new Date(),
-      lessons: [
-        {
-          moduleNumber: 1,
-          moduleName: 'Yoga Foundations',
-          lessonNumber: 1,
-          title: 'Introduction to Yoga Philosophy',
-          description: 'Learn the core principles of yoga',
-          type: 'video',
-          durationMinutes: 25,
-          sortOrder: 1,
-          isFree: true,
-        },
-        {
-          moduleNumber: 1,
-          moduleName: 'Yoga Foundations',
-          lessonNumber: 2,
-          title: 'Standing Poses',
-          description: 'Practice fundamental standing asanas',
-          type: 'video',
-          durationMinutes: 35,
-          sortOrder: 2,
-          isFree: false,
-        },
-        {
-          moduleNumber: 2,
-          moduleName: 'Building Strength',
-          lessonNumber: 1,
-          title: 'Core Strengthening Poses',
-          description: 'Develop core stability and strength',
-          type: 'video',
-          durationMinutes: 30,
-          sortOrder: 3,
-          isFree: false,
-        },
-      ],
-    },
-    {
-      slug: 'advanced-nutrition-science',
-      name: 'Advanced Nutrition Science',
-      shortDescription: 'Deep dive into nutritional biochemistry and dietary strategies',
-      description:
-        'An advanced course exploring the science of nutrition, metabolism, and evidence-based dietary approaches for optimal health.',
-      difficulty: 'advanced',
-      durationHours: 20,
-      price: 12999,
-      compareAtPrice: 19999,
-      instructorName: 'Dr. Anjali Mehta',
-      instructorBio:
-        'Dr. Anjali Mehta holds a PhD in Nutritional Biochemistry and has published over 30 research papers in peer-reviewed journals.',
-      learningOutcomes: [
-        'Understand macronutrient metabolism',
-        'Evaluate nutrition research critically',
-        'Design evidence-based meal plans',
-        'Understand nutrient-gene interactions',
-      ],
-      prerequisites: [
-        'Basic understanding of biology and chemistry',
-        'Prior knowledge of nutrition fundamentals recommended',
-      ],
-      status: 'published',
-      publishedAt: new Date(),
-      lessons: [
-        {
-          moduleNumber: 1,
-          moduleName: 'Nutritional Biochemistry',
-          lessonNumber: 1,
-          title: 'Carbohydrate Metabolism',
-          description: 'Understanding how the body processes carbohydrates',
-          type: 'video',
-          durationMinutes: 45,
-          sortOrder: 1,
-          isFree: true,
-        },
-        {
-          moduleNumber: 1,
-          moduleName: 'Nutritional Biochemistry',
-          lessonNumber: 2,
-          title: 'Protein Synthesis and Breakdown',
-          description: 'The role of proteins in metabolism',
-          type: 'article',
-          durationMinutes: 40,
-          sortOrder: 2,
-          isFree: false,
-        },
-      ],
-    },
-  ];
-
-  for (const courseSeed of courseSeeds) {
-    const { lessons, ...courseData } = courseSeed;
-    
-    const [existingCourse] = await sql`
-      SELECT id FROM courses WHERE slug = ${courseData.slug}
-    `;
-
-    if (existingCourse) {
-      console.log(`Course "${courseData.name}" already exists, skipping...`);
-      continue;
-    }
-
-    const [course] = await sql`
-      INSERT INTO courses (
-        slug, name, short_description, description, difficulty, duration_hours,
-        price, compare_at_price, instructor_name, instructor_bio,
-        learning_outcomes, prerequisites, status, published_at
-      )
-      VALUES (
-        ${courseData.slug},
-        ${courseData.name},
-        ${courseData.shortDescription},
-        ${courseData.description},
-        ${courseData.difficulty},
-        ${courseData.durationHours},
-        ${courseData.price},
-        ${courseData.compareAtPrice ?? null},
-        ${courseData.instructorName},
-        ${courseData.instructorBio},
-        ${JSON.stringify(courseData.learningOutcomes)},
-        ${JSON.stringify(courseData.prerequisites)},
-        ${courseData.status},
-        ${courseData.publishedAt}
-      )
-      RETURNING id
-    `;
-
-    const courseId = course.id;
-
-    for (const lesson of lessons) {
-      await sql`
-        INSERT INTO course_lessons (
-          course_id, module_number, module_name, lesson_number, title,
-          description, type, duration_minutes, sort_order, is_free
-        )
-        VALUES (
-          ${courseId},
-          ${lesson.moduleNumber},
-          ${lesson.moduleName},
-          ${lesson.lessonNumber},
-          ${lesson.title},
-          ${lesson.description ?? null},
-          ${lesson.type},
-          ${lesson.durationMinutes},
-          ${lesson.sortOrder},
-          ${lesson.isFree}
-        )
-      `;
-    }
-
-    console.log(`Seeded course: ${courseData.name}`);
-  }
-
-  console.log('Seeding complete.');
   await sql.end({ timeout: 5 });
 }
 

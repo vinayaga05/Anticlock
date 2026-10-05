@@ -4,12 +4,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RootNavigator } from '@/shared/navigation/RootNavigator';
-<<<<<<< HEAD
 import { AuthProvider, useAuth } from '@/shared/context/AuthProvider';
-=======
-import { AuthProvider } from '@/shared/context/AuthProvider';
 import { StreamChatProvider } from '@/shared/providers/StreamChatProvider';
->>>>>>> origin/main
 import { useTheme } from '@/shared/hooks/useTheme';
 import { useNotificationSetup } from '@/shared/hooks/useNotificationSetup';
 

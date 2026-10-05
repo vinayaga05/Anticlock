@@ -11,6 +11,7 @@ export {
   useServiceTreesQuery,
   useServiceCategoriesQuery,
 } from './hooks';
+<<<<<<< HEAD
 export {
   useCommunitiesQuery,
   useMyCommunitiesQuery,
@@ -26,3 +27,25 @@ export {
   useCreateCommentMutation,
   useReportPostMutation,
 } from './communityHooks';
+=======
+<<<<<<< HEAD
+export * from './coursesHooks';
+=======
+export {
+  useProductsQuery,
+  useProductQuery,
+  useOrdersQuery,
+  useOrderQuery,
+  useCreateOrderMutation,
+  useCancelOrderMutation,
+} from './shopHooks';
+export {
+  useTripsQuery,
+  useTripQuery,
+  useTripBookingsQuery,
+  useTripBookingQuery,
+  useCreateTripBookingMutation,
+  useCancelTripBookingMutation,
+} from './tripsHooks';
+>>>>>>> origin/main
+>>>>>>> origin/main

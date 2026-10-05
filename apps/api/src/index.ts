@@ -18,12 +18,18 @@ import {
   providerAdminRoutes,
   providerMobileRoutes,
 } from './routes/provider.js';
+import { shopAdminRoutes, shopMobileRoutes } from './routes/shop.js';
+import { tripsAdminRoutes, tripsMobileRoutes } from './routes/trips.js';
 import { assistantRoutes } from './routes/assistant.js';
 import { interestRoutes } from './routes/interests.js';
 import { contentMobileRoutes, contentPublicRoutes } from './routes/content.js';
 import { profileBlockRoutes } from './routes/blocks.js';
 import { contentSafetyRoutes } from './routes/contentSafety.js';
+<<<<<<< HEAD
 import { communitiesMobileRoutes, communitiesAdminRoutes } from './routes/communities.js';
+=======
+import { coursesMobileRoutes, coursesAdminRoutes } from './routes/courses.js';
+>>>>>>> origin/main
 import { startAssistantLifecycleJob } from './assistant/PrivacyService.js';
 import { redisHealthCheck } from './lib/redis.js';
 import {
@@ -86,15 +92,25 @@ app.route('/v1/catalog', catalogRoutes);
 app.route('/v1/media', mediaPublicRoutes);
 app.route('/v1/reels', reelsPublicRoutes);
 app.route('/v1/provider', providerMobileRoutes);
+app.route('/v1/shop', shopMobileRoutes);
+app.route('/v1/trips', tripsMobileRoutes);
 app.route('/v1/assistant', assistantRoutes);
 app.route('/v1/interests', interestRoutes);
 app.route('/v1/content', contentMobileRoutes);
 app.route('/v1/content', contentPublicRoutes);
 app.route('/v1/content', contentSafetyRoutes);
 app.route('/v1/blocks', profileBlockRoutes);
+<<<<<<< HEAD
 app.route('/v1/communities', communitiesMobileRoutes);
+=======
+app.route('/v1/courses', coursesMobileRoutes);
+>>>>>>> origin/main
 app.route('/admin', adminRoutes);
+app.route('/admin/courses', coursesAdminRoutes);
+app.route('/admin/courses', coursesAdminRoutes);
 app.route('/admin/provider', providerAdminRoutes);
+app.route('/admin/shop', shopAdminRoutes);
+app.route('/admin/trips', tripsAdminRoutes);
 app.route('/admin/media', mediaAdminRoutes);
 app.route('/admin/stubs', stubDomainRoutes);
 app.route('/admin/reels', reelsAdminRoutes);

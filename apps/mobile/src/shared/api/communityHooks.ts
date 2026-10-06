@@ -12,7 +12,7 @@ import type {
   CreateCommentRequest,
   ReportPostRequest,
 } from '@anticlock/contracts';
-import { apiFetch, isApiEnabled } from './client.js';
+import { apiFetch, isApiEnabled } from './client';
 
 export function useCommunitiesQuery(search?: string) {
   return useQuery({

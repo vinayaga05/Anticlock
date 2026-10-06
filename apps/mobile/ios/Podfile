@@ -9,6 +9,11 @@ require Pod::Executable.execute_command('node', ['-p',
 require_relative './cocoapods_pathname_workaround'
 
 platform :ios, min_ios_version_supported
+
+# react-native-firebase: resolve Firebase via CocoaPods instead of SPM. SPM
+# products + static libraries (RN's default) collide at link time, and
+# `pod install` refuses to continue without this.
+$RNFirebaseDisableSPM = true
 prepare_react_native_project!
 
 linkage = ENV['USE_FRAMEWORKS']
@@ -19,6 +24,13 @@ end
 
 target 'AnticlockTemp' do
   config = use_native_modules!
+
+  # Firebase's Swift pods import these Obj-C pods; with static libraries they
+  # need module maps (instead of switching the whole app to use_frameworks!).
+  %w[GoogleUtilities FirebaseCore FirebaseCoreExtension FirebaseInstallations
+     GoogleDataTransport nanopb].each do |name|
+    pod name, :modular_headers => true
+  end
 
   use_react_native!(
     :path => config[:reactNativePath],

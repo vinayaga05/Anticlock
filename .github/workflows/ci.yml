@@ -106,6 +106,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build contracts
+        # @anticlock/contracts resolves to ./dist (gitignored), so it must be
+        # compiled before anything imports it at runtime/bundle time. Mirrors
+        # the Dockerfiles, which build contracts before api/admin.
+        run: pnpm --filter @anticlock/contracts build
+
       - name: Run API tests
         working-directory: apps/api
         run: pnpm test
@@ -148,6 +154,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Build contracts
+        # @anticlock/contracts resolves to ./dist (gitignored), so it must be
+        # compiled before anything imports it at runtime/bundle time. Mirrors
+        # the Dockerfiles, which build contracts before api/admin.
+        run: pnpm --filter @anticlock/contracts build
 
       - name: Build admin
         working-directory: apps/admin

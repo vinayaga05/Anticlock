@@ -3,6 +3,14 @@ import assert from 'node:assert';
 import { Hono } from 'hono';
 import { messagesRoutes } from './messages.js';
 import type { AppEnv } from '../middleware/auth.js';
+import { signToken } from '../lib/auth.js';
+
+// requireAuth verifies a real JWT from the Authorization header and overwrites
+// any pre-set `auth` variable, so tests must send a signed token.
+async function authHeader(kind: 'mobile' | 'admin', sub: string) {
+  const token = await signToken({ kind, sub, email: `${sub}@test.com`, name: sub, roles: [] });
+  return { Authorization: `Bearer ${token}` };
+}
 
 describe('Messages Routes', () => {
   it('POST /token - requires authentication', async () => {
@@ -28,24 +36,12 @@ describe('Messages Routes', () => {
 
     const app = new Hono<AppEnv>();
     
-    // Mock auth middleware
-    app.use('*', async (c, next) => {
-      c.set('auth', { 
-        kind: 'mobile', 
-        sub: 'test-user-id', 
-        email: 'test@test.com',
-        name: 'Test User',
-        roles: [],
-        permissions: [] 
-      });
-      await next();
-    });
-    
+    const auth = await authHeader('mobile', 'test-user-id');
     app.route('/v1/messages', messagesRoutes);
 
     const res = await app.request('/v1/messages/token', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...auth },
     });
 
     assert.strictEqual(res.status, 503);
@@ -60,24 +56,12 @@ describe('Messages Routes', () => {
   it('POST /channels - requires mobile auth', async () => {
     const app = new Hono<AppEnv>();
     
-    // Mock non-mobile auth
-    app.use('*', async (c, next) => {
-      c.set('auth', { 
-        kind: 'admin', 
-        sub: 'admin-id', 
-        email: 'admin@test.com',
-        name: 'Admin',
-        roles: [],
-        permissions: [] 
-      });
-      await next();
-    });
-    
+    const auth = await authHeader('admin', 'admin-id');
     app.route('/v1/messages', messagesRoutes);
 
     const res = await app.request('/v1/messages/channels', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...auth },
       body: JSON.stringify({ otherUserId: 'other-user-id' }),
     });
 
@@ -88,23 +72,12 @@ describe('Messages Routes', () => {
   it('POST /channels - validates otherUserId format', async () => {
     const app = new Hono<AppEnv>();
     
-    app.use('*', async (c, next) => {
-      c.set('auth', { 
-        kind: 'mobile', 
-        sub: 'user-id', 
-        email: 'user@test.com',
-        name: 'User',
-        roles: [],
-        permissions: [] 
-      });
-      await next();
-    });
-    
+    const auth = await authHeader('mobile', 'user-id');
     app.route('/v1/messages', messagesRoutes);
 
     const res = await app.request('/v1/messages/channels', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...auth },
       body: JSON.stringify({ otherUserId: 'not-a-uuid' }),
     });
 

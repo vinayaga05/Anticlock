@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { testClient } from 'hono/testing';
-import { coursesMobileRoutes } from './courses.js';
-import { db } from '../db/client.js';
-import { courses, courseLessons, courseEnrollments, mobileUsers } from '../db/schema.js';
+import { coursesMobileRoutes } from '../courses.js';
+import { db } from '../../db/client.js';
+import { courses, courseLessons, courseEnrollments, mobileUsers } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 
 describe('Courses API Routes', () => {

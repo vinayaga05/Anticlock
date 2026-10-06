@@ -114,8 +114,8 @@ describe("Flash post validation", () => {
       mediaType: "image",
       caption: "Gallery",
       mediaIds: [
-        "d4e5f6g7-8901-23de-f012-4567890abcde",
-        "e5f6g7h8-9012-34ef-0123-567890abcdef",
+        "00000001-0000-4000-8000-000000000001",
+        "00000002-0000-4000-8000-000000000002",
       ],
       visibility: "public",
     };
@@ -127,7 +127,7 @@ describe("Flash post validation", () => {
       format: "flash",
       mediaType: "video",
       caption: "Short video moment",
-      mediaIds: ["f6g7h8i9-0123-45fg-1234-67890abcdefg"],
+      mediaIds: ["00000003-0000-4000-8000-000000000003"],
       visibility: "public",
     };
     assert.equal(CreateContentContainerRequestSchema.safeParse(valid).success, true);
@@ -139,8 +139,8 @@ describe("Flash post validation", () => {
       mediaType: "hybrid",
       caption: "Mixed media post",
       mediaIds: [
-        "g7h8i9j0-1234-56gh-2345-7890abcdefgh",
-        "h8i9j0k1-2345-67hi-3456-890abcdefghi",
+        "00000004-0000-4000-8000-000000000004",
+        "00000005-0000-4000-8000-000000000005",
       ],
       visibility: "public",
     };
@@ -162,7 +162,7 @@ describe("Flash post validation", () => {
       format: "flash",
       mediaType: "image",
       caption: "Too many",
-      mediaIds: Array(11).fill("i9j0k1l2-3456-78ij-4567-90abcdefghij"),
+      mediaIds: Array(11).fill("00000006-0000-4000-8000-000000000006"),
       visibility: "public",
     };
     assert.equal(CreateContentContainerRequestSchema.safeParse(invalid).success, false);
@@ -199,8 +199,8 @@ describe("Flash post validation", () => {
       format: "flash",
       mediaType: "image",
       caption: "With friends",
-      mediaIds: ["j0k1l2m3-4567-89jk-5678-01abcdefghijk"],
-      taggedUserIds: ["k1l2m3n4-5678-90kl-6789-12abcdefghijkl"],
+      mediaIds: ["00000007-0000-4000-8000-000000000007"],
+      taggedUserIds: ["00000008-0000-4000-8000-000000000008"],
       visibility: "public",
     };
     assert.equal(CreateContentContainerRequestSchema.safeParse(valid).success, true);

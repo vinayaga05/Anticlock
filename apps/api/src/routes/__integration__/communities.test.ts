@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { testRequest, createTestUser, createMobileTestUser } from '../test-helpers.js';
+import { testRequest, createTestUser, createMobileTestUser } from '../../test-helpers.js';
 
 describe('Communities Authorization', () => {
   let adminUserId: string;

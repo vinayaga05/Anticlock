@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { StreamChat } from 'stream-chat';
 import { Chat } from 'stream-chat-react-native';
-import { useAuthStore } from '@/shared/services/auth/authStore';
+import { useAuth } from '@/shared/context/AuthProvider';
 import { isApiEnabled } from '@/shared/api/config';
 import { apiClient } from '@/shared/api/client';
 
@@ -32,7 +32,8 @@ export function StreamChatProvider({ children }: { children: React.ReactNode }) 
   const [isReady, setIsReady] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const session = useAuthStore(state => state.session);
+  const { user } = useAuth();
+  const session = user ? { userId: user.id } : null;
 
   const connectClient = useCallback(async () => {
     if (!isApiEnabled) {

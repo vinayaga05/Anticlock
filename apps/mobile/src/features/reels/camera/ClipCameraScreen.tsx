@@ -21,6 +21,7 @@ import {
 import { getVideoInfo, toMediaUri } from '@anticlock/react-native-clip-editor';
 import { AppIcon } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
+import { GlassFill, GlassIconButton, HIT } from '@/features/reels/ui/GlassIconButton';
 import {
   CreationModePicker,
   type CreationMode,
@@ -46,7 +47,7 @@ type Props = {
   onDone: (segments: ClipSource[]) => void;
 };
 
-const RING = 92;
+const RING = 96;
 const MIN_TAKE_MS = 300;
 const HOLD_THRESHOLD_MS = 450;
 
@@ -78,6 +79,7 @@ export function ClipCameraScreen({
   const [busy, setBusy] = useState(false);
   const [liveMs, setLiveMs] = useState(0);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [durationsOpen, setDurationsOpen] = useState(true);
 
   const cameraPermission = useCameraPermission();
   const micPermission = useMicrophonePermission();
@@ -246,81 +248,102 @@ export function ClipCameraScreen({
     return out;
   }, [limitMs, segments]);
 
+  const hasTakes = segments.length > 0;
+  const flip = () => setPosition(value => (value === 'back' ? 'front' : 'back'));
+  const shutterDisabled = !hasCamera || (full && !recording);
+
   return (
     <View style={styles.root}>
-      <View style={[styles.preview, { marginTop: insets.top + 8 }]}>
-        {hasCamera ? (
-          <Camera
-            style={StyleSheet.absoluteFill}
-            isActive={isActive}
-            device={device}
-            outputs={[videoOutput]}
-            torchMode={torch && position === 'back' && device?.hasTorch ? 'on' : 'off'}
-            enableNativeZoomGesture
-            resizeMode="cover"
-            onStarted={() => setCameraError(null)}
-            onError={error => setCameraError(error.message)}
-          />
-        ) : (
-          <View style={styles.placeholder}>
-            <AppIcon name="camera" size={30} color="#fff" />
-            {!cameraPermission.hasPermission ? (
-              <>
-                <Text style={styles.placeholderTitle}>Allow camera access</Text>
-                <Text style={styles.placeholderBody}>
-                  Anticlock needs the camera (and microphone for sound) to record Reels.
+      {hasCamera ? (
+        <Camera
+          style={StyleSheet.absoluteFill}
+          isActive={isActive}
+          device={device}
+          outputs={[videoOutput]}
+          torchMode={torch && position === 'back' && device?.hasTorch ? 'on' : 'off'}
+          enableNativeZoomGesture
+          resizeMode="cover"
+          onStarted={() => setCameraError(null)}
+          onError={error => setCameraError(error.message)}
+        />
+      ) : (
+        <View style={styles.placeholder}>
+          <AppIcon name="camera" size={40} color="rgba(255,255,255,0.9)" strokeWidth={1.5} />
+          {!cameraPermission.hasPermission ? (
+            <>
+              <Text style={styles.placeholderLine}>Camera access needed</Text>
+              <PressableScale
+                onPress={requestAccess}
+                accessibilityLabel={cameraPermission.canRequestPermission ? 'Allow camera access' : 'Open Settings'}
+                style={styles.allowButton}
+              >
+                <Text style={styles.allowText}>
+                  {cameraPermission.canRequestPermission ? 'Allow' : 'Settings'}
                 </Text>
-                <PressableScale onPress={requestAccess} accessibilityLabel="Allow camera access" style={styles.allowButton}>
-                  <Text style={styles.allowText}>
-                    {cameraPermission.canRequestPermission ? 'Allow access' : 'Open Settings'}
-                  </Text>
-                </PressableScale>
-              </>
-            ) : (
-              <>
-                <Text style={styles.placeholderTitle}>No camera available</Text>
-                <Text style={styles.placeholderBody}>
-                  This device has no usable camera. Choose a video from your gallery instead.
-                </Text>
-              </>
-            )}
-          </View>
-        )}
-
-        {cameraError ? (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText} numberOfLines={2}>
-              {cameraError}
-            </Text>
-          </View>
-        ) : null}
-
-        <View style={styles.topControls}>
-          <PressableScale onPress={onClose} accessibilityLabel="Close creator" style={styles.control} disabled={recording}>
-            <AppIcon name="close" size={23} color="#fff" />
-          </PressableScale>
-          {recording || recordedMs > 0 ? (
-            <View style={styles.timer}>
-              <Text style={styles.timerText}>
-                {formatSeconds(recordedMs + liveMs)} / {limitS}s
-              </Text>
-            </View>
-          ) : null}
-          {device?.hasTorch && position === 'back' ? (
-            <PressableScale
-              onPress={() => setTorch(value => !value)}
-              accessibilityLabel={torch ? 'Turn flash off' : 'Turn flash on'}
-              style={torch ? [styles.control, styles.controlActive] : styles.control}
-            >
-              <AppIcon name="zap" size={22} color={torch ? '#111' : '#fff'} />
-            </PressableScale>
+              </PressableScale>
+            </>
           ) : (
-            <View style={styles.control} />
+            <Text style={styles.placeholderLine}>No camera</Text>
           )}
         </View>
+      )}
 
-        {!recording ? (
-          <View style={styles.limits}>
+      {cameraError ? (
+        <View style={[styles.errorBanner, { top: insets.top + 64 }]} accessibilityRole="alert">
+          <AppIcon name="alert" size={14} color="#fff" />
+          <Text style={styles.errorText} numberOfLines={1}>
+            {cameraError}
+          </Text>
+        </View>
+      ) : null}
+
+      {/* Top: close + timer */}
+      <View style={[styles.topBar, { top: insets.top + 8 }]}>
+        <GlassIconButton icon="close" accessibilityLabel="Close creator" onPress={onClose} disabled={recording} iconSize={24} />
+        {recording || recordedMs > 0 ? (
+          <View style={[styles.timer, recording && styles.timerRecording]}>
+            {recording ? <View style={styles.recDot} /> : null}
+            <Text style={styles.timerText}>{formatSeconds(recordedMs + liveMs)}</Text>
+          </View>
+        ) : null}
+        <View style={styles.topSpacer} />
+      </View>
+
+      {/* Right rail: flip, flash, duration */}
+      {!recording ? (
+        <View style={[styles.rail, { top: insets.top + 8 }]}>
+          <GlassIconButton
+            icon="switch-camera"
+            accessibilityLabel="Switch camera"
+            onPress={flip}
+            disabled={!cameraPermission.hasPermission}
+          />
+          {device?.hasTorch && position === 'back' ? (
+            <GlassIconButton
+              icon={torch ? 'zap' : 'zap-off'}
+              accessibilityLabel={torch ? 'Turn flash off' : 'Turn flash on'}
+              onPress={() => setTorch(value => !value)}
+              active={torch}
+            />
+          ) : null}
+          <GlassIconButton
+            icon="timer"
+            accessibilityLabel={`Duration ${limitS} seconds. ${durationsOpen ? 'Hide' : 'Show'} durations`}
+            onPress={() => setDurationsOpen(value => !value)}
+            badge={String(limitS)}
+          />
+          {!micPermission.hasPermission && cameraPermission.hasPermission ? (
+            <View style={styles.micOff} accessible accessibilityLabel="Microphone off. Takes will be silent.">
+              <AppIcon name="mic-off" size={18} color="#ffcf70" strokeWidth={2} />
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* Bottom: duration pills, capture row, mode picker */}
+      <View style={[styles.bottom, { paddingBottom: insets.bottom }]} pointerEvents="box-none">
+        {!recording && durationsOpen ? (
+          <View style={styles.pills}>
             {RECORD_LIMITS_S.map(value => {
               const disabled = value * 1000 < recordedMs;
               const active = value === limitS;
@@ -330,28 +353,27 @@ export function ClipCameraScreen({
                   onPress={() => setLimitS(value)}
                   disabled={disabled}
                   accessibilityLabel={`${value} second limit`}
-                  style={active ? [styles.limit, styles.limitActive] : disabled ? [styles.limit, styles.limitDisabled] : styles.limit}
+                  style={active ? [styles.pill, styles.pillActive] : disabled ? [styles.pill, styles.pillDisabled] : styles.pill}
                 >
-                  <Text style={[styles.limitText, active && styles.limitTextActive]}>{value}s</Text>
+                  <Text style={[styles.pillText, active && styles.pillTextActive]}>{value}</Text>
                 </PressableScale>
               );
             })}
           </View>
         ) : null}
 
-        {!micPermission.hasPermission && cameraPermission.hasPermission ? (
-          <Text style={styles.micHint}>Microphone is off. Takes will be silent.</Text>
-        ) : null}
-
         <View style={styles.captureRow}>
-          <PressableScale
-            accessibilityLabel={segments.length > 0 ? 'Delete last take' : 'Open gallery'}
-            onPress={segments.length > 0 ? undo : onGallery}
-            disabled={recording}
-            style={styles.thumb}
-          >
-            <AppIcon name={segments.length > 0 ? 'trash' : 'grid'} size={22} color="#fff" />
-          </PressableScale>
+          <View style={styles.side}>
+            {!recording ? (
+              <PressableScale onPress={onGallery} accessibilityLabel="Open gallery" style={styles.gallery}>
+                <GlassFill radius={10} />
+                <AppIcon name="images" size={22} color="#fff" strokeWidth={2} />
+              </PressableScale>
+            ) : null}
+            {hasTakes && !recording ? (
+              <GlassIconButton icon="undo" accessibilityLabel="Delete last take" onPress={undo} />
+            ) : null}
+          </View>
 
           <View style={styles.captureWrap}>
             <RecordProgressRing
@@ -364,175 +386,132 @@ export function ClipCameraScreen({
             <Pressable
               onPressIn={onCapturePressIn}
               onPressOut={onCapturePressOut}
-              disabled={!hasCamera || (full && !recording)}
+              disabled={shutterDisabled}
               accessibilityRole="button"
               accessibilityLabel={recording ? 'Stop recording' : 'Record a take. Tap to start and stop, or hold.'}
-              style={[styles.captureOuter, (!hasCamera || (full && !recording)) && styles.captureDisabled]}
+              style={[styles.captureOuter, shutterDisabled && styles.captureDisabled]}
             >
               <View style={[styles.captureInner, recording && styles.captureInnerRecording]} />
             </Pressable>
           </View>
 
-          {segments.length > 0 && !recording ? (
-            <PressableScale
-              onPress={() => onDone(segments)}
-              accessibilityLabel="Continue to editor"
-              style={[styles.thumb, styles.nextButton]}
-            >
-              <AppIcon name="chevron-right" size={24} color="#111" />
-            </PressableScale>
-          ) : (
-            <PressableScale
-              onPress={() => setPosition(value => (value === 'back' ? 'front' : 'back'))}
-              accessibilityLabel="Switch camera"
-              disabled={recording || !cameraPermission.hasPermission}
-              style={styles.thumb}
-            >
-              <AppIcon name="camera" size={22} color="#fff" />
-            </PressableScale>
-          )}
-        </View>
-        {segments.length > 0 && !recording ? (
-          <View style={styles.secondaryRow}>
-            <PressableScale onPress={onGallery} accessibilityLabel="Add from gallery" style={styles.secondaryChip}>
-              <AppIcon name="grid" size={14} color="#fff" />
-              <Text style={styles.secondaryText}>Gallery</Text>
-            </PressableScale>
-            <Text style={styles.secondaryText}>
-              {segments.length} take{segments.length === 1 ? '' : 's'}
-            </Text>
-            <PressableScale
-              onPress={() => setPosition(value => (value === 'back' ? 'front' : 'back'))}
-              accessibilityLabel="Switch camera"
-              style={styles.secondaryChip}
-            >
-              <AppIcon name="camera" size={14} color="#fff" />
-              <Text style={styles.secondaryText}>Flip</Text>
-            </PressableScale>
+          <View style={[styles.side, styles.sideRight]}>
+            {hasTakes && !recording ? (
+              <GlassIconButton
+                icon="check"
+                accessibilityLabel="Continue to editor"
+                onPress={() => onDone(segments)}
+                active
+                iconSize={24}
+              />
+            ) : null}
           </View>
-        ) : null}
+        </View>
+
+        {!recording ? <CreationModePicker mode={mode} onChange={onModeChange} /> : <View style={styles.modeSpacer} />}
       </View>
-      <CreationModePicker mode={mode} onChange={onModeChange} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#050505', paddingHorizontal: 8 },
-  preview: {
-    flex: 1,
-    overflow: 'hidden',
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    backgroundColor: '#151515',
+  root: { flex: 1, backgroundColor: '#000' },
+  placeholder: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
+    backgroundColor: '#0c0c0e',
   },
-  placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 36 },
-  placeholderTitle: { color: '#fff', fontWeight: '800', fontSize: 16 },
-  placeholderBody: { color: '#bdbdc2', textAlign: 'center', lineHeight: 19 },
-  allowButton: { marginTop: 6, backgroundColor: '#fff', borderRadius: 20, paddingHorizontal: 18, paddingVertical: 10 },
-  allowText: { color: '#111', fontWeight: '800' },
+  placeholderLine: { color: 'rgba(255,255,255,0.85)', fontWeight: '600', fontSize: 15 },
+  allowButton: {
+    minHeight: HIT,
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 22,
+    paddingHorizontal: 26,
+  },
+  allowText: { color: '#111', fontWeight: '800', fontSize: 15 },
   errorBanner: {
     position: 'absolute',
-    top: 70,
-    left: 16,
-    right: 16,
-    padding: 10,
-    borderRadius: 10,
-    backgroundColor: 'rgba(160,30,40,0.85)',
-  },
-  errorText: { color: '#fff', fontSize: 12 },
-  topControls: {
-    position: 'absolute',
-    top: 14,
-    left: 14,
-    right: 14,
+    left: 64,
+    right: 64,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(200,40,55,0.85)',
   },
-  control: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,.38)',
+  errorText: { flex: 1, color: '#fff', fontSize: 12, fontWeight: '600' },
+  topBar: {
+    position: 'absolute',
+    left: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  topSpacer: { width: HIT },
+  timer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  timerRecording: { backgroundColor: '#ff3b4e' },
+  recDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' },
+  timerText: { color: '#fff', fontWeight: '800', fontSize: 13, fontVariant: ['tabular-nums'] },
+  rail: { position: 'absolute', right: 10, alignItems: 'center', gap: 14 },
+  micOff: { width: HIT, height: HIT, alignItems: 'center', justifyContent: 'center' },
+  bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center' },
+  pills: { flexDirection: 'row', gap: 6, marginBottom: 14 },
+  pill: {
+    minWidth: HIT,
+    height: 28,
+    paddingHorizontal: 10,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.38)',
   },
-  controlActive: { backgroundColor: '#fff' },
-  timer: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: 'rgba(0,0,0,.45)' },
-  timerText: { color: '#fff', fontWeight: '800', fontVariant: ['tabular-nums'] },
-  limits: {
-    position: 'absolute',
-    bottom: 150,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    padding: 4,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,.4)',
-  },
-  limit: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14 },
-  limitActive: { backgroundColor: '#fff' },
-  limitDisabled: { opacity: 0.35 },
-  limitText: { color: '#fff', fontWeight: '800', fontSize: 12 },
-  limitTextActive: { color: '#111' },
-  micHint: {
-    position: 'absolute',
-    bottom: 196,
-    alignSelf: 'center',
-    color: '#ffcf70',
-    fontSize: 12,
-    fontWeight: '700',
-  },
+  pillActive: { backgroundColor: '#fff' },
+  pillDisabled: { opacity: 0.35 },
+  pillText: { color: '#fff', fontWeight: '800', fontSize: 12, fontVariant: ['tabular-nums'] },
+  pillTextActive: { color: '#111' },
   captureRow: {
-    position: 'absolute',
-    bottom: 40,
-    left: 24,
-    right: 24,
+    alignSelf: 'stretch',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    paddingHorizontal: 18,
   },
-  thumb: {
-    width: 46,
-    height: 46,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,.48)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,.25)',
+  side: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14 },
+  sideRight: { justifyContent: 'flex-end' },
+  gallery: {
+    width: HIT,
+    height: HIT,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.9)',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
-  nextButton: { backgroundColor: '#fff', borderRadius: 23 },
   captureWrap: { width: RING, height: RING, alignItems: 'center', justifyContent: 'center' },
   captureOuter: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    padding: 6,
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    padding: 5,
     alignItems: 'center',
     justifyContent: 'center',
   },
   captureDisabled: { opacity: 0.4 },
-  captureInner: { width: '100%', height: '100%', borderRadius: 30, backgroundColor: '#fff' },
-  captureInnerRecording: { width: '62%', height: '62%', borderRadius: 8, backgroundColor: '#ff4d5e' },
-  secondaryRow: {
-    position: 'absolute',
-    bottom: 8,
-    left: 24,
-    right: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  secondaryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,.45)',
-  },
-  secondaryText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  captureInner: { width: '100%', height: '100%', borderRadius: 34, backgroundColor: '#fff' },
+  captureInnerRecording: { width: '52%', height: '52%', borderRadius: 8, backgroundColor: '#ff3b4e' },
+  modeSpacer: { height: 78 },
 });

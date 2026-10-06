@@ -31,8 +31,9 @@ type Props = {
   onScrubbing?: (active: boolean) => void;
 };
 
-const HANDLE = 18;
-const HEIGHT = 56;
+const HANDLE = 16;
+const HEIGHT = 52;
+const RADIUS = 10;
 
 /**
  * Thumbnail strip with draggable trim handles. The handles move on the UI
@@ -142,12 +143,12 @@ export function TrimTimeline({
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Trim</Text>
-        <Text style={styles.duration}>
-          {liveLabel ?? formatSeconds(selectedMs)} of {formatSeconds(totalMs)}
-          {totalMs > MAX_CLIP_DURATION_MS ? ' · max 90s' : ''}
-        </Text>
+      <View style={styles.labelRow} pointerEvents="none">
+        {liveLabel ? (
+          <View style={styles.liveChip}>
+            <Text style={styles.liveText}>{liveLabel}</Text>
+          </View>
+        ) : null}
       </View>
       <View
         style={styles.strip}
@@ -179,7 +180,7 @@ export function TrimTimeline({
             <Animated.View pointerEvents="none" style={[styles.dim, styles.dimRight, dimRightStyle]} />
             <Animated.View pointerEvents="none" style={[styles.frame, frameStyle]} />
             {playheadLeft !== null ? (
-              <View pointerEvents="none" style={[styles.playhead, { left: playheadLeft - 1 }]} />
+              <View pointerEvents="none" style={[styles.playhead, { left: playheadLeft - 1.5 }]} />
             ) : null}
             <GestureDetector gesture={startPan}>
               <Animated.View
@@ -205,10 +206,16 @@ export function TrimTimeline({
 }
 
 const styles = StyleSheet.create({
-  root: { gap: 8 },
-  header: { flexDirection: 'row', justifyContent: 'space-between' },
-  title: { color: '#fff', fontWeight: '800' },
-  duration: { color: '#bdbdc2', fontSize: 12, fontVariant: ['tabular-nums'] },
+  root: { gap: 4 },
+  labelRow: { height: 20, alignItems: 'center', justifyContent: 'center' },
+  liveChip: {
+    paddingHorizontal: 8,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    justifyContent: 'center',
+  },
+  liveText: { color: '#111', fontSize: 11, fontWeight: '800', fontVariant: ['tabular-nums'] },
   strip: { height: HEIGHT, justifyContent: 'center' },
   thumbs: {
     position: 'absolute',
@@ -217,23 +224,24 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     flexDirection: 'row',
-    borderRadius: 6,
+    borderRadius: 4,
     overflow: 'hidden',
-    backgroundColor: '#25252a',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   thumb: { flex: 1, height: '100%' },
   boundary: {
     position: 'absolute',
-    top: 4,
-    bottom: 4,
+    top: 6,
+    bottom: 6,
     width: 2,
-    backgroundColor: 'rgba(255,255,255,0.65)',
+    borderRadius: 1,
+    backgroundColor: 'rgba(255,255,255,0.7)',
   },
   dim: {
     position: 'absolute',
     top: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.62)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
   dimLeft: { left: HANDLE },
   dimRight: { right: HANDLE },
@@ -247,11 +255,16 @@ const styles = StyleSheet.create({
   },
   playhead: {
     position: 'absolute',
-    top: -4,
-    bottom: -4,
-    width: 2,
-    borderRadius: 1,
-    backgroundColor: '#ffd84d',
+    top: -6,
+    bottom: -6,
+    width: 3,
+    borderRadius: 2,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 3,
   },
   handle: {
     position: 'absolute',
@@ -263,7 +276,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  handleLeft: { borderTopLeftRadius: 6, borderBottomLeftRadius: 6 },
-  handleRight: { borderTopRightRadius: 6, borderBottomRightRadius: 6 },
-  grip: { width: 3, height: 18, borderRadius: 2, backgroundColor: '#111' },
+  handleLeft: { borderTopLeftRadius: RADIUS, borderBottomLeftRadius: RADIUS },
+  handleRight: { borderTopRightRadius: RADIUS, borderBottomRightRadius: RADIUS },
+  grip: { width: 3, height: 16, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.55)' },
 });

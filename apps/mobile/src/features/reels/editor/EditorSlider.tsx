@@ -6,6 +6,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
 } from 'react-native-reanimated';
+import { AppIcon, type IconName } from '@/shared/components/AppIcon';
 
 type Props = {
   /** 0..1 */
@@ -13,7 +14,10 @@ type Props = {
   onChange: (value: number) => void;
   /** Called once when the gesture ends (use for expensive work). */
   onChangeEnd?: (value: number) => void;
-  label: string;
+  /** Optional text label above the track (omit for icon-only rows). */
+  label?: string;
+  /** Leading icon; renders the slider as a compact single row. */
+  icon?: IconName;
   valueLabel?: string;
   accessibilityLabel: string;
   disabled?: boolean;
@@ -28,6 +32,7 @@ export function EditorSlider({
   onChange,
   onChangeEnd,
   label,
+  icon,
   valueLabel,
   accessibilityLabel,
   disabled,
@@ -89,34 +94,52 @@ export function EditorSlider({
     onChangeEnd?.(next);
   };
 
+  const track = (
+    <GestureDetector gesture={Gesture.Race(pan, tap)}>
+      <View
+        style={[styles.hit, icon ? styles.hitInline : null]}
+        onLayout={onLayout}
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityValue={{ text: valueLabel ?? `${Math.round(value * 100)}%` }}
+        accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+        onAccessibilityAction={event =>
+          adjust(event.nativeEvent.actionName === 'increment' ? step : -step)
+        }
+      >
+        <View style={styles.track} />
+        {width > 0 ? (
+          <>
+            <Animated.View style={[styles.fill, fillStyle]} />
+            <Animated.View style={[styles.thumb, thumbStyle]} />
+          </>
+        ) : null}
+      </View>
+    </GestureDetector>
+  );
+
+  if (icon) {
+    return (
+      <View style={[styles.row, disabled && styles.disabled]}>
+        <View style={styles.icon}>
+          <AppIcon name={icon} size={20} color="#fff" strokeWidth={2} />
+        </View>
+        {track}
+        {valueLabel ? <Text style={styles.rowValue}>{valueLabel}</Text> : null}
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.root, disabled && styles.disabled]}>
-      <View style={styles.labels}>
-        <Text style={styles.label}>{label}</Text>
-        {valueLabel ? <Text style={styles.value}>{valueLabel}</Text> : null}
-      </View>
-      <GestureDetector gesture={Gesture.Race(pan, tap)}>
-        <View
-          style={styles.hit}
-          onLayout={onLayout}
-          accessible
-          accessibilityRole="adjustable"
-          accessibilityLabel={accessibilityLabel}
-          accessibilityValue={{ text: valueLabel ?? `${Math.round(value * 100)}%` }}
-          accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-          onAccessibilityAction={event =>
-            adjust(event.nativeEvent.actionName === 'increment' ? step : -step)
-          }
-        >
-          <View style={styles.track} />
-          {width > 0 ? (
-            <>
-              <Animated.View style={[styles.fill, fillStyle]} />
-              <Animated.View style={[styles.thumb, thumbStyle]} />
-            </>
-          ) : null}
+      {label || valueLabel ? (
+        <View style={styles.labels}>
+          {label ? <Text style={styles.label}>{label}</Text> : <View />}
+          {valueLabel ? <Text style={styles.value}>{valueLabel}</Text> : null}
         </View>
-      </GestureDetector>
+      ) : null}
+      {track}
     </View>
   );
 }
@@ -127,14 +150,25 @@ const styles = StyleSheet.create({
   labels: { flexDirection: 'row', justifyContent: 'space-between' },
   label: { color: '#e6e6e8', fontSize: 13, fontWeight: '700' },
   value: { color: '#a4a4a8', fontSize: 12, fontVariant: ['tabular-nums'] },
-  hit: { height: 32, justifyContent: 'center' },
+  hit: { height: 44, justifyContent: 'center' },
+  hitInline: { flex: 1 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  icon: { width: 28, alignItems: 'center' },
+  rowValue: {
+    width: 34,
+    textAlign: 'right',
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 11,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
   track: {
     position: 'absolute',
     left: THUMB / 2,
     right: THUMB / 2,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#3a3a40',
+    backgroundColor: 'rgba(255,255,255,0.22)',
   },
   fill: {
     position: 'absolute',

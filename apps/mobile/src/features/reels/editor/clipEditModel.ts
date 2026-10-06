@@ -40,6 +40,8 @@ export type MusicTrackOption = {
   exportUri: string;
   license: string | null;
   attribution: string | null;
+  /** Optional cover art (asset module or URL) shown in the music picker. */
+  artwork?: string | number | null;
   /** Dev-only synthetic sample. Never shown in release builds. */
   isDevSample?: boolean;
 };

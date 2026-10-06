@@ -1393,6 +1393,39 @@ async function migrate() {
       ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now()
   `;
 
+  // Clip editor (on-device trim + music). Additive only: nullable columns and
+  // a new table, so this is safe to run against a live database and against
+  // older app versions that never send `edit`.
+  await sql`
+    ALTER TABLE content_containers
+      ADD COLUMN IF NOT EXISTS edit jsonb
+  `;
+  await sql`
+    ALTER TABLE content_posts
+      ADD COLUMN IF NOT EXISTS edit jsonb,
+      ADD COLUMN IF NOT EXISTS music_track_id text
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS music_tracks (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      title text NOT NULL,
+      artist text,
+      duration_ms integer NOT NULL CHECK (duration_ms > 0),
+      media_id uuid REFERENCES media_assets(id) ON DELETE SET NULL,
+      audio_url text,
+      license text NOT NULL,
+      attribution text,
+      is_active boolean NOT NULL DEFAULT false,
+      sort_order integer NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS music_tracks_active_idx
+      ON music_tracks (is_active, sort_order)
+  `;
+
   console.log("Migrations applied.");
   await sql.end({ timeout: 5 });
 }

@@ -837,6 +837,27 @@ export class MediaService {
     });
   }
 
+  /** Delivery URL for an operator-managed, public music track asset. */
+  async getPublicAudioDeliveryUrl(mediaId: string) {
+    const asset = await this.repo.getAsset(mediaId);
+    if (
+      !asset ||
+      asset.kind !== "audio" ||
+      asset.processingStatus !== "ready" ||
+      asset.accessLevel !== "public" ||
+      asset.deletedAt ||
+      asset.archivedAt ||
+      !["approved", "not_required"].includes(asset.moderationStatus)
+    ) {
+      return null;
+    }
+    return this.storage.createDownloadUrl({
+      bucket: asset.bucket as "public-media" | "private-documents",
+      key: asset.storageKey,
+      accessLevel: "public",
+    });
+  }
+
   // --- stub domain helpers ---
 
   async listProviders(auth: AuthClaims) {

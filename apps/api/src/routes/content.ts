@@ -38,6 +38,11 @@ import {
   listPublishingIdentities,
   resolvePublishingContext,
 } from "../publishing/PublishingContextService.js";
+import {
+  exceedsClipDuration,
+  listActiveMusicTracks,
+  musicAttributionFromEdit,
+} from "../content/musicTracks.js";
 
 function errorResponse(error: unknown) {
   const err = error as { status?: number; code?: string; message?: string };
@@ -329,6 +334,21 @@ contentMobileRoutes.use("/containers", requireAuth);
 contentMobileRoutes.use("/containers/*", requireAuth);
 contentMobileRoutes.use("/posts", requireAuth);
 contentMobileRoutes.use("/posts/*", requireAuth);
+contentMobileRoutes.use("/music-tracks", requireAuth);
+
+/**
+ * Server-managed music for the Clip editor. Returns only tracks an operator
+ * has activated; an empty list is expected until licensed tracks are added.
+ */
+contentMobileRoutes.get("/music-tracks", async (c) => {
+  try {
+    await requireActiveMobile(c.get("auth"));
+    return c.json({ tracks: await listActiveMusicTracks() });
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
 
 contentMobileRoutes.get("/identities", async (c) => {
   try {
@@ -418,6 +438,12 @@ contentMobileRoutes.post("/containers", async (c) => {
         status: 400,
       });
     }
+    if (body.format === "clip" && exceedsClipDuration(assets[0]?.durationMs)) {
+      throw Object.assign(new Error("Clips can be up to 90 seconds long"), {
+        code: "clip_too_long",
+        status: 400,
+      });
+    }
     const [container] = await db
       .insert(contentContainers)
       .values({
@@ -433,6 +459,7 @@ contentMobileRoutes.post("/containers", async (c) => {
         taggedMobileUserIds: [...new Set(body.taggedUserIds)],
         location: body.location ?? null,
         visibility: body.visibility,
+        edit: body.format === "clip" ? body.edit ?? null : null,
         status: "ready_to_publish",
       })
       .returning();
@@ -552,6 +579,8 @@ contentMobileRoutes.post("/containers/:id/publish", async (c) => {
           location: container.location,
           duplicateClusterId,
           visibility: container.visibility,
+          edit: container.edit ?? null,
+          musicTrackId: container.edit?.music?.trackId ?? null,
           status: "published",
           expiresAt,
           publishedAt: now,
@@ -797,6 +826,7 @@ contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
           commentCount: post.commentCount,
           shareCount: post.shareCount,
           viewerHasLiked: likedPostIds.has(post.id),
+          music: musicAttributionFromEdit(post.edit),
         };
       }),
       nextCursor: null,

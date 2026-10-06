@@ -1,0 +1,33 @@
+{
+  "name": "@anticlock/react-native-clip-editor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "On-device clip trim, segment concat and music mix for Anticlock (AVFoundation on iOS, Media3 Transformer on Android).",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "react-native": "src/index.ts",
+  "source": "src/index.ts",
+  "files": [
+    "src",
+    "ios",
+    "android/build.gradle",
+    "android/src",
+    "AnticlockClipEditor.podspec"
+  ],
+  "peerDependencies": {
+    "react-native": "*"
+  },
+  "codegenConfig": {
+    "name": "AnticlockClipEditorSpec",
+    "type": "modules",
+    "jsSrcsDir": "src/specs",
+    "android": {
+      "javaPackageName": "com.anticlock.clipeditor"
+    },
+    "ios": {
+      "modulesProvider": {
+        "ClipEditor": "ClipEditor"
+      }
+    }
+  }
+}

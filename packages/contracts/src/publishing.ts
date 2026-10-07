@@ -62,6 +62,101 @@ export const PublishingIdentitySchema = z.object({
 });
 export type PublishingIdentity = z.infer<typeof PublishingIdentitySchema>;
 
+/**
+ * Mobile Clips are capped at 90 seconds after on-device editing. Admin/CMS
+ * reels keep their separate 3-minute limit (`MAX_REEL_VIDEO_DURATION_MS`).
+ */
+export const MAX_CLIP_DURATION_MS = 90_000;
+export const MIN_CLIP_DURATION_MS = 1_000;
+
+/** Where a selected music track came from. No third-party catalogue is implied. */
+export const ClipMusicSourceSchema = z.enum(["bundled", "remote"]);
+export type ClipMusicSource = z.infer<typeof ClipMusicSourceSchema>;
+
+/**
+ * The music a creator mixed into a Clip on-device. The audio is already baked
+ * into the uploaded MP4; this record exists for attribution and the feed label.
+ */
+export const ClipMusicSelectionSchema = z
+  .object({
+    trackId: z.string().trim().min(1).max(128),
+    source: ClipMusicSourceSchema,
+    title: z.string().trim().min(1).max(160),
+    artist: z.string().trim().max(160).nullable(),
+    /** Offset into the track where the Clip's music starts. */
+    startMs: z
+      .number()
+      .int()
+      .min(0)
+      .max(60 * 60 * 1_000),
+    volume: z.number().min(0).max(1),
+  })
+  .strict();
+export type ClipMusicSelection = z.infer<typeof ClipMusicSelectionSchema>;
+
+/**
+ * Edit decisions applied on-device before upload (trim, segment concat, music
+ * mix). Trim positions are on the concatenated source timeline.
+ */
+export const ClipEditMetadataSchema = z
+  .object({
+    music: ClipMusicSelectionSchema.nullable(),
+    originalVolume: z.number().min(0).max(1),
+    sourceTrimStartMs: z.number().int().min(0),
+    sourceTrimEndMs: z.number().int().positive(),
+    segmentCount: z.number().int().min(1).max(20),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const durationMs = value.sourceTrimEndMs - value.sourceTrimStartMs;
+    if (durationMs < MIN_CLIP_DURATION_MS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sourceTrimEndMs"],
+        message: "A Clip must be at least 1 second long",
+      });
+    }
+    if (durationMs > MAX_CLIP_DURATION_MS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sourceTrimEndMs"],
+        message: "A Clip can be at most 90 seconds long",
+      });
+    }
+  });
+export type ClipEditMetadata = z.infer<typeof ClipEditMetadataSchema>;
+
+/** Display-only attribution returned with feed items. */
+export const ClipMusicAttributionSchema = z.object({
+  trackId: z.string(),
+  source: ClipMusicSourceSchema,
+  title: z.string(),
+  artist: z.string().nullable(),
+});
+export type ClipMusicAttribution = z.infer<typeof ClipMusicAttributionSchema>;
+
+/**
+ * A server-managed music track (`GET /v1/content/music-tracks`). Only tracks
+ * the operator has rights to should be activated; an empty list is valid.
+ */
+export const MusicTrackSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  artist: z.string().nullable(),
+  durationMs: z.number().int().positive(),
+  url: z.string().url(),
+  license: z.string(),
+  attribution: z.string().nullable(),
+});
+export type MusicTrack = z.infer<typeof MusicTrackSchema>;
+
+export const ListMusicTracksResponseSchema = z.object({
+  tracks: z.array(MusicTrackSchema),
+});
+export type ListMusicTracksResponse = z.infer<
+  typeof ListMusicTracksResponseSchema
+>;
+
 export const CreateContentContainerRequestSchema = z
   .object({
     format: ContentFormatSchema,
@@ -76,8 +171,17 @@ export const CreateContentContainerRequestSchema = z
     visibility: z
       .enum(["public", "followers", "friends", "community", "only_me"])
       .default("public"),
+    /** Optional on-device edit metadata; only accepted for Clips. */
+    edit: ClipEditMetadataSchema.nullable().optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.edit && value.format !== "clip") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["edit"],
+        message: "Edit metadata is only supported for Clips",
+      });
+    }
     if (value.mediaType === "text" && value.caption.length === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -229,5 +333,9 @@ export const ContentFeedItemSchema = ContentPostSchema.extend({
   trendingScore: z.number(),
   /** Current viewer state is returned with the personalized feed item. */
   viewerHasLiked: z.boolean(),
+  /** Music mixed into the Clip on-device, when the creator added any. */
+  music: ClipMusicAttributionSchema.nullable().optional(),
+  /** Duration of the playable video, when known. */
+  durationMs: z.number().int().positive().nullable().optional(),
 });
 export type ContentFeedItem = z.infer<typeof ContentFeedItemSchema>;

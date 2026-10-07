@@ -23,31 +23,43 @@ import {
 import { useTheme } from '@/shared/hooks/useTheme';
 import type { PostVisibility } from '@/shared/data/flash/types';
 import {
-  captureClipVideo,
+  coverFromExport,
   createCoverUploadFile,
   createVideoUploadFile,
-  hasNativeClipMediaPicker,
   pickClipCover,
-  pickClipVideo,
-  restoreSavedClipCover,
-  restoreSavedClipVideo,
+  pickClipSource,
+  videoFromExport,
   type PickedClipCover,
   type PickedClipVideo,
-  type SavedClipCover,
-  type SavedClipVideo,
 } from '@/features/reels/media/clipMediaPicker';
 import { STORAGE_KEYS } from '@/shared/constants';
 import { storage } from '@/shared/services/storage';
-import {
-  CreationCameraShell,
-  type CreationMode,
-} from '@/features/reels/components/CreationCameraShell';
+import type { ClipExportResult } from '@anticlock/react-native-clip-editor';
+import type { CreationMode } from '@/features/reels/components/CreationCameraShell';
+import { ClipCameraScreen } from '@/features/reels/camera/ClipCameraScreen';
 import { ReelEditor } from '@/features/reels/components/ReelEditor';
+import {
+  MAX_CLIP_DURATION_MS,
+  MAX_CLIP_SEGMENTS,
+  buildEditMetadata,
+  createEditState,
+  totalDurationMs,
+  type ClipEditMetadata,
+  type ClipEditState,
+  type ClipSource,
+} from '@/features/reels/editor/clipEditModel';
 import {
   displayBytes,
   normalizeHashtags,
   normalizeTaggedUserIds,
 } from './clipComposerUtils';
+import {
+  parseDraft,
+  serializeEdit,
+  type ClipComposerDraftV2,
+  type CoverMode,
+  type RestoredDraft,
+} from './clipComposerDraft';
 
 const VISIBILITY: { id: PostVisibility; label: string }[] = [
   { id: 'public', label: 'Public' },
@@ -57,7 +69,6 @@ const VISIBILITY: { id: PostVisibility; label: string }[] = [
   { id: 'only_me', label: 'Only me' },
 ];
 
-type CoverMode = 'generated' | 'custom';
 type UploadPhase =
   | 'idle'
   | 'preparing'
@@ -73,25 +84,11 @@ type UploadStatus = {
   message?: string;
 };
 
-type ClipComposerDraft = {
-  version: 1;
-  identityId: string | null;
-  video: SavedClipVideo | null;
-  cover: SavedClipCover | null;
-  coverMode: CoverMode;
-  caption: string;
-  hashtagsInput: string;
-  taggedUserIdsInput: string;
-  locationName: string;
-  visibility: PostVisibility;
-};
-
-function loadDraft(): ClipComposerDraft | null {
+function loadDraft(): RestoredDraft | null {
   const raw = storage.getString(STORAGE_KEYS.CLIP_COMPOSER_DRAFT);
   if (!raw) return null;
   try {
-    const draft = JSON.parse(raw) as ClipComposerDraft;
-    return draft.version === 1 ? draft : null;
+    return parseDraft(raw);
   } catch {
     storage.remove(STORAGE_KEYS.CLIP_COMPOSER_DRAFT);
     return null;
@@ -133,7 +130,18 @@ export function ClipComposerScreen() {
     'capture',
   );
   const [creationMode, setCreationMode] = useState<CreationMode>('reel');
+  /** Takes recorded in the camera (kept when returning from the editor). */
+  const [segments, setSegments] = useState<ClipSource[]>([]);
+  /** Current editor state; the source of truth for trim/music/volume. */
+  const [edit, setEdit] = useState<ClipEditState | null>(null);
+  /** Exported MP4 (what gets uploaded) and the edit that produced it. */
   const [video, setVideo] = useState<PickedClipVideo | null>(null);
+  const [exportedEdit, setExportedEdit] = useState<ClipEditMetadata | null>(
+    null,
+  );
+  const [generatedCover, setGeneratedCover] = useState<PickedClipCover | null>(
+    null,
+  );
   const [coverMode, setCoverMode] = useState<CoverMode>('generated');
   const [cover, setCover] = useState<PickedClipCover | null>(null);
   const [caption, setCaption] = useState('');
@@ -150,14 +158,18 @@ export function ClipComposerScreen() {
     const draft = loadDraft();
     if (!draft) return;
     setIdentityId(draft.identityId);
-    setVideo(restoreSavedClipVideo(draft.video));
-    setCover(restoreSavedClipCover(draft.cover));
+    setCover(draft.cover);
     setCoverMode(draft.coverMode);
     setCaption(draft.caption);
     setHashtagsInput(draft.hashtagsInput);
     setTaggedUserIdsInput(draft.taggedUserIdsInput);
     setLocationName(draft.locationName);
     setVisibility(draft.visibility);
+    if (draft.edit) {
+      setEdit(draft.edit);
+      setSegments(draft.edit.sources.filter(s => s.origin === 'camera'));
+      setStage('editor');
+    }
   }, []);
 
   useEffect(() => {
@@ -174,17 +186,52 @@ export function ClipComposerScreen() {
       })),
     [identities],
   );
-  const nativePickerAvailable = hasNativeClipMediaPicker();
   const isPublishing =
     uploadStatus.phase !== 'idle' &&
     uploadStatus.phase !== 'complete' &&
     uploadStatus.phase !== 'error';
 
-  const chooseVideo = async () => {
+  /** Any change to the edit invalidates a previous export. */
+  const changeEdit = (next: ClipEditState) => {
+    setEdit(next);
+    setVideo(null);
+    setExportedEdit(null);
+    setGeneratedCover(null);
+  };
+
+  const openEditor = (sources: ClipSource[]) => {
+    if (sources.length === 0) return;
+    const sameSources =
+      edit &&
+      edit.sources.length === sources.length &&
+      edit.sources.every((source, index) => source.uri === sources[index].uri);
+    if (!sameSources) changeEdit(createEditState(sources));
+    setStage('editor');
+  };
+
+  const addSources = (extra: ClipSource[]) => {
+    const current = edit?.sources ?? segments;
+    const sources = [...current, ...extra].slice(0, MAX_CLIP_SEGMENTS);
+    const previousTotal = totalDurationMs(current);
+    const base = edit ?? createEditState(current);
+    const total = totalDurationMs(sources);
+    // Extend the window if it was open-ended (covered the whole timeline).
+    const trimEndMs =
+      !edit || base.trimEndMs >= previousTotal - 1
+        ? Math.min(total, base.trimStartMs + MAX_CLIP_DURATION_MS)
+        : base.trimEndMs;
+    changeEdit({ ...base, sources, trimEndMs });
+    setStage('editor');
+  };
+
+  const chooseFromGallery = async () => {
     try {
-      const selected = await pickClipVideo();
-      if (selected) {
-        setVideo(selected);
+      const selected = await pickClipSource();
+      if (!selected) return;
+      if (stage === 'editor' || segments.length > 0) {
+        addSources([selected]);
+      } else {
+        changeEdit(createEditState([selected]));
         setStage('editor');
       }
     } catch (error) {
@@ -195,19 +242,32 @@ export function ClipComposerScreen() {
     }
   };
 
-  const recordVideo = async () => {
-    try {
-      const recorded = await captureClipVideo();
-      if (recorded) {
-        setVideo(recorded);
-        setStage('editor');
-      }
-    } catch (error) {
-      Alert.alert(
-        'Couldn’t open camera',
-        error instanceof Error ? error.message : 'Please try again.',
-      );
+  const removeSource = (id: string) => {
+    if (!edit) return;
+    const sources = edit.sources.filter(source => source.id !== id);
+    setSegments(current => current.filter(source => source.id !== id));
+    if (sources.length === 0) {
+      changeEdit(createEditState([]));
+      setEdit(null);
+      setStage('capture');
+      return;
     }
+    const total = totalDurationMs(sources);
+    changeEdit({
+      ...edit,
+      sources,
+      trimStartMs: 0,
+      trimEndMs: Math.min(total, MAX_CLIP_DURATION_MS),
+      coverAtMs: 0,
+    });
+  };
+
+  const onExported = (result: ClipExportResult) => {
+    if (!edit) return;
+    setVideo(videoFromExport(result));
+    setGeneratedCover(coverFromExport(result));
+    setExportedEdit(buildEditMetadata(edit));
+    setStage('publish');
   };
 
   const chooseCover = async () => {
@@ -227,7 +287,7 @@ export function ClipComposerScreen() {
 
   const publish = async () => {
     if (!video) {
-      Alert.alert('Choose a video', 'Add a video before publishing your clip.');
+      Alert.alert('Edit your clip', 'Finish editing your clip before publishing.');
       return;
     }
     if (!identity) {
@@ -273,8 +333,10 @@ export function ClipComposerScreen() {
       );
 
       let thumbnailMediaId: string | null = null;
-      if (coverMode === 'custom' && cover) {
-        const coverFile = await createCoverUploadFile(cover);
+      const coverToUpload =
+        coverMode === 'custom' ? cover : generatedCover;
+      if (coverToUpload) {
+        const coverFile = await createCoverUploadFile(coverToUpload);
         setUploadStatus({
           phase: 'cover',
           progress: 68,
@@ -298,6 +360,7 @@ export function ClipComposerScreen() {
         taggedUserIds,
         location: locationName.trim() ? { name: locationName.trim() } : null,
         visibility,
+        edit: exportedEdit ?? undefined,
         identity,
       });
       setUploadStatus({ phase: 'complete', progress: 100 });
@@ -314,21 +377,10 @@ export function ClipComposerScreen() {
   };
 
   const saveDraft = () => {
-    const draft: ClipComposerDraft = {
-      version: 1,
+    const draft: ClipComposerDraftV2 = {
+      version: 2,
       identityId,
-      video: video
-        ? {
-            id: video.id,
-            label: video.label,
-            filename: video.filename,
-            durationMs: video.durationMs,
-            width: video.width,
-            height: video.height,
-            localUri: video.localUri,
-            byteSize: video.byteSize,
-          }
-        : null,
+      edit: serializeEdit(edit),
       cover: cover
         ? {
             id: cover.id,
@@ -349,37 +401,46 @@ export function ClipComposerScreen() {
       visibility,
     };
     storage.set(STORAGE_KEYS.CLIP_COMPOSER_DRAFT, JSON.stringify(draft));
-    Alert.alert('Draft saved', 'Your Clip details are saved on this device.');
+    Alert.alert(
+      'Draft saved',
+      'Your Clip edit and details are saved on this device.',
+    );
   };
 
   if (stage === 'capture') {
     return (
-      <CreationCameraShell
+      <ClipCameraScreen
         mode={creationMode}
         onModeChange={setCreationMode}
         onClose={() => navigation.goBack()}
-        onRecord={recordVideo}
-        onGallery={chooseVideo}
-        preview={video?.previewSource}
+        onGallery={chooseFromGallery}
+        segments={segments}
+        onSegmentsChange={setSegments}
+        onDone={takes => {
+          // Keep gallery sources already in the edit after the new takes.
+          const extras = (edit?.sources ?? []).filter(
+            source => source.origin === 'gallery',
+          );
+          openEditor([...takes, ...extras]);
+        }}
       />
     );
   }
 
-  if (stage === 'editor') {
+  if (stage === 'editor' && edit) {
     return (
       <ReelEditor
-        clips={video ? [video] : []}
+        edit={edit}
+        onEditChange={changeEdit}
         onBack={() => setStage('capture')}
-        onNext={() => setStage('publish')}
-        onAdd={chooseVideo}
-        onRemove={() => {
-          setVideo(null);
-          setStage('capture');
-        }}
-        onMove={() => {}}
+        onAddClip={chooseFromGallery}
+        onRemoveSource={removeSource}
+        onExported={onExported}
       />
     );
   }
+
+  const coverPreview = coverMode === 'custom' ? cover : generatedCover;
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
@@ -505,15 +566,14 @@ export function ClipComposerScreen() {
                   { color: theme.colors.textSecondary },
                 ]}
               >
-                {video?.label ??
-                  'Choose an MP4 video to preview before posting.'}
+                {video?.label ?? 'Edit your clip to preview it here.'}
               </Text>
             </View>
             {video ? (
               <PressableScale
-                onPress={() => setVideo(null)}
+                onPress={() => setStage('editor')}
                 disabled={isPublishing}
-                accessibilityLabel="Remove selected video"
+                accessibilityLabel="Edit clip"
               >
                 <Text
                   style={[
@@ -521,7 +581,7 @@ export function ClipComposerScreen() {
                     { color: theme.colors.primary },
                   ]}
                 >
-                  Remove
+                  Edit
                 </Text>
               </PressableScale>
             ) : null}
@@ -557,18 +617,11 @@ export function ClipComposerScreen() {
 
           <View style={styles.mediaActions}>
             <Button
-              title={video ? 'Gallery' : 'Choose video'}
+              title="Edit clip"
               icon="video"
               variant="secondary"
               style={styles.actionButton}
-              onPress={chooseVideo}
-              disabled={isPublishing}
-            />
-            <Button
-              title="Record"
-              icon="camera"
-              style={styles.actionButton}
-              onPress={recordVideo}
+              onPress={() => setStage(edit ? 'editor' : 'capture')}
               disabled={isPublishing}
             />
           </View>
@@ -578,20 +631,9 @@ export function ClipComposerScreen() {
               { color: theme.colors.textTertiary },
             ]}
           >
-            Record or select an MP4 video up to 90 seconds.
+            Edited on this device: trimmed to 90 seconds max and exported as MP4
+            {exportedEdit?.music ? ` with ♪ ${exportedEdit.music.title}` : ''}.
           </Text>
-          {!nativePickerAvailable ? (
-            <Text
-              style={[
-                theme.typography.caption,
-                { color: theme.colors.textTertiary },
-              ]}
-            >
-              This build has no native gallery picker installed. The included
-              demo video lets you test the real upload and publish flow;
-              production can register the picker adapter in this feature.
-            </Text>
-          ) : null}
         </Card>
 
         <Card style={styles.section}>
@@ -609,7 +651,7 @@ export function ClipComposerScreen() {
               { color: theme.colors.textSecondary },
             ]}
           >
-            Choose a custom thumbnail or let video processing create the cover.
+            Use the frame you picked in the editor or choose a custom image.
           </Text>
           <FilterPills
             activeId={coverMode}
@@ -619,6 +661,24 @@ export function ClipComposerScreen() {
               { id: 'custom', label: 'Custom cover' },
             ]}
           />
+          {coverMode === 'generated' && coverPreview ? (
+            <View style={styles.coverRow}>
+              <Image
+                source={imageSource(coverPreview.previewSource)}
+                style={[styles.coverPreview, { borderRadius: theme.radius.md }]}
+              />
+              <View style={styles.coverCopy}>
+                <Text
+                  style={[
+                    theme.typography.bodySmall,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  Frame from your edited clip. Change it in the editor’s Cover tool.
+                </Text>
+              </View>
+            </View>
+          ) : null}
           {coverMode === 'custom' ? (
             <View style={styles.coverRow}>
               {cover ? (
@@ -661,11 +721,7 @@ export function ClipComposerScreen() {
                   {cover?.label ?? 'Add a thumbnail image for your clip.'}
                 </Text>
                 <Button
-                  title={
-                    nativePickerAvailable
-                      ? 'Choose cover'
-                      : 'Use included cover'
-                  }
+                  title="Choose cover"
                   icon="camera"
                   variant="secondary"
                   onPress={chooseCover}

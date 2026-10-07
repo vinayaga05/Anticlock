@@ -84,6 +84,18 @@ import {
   Flag,
   Captions,
   ChevronsDown,
+  SwitchCamera,
+  ZapOff,
+  Timer,
+  Undo2,
+  Images,
+  Scissors,
+  Image as ImageGlyph,
+  ArrowRight,
+  Pause,
+  RefreshCw,
+  TriangleAlert,
+  MicOff,
 } from 'lucide-react-native';
 
 export const iconMap = {
@@ -221,6 +233,18 @@ export const iconMap = {
   caption: Captions,
   'chevrons-down': ChevronsDown,
   'auto-scroll': ChevronsDown,
+  'switch-camera': SwitchCamera,
+  'zap-off': ZapOff,
+  timer: Timer,
+  undo: Undo2,
+  images: Images,
+  scissors: Scissors,
+  image: ImageGlyph,
+  'arrow-right': ArrowRight,
+  pause: Pause,
+  refresh: RefreshCw,
+  alert: TriangleAlert,
+  'mic-off': MicOff,
 } as const;
 
 export type IconName = keyof typeof iconMap;

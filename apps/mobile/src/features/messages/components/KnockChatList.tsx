@@ -3,7 +3,7 @@ import { StyleSheet, View, Text } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ChannelList } from 'stream-chat-react-native';
 import { useStreamChat } from '@/shared/providers/StreamChatProvider';
-import { useAuthStore } from '@/shared/services/auth/authStore';
+import { useAuth } from '@/shared/context/AuthProvider';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { Card } from '@/shared/components/Card';
 import { EmptyState } from '@/shared/components/EmptyState';
@@ -13,7 +13,8 @@ export function KnockChatList() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const { client, isReady, isConnecting, error } = useStreamChat();
-  const session = useAuthStore(state => state.session);
+  const { user } = useAuth();
+  const session = user ? { userId: user.id } : null;
 
   // Mock fallback when API is disabled
   if (!client || !isReady) {

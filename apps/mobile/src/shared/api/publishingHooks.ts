@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiRequest, getApiToken, ApiError } from './client';
 import { getApiBaseUrl, isApiEnabled } from './config';
 import { readStoredSession } from '@/shared/services/auth/authService';
+import type { ClipEditMetadata } from '@/features/reels/editor/clipEditModel';
 
 export type PublishingIdentity = {
   type: 'user' | 'provider';
@@ -25,6 +26,8 @@ type ContentContainerInput = {
     longitude?: number;
   } | null;
   visibility: 'public' | 'followers' | 'friends' | 'community' | 'only_me';
+  /** On-device edit decisions for Clips (trim, segments, music mix). */
+  edit?: ClipEditMetadata;
   identity: PublishingIdentity;
 };
 

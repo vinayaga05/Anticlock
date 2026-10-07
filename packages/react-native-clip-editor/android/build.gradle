@@ -1,0 +1,70 @@
+// Android side of @anticlock/react-native-clip-editor (TurboModule, Kotlin).
+// Plugins come from the app's root buildscript classpath (AGP, Kotlin, RNGP).
+
+def safeExtGet(name, fallback) {
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : fallback
+}
+
+apply plugin: "com.android.library"
+
+def agpMajor = com.android.Version.ANDROID_GRADLE_PLUGIN_VERSION.tokenize('.')[0].toInteger()
+def builtInKotlin = providers.gradleProperty("android.builtInKotlin").orNull
+if (agpMajor <= 8 || (builtInKotlin != null && !builtInKotlin.toBoolean())) {
+  apply plugin: "org.jetbrains.kotlin.android"
+}
+apply plugin: "com.facebook.react"
+
+// Keep Media3 aligned with react-native-video (RNVideo_media3Version) so the
+// app ends up with a single Media3 version on the classpath.
+def media3Version = safeExtGet("media3Version", "1.8.0")
+
+android {
+  namespace "com.anticlock.clipeditor"
+  compileSdkVersion safeExtGet("compileSdkVersion", 36)
+
+  defaultConfig {
+    minSdkVersion safeExtGet("minSdkVersion", 24)
+    targetSdkVersion safeExtGet("targetSdkVersion", 36)
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  sourceSets {
+    main {
+      java.srcDirs += ["${project.buildDir}/generated/source/codegen/java"]
+    }
+  }
+
+  lintOptions {
+    abortOnError false
+  }
+}
+
+if (agpMajor <= 8) {
+  tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    compilerOptions {
+      jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+  }
+}
+
+react {
+  jsRootDir = file("../src/specs")
+  libraryName = "AnticlockClipEditorSpec"
+  codegenJavaPackageName = "com.anticlock.clipeditor"
+}
+
+repositories {
+  google()
+  mavenCentral()
+}
+
+dependencies {
+  implementation "com.facebook.react:react-android"
+  implementation "androidx.media3:media3-transformer:${media3Version}"
+  implementation "androidx.media3:media3-effect:${media3Version}"
+  implementation "androidx.media3:media3-common:${media3Version}"
+}

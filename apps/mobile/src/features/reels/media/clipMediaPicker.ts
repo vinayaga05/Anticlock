@@ -3,7 +3,16 @@ import {
   launchImageLibrary,
   type Asset,
 } from 'react-native-image-picker';
+import {
+  getVideoInfo,
+  isClipEditorAvailable,
+  type ClipExportResult,
+} from '@anticlock/react-native-clip-editor';
 import type { ContentUploadFile } from '@/shared/api/publishingHooks';
+import {
+  MAX_CLIP_DURATION_MS,
+  type ClipSource,
+} from '@/features/reels/editor/clipEditModel';
 
 export type ClipPreviewSource = string | number;
 
@@ -205,6 +214,107 @@ export async function captureClipVideo(): Promise<PickedClipVideo | null> {
     }),
   );
   return asset ? videoFromAsset(asset) : null;
+}
+
+/**
+ * Picks a gallery video as an editor source. Unlike `pickClipVideo`, this
+ * accepts MOV/HEVC and videos longer than 90 seconds: the editor trims to
+ * 90 s, and the native exporter always produces an H.264 MP4 for upload.
+ */
+export async function pickClipSource(): Promise<ClipSource | null> {
+  if (!isClipEditorAvailable()) {
+    const legacy = await pickClipVideo();
+    if (!legacy) return null;
+    return {
+      id: legacy.id,
+      uri: legacy.localUri ?? String(legacy.previewSource),
+      durationMs: legacy.durationMs,
+      width: legacy.width,
+      height: legacy.height,
+      origin: 'gallery',
+    };
+  }
+  const asset = selectedAsset(
+    await launchImageLibrary({
+      mediaType: 'video',
+      selectionLimit: 1,
+      formatAsMp4: true,
+      assetRepresentationMode: 'compatible',
+    }),
+  );
+  if (!asset) return null;
+  const type = normalizedMime(asset.type);
+  if (type && !type.startsWith('video/')) {
+    throw new Error('Choose a video for your Reel.');
+  }
+  const uri = asset.uri!;
+  let durationMs = Math.round((asset.duration ?? 0) * 1_000);
+  let width = positiveNumber(asset.width);
+  let height = positiveNumber(asset.height);
+  let hasAudio: boolean | undefined;
+  try {
+    const info = await getVideoInfo(uri);
+    durationMs = Math.round(info.durationMs) || durationMs;
+    width = positiveNumber(info.width) ?? width;
+    height = positiveNumber(info.height) ?? height;
+    hasAudio = info.hasAudio;
+  } catch {
+    if (!durationMs) {
+      throw new Error(
+        'We could not read this video. Please choose another one.',
+      );
+    }
+  }
+  if (!Number.isFinite(durationMs) || durationMs < 500) {
+    throw new Error('This video is too short. Choose at least 1 second.');
+  }
+  return {
+    id: `${asset.id ?? uri}-${Date.now().toString(36)}`,
+    uri,
+    durationMs,
+    width,
+    height,
+    hasAudio,
+    origin: 'gallery',
+  };
+}
+
+/** The editor's exported MP4, shaped for the existing upload pipeline. */
+export function videoFromExport(result: ClipExportResult): PickedClipVideo {
+  const durationMs = Math.min(
+    MAX_CLIP_DURATION_MS,
+    Math.max(1, Math.round(result.durationMs)),
+  );
+  return {
+    id: result.uri,
+    label: `Edited clip · ${Math.round(durationMs / 1000)}s`,
+    previewSource: result.uri,
+    filename: 'anticlock-clip.mp4',
+    contentType: 'video/mp4',
+    durationMs,
+    width: positiveNumber(result.width),
+    height: positiveNumber(result.height),
+    localUri: result.uri,
+    byteSize: positiveByteSize(Math.round(result.byteSize)),
+    loadBytes: () => loadUriBytes(result.uri),
+  };
+}
+
+/** The cover frame the exporter grabbed from the edited clip, if any. */
+export function coverFromExport(
+  result: ClipExportResult,
+): PickedClipCover | null {
+  if (!result.coverUri) return null;
+  const coverUri = result.coverUri;
+  return {
+    id: coverUri,
+    label: 'Frame from your clip',
+    previewSource: coverUri,
+    filename: 'anticlock-cover.jpg',
+    contentType: 'image/jpeg',
+    localUri: undefined,
+    loadBytes: () => loadUriBytes(coverUri),
+  };
 }
 
 export type SavedClipVideo = Pick<

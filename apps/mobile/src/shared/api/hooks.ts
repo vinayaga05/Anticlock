@@ -85,6 +85,13 @@ export type ApiContentClipFeedItem = {
   shareCount: number;
   createdAt: string;
   publishedAt: string;
+  /** Music the creator mixed in on-device (display/attribution only). */
+  music?: {
+    trackId: string;
+    source: 'bundled' | 'remote';
+    title: string;
+    artist: string | null;
+  } | null;
   author: {
     // The publishing API calls a business identity a provider; mobile calls
     // the same visible profile a business.
@@ -236,6 +243,12 @@ function isPublishedContentClipFeedItem(
   );
 }
 
+function contentMusicLabel(music: ApiContentClipFeedItem['music']): string {
+  if (!music || !isNonEmptyString(music.title)) return '';
+  const title = music.title.trim();
+  return isNonEmptyString(music.artist) ? `${title} · ${music.artist.trim()}` : title;
+}
+
 /** Convert a profile-backed content post into the stable visual Clip shape. */
 export function mapApiContentClipToItem(
   item: ApiContentClipFeedItem,
@@ -243,9 +256,9 @@ export function mapApiContentClipToItem(
   const author = item.author;
   return {
     id: item.id,
-    // Content posts deliberately have no separate audio/title field. Leaving
-    // this blank keeps the existing UI's "Original audio" fallback honest.
-    title: '',
+    // `title` drives the feed's "♪" label. Only Clips with on-device music
+    // carry one; everything else keeps the honest "Original audio" fallback.
+    title: contentMusicLabel(item.music),
     author: author.name,
     authorAvatarUrl: isRemoteMediaUrl(author.avatarUrl)
       ? author.avatarUrl

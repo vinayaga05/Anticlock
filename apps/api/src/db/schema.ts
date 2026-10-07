@@ -13,6 +13,7 @@ import {
   doublePrecision,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import type { ClipEditMetadata } from "@anticlock/contracts";
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -521,6 +522,8 @@ export const contentContainers = pgTable(
       longitude?: number;
     }>(),
     visibility: text("visibility").notNull().default("public"),
+    /** On-device Clip edit metadata (trim/music/volume); null for other formats. */
+    edit: jsonb("edit").$type<ClipEditMetadata>(),
     status: text("status").notNull().default("ready_to_publish"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -574,6 +577,10 @@ export const contentPosts = pgTable(
     /** Exact-media checksum (or media id when no checksum exists) used for feed de-duplication. */
     duplicateClusterId: text("duplicate_cluster_id").notNull(),
     visibility: text("visibility").notNull().default("public"),
+    /** On-device Clip edit metadata copied from the container at publish time. */
+    edit: jsonb("edit").$type<ClipEditMetadata>(),
+    /** Denormalized music track id for future "uses this audio" surfaces. */
+    musicTrackId: text("music_track_id"),
     status: text("status").notNull().default("published"),
     viewCount: integer("view_count").notNull().default(0),
     likeCount: integer("like_count").notNull().default(0),
@@ -593,6 +600,32 @@ export const contentPosts = pgTable(
     index("content_posts_cluster_idx").on(table.duplicateClusterId),
   ]
 );
+
+/**
+ * Server-managed music for the Clip editor. Rows are inactive by default; an
+ * operator activates only tracks they hold the rights to. Audio is either a
+ * `media_assets` row (kind `audio`) or an HTTPS URL the operator controls.
+ */
+export const musicTracks = pgTable("music_tracks", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  title: text("title").notNull(),
+  artist: text("artist"),
+  durationMs: integer("duration_ms").notNull(),
+  mediaId: uuid("media_id").references(() => mediaAssets.id, {
+    onDelete: "set null",
+  }),
+  audioUrl: text("audio_url"),
+  license: text("license").notNull(),
+  attribution: text("attribution"),
+  isActive: boolean("is_active").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
 
 /** Durable per-viewer post claims prevent the same post from returning for 90 days. */
 export const contentPostDeliveries = pgTable(

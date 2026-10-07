@@ -6,7 +6,7 @@ export {
   isProductionEnvironment,
   USE_PRODUCTION_ENVIRONMENT,
 } from './config';
-export { apiRequest, setApiToken, getApiToken, ApiError } from './client';
+export { apiRequest, apiClient, setApiToken, getApiToken, ApiError } from './client';
 export {
   useServiceTreesQuery,
   useServiceCategoriesQuery,
@@ -43,3 +43,10 @@ export {
   useCreateTripBookingMutation,
   useCancelTripBookingMutation,
 } from './tripsHooks';
+export {
+  useBookingsQuery,
+  useBookingQuery,
+  useCreateBookingMutation,
+  useUpdateBookingMutation,
+  useCancelBookingMutation,
+} from './bookingHooks';

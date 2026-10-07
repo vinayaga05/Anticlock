@@ -109,6 +109,23 @@ export async function apiRequest<T>(
   return (await res.json()) as T;
 }
 
+/** Thin POST/GET helper used by messages/Stream Chat (matches apiRequest JSON body). */
+export const apiClient = {
+  post<T>(path: string, body?: unknown, init: RequestInit = {}): Promise<T> {
+    return apiRequest<T>(path, {
+      ...init,
+      method: 'POST',
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  },
+  get<T>(path: string, init: RequestInit = {}): Promise<T> {
+    return apiRequest<T>(path, {
+      ...init,
+      method: 'GET',
+    });
+  },
+};
+
 /**
  * SSE client for Genie. React Native's fetch often has no ReadableStream
  * (`response.body.getReader`), so we use XMLHttpRequest which supports

@@ -3,7 +3,7 @@ import { StreamChat } from 'stream-chat';
 import { Chat, OverlayProvider } from 'stream-chat-react-native';
 import { useAuth } from '@/shared/context/AuthProvider';
 import { isApiEnabled } from '@/shared/api/config';
-import { apiClient } from '@/shared/api/client';
+import { apiClient, getApiToken } from '@/shared/api/client';
 
 interface StreamChatContextType {
   client: StreamChat | null;
@@ -41,9 +41,11 @@ export function StreamChatProvider({ children }: { children: React.ReactNode }) 
       return;
     }
 
-    if (!session?.userId) {
+    // POST /v1/messages/token requires auth; skip when there is no bearer token.
+    if (!session?.userId || !getApiToken()) {
       setIsReady(false);
       setClient(null);
+      setError(null);
       return;
     }
 
@@ -112,20 +114,18 @@ export function StreamChatProvider({ children }: { children: React.ReactNode }) 
     error,
   };
 
-  // Only wrap with Chat provider if client is ready
-  if (!isApiEnabled || !client || !isReady) {
-    return (
-      <StreamChatContext.Provider value={contextValue}>
-        {children}
-      </StreamChatContext.Provider>
+  // OverlayProvider always mounted (supplies ThemeContext / overlay portal for
+  // Stream components); Chat only once the Stream client is connected.
+  const content =
+    isApiEnabled && client && isReady ? (
+      <Chat client={client}>{children}</Chat>
+    ) : (
+      children
     );
-  }
 
   return (
     <StreamChatContext.Provider value={contextValue}>
-      <OverlayProvider>
-        <Chat client={client}>{children}</Chat>
-      </OverlayProvider>
+      <OverlayProvider>{content}</OverlayProvider>
     </StreamChatContext.Provider>
   );
 }

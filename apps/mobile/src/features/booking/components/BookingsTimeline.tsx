@@ -11,6 +11,7 @@ import { NextUpBookingCard } from '@/features/booking/components/NextUpBookingCa
 import { UnifiedBookingCard } from '@/features/booking/components/UnifiedBookingCard';
 import { useBookingsQuery } from '@/shared/api';
 import { isApiEnabled } from '@/shared/api/config';
+import { getApiToken } from '@/shared/api/client';
 import { mapApiBookingToConsolidated } from '@/shared/utils/bookingMappers';
 import {
   applyAdvancedFilters,
@@ -51,8 +52,8 @@ export function BookingsTimeline({
   const { data: apiData, isLoading, error } = useBookingsQuery('all');
 
   const allBookings = useMemo(() => {
-    // If API is enabled and we have data, use it
-    if (isApiEnabled && apiData?.bookings) {
+    // Authenticated API data only; no token keeps the mock timeline.
+    if (isApiEnabled && getApiToken() && apiData?.bookings) {
       return apiData.bookings.map(mapApiBookingToConsolidated);
     }
     // Otherwise fall back to mock data

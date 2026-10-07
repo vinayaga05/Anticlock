@@ -41,14 +41,22 @@ describe('testLogin', () => {
       assert.equal(isTestAccount('+919876543210'), true);
       assert.equal(isTestAccount('+919876543211'), true);
       assert.equal(isTestAccount('+919876543212'), true);
-      assert.equal(isTestAccount('+919876543213'), true);
-      assert.equal(isTestAccount('+919999999999'), true);
+      for (let i = 0; i <= 9; i++) {
+        assert.equal(isTestAccount(`+91987654321${i}`), true);
+      }
+    });
+
+    it('does not include numbers outside 9876543210..9876543219', () => {
+      delete process.env.TEST_LOGIN_DISABLED;
+      assert.equal(isTestAccount('+919999999999'), false);
+      assert.equal(isTestAccount('+919876543220'), false);
+      assert.equal(isTestAccount('+919876543209'), false);
     });
 
     it('returns false for test accounts when disabled', () => {
       process.env.TEST_LOGIN_DISABLED = 'true';
       assert.equal(isTestAccount('+919876543210'), false);
-      assert.equal(isTestAccount('+919999999999'), false);
+      assert.equal(isTestAccount('+919876543219'), false);
     });
 
     it('returns false for non-test accounts', () => {
@@ -59,8 +67,12 @@ describe('testLogin', () => {
   });
 
   describe('TEST_LOGIN_ACCOUNTS', () => {
-    it('contains exactly 5 accounts', () => {
-      assert.equal(TEST_LOGIN_ACCOUNTS.length, 5);
+    it('contains exactly 10 accounts 9876543210..9876543219', () => {
+      assert.equal(TEST_LOGIN_ACCOUNTS.length, 10);
+      assert.deepEqual(
+        [...TEST_LOGIN_ACCOUNTS],
+        Array.from({ length: 10 }, (_, i) => `+91987654321${i}`),
+      );
     });
 
     it('all accounts are in normalized +91 format', () => {

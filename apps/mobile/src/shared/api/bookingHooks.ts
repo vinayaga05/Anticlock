@@ -17,20 +17,23 @@ function ensureAuthToken() {
 }
 
 export function useBookingsQuery(status?: 'upcoming' | 'past' | 'all') {
+  const session = readStoredSession();
+  const canFetch = isApiEnabled && Boolean(session?.token);
+
   return useQuery({
-    queryKey: ['bookings', status ?? 'all', isApiEnabled ? 'api' : 'mock'],
+    queryKey: ['bookings', status ?? 'all', canFetch ? 'api' : 'mock'],
     queryFn: async () => {
-      if (!isApiEnabled) {
+      // No bearer token: do not call the API (BookingsTimeline falls back to mocks).
+      if (!canFetch) {
         return { bookings: [], nextCursor: null };
       }
-      await ensureAuthToken();
       const qs = status && status !== 'all' ? `?status=${status}` : '';
       const res = await apiRequest<{ bookings: Booking[]; nextCursor: string | null }>(
         `/v1/bookings${qs}`,
       );
       return res;
     },
-    staleTime: isApiEnabled ? 30_000 : Infinity,
+    staleTime: canFetch ? 30_000 : Infinity,
   });
 }
 

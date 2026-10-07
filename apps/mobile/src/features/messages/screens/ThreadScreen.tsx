@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Channel, MessageList, MessageInput } from 'stream-chat-react-native';
+import { Channel, MessageList, MessageComposer } from 'stream-chat-react-native';
 import { useStreamChat } from '@/shared/providers/StreamChatProvider';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { conversations, messages as seedMessages } from '@/shared/data/mocks';
@@ -96,7 +96,7 @@ export function ThreadScreen() {
         edges={['bottom']}>
         <Channel channel={channel}>
           <MessageList />
-          <MessageInput />
+          <MessageComposer />
         </Channel>
       </SafeAreaView>
     );

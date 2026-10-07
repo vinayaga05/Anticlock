@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { StreamChat } from 'stream-chat';
-import { Chat } from 'stream-chat-react-native';
+import { Chat, OverlayProvider } from 'stream-chat-react-native';
 import { useAuth } from '@/shared/context/AuthProvider';
 import { isApiEnabled } from '@/shared/api/config';
 import { apiClient } from '@/shared/api/client';
@@ -123,7 +123,9 @@ export function StreamChatProvider({ children }: { children: React.ReactNode }) 
 
   return (
     <StreamChatContext.Provider value={contextValue}>
-      <Chat client={client}>{children}</Chat>
+      <OverlayProvider>
+        <Chat client={client}>{children}</Chat>
+      </OverlayProvider>
     </StreamChatContext.Provider>
   );
 }

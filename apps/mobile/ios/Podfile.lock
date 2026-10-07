@@ -2554,6 +2554,51 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - Teleport (1.2.2):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Teleport/common (= 1.2.2)
+    - Yoga
+  - Teleport/common (1.2.2):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - VisionCamera (5.2.3):
     - hermes-engine
     - NitroImage
@@ -2681,6 +2726,7 @@ DEPENDENCIES:
   - RNSVG (from `../../../node_modules/react-native-svg`)
   - RNWorklets (from `../../../node_modules/react-native-worklets`)
   - stream-chat-react-native (from `../../../node_modules/stream-chat-react-native`)
+  - Teleport (from `../../../node_modules/react-native-teleport`)
   - VisionCamera (from `../../../node_modules/react-native-vision-camera`)
   - Yoga (from `../../../node_modules/react-native/ReactCommon/yoga`)
 
@@ -2884,6 +2930,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/react-native-worklets"
   stream-chat-react-native:
     :path: "../../../node_modules/stream-chat-react-native"
+  Teleport:
+    :path: "../../../node_modules/react-native-teleport"
   VisionCamera:
     :path: "../../../node_modules/react-native-vision-camera"
   Yoga:
@@ -2993,6 +3041,7 @@ SPEC CHECKSUMS:
   RNSVG: 6cae8d4082913be2eb43eaec2a456222c42195ed
   RNWorklets: 9a0cb4d302ab197d0f0d5630c3494d2e684c9c48
   stream-chat-react-native: ad4f2bb1eb174deaf5f728d7d75da75328bd8531
+  Teleport: 471840da840c785060fd733ab43ea7f15125dc8d
   VisionCamera: f84550cffbbf23f3cac7a3d1d2e66e5098a4e8eb
   Yoga: fe50ab299e578f397fef753cf309c6703a4db29b
 

@@ -66,14 +66,9 @@ describe('TestAccountWrapperProvider', () => {
       assert.equal(verified, true);
     });
 
-    it('all 5 test accounts work', async () => {
-      const testNumbers = [
-        '+919876543210',
-        '+919876543211',
-        '+919876543212',
-        '+919876543213',
-        '+919999999999',
-      ];
+    it('all 10 test accounts work (with and without +91)', async () => {
+      const testNumbers = Array.from({ length: 10 }, (_, i) => `+91987654321${i}`);
+      for (let i = 0; i <= 9; i++) testNumbers.push(`987654321${i}`);
 
       for (const phone of testNumbers) {
         const { requestId } = await wrapper.sendOtp(phone);

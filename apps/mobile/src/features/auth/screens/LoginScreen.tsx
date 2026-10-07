@@ -172,7 +172,7 @@ export function LoginScreen() {
           <Text style={[styles.devHint, { color: theme.colors.textTertiary }]}>
             {isDevEnvironment
               ? 'Local API · Dev: 9999999999 or 8888888888 · OTP 123456'
-              : 'Production API · Test: 9876543210-13, 9999999999 · OTP 123456'}
+              : 'Production API · Test: 9876543210-19 · OTP 123456'}
             {'\n'}
             API: {getApiBaseUrl()}
           </Text>

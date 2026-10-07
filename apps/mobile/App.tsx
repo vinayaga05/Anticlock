@@ -1,6 +1,7 @@
 import React from 'react';
 import { StatusBar } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { PortalProvider } from 'react-native-teleport';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RootNavigator } from '@/shared/navigation/RootNavigator';
@@ -37,18 +38,22 @@ function AppShell() {
 }
 
 function App() {
+  // Match Connect (Mellini): PortalProvider outermost so react-native-teleport
+  // PortalHostView is registered above GestureHandler / navigation / Stream Chat.
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
-          <AuthProvider>
-            <StreamChatProvider>
-              <AppShell />
-            </StreamChatProvider>
-          </AuthProvider>
-        </QueryClientProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <PortalProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <StreamChatProvider>
+                <AppShell />
+              </StreamChatProvider>
+            </AuthProvider>
+          </QueryClientProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </PortalProvider>
   );
 }
 

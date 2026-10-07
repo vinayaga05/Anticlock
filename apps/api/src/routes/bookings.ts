@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { ZodError } from 'zod';
 import {
   BookingAdminQuerySchema,
   BookingListQuerySchema,
@@ -25,6 +26,12 @@ function requireMobileAuth(c: { get: (k: 'auth') => { kind: string; sub: string 
 }
 
 function httpError(err: unknown) {
+  if (err instanceof ZodError) {
+    return {
+      status: 400 as const,
+      body: { error: { code: 'invalid_request', message: err.issues[0]?.message ?? 'Invalid request' } },
+    };
+  }
   const e = err as { status?: number; code?: string; message?: string };
   return {
     status: (e.status ?? 500) as 400 | 403 | 404 | 409 | 500,

@@ -1510,16 +1510,38 @@ async function migrate() {
       ADD COLUMN IF NOT EXISTS resolved_at timestamptz
   `;
 
-  // One-time (idempotent) recovery of uploads that never became posts. A
-  // container is only published when every attached media asset is ready,
-  // live and approved; text-only containers need a caption. Stories are
-  // given their original 24h window, so stale ones are created already
-  // expired and never surface in the tray.
+  // One-shot recovery of uploads whose publish call failed under the old
+  // client (it created the container and published in one tap, so these
+  // creators did press Publish). Guarded by a marker row so it runs exactly
+  // once (this script runs on every deploy), and limited to containers older
+  // than an hour so an in-flight composer at deploy time is never published
+  // on the creator's behalf. A container qualifies only when every attached
+  // media asset is ready, live and approved; text-only containers need a
+  // caption. With CONTENT_REQUIRE_REVIEW=true they go to `pending_review`
+  // instead of `published`. Stories keep their original 24h window, so stale
+  // ones are created already expired and never surface in the tray.
   await sql`
+    CREATE TABLE IF NOT EXISTS app_data_backfills (
+      name text PRIMARY KEY,
+      applied_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  const recoveredStatus =
+    process.env.CONTENT_REQUIRE_REVIEW === "true" ? "pending_review" : "published";
+  await sql.begin(async (tx) => {
+    const claimed = await tx`
+      INSERT INTO app_data_backfills (name)
+      VALUES ('content_publish_orphan_ready_containers_v1')
+      ON CONFLICT (name) DO NOTHING
+      RETURNING name
+    `;
+    if (claimed.length === 0) return;
+    await tx`
     WITH eligible AS (
       SELECT c.*
       FROM content_containers c
       WHERE c.status = 'ready_to_publish'
+        AND c.created_at < now() - interval '1 hour'
         AND NOT EXISTS (SELECT 1 FROM content_posts p WHERE p.container_id = c.id)
         AND (
           (c.media_type = 'text' AND length(c.caption) > 0)
@@ -1558,17 +1580,20 @@ async function migrate() {
           ),
           e.id::text
         ),
-        e.visibility, e.edit, e.edit -> 'music' ->> 'trackId', 'published',
+        e.visibility, e.edit, e.edit -> 'music' ->> 'trackId', ${recoveredStatus}::text,
         CASE WHEN e.format = 'story' THEN e.created_at + interval '24 hours' END,
         e.created_at, e.created_at
       FROM eligible e
       RETURNING container_id
     )
     UPDATE content_containers c
-    SET status = 'published', published_at = c.created_at, updated_at = now()
+    SET status = ${recoveredStatus}::text,
+        published_at = CASE WHEN ${recoveredStatus}::text = 'published' THEN c.created_at END,
+        updated_at = now()
     FROM inserted i
     WHERE c.id = i.container_id
-  `;
+    `;
+  });
 
   console.log("Migrations applied.");
   await sql.end({ timeout: 5 });

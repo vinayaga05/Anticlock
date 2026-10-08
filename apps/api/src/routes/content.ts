@@ -1214,8 +1214,17 @@ contentPublicRoutes.get("/feeds/:format", async (c) => {
     const publisher = ref ? publishers.get(publisherKey(ref)) : undefined;
     // Inactive users / non-active businesses are dropped, as in every feed.
     if (!ref || !publisher) return [];
-    const { createdByMobileUserId: _owner, ...rest } = post;
+    // Owner id and moderator notes are internal; never send them to the
+    // unauthenticated feed.
+    const {
+      createdByMobileUserId: _owner,
+      reviewNote: _reviewNote,
+      reviewedAt: _reviewedAt,
+      ...rest
+    } = post;
     void _owner;
+    void _reviewNote;
+    void _reviewedAt;
     return [
       {
         ...rest,

@@ -1,4 +1,17 @@
-import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  notInArray,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { z } from "zod";
 import {
   ClipEditMetadataSchema,
@@ -672,9 +685,13 @@ export async function listMine(
   options: { publisherProfileId?: string; limit?: number } = {}
 ) {
   const limit = Math.min(Math.max(options.limit ?? 50, 1), 100);
+  // Unfinished containers (no post yet) are queried on their own so a long
+  // run of later publishes can never push drafts, processing or failed items
+  // out of the owner's view.
   const containerConditions: SQL[] = [
     eq(contentContainers.createdByMobileUserId, ownerUserId),
-    ne(contentContainers.status, "discarded"),
+    notInArray(contentContainers.status, ["discarded", "published"]),
+    sql`NOT EXISTS (SELECT 1 FROM content_posts p WHERE p.container_id = ${contentContainers.id})`,
   ];
   const postConditions: SQL[] = [eq(contentPosts.createdByMobileUserId, ownerUserId)];
   if (options.publisherProfileId) {
@@ -733,8 +750,9 @@ export async function listMine(
       };
     })
     .filter((item): item is NonNullable<typeof item> => item !== null)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, limit);
+    // Up to `limit` unfinished items plus up to `limit` posts; no shared
+    // truncation, so in-progress work is always returned.
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return { items };
 }
 

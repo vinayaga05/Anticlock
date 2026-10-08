@@ -15,6 +15,7 @@ import {
   requirePermission,
   type AppEnv,
 } from '../middleware/auth.js';
+import { httpError } from '../lib/httpError.js';
 
 function requireMobileAuth(c: { get: (k: 'auth') => { kind: string; sub: string } }) {
   const auth = c.get('auth');
@@ -25,19 +26,6 @@ function requireMobileAuth(c: { get: (k: 'auth') => { kind: string; sub: string 
     });
   }
   return auth;
-}
-
-function httpError(err: unknown) {
-  const e = err as { status?: number; code?: string; message?: string };
-  return {
-    status: (e.status ?? 500) as 400 | 403 | 404 | 409 | 500,
-    body: {
-      error: {
-        code: e.code ?? 'error',
-        message: e.message ?? 'Unexpected error',
-      },
-    },
-  };
 }
 
 export const tripsMobileRoutes = new Hono<AppEnv>();
@@ -58,7 +46,7 @@ tripsMobileRoutes.get('/trips', async c => {
     const result = await tripService.listTrips(validated);
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'trips');
     return c.json(body, status);
   }
 });
@@ -75,7 +63,7 @@ tripsMobileRoutes.get('/trips/:id', async c => {
     }
     return c.json({ trip });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'trips');
     return c.json(body, status);
   }
 });
@@ -97,7 +85,7 @@ tripsMobileRoutes.post('/trips/:id/book', async c => {
     const booking = await tripBookingService.createBooking(auth.sub, body);
     return c.json({ booking }, 201);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'trips');
     return c.json(body, status);
   }
 });
@@ -115,7 +103,7 @@ tripsMobileRoutes.get('/trip-bookings', async c => {
     const result = await tripBookingService.listBookings(auth.sub, validated);
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'trips');
     return c.json(body, status);
   }
 });
@@ -136,7 +124,7 @@ tripsMobileRoutes.get('/trip-bookings/:id', async c => {
     }
     return c.json({ booking });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'trips');
     return c.json(body, status);
   }
 });
@@ -162,7 +150,7 @@ tripsMobileRoutes.post('/trip-bookings/:id/cancel', async c => {
     }
     return c.json({ booking });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'trips');
     return c.json(body, status);
   }
 });
@@ -188,7 +176,7 @@ tripsAdminRoutes.get(
       const result = await tripService.listTrips(validated);
       return c.json(result);
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'trips');
       return c.json(body, status);
     }
   },
@@ -208,7 +196,7 @@ tripsAdminRoutes.get(
       }
       return c.json({ trip });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'trips');
       return c.json(body, status);
     }
   },
@@ -223,7 +211,7 @@ tripsAdminRoutes.post(
       const trip = await tripService.createTrip(body);
       return c.json({ trip }, 201);
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'trips');
       return c.json(body, status);
     }
   },
@@ -244,7 +232,7 @@ tripsAdminRoutes.patch(
       }
       return c.json({ trip });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'trips');
       return c.json(body, status);
     }
   },
@@ -264,7 +252,7 @@ tripsAdminRoutes.delete(
       }
       return c.json({ ok: true });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'trips');
       return c.json(body, status);
     }
   },
@@ -290,7 +278,7 @@ tripsAdminRoutes.get(
       const result = await tripBookingService.listBookingsAdmin(validated);
       return c.json(result);
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'trips');
       return c.json(body, status);
     }
   },
@@ -310,7 +298,7 @@ tripsAdminRoutes.get(
       }
       return c.json({ booking });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'trips');
       return c.json(body, status);
     }
   },
@@ -334,7 +322,7 @@ tripsAdminRoutes.patch(
       }
       return c.json({ booking });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'trips');
       return c.json(body, status);
     }
   },

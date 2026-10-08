@@ -1,5 +1,4 @@
 import { Hono } from 'hono';
-import { ZodError } from 'zod';
 import {
   BookingAdminQuerySchema,
   BookingListQuerySchema,
@@ -13,6 +12,7 @@ import {
   requirePermission,
   type AppEnv,
 } from '../middleware/auth.js';
+import { httpError } from '../lib/httpError.js';
 
 function requireMobileAuth(c: { get: (k: 'auth') => { kind: string; sub: string } }) {
   const auth = c.get('auth');
@@ -25,25 +25,6 @@ function requireMobileAuth(c: { get: (k: 'auth') => { kind: string; sub: string 
   return auth;
 }
 
-function httpError(err: unknown) {
-  if (err instanceof ZodError) {
-    return {
-      status: 400 as const,
-      body: { error: { code: 'invalid_request', message: err.issues[0]?.message ?? 'Invalid request' } },
-    };
-  }
-  const e = err as { status?: number; code?: string; message?: string };
-  return {
-    status: (e.status ?? 500) as 400 | 403 | 404 | 409 | 500,
-    body: {
-      error: {
-        code: e.code ?? 'error',
-        message: e.message ?? 'Unexpected error',
-      },
-    },
-  };
-}
-
 export const bookingMobileRoutes = new Hono<AppEnv>();
 bookingMobileRoutes.use('*', requireAuth);
 
@@ -54,7 +35,7 @@ bookingMobileRoutes.post('/', async c => {
     const booking = await bookingService.createBooking(auth.sub, body);
     return c.json({ booking }, 201);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'bookings');
     return c.json(body, status);
   }
 });
@@ -72,7 +53,7 @@ bookingMobileRoutes.get('/', async c => {
     const result = await bookingService.listBookings(auth.sub, validated);
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'bookings');
     return c.json(body, status);
   }
 });
@@ -89,7 +70,7 @@ bookingMobileRoutes.get('/:id', async c => {
     }
     return c.json({ booking });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'bookings');
     return c.json(body, status);
   }
 });
@@ -111,7 +92,7 @@ bookingMobileRoutes.patch('/:id', async c => {
     }
     return c.json({ booking });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'bookings');
     return c.json(body, status);
   }
 });
@@ -133,7 +114,7 @@ bookingMobileRoutes.post('/:id/cancel', async c => {
     }
     return c.json({ booking });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'bookings');
     return c.json(body, status);
   }
 });
@@ -159,7 +140,7 @@ bookingAdminRoutes.get(
       const result = await bookingService.listBookingsAdmin(validated);
       return c.json(result);
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'bookings');
       return c.json(body, status);
     }
   },
@@ -179,7 +160,7 @@ bookingAdminRoutes.get(
       }
       return c.json({ booking });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'bookings');
       return c.json(body, status);
     }
   },
@@ -203,7 +184,7 @@ bookingAdminRoutes.patch(
       }
       return c.json({ booking });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'bookings');
       return c.json(body, status);
     }
   },

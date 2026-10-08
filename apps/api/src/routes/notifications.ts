@@ -11,6 +11,7 @@ import {
   requirePermission,
   type AppEnv,
 } from "../middleware/auth.js";
+import { httpError } from '../lib/httpError.js';
 
 function requireMobileAuth(c: {
   get: (k: "auth") => { kind: string; sub: string };
@@ -23,19 +24,6 @@ function requireMobileAuth(c: {
     });
   }
   return auth;
-}
-
-function httpError(err: unknown) {
-  const e = err as { status?: number; code?: string; message?: string };
-  return {
-    status: (e.status ?? 500) as 400 | 403 | 404 | 500,
-    body: {
-      error: {
-        code: e.code ?? "error",
-        message: e.message ?? "Unexpected error",
-      },
-    },
-  };
 }
 
 export const notificationsMobileRoutes = new Hono<AppEnv>();
@@ -56,7 +44,7 @@ notificationsMobileRoutes.get("/", async (c) => {
     );
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'notifications');
     return c.json(body, status);
   }
 });
@@ -67,7 +55,7 @@ notificationsMobileRoutes.get("/unread-count", async (c) => {
     const count = await notificationService.getUnreadCount(auth.sub);
     return c.json({ unreadCount: count });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'notifications');
     return c.json(body, status);
   }
 });
@@ -92,7 +80,7 @@ notificationsMobileRoutes.post("/:id/read", async (c) => {
     }
     return c.json({ success: true });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'notifications');
     return c.json(body, status);
   }
 });
@@ -103,7 +91,7 @@ notificationsMobileRoutes.post("/read-all", async (c) => {
     const count = await notificationService.markAllRead(auth.sub);
     return c.json({ count });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'notifications');
     return c.json(body, status);
   }
 });
@@ -128,7 +116,7 @@ notificationsMobileRoutes.delete("/:id", async (c) => {
     }
     return c.json({ success: true });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'notifications');
     return c.json(body, status);
   }
 });
@@ -147,7 +135,7 @@ devicesMobileRoutes.post("/", async (c) => {
     );
     return c.json({ success: true });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'notifications');
     return c.json(body, status);
   }
 });
@@ -162,7 +150,7 @@ devicesMobileRoutes.delete("/", async (c) => {
     );
     return c.json({ success });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'notifications');
     return c.json(body, status);
   }
 });
@@ -182,7 +170,7 @@ devicesMobileRoutes.get("/", async (c) => {
       })),
     });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'notifications');
     return c.json(body, status);
   }
 });
@@ -204,7 +192,7 @@ notificationsAdminRoutes.post(
       });
       return c.json(result);
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'notifications');
       return c.json(body, status);
     }
   }
@@ -233,7 +221,7 @@ notificationsAdminRoutes.get(
       });
       return c.json(result);
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'notifications');
       return c.json(body, status);
     }
   }

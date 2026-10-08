@@ -13,27 +13,7 @@ import {
 } from '../middleware/auth.js';
 import { mediaService } from '../media/MediaService.js';
 import { mediaAccessPolicy } from '../media/MediaAccessPolicy.js';
-
-function httpError(err: unknown) {
-  const e = err as { status?: number; code?: string; message?: string };
-  const isValidationError = err instanceof Error && err.name === 'ZodError';
-  const status = (isValidationError ? 400 : e.status ?? 500) as
-    | 400
-    | 403
-    | 404
-    | 409
-    | 410
-    | 500;
-  return {
-    status,
-    body: {
-      error: {
-        code: isValidationError ? 'validation_error' : e.code ?? 'error',
-        message: e.message ?? 'Unexpected error',
-      },
-    },
-  };
-}
+import { httpError } from '../lib/httpError.js';
 
 export const mediaAdminRoutes = new Hono<AppEnv>();
 
@@ -51,7 +31,7 @@ mediaAdminRoutes.post(
       );
       return c.json(result, 201);
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'media');
       return c.json(body, status);
     }
   },
@@ -73,7 +53,7 @@ mediaAdminRoutes.post(
       );
       return c.json(result, 201);
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'media');
       return c.json(body, status);
     }
   },
@@ -92,7 +72,7 @@ mediaAdminRoutes.put(
       );
       return c.json(result);
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'media');
       return c.json(body, status);
     }
   },
@@ -112,7 +92,7 @@ mediaAdminRoutes.post(
       );
       return c.json(result);
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'media');
       return c.json(body, status);
     }
   },
@@ -133,7 +113,7 @@ mediaAdminRoutes.post(
       );
       return c.json(result);
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'media');
       return c.json(body, status);
     }
   },
@@ -151,7 +131,7 @@ mediaAdminRoutes.get('/', requirePermission('media.read'), async c => {
     const result = await mediaService.list(c.get('auth'), query);
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'media');
     return c.json(body, status);
   }
 });
@@ -167,7 +147,7 @@ mediaAdminRoutes.get(
       );
       return c.json({ asset });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'media');
       return c.json(body, status);
     }
   },
@@ -179,7 +159,7 @@ mediaAdminRoutes.post('/usages', requirePermission('media.write'), async c => {
     const result = await mediaService.attachUsage(c.get('auth'), body);
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'media');
     return c.json(body, status);
   }
 });
@@ -195,7 +175,7 @@ mediaAdminRoutes.delete(
       );
       return c.json(result);
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'media');
       return c.json(body, status);
     }
   },
@@ -223,7 +203,7 @@ mediaAdminRoutes.get(
         },
       });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'media');
       return c.json(body, status);
     }
   },
@@ -244,7 +224,7 @@ mediaAdminRoutes.post(
       );
       return c.json({ asset });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'media');
       return c.json(body, status);
     }
   },
@@ -255,7 +235,7 @@ mediaAdminRoutes.get('/:id', requirePermission('media.read'), async c => {
     const result = await mediaService.get(c.get('auth'), c.req.param('id'));
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'media');
     return c.json(body, status);
   }
 });
@@ -271,7 +251,7 @@ mediaAdminRoutes.post(
       );
       return c.json({ asset });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'media');
       return c.json(body, status);
     }
   },
@@ -282,7 +262,7 @@ mediaAdminRoutes.delete('/:id', requirePermission('media.delete'), async c => {
     const result = await mediaService.delete(c.get('auth'), c.req.param('id'));
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'media');
     return c.json(body, status);
   }
 });
@@ -320,7 +300,7 @@ mediaPublicRoutes.get('/file/:bucket/:key{.+}', async c => {
       },
     });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'media');
     return c.json(body, status);
   }
 });
@@ -330,7 +310,7 @@ mediaPublicRoutes.get('/banners', async c => {
     const data = await mediaService.listPublicBanners();
     return c.json({ data });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'media');
     return c.json(body, status);
   }
 });
@@ -362,7 +342,7 @@ stubDomainRoutes.put(
       });
       return c.json({ ok: true });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'media');
       return c.json(body, status);
     }
   },
@@ -390,7 +370,7 @@ stubDomainRoutes.put(
       );
       return c.json({ ok: true });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'media');
       return c.json(body, status);
     }
   },
@@ -416,7 +396,7 @@ stubDomainRoutes.put(
       });
       return c.json({ ok: true });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'media');
       return c.json(body, status);
     }
   },

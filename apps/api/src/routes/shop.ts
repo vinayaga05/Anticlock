@@ -16,6 +16,7 @@ import {
   requirePermission,
   type AppEnv,
 } from '../middleware/auth.js';
+import { httpError } from '../lib/httpError.js';
 
 function requireMobileAuth(c: { get: (k: 'auth') => { kind: string; sub: string } }) {
   const auth = c.get('auth');
@@ -26,19 +27,6 @@ function requireMobileAuth(c: { get: (k: 'auth') => { kind: string; sub: string 
     });
   }
   return auth;
-}
-
-function httpError(err: unknown) {
-  const e = err as { status?: number; code?: string; message?: string };
-  return {
-    status: (e.status ?? 500) as 400 | 403 | 404 | 409 | 500,
-    body: {
-      error: {
-        code: e.code ?? 'error',
-        message: e.message ?? 'Unexpected error',
-      },
-    },
-  };
 }
 
 export const shopMobileRoutes = new Hono<AppEnv>();
@@ -57,7 +45,7 @@ shopMobileRoutes.get('/products', async (c) => {
     const result = await productService.listProducts(validated);
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'shop');
     return c.json(body, status);
   }
 });
@@ -73,7 +61,7 @@ shopMobileRoutes.get('/products/:id', async (c) => {
     }
     return c.json({ product });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'shop');
     return c.json(body, status);
   }
 });
@@ -85,7 +73,7 @@ shopMobileRoutes.post('/orders', async (c) => {
     const order = await orderService.createOrder(auth.sub, body);
     return c.json({ order }, 201);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'shop');
     return c.json(body, status);
   }
 });
@@ -102,7 +90,7 @@ shopMobileRoutes.get('/orders', async (c) => {
     const result = await orderService.listOrders(auth.sub, validated);
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'shop');
     return c.json(body, status);
   }
 });
@@ -119,7 +107,7 @@ shopMobileRoutes.get('/orders/:id', async (c) => {
     }
     return c.json({ order });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'shop');
     return c.json(body, status);
   }
 });
@@ -135,7 +123,7 @@ shopMobileRoutes.post('/orders/:id/cancel', async (c) => {
     );
     return c.json({ order });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'shop');
     return c.json(body, status);
   }
 });
@@ -156,7 +144,7 @@ shopAdminRoutes.get('/products', async (c) => {
     const result = await productService.listProducts(validated);
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'shop');
     return c.json(body, status);
   }
 });
@@ -172,7 +160,7 @@ shopAdminRoutes.get('/products/:id', async (c) => {
     }
     return c.json({ product });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'shop');
     return c.json(body, status);
   }
 });
@@ -184,7 +172,7 @@ shopAdminRoutes.post('/products', async (c) => {
     const product = await productService.createProduct(body);
     return c.json({ product }, 201);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'shop');
     return c.json(body, status);
   }
 });
@@ -196,7 +184,7 @@ shopAdminRoutes.patch('/products/:id', async (c) => {
     const product = await productService.updateProduct(c.req.param('id'), body);
     return c.json({ product });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'shop');
     return c.json(body, status);
   }
 });
@@ -207,7 +195,7 @@ shopAdminRoutes.delete('/products/:id', async (c) => {
     await productService.deleteProduct(c.req.param('id'));
     return c.json({ success: true });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'shop');
     return c.json(body, status);
   }
 });
@@ -226,7 +214,7 @@ shopAdminRoutes.get('/orders', async (c) => {
     const result = await orderService.listAdminOrders(validated);
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'shop');
     return c.json(body, status);
   }
 });
@@ -242,7 +230,7 @@ shopAdminRoutes.get('/orders/:id', async (c) => {
     }
     return c.json({ order });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'shop');
     return c.json(body, status);
   }
 });
@@ -254,7 +242,7 @@ shopAdminRoutes.patch('/orders/:id', async (c) => {
     const order = await orderService.updateAdminOrder(c.req.param('id'), body);
     return c.json({ order });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'shop');
     return c.json(body, status);
   }
 });

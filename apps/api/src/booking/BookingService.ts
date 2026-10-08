@@ -8,6 +8,7 @@ import type {
 } from '@anticlock/contracts';
 import { db } from '../db/client.js';
 import { bookings, mobileUsers, providers } from '../db/schema.js';
+import { parseCursorDate } from '../lib/cursor.js';
 
 export class BookingService {
   async createBooking(
@@ -75,7 +76,7 @@ export class BookingService {
     let conditions = [eq(bookings.mobileUserId, mobileUserId)];
 
     if (options.cursor) {
-      conditions.push(lt(bookings.startsAt, new Date(options.cursor)));
+      conditions.push(lt(bookings.startsAt, parseCursorDate(options.cursor)));
     }
 
     if (options.status === 'upcoming') {
@@ -210,7 +211,7 @@ export class BookingService {
     if (filters.status) conditions.push(eq(bookings.status, filters.status));
     if (filters.from) conditions.push(gte(bookings.startsAt, new Date(filters.from)));
     if (filters.to) conditions.push(lt(bookings.startsAt, new Date(filters.to)));
-    if (filters.cursor) conditions.push(lt(bookings.startsAt, new Date(filters.cursor)));
+    if (filters.cursor) conditions.push(lt(bookings.startsAt, parseCursorDate(filters.cursor)));
 
     const rows = await db
       .select({

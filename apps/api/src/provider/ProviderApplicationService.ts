@@ -511,7 +511,15 @@ export class ProviderApplicationService {
 
     const updated = await db
       .update(providerApplications)
-      .set({ status: 'submitted', submittedAt: new Date(), updatedAt: new Date() })
+      // The previous review cycle's feedback is answered by this resubmission;
+      // clearing it keeps stale banners off the admin page (audit log keeps it).
+      .set({
+        status: 'submitted',
+        submittedAt: new Date(),
+        updatedAt: new Date(),
+        infoRequestMessage: null,
+        reviewNotes: null,
+      })
       .where(
         and(
           eq(providerApplications.id, applicationId),

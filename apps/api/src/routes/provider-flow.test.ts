@@ -324,6 +324,7 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     const resubmitted = await call('OWNER', 'POST', `/v1/provider/applications/${firstId}/submit`);
     assert.equal(resubmitted.status, 200);
     assert.equal(resubmitted.json.application.status, 'submitted');
+    assert.equal(resubmitted.json.application.infoRequestMessage, null, 'answered info request is cleared');
 
     assert.equal((await review('mark_under_review')).status, 200);
     const approved = await review('approve', { notes: 'Looks good' });
@@ -397,6 +398,10 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     assert.equal(reopened.status, 200);
     assert.equal(reopened.json.application.status, 'draft');
     assert.equal(reopened.json.application.reviewNotes, 'Registration certificate is unreadable');
+    const again = await call('OWNER', 'POST', `/v1/provider/applications/${rejectedId}/submit`);
+    assert.equal(again.status, 200, JSON.stringify(again.json));
+    assert.equal(again.json.application.status, 'submitted');
+    assert.equal(again.json.application.reviewNotes, null, 'old rejection reason is cleared on resubmit');
   });
 
   it('lists only approved, active businesses in the marketplace', async () => {

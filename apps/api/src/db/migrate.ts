@@ -1518,16 +1518,19 @@ async function migrate() {
   // on the creator's behalf. A container qualifies only when every attached
   // media asset is ready, live and approved; text-only containers need a
   // caption. With CONTENT_REQUIRE_REVIEW=true they go to `pending_review`
-  // instead of `published`. Stories keep their original 24h window, so stale
-  // ones are created already expired and never surface in the tray.
+  // instead of `published`. Stories keep their original 24h window; stories
+  // already past it are skipped entirely.
   await sql`
     CREATE TABLE IF NOT EXISTS app_data_backfills (
       name text PRIMARY KEY,
       applied_at timestamptz NOT NULL DEFAULT now()
     )
   `;
+  // Same parsing as contentRequiresReview() in publishing/publisher.ts.
   const recoveredStatus =
-    process.env.CONTENT_REQUIRE_REVIEW === "true" ? "pending_review" : "published";
+    (process.env.CONTENT_REQUIRE_REVIEW ?? "").trim().toLowerCase() === "true"
+      ? "pending_review"
+      : "published";
   await sql.begin(async (tx) => {
     const claimed = await tx`
       INSERT INTO app_data_backfills (name)
@@ -1542,6 +1545,9 @@ async function migrate() {
       FROM content_containers c
       WHERE c.status = 'ready_to_publish'
         AND c.created_at < now() - interval '1 hour'
+        -- A story past its 24h window is not worth recovering (and must not
+        -- be revived through review approval).
+        AND NOT (c.format = 'story' AND c.created_at <= now() - interval '24 hours')
         AND NOT EXISTS (SELECT 1 FROM content_posts p WHERE p.container_id = c.id)
         AND (
           (c.media_type = 'text' AND length(c.caption) > 0)

@@ -497,7 +497,7 @@ export function RootNavigator() {
             <Stack.Screen
               name="ProviderDashboard"
               component={ProviderDashboardScreen}
-              options={{ title: 'Provider dashboard' }}
+              options={{ title: 'Provider dashboard', headerShown: false }}
             />
           </>
         )}

@@ -4,6 +4,7 @@ import { useTheme } from '@/shared/hooks/useTheme';
 import { AppIcon } from '@/shared/components/AppIcon';
 import { Button } from '@/shared/components/Button';
 import { PressableScale } from '@/shared/components/PressableScale';
+import { formatTimeLabel } from '@/features/provider-onboarding/utils/formValues';
 
 const MONTHS = [
   'January',
@@ -31,12 +32,7 @@ export function formatDateLabel(value: string) {
   return `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]?.slice(0, 3)} ${m[1]}`;
 }
 
-export function formatTimeLabel(value: string) {
-  const m = /^(\d{2}):(\d{2})$/.exec(value);
-  if (!m) return value;
-  const h = Number(m[1]);
-  return `${h % 12 === 0 ? 12 : h % 12}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`;
-}
+export { formatTimeLabel };
 
 function PickerTrigger({
   icon,

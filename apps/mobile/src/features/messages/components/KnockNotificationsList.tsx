@@ -58,7 +58,7 @@ function formatTimestamp(timestamp: string): string {
 
 export function KnockNotificationsList() {
   const theme = useTheme();
-  const apiEnabled = isApiEnabled();
+  const apiEnabled = isApiEnabled;
   const { data, isLoading, error } = useNotifications();
   const markRead = useMarkNotificationRead();
   const navigation = useNavigation<any>();

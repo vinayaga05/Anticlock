@@ -55,6 +55,9 @@ export function ProviderApplicationFormScreen() {
   const dirty = useRef(false);
   const latestValues = useRef(values);
   latestValues.current = values;
+  // Last server copy (autosave writes it into the query cache).
+  const savedApp = useRef(app);
+  savedApp.current = app;
   const inFlight = useRef<Promise<void> | null>(null);
   const lastAadhaarSent = useRef<string | undefined>(undefined);
 
@@ -79,7 +82,11 @@ export function ProviderApplicationFormScreen() {
       if (!dirty.current) return;
     }
     dirty.current = false;
-    const payload = buildApplicationPayload(latestValues.current, schema);
+    const payload = buildApplicationPayload(
+      latestValues.current,
+      schema,
+      savedApp.current,
+    );
     const aadhaarNumber =
       payload.aadhaarNumber && payload.aadhaarNumber !== lastAadhaarSent.current
         ? payload.aadhaarNumber

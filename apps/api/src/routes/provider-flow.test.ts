@@ -69,11 +69,12 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     applicationId: string,
     fieldKey: string,
     purpose: 'document' | 'profile',
+    kind: 'image' | 'document' = 'image',
   ) {
     const session = await call(who, 'POST', `/v1/provider/applications/${applicationId}/kyc-upload-session`, {
       fieldKey,
       purpose,
-      kind: 'image',
+      kind,
       filename: `${fieldKey}.png`,
       contentType: 'image/png',
       byteSize: PNG_BYTES.length,
@@ -121,8 +122,10 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     assert.equal((await call('OWNER', 'PUT', `/v1/provider/applications/${id}/services`, { categoryIds: [categoryId] })).status, 200);
     const patched = await call('OWNER', 'PATCH', `/v1/provider/applications/${id}`, completePayload(name));
     assert.equal(patched.status, 200, JSON.stringify(patched.json));
-    await upload('OWNER', id, 'identity.aadhaarDocument', 'document');
-    await upload('OWNER', id, 'identity.idDocument', 'document');
+    // The mobile app sends document fields as kind "document" even when the
+    // file is a photo of the document (JPEG/PNG).
+    await upload('OWNER', id, 'identity.aadhaarDocument', 'document', 'document');
+    await upload('OWNER', id, 'identity.idDocument', 'document', 'document');
     return id;
   }
 

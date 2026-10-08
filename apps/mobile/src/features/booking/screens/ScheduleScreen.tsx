@@ -17,19 +17,9 @@ import { RootStackParamList } from '@/shared/navigation/types';
 import { ServiceMode } from '@/shared/types';
 import { useCreateBookingMutation } from '@/shared/api/bookingHooks';
 import { isApiEnabled } from '@/shared/api/config';
+import { scheduleToIso } from '@/shared/utils/bookingDates';
 
-/** "2026-10-09" + "10:30 AM" (device-local) -> ISO timestamp. */
-export function scheduleToIso(date: string, time: string): string | null {
-  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  const t = /^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i.exec(time.trim());
-  if (!d || !t) return null;
-  let hour = Number(t[1]);
-  const meridiem = t[3]?.toUpperCase();
-  if (meridiem === 'PM' && hour < 12) hour += 12;
-  if (meridiem === 'AM' && hour === 12) hour = 0;
-  const at = new Date(Number(d[1]), Number(d[2]) - 1, Number(d[3]), hour, Number(t[2]));
-  return Number.isNaN(at.getTime()) ? null : at.toISOString();
-}
+export { scheduleToIso };
 
 const HEALTH_KINDS = new Set(['doctor', 'lab', 'appointment']);
 

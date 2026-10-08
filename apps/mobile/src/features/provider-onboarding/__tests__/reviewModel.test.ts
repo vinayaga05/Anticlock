@@ -153,5 +153,8 @@ describe('formatFieldValue', () => {
         'y',
       ),
     ).toBe('Yes please');
+    const time = { key: 't', type: 'time', label: 'Opens', sectionId: 'x' } as const;
+    expect(formatFieldValue(time, '06:00')).toBe('6:00 AM');
+    expect(formatFieldValue(time, '20:30')).toBe('8:30 PM');
   });
 });

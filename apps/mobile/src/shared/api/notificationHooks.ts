@@ -33,7 +33,7 @@ export function useNotifications(options?: { unreadOnly?: boolean }) {
       );
       return response;
     },
-    enabled: isApiEnabled(),
+    enabled: isApiEnabled,
     staleTime: 30000, // 30 seconds
   });
 }
@@ -51,7 +51,7 @@ export function useUnreadCount() {
       );
       return response;
     },
-    enabled: isApiEnabled(),
+    enabled: isApiEnabled,
     staleTime: 30000,
     refetchInterval: 60000, // Poll every minute for unread count
   });

@@ -147,6 +147,42 @@ describe('buildApplicationPayload', () => {
     expect(result.dynamicPayload).toEqual({ 'gym.capacity': null });
     expect(result.aadhaarNumber).toBeUndefined();
   });
+
+  it('keeps the last saved number while a value is half-typed', () => {
+    const saved = {
+      commonPayload: {
+        services: { pricingStartsAt: 1500 },
+        location: { latitude: 13.04, longitude: 80.23, serviceRadiusKm: 8 },
+      },
+    } as never;
+    const result = buildApplicationPayload(
+      {
+        'services.pricingStartsAt': '1500.',
+        'location.map': { latitude: '13.', longitude: '-' },
+        'location.serviceRadiusKm': '-',
+        'gym.capacity': '4x',
+      },
+      schema,
+      saved,
+    );
+    expect(result.commonPayload.services).toEqual({ pricingStartsAt: 1500 });
+    expect(result.commonPayload.location).toEqual({
+      latitude: 13.04,
+      longitude: 80.23,
+      serviceRadiusKm: 8,
+    });
+    // Dynamic keys merge individually on the API, so an unsent key is kept.
+    expect(result.dynamicPayload).toEqual({});
+
+    // A deliberately emptied value is still cleared.
+    const cleared = buildApplicationPayload(
+      { 'services.pricingStartsAt': '', 'location.map': { latitude: '', longitude: '' } },
+      schema,
+      saved,
+    );
+    expect(cleared.commonPayload.services).toEqual({});
+    expect(cleared.commonPayload.location).toEqual({});
+  });
 });
 
 describe('hydrateFormValues', () => {

@@ -157,6 +157,31 @@ export function hydrateFormValues(
   return values;
 }
 
+function getNestedValue(obj: Record<string, unknown>, key: string): unknown {
+  let current: unknown = obj;
+  for (const part of key.split('.')) {
+    if (!current || typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+}
+
+function isEmptyLocation(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return true;
+  return Object.values(value as Record<string, unknown>).every(isEmptyValue);
+}
+
+function savedLocation(
+  savedCommon: Record<string, unknown>,
+  section: string,
+): LocationValue | null {
+  const stored = (savedCommon[section] ?? {}) as Record<string, unknown>;
+  return parseLocationValue({
+    latitude: stored.latitude,
+    longitude: stored.longitude,
+  });
+}
+
 export type BuiltApplicationPayload = {
   commonPayload: Record<string, unknown>;
   dynamicPayload: Record<string, unknown>;
@@ -167,13 +192,16 @@ export type BuiltApplicationPayload = {
  * Builds the PATCH body from form values: numbers are parsed, media fields
  * are written to their *MediaId keys, a map location becomes
  * location.latitude/longitude, documents and Aadhaar never enter the
- * payload. Values that fail to parse are omitted so a draft autosave never
- * fails because of a half-typed number (the field shows an error instead).
+ * payload. A value that fails to parse (a half-typed number) never fails the
+ * autosave: the field shows an error and the last saved value (`saved`) is
+ * sent instead, because the API replaces each common section wholesale.
  */
 export function buildApplicationPayload(
   values: Record<string, unknown>,
   schema?: ResolvedProviderFormSchema | null,
+  saved?: Pick<ProviderApplicationDetail, 'commonPayload'> | null,
 ): BuiltApplicationPayload {
+  const savedCommon = (saved?.commonPayload ?? {}) as Record<string, unknown>;
   const fieldsByKey = new Map((schema?.fields ?? []).map(f => [f.key, f]));
   const commonPayload: Record<string, unknown> = {};
   const dynamicPayload: Record<string, unknown> = {};
@@ -195,20 +223,32 @@ export function buildApplicationPayload(
 
     if (field?.type === 'location') {
       const loc = parseLocationValue(raw);
+      const typed = !isEmptyLocation(raw);
       if (isCommon) {
-        if (loc) {
-          setNestedValue(commonPayload, `${prefix}.latitude`, loc.latitude);
-          setNestedValue(commonPayload, `${prefix}.longitude`, loc.longitude);
+        const keep = loc ?? (typed ? savedLocation(savedCommon, prefix) : null);
+        if (keep) {
+          setNestedValue(commonPayload, `${prefix}.latitude`, keep.latitude);
+          setNestedValue(commonPayload, `${prefix}.longitude`, keep.longitude);
         }
         continue;
       }
+      // Dynamic keys merge one by one on the API: skipping keeps the saved value.
+      if (!loc && typed) continue;
       value = loc ?? undefined;
     } else if (field && NUMERIC_TYPES.has(field.type)) {
       if (isEmptyValue(raw)) {
         value = undefined;
       } else {
         const n = parseNumberInput(raw);
-        if (n === null) continue;
+        if (n === null) {
+          if (isCommon) {
+            const previous = getNestedValue(savedCommon, targetKey);
+            if (typeof previous === 'number') {
+              setNestedValue(commonPayload, targetKey, previous);
+            }
+          }
+          continue;
+        }
         value = n;
       }
     } else if (typeof raw === 'string') {
@@ -355,4 +395,12 @@ export function computeCompletion(
   const required = schema.fields.filter(f => f.required);
   const done = required.filter(f => !errors[f.key]).length;
   return { required: required.length, done, errors };
+}
+
+/** "HH:mm" -> "h:mm AM/PM"; anything else is returned unchanged. */
+export function formatTimeLabel(value: string) {
+  const m = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!m) return value;
+  const h = Number(m[1]);
+  return `${h % 12 === 0 ? 12 : h % 12}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`;
 }

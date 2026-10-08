@@ -6,6 +6,7 @@ import type {
 } from '@/features/provider-onboarding/types';
 import {
   computeCompletion,
+  formatTimeLabel,
   hydrateFormValues,
   isEmptyValue,
   parseLocationValue,
@@ -147,6 +148,9 @@ export function formatFieldValue(
     return count === 1 ? '1 photo' : `${count} photos`;
   }
   if (field.type === 'video') return 'Video added';
+  if (field.type === 'time' && typeof value === 'string') {
+    return formatTimeLabel(value);
+  }
   const options = new Map((field.options ?? []).map(o => [o.value, o.label]));
   if (Array.isArray(value)) {
     return value.map(v => options.get(String(v)) ?? String(v)).join(', ');

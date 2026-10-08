@@ -46,6 +46,7 @@ import { computeApplicationReadiness } from './applicationReadiness.js';
 
 type ApplicationRow = typeof providerApplications.$inferSelect;
 
+const PHOTO_DOCUMENT_MIMES = new Set(['image/jpeg', 'image/jpg', 'image/png']);
 const editableStatuses = new Set<string>(['draft', 'more_info_requested']);
 const submittableStatuses = new Set<string>(PROVIDER_APPLICANT_SUBMITTABLE_STATUSES);
 /** Guards against unbounded draft creation by one account. */
@@ -553,8 +554,14 @@ export class ProviderApplicationService {
     if (!editableStatuses.has(row.status)) {
       throw appError('Application cannot be edited in current status', 'invalid_status', 409);
     }
+    // KYC documents may be photographed. The generic media pipeline only
+    // accepts PDFs for kind "document", so a JPEG/PNG of a document is stored
+    // as kind "image"; it stays private because the bucket follows `purpose`.
+    const contentType = body.contentType.trim().toLowerCase().split(';', 1)[0] ?? '';
+    const kind =
+      body.kind === 'document' && PHOTO_DOCUMENT_MIMES.has(contentType) ? 'image' : body.kind;
     return mediaService.createMobileProviderUploadSession(mobileUserId, applicationId, {
-      kind: body.kind,
+      kind,
       accessLevel: body.purpose === 'profile' ? 'public' : 'private',
       filename: body.filename,
       contentType: body.contentType,

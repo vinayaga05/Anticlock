@@ -645,8 +645,13 @@ async function migrate() {
     )
   `;
 
+  // One account owns one personal profile plus any number of business
+  // profiles, so providers.mobile_user_id is NOT unique. Older databases got
+  // a unique index here; dropping it removes only the constraint (no rows
+  // change). A plain index keeps owner lookups fast.
+  await sql`DROP INDEX IF EXISTS providers_mobile_user_uid`;
   await sql`
-    CREATE UNIQUE INDEX IF NOT EXISTS providers_mobile_user_uid
+    CREATE INDEX IF NOT EXISTS providers_mobile_user_idx
       ON providers (mobile_user_id)
   `;
 
@@ -704,6 +709,48 @@ async function migrate() {
       created_at timestamptz NOT NULL DEFAULT now(),
       UNIQUE (application_id, field_key)
     )
+  `;
+
+  // Multi-business onboarding: each approved application creates exactly one
+  // business profile. `source_application_id` links the provider to the
+  // application that created it and (with the partial unique index) makes
+  // approval idempotent even if two admins approve at the same moment.
+  // Backfill only fills NULLs from the existing provider_applications link,
+  // choosing the earliest approved application per provider; no other
+  // column or row is modified.
+  await sql`
+    ALTER TABLE providers
+      ADD COLUMN IF NOT EXISTS source_application_id uuid
+        REFERENCES provider_applications(id) ON DELETE SET NULL
+  `;
+  await sql`
+    UPDATE providers p
+    SET source_application_id = src.application_id
+    FROM (
+      SELECT DISTINCT ON (a.provider_id) a.provider_id, a.id AS application_id
+      FROM provider_applications a
+      WHERE a.provider_id IS NOT NULL
+      ORDER BY a.provider_id, a.reviewed_at ASC NULLS LAST, a.created_at ASC
+    ) src
+    WHERE p.id = src.provider_id
+      AND p.source_application_id IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM providers other
+        WHERE other.source_application_id = src.application_id
+      )
+  `;
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS providers_source_application_uid
+      ON providers (source_application_id)
+      WHERE source_application_id IS NOT NULL
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS provider_applications_user_idx
+      ON provider_applications (mobile_user_id, updated_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS provider_service_offerings_category_idx
+      ON provider_service_offerings (category_id)
   `;
 
   await sql`

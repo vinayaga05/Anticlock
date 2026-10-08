@@ -10,6 +10,8 @@ import {
 } from '@/shared/api/notificationHooks';
 import { isApiEnabled } from '@/shared/api/config';
 import type { Notification } from '@/shared/api/notificationHooks';
+import { useNavigation } from '@react-navigation/native';
+import { routeForNotification } from '@/shared/navigation/rootNavigation';
 
 function getIconForType(type: string): string {
   switch (type) {
@@ -56,15 +58,19 @@ function formatTimestamp(timestamp: string): string {
 
 export function KnockNotificationsList() {
   const theme = useTheme();
-  const apiEnabled = isApiEnabled();
+  const apiEnabled = isApiEnabled;
   const { data, isLoading, error } = useNotifications();
   const markRead = useMarkNotificationRead();
+  const navigation = useNavigation<any>();
 
   const handleNotificationPress = (notification: Notification) => {
     if (!notification.readAt) {
       markRead.mutate(notification.id);
     }
-    // TODO: Navigate based on notification.data
+    const route = routeForNotification(
+      notification.data as Record<string, unknown> | undefined,
+    );
+    if (route) navigation.navigate(route.screen, route.params);
   };
 
   // Use mock data when API is disabled

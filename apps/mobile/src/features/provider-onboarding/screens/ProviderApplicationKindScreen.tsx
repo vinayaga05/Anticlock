@@ -48,6 +48,8 @@ export function ProviderApplicationKindScreen() {
       if (!applicationId) {
         const created = await create.mutateAsync({ providerKind: selected });
         applicationId = created.id;
+        // Coming back to this screen must edit the same draft, not start another.
+        navigation.setParams({ applicationId });
       } else {
         await update.mutateAsync({ providerKind: selected });
       }

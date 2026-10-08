@@ -16,9 +16,12 @@ import {
   getCoursesForCategory,
   getEventsForCategory,
   getProductsForCategory,
-  getProvidersForCategory,
 } from '@/shared/data/services';
 import { ProviderCard } from '@/features/services/components/ProviderCard';
+import {
+  isMarketplaceProviderId,
+  useMarketplaceProvidersQuery,
+} from '@/shared/api/marketplaceHooks';
 import { EventCard } from '@/features/services/components/EventCard';
 import { CourseCard } from '@/features/services/components/CourseCard';
 import { ProductCard } from '@/features/services/components/ProductCard';
@@ -52,9 +55,12 @@ export function ServiceCategoryScreen() {
     if (category) navigation.setOptions({ title: category.name });
   }, [category, navigation]);
 
+  // Approved businesses offering this category (or a sub-category) come
+  // from the API; fixtures are only used when the app runs offline.
+  const providersQuery = useMarketplaceProvidersQuery({ categoryId, limit: 50 });
   const providers = useMemo(
-    () => getProvidersForCategory(categoryId),
-    [categoryId],
+    () => providersQuery.data ?? [],
+    [providersQuery.data],
   );
   const events = useMemo(() => getEventsForCategory(categoryId), [categoryId]);
   const courses = useMemo(
@@ -316,6 +322,16 @@ export function ServiceCategoryScreen() {
             provider={provider}
             health={isHealth}
             onPress={() => {
+              // Real businesses always open their own detail page; the legacy
+              // jumps below only apply to the offline demo fixtures.
+              if (isMarketplaceProviderId(provider.id)) {
+                navigation.navigate('UniversalDetail', {
+                  entityType: 'provider',
+                  entityId: provider.id,
+                  categoryId,
+                });
+                return;
+              }
               if (
                 category.legacyRoute === 'Doctors' &&
                 provider.id === 'prov-doc-remya'

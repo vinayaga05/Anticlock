@@ -5,6 +5,11 @@ import { EmptyState } from '@/shared/components/EmptyState';
 import { SectionHeader } from '@/shared/components/SectionHeader';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { searchCatalog } from '@/shared/data/services';
+import {
+  marketplaceUsesApi,
+  useMarketplaceProvidersQuery,
+} from '@/shared/api/marketplaceHooks';
+import { useDebouncedValue } from '@/shared/hooks/useDebouncedValue';
 import { ServiceCategoryCard } from './ServiceCategoryGrid';
 import { ProviderCard } from './ProviderCard';
 import { EventCard } from './EventCard';
@@ -16,9 +21,21 @@ export function ServiceCatalogSearchResults({ query }: { query: string }) {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const normalizedQuery = query.trim();
-  const results = useMemo(
+  const debouncedQuery = useDebouncedValue(normalizedQuery, 250);
+  const catalog = useMemo(
     () => searchCatalog(normalizedQuery),
     [normalizedQuery],
+  );
+  const providersQuery = useMarketplaceProvidersQuery(
+    { q: debouncedQuery, limit: 10 },
+    { enabled: Boolean(debouncedQuery) },
+  );
+  const results = useMemo(
+    () => ({
+      ...catalog,
+      providers: marketplaceUsesApi ? providersQuery.data ?? [] : catalog.providers,
+    }),
+    [catalog, providersQuery.data],
   );
   const resultCount =
     results.categories.length +

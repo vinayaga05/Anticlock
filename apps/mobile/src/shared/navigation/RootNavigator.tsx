@@ -7,6 +7,7 @@ import {
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Linking } from 'react-native';
 import { linking } from '@/shared/navigation/linking';
+import { rootNavigationRef } from '@/shared/navigation/rootNavigation';
 import { 
   storePendingDeepLink, 
   usePendingDeepLink 
@@ -155,6 +156,7 @@ export function RootNavigator() {
 
   return (
     <NavigationContainer
+      ref={rootNavigationRef}
       theme={navigationTheme}
       linking={linking}
       onStateChange={state => {
@@ -495,7 +497,7 @@ export function RootNavigator() {
             <Stack.Screen
               name="ProviderDashboard"
               component={ProviderDashboardScreen}
-              options={{ title: 'Provider dashboard' }}
+              options={{ title: 'Provider dashboard', headerShown: false }}
             />
           </>
         )}

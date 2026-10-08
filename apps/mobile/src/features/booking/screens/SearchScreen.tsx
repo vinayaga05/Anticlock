@@ -7,13 +7,28 @@ import { EmptyState } from '@/shared/components/EmptyState';
 import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { searchCatalog } from '@/shared/data/services';
+import {
+  marketplaceUsesApi,
+  useMarketplaceProvidersQuery,
+} from '@/shared/api/marketplaceHooks';
+import { useDebouncedValue } from '@/shared/hooks/useDebouncedValue';
 
 export function SearchScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const [q, setQ] = useState('');
 
-  const results = useMemo(() => searchCatalog(q), [q]);
+  const debouncedQ = useDebouncedValue(q.trim(), 250);
+  const catalog = useMemo(() => searchCatalog(q), [q]);
+  // Providers are real approved businesses from the API (fixtures only offline).
+  const providersQuery = useMarketplaceProvidersQuery({ q: debouncedQ, limit: 6 });
+  const results = useMemo(
+    () => ({
+      ...catalog,
+      providers: marketplaceUsesApi ? providersQuery.data ?? [] : catalog.providers,
+    }),
+    [catalog, providersQuery.data],
+  );
 
   const hasAny =
     results.categories.length +
@@ -123,7 +138,7 @@ export function SearchScreen() {
                 <Row
                   key={p.id}
                   title={p.name}
-                  subtitle={p.type}
+                  subtitle={p.subtitle || p.type}
                   icon="user"
                   onPress={() =>
                     navigation.navigate('UniversalDetail', {

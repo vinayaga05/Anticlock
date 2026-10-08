@@ -4,6 +4,7 @@ import { useTheme } from '@/shared/hooks/useTheme';
 import { timeSlots } from '@/shared/data/mocks';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { AppIcon } from '@/shared/components/AppIcon';
+import { toLocalDateId } from '@/shared/utils/bookingDates';
 
 type Props = {
   selectedDate: string | null;
@@ -25,7 +26,7 @@ export function SchedulePicker({
       const d = new Date(base);
       d.setDate(base.getDate() + i);
       return {
-        id: d.toISOString().slice(0, 10),
+        id: toLocalDateId(d),
         day: d.toLocaleDateString('en-US', { weekday: 'short' }),
         date: d.getDate().toString(),
       };

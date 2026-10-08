@@ -980,14 +980,48 @@ export class MediaService {
     );
   }
 
+  /**
+   * Provider onboarding uploads. `purpose: "document"` stores a private KYC
+   * document; `purpose: "profile"` stores a public profile image/video whose
+   * media id is saved in the application payload. Both keep the
+   * `provider-app-<applicationId>` marker in the storage key, which is how
+   * PUT/complete and later payload validation prove ownership.
+   */
   async createMobileProviderUploadSession(
     _mobileUserId: string,
     applicationId: string,
-    body: CreateUploadSessionRequest
+    body: CreateUploadSessionRequest & { purpose?: "document" | "profile" }
   ) {
     assertAllowedMime(body.kind, body.contentType);
-    const maxBytes = Math.min(body.byteSize, maxBytesForKind(body.kind));
-    const accessLevel = "private" as const;
+    const kindMax = maxBytesForKind(body.kind);
+    if (body.byteSize > kindMax) {
+      throw Object.assign(new Error("File exceeds max size"), {
+        code: "file_too_large",
+        status: 400,
+      });
+    }
+    if (body.purpose === "profile" && body.kind === "document") {
+      throw Object.assign(new Error("Profile media must be an image or video"), {
+        code: "validation_error",
+        status: 400,
+      });
+    }
+    if (body.kind === "video") {
+      validateVideoUploadMetadata({
+        expectedMime: body.contentType,
+        contentType: body.contentType,
+        maxBytes: kindMax,
+        byteSize: body.byteSize,
+        durationMs: body.durationMs ?? null,
+      });
+    }
+    // Allow a little slack over the picker-reported size (HEIC->JPEG etc.)
+    // while never exceeding the per-kind ceiling.
+    const maxBytes = Math.min(
+      kindMax,
+      Math.max(body.byteSize, Math.ceil(body.byteSize * 1.1))
+    );
+    const accessLevel = body.purpose === "profile" ? "public" : "private";
     const bucket = bucketForAccess(accessLevel);
     const ext = extensionForMime(body.contentType);
     const hint = `provider-app-${applicationId}`;
@@ -1032,14 +1066,91 @@ export class MediaService {
       maxBytes,
       sessionId: session.id,
     });
+    const apiBase = (
+      process.env.API_PUBLIC_URL ??
+      `http://localhost:${process.env.API_PORT ?? 4000}`
+    ).replace(/\/$/, "");
 
     return {
       sessionId: session.id,
       mediaId: asset.id,
-      uploadUrl: target.uploadUrl,
+      // Local storage writes through the mobile-authorized provider route;
+      // R2 returns a presigned URL that must not receive the bearer token.
+      uploadUrl:
+        this.storage.name === "local"
+          ? `${apiBase}/v1/provider/applications/${applicationId}/kyc-upload-sessions/${session.id}/content`
+          : target.uploadUrl,
       headers: target.headers,
       storageKey,
       expiresAt: expiresAt.toISOString(),
+    };
+  }
+
+  /** Public delivery URL for a ready, public media asset (else null). */
+  async getPublicMediaUrl(mediaId: string): Promise<string | null> {
+    const asset = await this.repo.getAsset(mediaId);
+    if (
+      !asset ||
+      asset.accessLevel !== "public" ||
+      asset.processingStatus !== "ready" ||
+      asset.deletedAt ||
+      asset.archivedAt
+    ) {
+      return null;
+    }
+    return this.storage.createDownloadUrl({
+      bucket: asset.bucket as "public-media" | "private-documents",
+      key: asset.storageKey,
+      accessLevel: "public",
+    });
+  }
+
+  /**
+   * Ensures profile media ids saved on an application were uploaded for that
+   * application, are public, ready, and of the expected kind.
+   */
+  async requireProviderApplicationMedia(
+    applicationIds: string[],
+    mediaIds: string[],
+    kind: "image" | "video"
+  ) {
+    const markers = applicationIds.map((id) => `/provider-app-${id}/`);
+    for (const mediaId of new Set(mediaIds)) {
+      const asset = await this.repo.getAsset(mediaId);
+      if (
+        !asset ||
+        !markers.some((marker) => asset.storageKey.includes(marker)) ||
+        asset.accessLevel !== "public"
+      ) {
+        throw Object.assign(
+          new Error("Profile media was not uploaded for this application"),
+          { code: "media_forbidden", status: 403 }
+        );
+      }
+      if (asset.kind !== kind) {
+        throw Object.assign(new Error(`Profile media must be a ${kind}`), {
+          code: "validation_error",
+          status: 400,
+        });
+      }
+      if (asset.processingStatus !== "ready" || asset.deletedAt || asset.archivedAt) {
+        throw Object.assign(new Error("Profile media is not ready yet"), {
+          code: "media_not_ready",
+          status: 400,
+        });
+      }
+    }
+  }
+
+  async getAssetSummary(mediaId: string) {
+    const asset = await this.repo.getAsset(mediaId);
+    if (!asset) return null;
+    return {
+      id: asset.id,
+      kind: asset.kind,
+      accessLevel: asset.accessLevel,
+      originalFilename: asset.originalFilename ?? null,
+      processingStatus: asset.processingStatus,
     };
   }
 

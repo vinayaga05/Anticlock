@@ -22,7 +22,18 @@ export function ProviderCard({
   const content = (
     <>
       <View style={styles.row}>
-        <Image source={{ uri: provider.imageUrl }} style={styles.avatar} />
+        {provider.imageUrl ? (
+          <Image source={{ uri: provider.imageUrl }} style={styles.avatar} />
+        ) : (
+          <View
+            style={[
+              styles.avatar,
+              styles.avatarFallback,
+              { backgroundColor: theme.colors.primarySoft },
+            ]}>
+            <AppIcon name="shop" size={22} color={theme.colors.primary} />
+          </View>
+        )}
         <View style={{ flex: 1, gap: 4 }}>
           <View style={styles.nameRow}>
             <Text
@@ -59,7 +70,10 @@ export function ProviderCard({
                 theme.typography.caption,
                 { color: health ? healthTheme.textMuted : theme.colors.textSecondary },
               ]}>
-              {provider.rating} · {provider.location.area}
+              {provider.reviewCount > 0 ? provider.rating : 'New'}
+              {provider.location.area || provider.location.city
+                ? ` · ${provider.location.area || provider.location.city}`
+                : ''}
             </Text>
           </View>
           {provider.priceFrom != null ? (
@@ -107,6 +121,7 @@ export function ProviderCard({
 }
 
 const styles = StyleSheet.create({
+  avatarFallback: { alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', gap: 12 },
   avatar: { width: 72, height: 72, borderRadius: 18 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

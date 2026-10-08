@@ -38,6 +38,9 @@ export type RootStackParamList = {
     id: string;
     title: string;
     fee: number;
+    /** Approved marketplace business: creates a real booking via the API. */
+    providerId?: string;
+    categoryId?: string;
   };
   BookingConfirm: {
     kind: 'doctor' | 'lab' | 'fitness' | 'appointment' | 'class';
@@ -95,11 +98,11 @@ export type RootStackParamList = {
   ProviderApplicationIntro: undefined;
   ProviderApplicationKind: { applicationId?: string } | undefined;
   ProviderApplicationServices: { applicationId: string };
-  ProviderApplicationForm: { applicationId: string };
+  ProviderApplicationForm: { applicationId: string; focusField?: string };
   ProviderApplicationReview: { applicationId: string };
   ProviderApplicationStatus: { applicationId: string };
   ProviderBusinesses: undefined;
-  ProviderDashboard: undefined;
+  ProviderDashboard: { providerId?: string } | undefined;
 };
 
 declare global {

@@ -4,7 +4,10 @@ import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
-import type { ProviderApplicationAdminDetail } from '@anticlock/contracts';
+import type {
+  ProviderApplicationAdminDetail,
+  ProviderApplicationReviewAction,
+} from '@anticlock/contracts';
 import { AdminShell } from '@/components/AdminShell';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -41,7 +44,7 @@ export default function ProviderApplicationDetailPage() {
 
   const review = useMutation({
     mutationFn: (body: {
-      action: 'approve' | 'reject' | 'request_info' | 'mark_under_review';
+      action: ProviderApplicationReviewAction;
       notes?: string;
       infoRequestMessage?: string;
     }) =>
@@ -58,6 +61,9 @@ export default function ProviderApplicationDetailPage() {
   });
 
   const app = data?.application;
+  // Only transitions the API will accept for the current status are offered.
+  const allowed = new Set(app?.allowedActions ?? []);
+  const readiness = app?.readiness;
 
   return (
     <AdminShell>
@@ -73,14 +79,63 @@ export default function ProviderApplicationDetailPage() {
             <p>
               <strong>{app.applicantName}</strong> · {app.applicantPhone}
             </p>
+            <p>
+              <strong>{app.businessName}</strong>
+            </p>
             <p className="muted">
               {app.providerKind} · {app.status.replace(/_/g, ' ')} ·{' '}
-              {app.categoryIds.join(', ')}
+              {(app.categories ?? []).map(c => c.name).join(', ') ||
+                app.categoryIds.join(', ')}
             </p>
             {app.infoRequestMessage ? (
               <p className="error">Info requested: {app.infoRequestMessage}</p>
             ) : null}
+            {app.reviewNotes ? <p className="muted">Review notes: {app.reviewNotes}</p> : null}
           </div>
+
+          {readiness ? (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <h2 className="section-title">
+                Completeness: {readiness.completedCount}/{readiness.requiredCount} required
+              </h2>
+              {readiness.complete ? (
+                <p className="muted">All required details and documents are present.</p>
+              ) : (
+                <ul>
+                  {readiness.missing.map(item => (
+                    <li key={item.key} className="error">
+                      {item.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
+
+          {(app.mediaPreviews ?? []).some(m => m.url) ? (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <h2 className="section-title">Profile media</h2>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                {(app.mediaPreviews ?? [])
+                  .filter(m => m.url)
+                  .map(m =>
+                    m.kind === 'image' ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={m.mediaId}
+                        src={m.url!}
+                        alt={m.filename ?? 'Profile media'}
+                        style={{ width: 120, height: 120, objectFit: 'cover', borderRadius: 8 }}
+                      />
+                    ) : (
+                      <a key={m.mediaId} href={m.url!} target="_blank" rel="noreferrer">
+                        {m.filename ?? 'Video'}
+                      </a>
+                    ),
+                  )}
+              </div>
+            </div>
+          ) : null}
 
           <div className="card" style={{ marginBottom: 16 }}>
             <h2 className="section-title">Common details</h2>
@@ -117,61 +172,85 @@ export default function ProviderApplicationDetailPage() {
           {hasPermission('provider.verify') ? (
             <div className="card">
               <h2 className="section-title">Actions</h2>
-              <textarea
-                className="input"
-                rows={3}
-                placeholder="Review notes"
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-              />
-              <textarea
-                className="input"
-                rows={3}
-                placeholder="Message to applicant (for request info)"
-                value={infoMessage}
-                onChange={e => setInfoMessage(e.target.value)}
-                style={{ marginTop: 8 }}
-              />
-              <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  className="btn secondary"
-                  disabled={review.isPending}
-                  onClick={() => review.mutate({ action: 'mark_under_review', notes })}
-                >
-                  Mark under review
-                </button>
-                <button
-                  type="button"
-                  className="btn secondary"
-                  disabled={review.isPending}
-                  onClick={() =>
-                    review.mutate({
-                      action: 'request_info',
-                      notes,
-                      infoRequestMessage: infoMessage || notes,
-                    })
-                  }
-                >
-                  Request more info
-                </button>
-                <button
-                  type="button"
-                  className="btn secondary"
-                  disabled={review.isPending}
-                  onClick={() => review.mutate({ action: 'reject', notes })}
-                >
-                  Reject
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={review.isPending}
-                  onClick={() => review.mutate({ action: 'approve', notes })}
-                >
-                  Approve
-                </button>
-              </div>
+              {allowed.size === 0 ? (
+                <p className="muted">
+                  No review action is available while the application is{' '}
+                  {app.status.replace(/_/g, ' ')}.
+                </p>
+              ) : (
+                <>
+                  <textarea
+                    className="input"
+                    rows={3}
+                    placeholder="Review notes (required to reject)"
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                  />
+                  {allowed.has('request_info') ? (
+                    <textarea
+                      className="input"
+                      rows={3}
+                      placeholder="Message to applicant (required to request info)"
+                      value={infoMessage}
+                      onChange={e => setInfoMessage(e.target.value)}
+                      style={{ marginTop: 8 }}
+                    />
+                  ) : null}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                    {allowed.has('mark_under_review') ? (
+                      <button
+                        type="button"
+                        className="btn secondary"
+                        disabled={review.isPending}
+                        onClick={() => review.mutate({ action: 'mark_under_review', notes })}
+                      >
+                        Mark under review
+                      </button>
+                    ) : null}
+                    {allowed.has('request_info') ? (
+                      <button
+                        type="button"
+                        className="btn secondary"
+                        disabled={review.isPending || !(infoMessage || notes).trim()}
+                        onClick={() =>
+                          review.mutate({
+                            action: 'request_info',
+                            notes,
+                            infoRequestMessage: infoMessage || notes,
+                          })
+                        }
+                      >
+                        Request more info
+                      </button>
+                    ) : null}
+                    {allowed.has('reject') ? (
+                      <button
+                        type="button"
+                        className="btn secondary"
+                        disabled={review.isPending || !notes.trim()}
+                        onClick={() => review.mutate({ action: 'reject', notes })}
+                      >
+                        Reject
+                      </button>
+                    ) : null}
+                    {allowed.has('approve') ? (
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={review.isPending || readiness?.complete === false}
+                        title={
+                          readiness?.complete === false
+                            ? 'The application is incomplete'
+                            : undefined
+                        }
+                        onClick={() => review.mutate({ action: 'approve', notes })}
+                      >
+                        Approve
+                      </button>
+                    ) : null}
+                  </div>
+                </>
+              )}
               {review.isError ? (
                 <p className="error">{(review.error as Error).message}</p>
               ) : null}

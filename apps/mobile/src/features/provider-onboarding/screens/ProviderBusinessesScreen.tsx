@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppIcon } from '@/shared/components/AppIcon';
 import { Button } from '@/shared/components/Button';
@@ -26,6 +26,39 @@ export function ProviderBusinessesScreen() {
   const insets = useSafeAreaInsets();
   const { data: applications = [], isLoading, refetch } = useProviderApplicationsQuery();
   const deleteApplication = useDeleteProviderApplicationMutation();
+
+  useFocusEffect(
+    useCallback(() => {
+      void refetch();
+    }, [refetch]),
+  );
+
+  const groups = useMemo(() => {
+    const byStatus = (statuses: string[]) =>
+      applications.filter(application => statuses.includes(application.status));
+    return [
+      { id: 'live', title: 'Live businesses', items: byStatus(['approved']) },
+      {
+        id: 'attention',
+        title: 'Needs your attention',
+        items: byStatus(['more_info_requested', 'rejected']),
+      },
+      { id: 'review', title: 'In review', items: byStatus(['submitted', 'under_review']) },
+      { id: 'drafts', title: 'Drafts', items: byStatus(['draft']) },
+    ].filter(group => group.items.length > 0);
+  }, [applications]);
+
+  const openApplication = (application: (typeof applications)[number]) => {
+    if (application.status === 'approved' && application.providerId) {
+      navigation.navigate('ProviderDashboard', { providerId: application.providerId });
+      return;
+    }
+    if (application.status === 'draft') {
+      resumeEditing(application);
+      return;
+    }
+    navigation.navigate('ProviderApplicationStatus', { applicationId: application.id });
+  };
 
   const resumeEditing = (application: (typeof applications)[number]) => {
     if (application.categoryIds.length === 0) {
@@ -84,24 +117,25 @@ export function ProviderBusinessesScreen() {
             <AppIcon name="badge-check" size={24} color="#FFFFFF" />
           </View>
           <View style={styles.heroCopy}>
-            <Text style={[styles.heroTitle, { color: theme.colors.textPrimary }]}>Your submitted businesses</Text>
-            <Text style={[styles.heroText, { color: theme.colors.textSecondary }]}>Only businesses sent for review or approved by our team appear here.</Text>
+            <Text style={[styles.heroTitle, { color: theme.colors.textPrimary }]}>Your businesses</Text>
+            <Text style={[styles.heroText, { color: theme.colors.textSecondary }]}>Drafts save automatically. Resume any time, then submit for review.</Text>
           </View>
-        </View>
-
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Under review & live</Text>
-          <Text style={[styles.count, { color: theme.colors.textSecondary }]}>{applications.length}</Text>
         </View>
 
         {isLoading ? (
           <Text style={[styles.loading, { color: theme.colors.textSecondary }]}>Loading your businesses…</Text>
         ) : applications.length ? (
-          <View style={styles.list}>
-            {applications.map(application => {
+          groups.map(group => (
+          <View key={group.id} style={styles.list}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>{group.title}</Text>
+              <Text style={[styles.count, { color: theme.colors.textSecondary }]}>{group.items.length}</Text>
+            </View>
+            {group.items.map(application => {
               const badge = statusStyle(application.status, theme);
               const editable = application.status === 'draft' || application.status === 'more_info_requested';
-              const deletable = application.status !== 'approved';
+              const deletable = application.status !== 'approved' && !application.providerId;
+              const categoryText = (application.categories ?? []).map(c => c.name).join(', ');
               return (
                 <View
                   key={application.id}
@@ -113,11 +147,7 @@ export function ProviderBusinessesScreen() {
                     },
                   ]}>
                   <PressableScale
-                    onPress={() =>
-                      navigation.navigate('ProviderApplicationStatus', {
-                        applicationId: application.id,
-                      })
-                    }
+                    onPress={() => openApplication(application)}
                     style={styles.businessPress}>
                     <View style={[styles.businessIcon, { backgroundColor: theme.colors.surfaceMuted }]}>
                       <AppIcon name={application.providerKind === 'business' ? 'shop' : 'user'} size={21} color={theme.colors.primaryMuted} />
@@ -125,7 +155,7 @@ export function ProviderBusinessesScreen() {
                     <View style={styles.businessBody}>
                       <Text style={[styles.businessName, { color: theme.colors.textPrimary }]} numberOfLines={1}>{application.businessName}</Text>
                       <Text style={[styles.businessMeta, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                        {application.categoryIds.length ? 'Primary service selected' : editable ? 'Finish your application' : application.providerKind === 'business' ? 'Business' : 'Professional'}
+                        {categoryText || (editable ? 'Choose your service to continue' : application.providerKind === 'business' ? 'Business' : 'Professional')}
                       </Text>
                       <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
                         <Text style={[styles.statusText, { color: badge.color }]}>{statusLabel(application.status)}</Text>
@@ -137,11 +167,11 @@ export function ProviderBusinessesScreen() {
                     <View style={[styles.businessActions, { borderTopColor: theme.colors.borderSoft }]}>
                       {editable ? (
                         <Button
+                          title={application.status === 'draft' ? 'Resume' : 'Edit & resubmit'}
                           icon="edit"
-                          variant="icon"
+                          variant="secondary"
                           onPress={() => resumeEditing(application)}
-                          style={styles.actionIcon}
-                          accessibilityLabel={`Edit ${application.businessName}`}
+                          accessibilityLabel={`Resume ${application.businessName}`}
                         />
                       ) : null}
                       {deletable ? (
@@ -160,15 +190,16 @@ export function ProviderBusinessesScreen() {
               );
             })}
           </View>
+          ))
         ) : (
           <View style={[styles.empty, { backgroundColor: theme.colors.surface, borderColor: theme.colors.borderSoft }]}>
             <AppIcon name="shop" size={30} color={theme.colors.primary} />
-            <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No submitted businesses yet</Text>
-            <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>Complete and submit a business profile to send it for admin approval. Unfinished drafts are not saved here.</Text>
+            <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No businesses yet</Text>
+            <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>Start a business profile. Your progress is saved as a draft until you submit it for review.</Text>
           </View>
         )}
 
-        <Button title="Add another business" icon="plus" onPress={() => navigation.navigate('ProviderApplicationKind')} />
+        <Button title={applications.length ? 'Add another business' : 'Start a business'} icon="plus" onPress={() => navigation.navigate('ProviderApplicationKind')} />
         {applications.length ? <Button title="Refresh status" variant="secondary" onPress={() => void refetch()} /> : null}
       </ScrollView>
     </View>

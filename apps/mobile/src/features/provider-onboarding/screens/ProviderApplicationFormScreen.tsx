@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
@@ -6,92 +6,182 @@ import { Button } from '@/shared/components/Button';
 import { AppIcon } from '@/shared/components/AppIcon';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { RootStackParamList } from '@/shared/navigation/types';
-import { DynamicFormRenderer } from '@/features/provider-onboarding/components/DynamicFormRenderer';
 import {
-  COMMON_SECTION_PREFIXES,
-  splitFormValues,
+  DynamicFormRenderer,
+  type FormValueUpdate,
+} from '@/features/provider-onboarding/components/DynamicFormRenderer';
+import {
+  buildApplicationPayload,
+  computeCompletion,
+  hydrateFormValues,
+  statusLabel,
 } from '@/features/provider-onboarding/utils/formValues';
 import {
+  deleteProviderDocument,
+  useAutosaveProviderApplicationMutation,
   useProviderApplicationQuery,
   useResolvedFormSchemaQuery,
-  useUpdateProviderApplicationMutation,
 } from '@/shared/api/providerHooks';
+
+const AUTOSAVE_DELAY_MS = 1200;
+const EDITABLE_STATUSES = new Set(['draft', 'more_info_requested']);
+
+type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
 export function ProviderApplicationFormScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const route =
     useRoute<RouteProp<RootStackParamList, 'ProviderApplicationForm'>>();
-  const applicationQuery = useProviderApplicationQuery(
-    route.params.applicationId,
-  );
+  const { applicationId, focusField } = route.params;
+  const applicationQuery = useProviderApplicationQuery(applicationId);
   const app = applicationQuery.data;
   const schemaQuery = useResolvedFormSchemaQuery(
     app?.providerKind,
     app?.categoryIds ?? [],
   );
-  const update = useUpdateProviderApplicationMutation(
-    route.params.applicationId,
-  );
-
-  const initialValues = useMemo(() => {
-    const values: Record<string, unknown> = {};
-    const flatten = (obj: Record<string, unknown>, prefix = '') => {
-      for (const [key, value] of Object.entries(obj)) {
-        const full = prefix ? `${prefix}.${key}` : key;
-        if (value && typeof value === 'object' && !Array.isArray(value)) {
-          flatten(value as Record<string, unknown>, full);
-        } else {
-          values[full] = value;
-        }
-      }
-    };
-    flatten((app?.commonPayload ?? {}) as Record<string, unknown>);
-    Object.assign(values, app?.dynamicPayload ?? {});
-    return values;
-  }, [app]);
+  const schema = schemaQuery.data;
+  const autosave = useAutosaveProviderApplicationMutation(applicationId);
+  const editable = app ? EDITABLE_STATUSES.has(app.status) : false;
 
   const [values, setValues] = useState<Record<string, unknown>>({});
+  const [uploadedDocs, setUploadedDocs] = useState<Set<string>>(new Set());
   const [hydrated, setHydrated] = useState(false);
-  if (app && !hydrated) {
-    setValues(initialValues);
+  const [touched, setTouched] = useState<Set<string>>(
+    () => new Set(focusField ? [focusField] : []),
+  );
+  const [showAllErrors, setShowAllErrors] = useState(Boolean(focusField));
+  const [saveState, setSaveState] = useState<SaveState>('idle');
+  const dirty = useRef(false);
+  const latestValues = useRef(values);
+  latestValues.current = values;
+  // Last server copy (autosave writes it into the query cache).
+  const savedApp = useRef(app);
+  savedApp.current = app;
+  const inFlight = useRef<Promise<void> | null>(null);
+  const lastAadhaarSent = useRef<string | undefined>(undefined);
+
+  // Hydrate once both the saved application and its form schema are ready.
+  useEffect(() => {
+    if (hydrated || !app || !schema) return;
+    setValues(hydrateFormValues(app, schema));
+    setUploadedDocs(new Set(app.documents.map(d => d.fieldKey)));
     setHydrated(true);
-  }
-  const [uploadedDocs, setUploadedDocs] = useState(
+  }, [app, hydrated, schema]);
+
+  const mediaPreviews = useMemo(
     () =>
-      new Set(
-        app?.documents.map((d: { fieldKey: string }) => d.fieldKey) ?? [],
-      ),
+      Object.fromEntries((app?.mediaPreviews ?? []).map(m => [m.mediaId, m.url])),
+    [app?.mediaPreviews],
   );
 
-  const onChange = (key: string, value: unknown) => {
-    setValues(prev => {
-      const next = { ...prev, [key]: value };
-      return next;
-    });
-  };
-
-  const onSave = async () => {
-    const { commonPayload, dynamicPayload } = splitFormValues(
-      values,
-      COMMON_SECTION_PREFIXES,
+  const saveNow = useCallback(async (): Promise<void> => {
+    if (!editable || !schema) return;
+    if (inFlight.current) {
+      await inFlight.current;
+      if (!dirty.current) return;
+    }
+    dirty.current = false;
+    const payload = buildApplicationPayload(
+      latestValues.current,
+      schema,
+      savedApp.current,
     );
     const aadhaarNumber =
-      typeof values['identity.aadhaarNumber'] === 'string'
-        ? values['identity.aadhaarNumber']
+      payload.aadhaarNumber && payload.aadhaarNumber !== lastAadhaarSent.current
+        ? payload.aadhaarNumber
         : undefined;
+    setSaveState('saving');
+    const run = autosave
+      .mutateAsync({
+        commonPayload: payload.commonPayload as never,
+        dynamicPayload: payload.dynamicPayload,
+        ...(aadhaarNumber ? { aadhaarNumber } : {}),
+      })
+      .then(() => {
+        if (aadhaarNumber) lastAadhaarSent.current = aadhaarNumber;
+        setSaveState(dirty.current ? 'pending' : 'saved');
+      })
+      .catch(err => {
+        dirty.current = true;
+        setSaveState('error');
+        throw err;
+      })
+      .finally(() => {
+        inFlight.current = null;
+      });
+    inFlight.current = run.catch(() => undefined);
+    return run;
+  }, [autosave, editable, schema]);
 
-    await update.mutateAsync({
-      commonPayload: commonPayload as never,
-      dynamicPayload,
-      aadhaarNumber,
-    });
-    navigation.navigate('ProviderApplicationReview', {
-      applicationId: route.params.applicationId,
-    });
+  // Debounced autosave after every change.
+  useEffect(() => {
+    if (!hydrated || !dirty.current || !editable) return;
+    setSaveState('pending');
+    const timer = setTimeout(() => {
+      void saveNow().catch(() => undefined);
+    }, AUTOSAVE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [values, hydrated, editable, saveNow]);
+
+  // Flush unsaved edits when leaving the screen.
+  useEffect(
+    () =>
+      navigation.addListener('beforeRemove', () => {
+        if (dirty.current) void saveNow().catch(() => undefined);
+      }),
+    [navigation, saveNow],
+  );
+
+  const onChange = useCallback((key: string, update: FormValueUpdate) => {
+    dirty.current = true;
+    setValues(prev => ({
+      ...prev,
+      [key]:
+        typeof update === 'function'
+          ? (update as (previous: unknown) => unknown)(prev[key])
+          : update,
+    }));
+  }, []);
+
+  const onFieldBlur = useCallback((key: string) => {
+    setTouched(prev => (prev.has(key) ? prev : new Set([...prev, key])));
+  }, []);
+
+  const completion = useMemo(
+    () =>
+      schema
+        ? computeCompletion(schema, values, {
+            documentKeys: uploadedDocs,
+            aadhaarSaved: Boolean(app?.aadhaarMasked),
+          })
+        : { required: 0, done: 0, errors: {} as Record<string, string> },
+    [app?.aadhaarMasked, schema, uploadedDocs, values],
+  );
+
+  const visibleErrors = useMemo(() => {
+    if (showAllErrors) return completion.errors;
+    return Object.fromEntries(
+      Object.entries(completion.errors).filter(([key]) => touched.has(key)),
+    );
+  }, [completion.errors, showAllErrors, touched]);
+
+  const onContinue = async () => {
+    try {
+      await saveNow();
+    } catch (err) {
+      Alert.alert('Could not save', (err as Error).message);
+      return;
+    }
+    setShowAllErrors(true);
+    navigation.navigate('ProviderApplicationReview', { applicationId });
   };
 
-  if (applicationQuery.isLoading || (app && schemaQuery.isLoading)) {
+  if (
+    applicationQuery.isLoading ||
+    (app && schemaQuery.isLoading) ||
+    (app && schema && !hydrated)
+  ) {
     return (
       <ScreenContainer tabAware={false}>
         <Text style={{ color: theme.colors.textSecondary, padding: 20 }}>
@@ -153,11 +243,28 @@ export function ProviderApplicationFormScreen() {
     );
   }
 
-  if (
-    schemaQuery.isError ||
-    !schemaQuery.data ||
-    schemaQuery.data.fields.length === 0
-  ) {
+  if (!editable) {
+    return (
+      <ScreenContainer tabAware={false}>
+        <View style={styles.state}>
+          <Text style={[styles.stateTitle, { color: theme.colors.textPrimary }]}>
+            {statusLabel(app.status)}
+          </Text>
+          <Text style={{ color: theme.colors.textSecondary, textAlign: 'center' }}>
+            This application can’t be edited while it is {statusLabel(app.status).toLowerCase()}.
+          </Text>
+          <Button
+            title="View status"
+            onPress={() =>
+              navigation.replace('ProviderApplicationStatus', { applicationId: app.id })
+            }
+          />
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  if (schemaQuery.isError || !schema || schema.fields.length === 0) {
     return (
       <ScreenContainer tabAware={false}>
         <View style={styles.state}>
@@ -191,18 +298,50 @@ export function ProviderApplicationFormScreen() {
     );
   }
 
+  const saveLabel =
+    saveState === 'saving'
+      ? 'Saving draft…'
+      : saveState === 'pending'
+        ? 'Unsaved changes'
+        : saveState === 'error'
+          ? 'Couldn’t save. Check your connection.'
+          : saveState === 'saved'
+            ? 'Draft saved'
+            : 'Drafts save automatically';
+
   return (
     <View style={styles.root}>
+      {app.status === 'more_info_requested' && app.infoRequestMessage ? (
+        <View style={[styles.banner, { backgroundColor: `${theme.colors.warning}1F` }]}>
+          <AppIcon name="alert" size={16} color={theme.colors.warning} />
+          <Text style={[styles.bannerText, { color: theme.colors.textPrimary }]}>
+            Reviewer: {app.infoRequestMessage}
+          </Text>
+        </View>
+      ) : null}
       <DynamicFormRenderer
-        schema={schemaQuery.data}
+        schema={schema}
         values={values}
         onChange={onChange}
         aadhaarMasked={app.aadhaarMasked}
         uploadedDocs={uploadedDocs}
         applicationId={app.id}
-        onDocumentUploaded={fieldKey =>
-          setUploadedDocs(prev => new Set([...prev, fieldKey]))
-        }
+        onDocumentUploaded={fieldKey => {
+          setUploadedDocs(prev => new Set([...prev, fieldKey]));
+          void applicationQuery.refetch();
+        }}
+        onDocumentRemoved={async fieldKey => {
+          await deleteProviderDocument(app.id, fieldKey);
+          setUploadedDocs(prev => {
+            const next = new Set(prev);
+            next.delete(fieldKey);
+            return next;
+          });
+        }}
+        errors={visibleErrors}
+        mediaPreviews={mediaPreviews}
+        focusField={focusField}
+        onFieldBlur={onFieldBlur}
       />
       <View
         style={[
@@ -214,21 +353,32 @@ export function ProviderApplicationFormScreen() {
         ]}
       >
         <View style={styles.savedNote}>
-          <AppIcon name="lock" size={15} color={theme.colors.primaryMuted} />
+          <AppIcon
+            name={saveState === 'error' ? 'alert' : saveState === 'saved' ? 'check-circle' : 'lock'}
+            size={15}
+            color={saveState === 'error' ? theme.colors.error : theme.colors.primaryMuted}
+          />
           <Text
-            style={[styles.savedText, { color: theme.colors.textSecondary }]}
+            testID="autosave-status"
+            style={[
+              styles.savedText,
+              { color: saveState === 'error' ? theme.colors.error : theme.colors.textSecondary },
+            ]}
           >
-            Your progress is saved automatically
+            {saveLabel} · {completion.done}/{completion.required} required done
           </Text>
+          {saveState === 'error' ? (
+            <Button
+              title="Retry"
+              variant="ghost"
+              onPress={() => void saveNow().catch(() => undefined)}
+            />
+          ) : null}
         </View>
         <Button
-          title="Save & continue"
-          onPress={() => {
-            void onSave().catch(err => {
-              Alert.alert('Could not save', (err as Error).message);
-            });
-          }}
-          loading={update.isPending}
+          title="Review application"
+          onPress={() => void onContinue()}
+          loading={saveState === 'saving'}
         />
       </View>
     </View>
@@ -253,6 +403,20 @@ const styles = StyleSheet.create({
   },
   savedText: {
     fontSize: 12,
+    fontWeight: '600',
+  },
+  banner: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 12,
+  },
+  bannerText: {
+    flex: 1,
+    fontSize: 13,
     fontWeight: '600',
   },
   state: {

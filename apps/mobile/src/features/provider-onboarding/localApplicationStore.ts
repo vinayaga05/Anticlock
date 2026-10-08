@@ -67,11 +67,7 @@ export function deleteLocalApplication(applicationId: string) {
 }
 
 export function createLocalApplication(providerKind: ProviderKind) {
-  const applications = getLocalApplications().filter(
-    application => application.status !== 'draft',
-  );
-  storage.set(STORAGE_KEYS.PROVIDER_APPLICATIONS, JSON.stringify(applications));
-
+  // Existing drafts are kept: each one is a separate business in progress.
   const createdAt = nowIso();
   return saveLocalApplication({
     id: newId(),
@@ -116,7 +112,7 @@ export function updateLocalApplication(
       typeof (body.commonPayload.basic as Record<string, unknown>).providerName === 'string'
         ? (body.commonPayload.basic as Record<string, string>).providerName
         : existing.businessName,
-    status: existing.status === 'more_info_requested' ? 'draft' : existing.status,
+    status: existing.status,
   };
   if (body.aadhaarNumber) {
     next.aadhaarMasked = maskAadhaar(body.aadhaarNumber);
@@ -165,4 +161,24 @@ export function submitLocalApplication(applicationId: string) {
     submittedAt: nowIso(),
     updatedAt: nowIso(),
   });
+}
+
+export function removeLocalDocument(applicationId: string, fieldKey: string) {
+  const existing = getLocalApplication(applicationId);
+  if (!existing) {
+    throw new Error('Application not found');
+  }
+  return saveLocalApplication({
+    ...existing,
+    documents: existing.documents.filter(doc => doc.fieldKey !== fieldKey),
+    updatedAt: nowIso(),
+  });
+}
+
+export function reopenLocalApplication(applicationId: string) {
+  const existing = getLocalApplication(applicationId);
+  if (!existing || existing.status !== 'rejected') {
+    throw new Error('Only a rejected application can be reopened');
+  }
+  return saveLocalApplication({ ...existing, status: 'draft', updatedAt: nowIso() });
 }

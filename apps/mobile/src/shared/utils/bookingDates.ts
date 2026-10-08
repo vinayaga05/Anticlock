@@ -4,6 +4,25 @@ export type BookingDateOption = {
   label: string;
 };
 
+/** Device-local calendar day as YYYY-MM-DD (toISOString would give the UTC day). */
+export function toLocalDateId(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Local "2026-10-09" + "10:30 AM" -> ISO timestamp (null when invalid). */
+export function scheduleToIso(date: string, time: string): string | null {
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const t = /^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i.exec(time.trim());
+  if (!d || !t) return null;
+  let hour = Number(t[1]);
+  const meridiem = t[3]?.toUpperCase();
+  if (meridiem === 'PM' && hour < 12) hour += 12;
+  if (meridiem === 'AM' && hour === 12) hour = 0;
+  const at = new Date(Number(d[1]), Number(d[2]) - 1, Number(d[3]), hour, Number(t[2]));
+  return Number.isNaN(at.getTime()) ? null : at.toISOString();
+}
+
 /** Next N calendar days for appointment pickers. */
 export function getUpcomingBookingDates(count = 6): BookingDateOption[] {
   const base = new Date();
@@ -11,7 +30,7 @@ export function getUpcomingBookingDates(count = 6): BookingDateOption[] {
     const d = new Date(base);
     d.setDate(base.getDate() + i);
     return {
-      id: d.toISOString().slice(0, 10),
+      id: toLocalDateId(d),
       day: d.toLocaleDateString('en-US', { weekday: 'short' }),
       label: String(d.getDate()),
     };

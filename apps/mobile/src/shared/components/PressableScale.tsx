@@ -16,6 +16,9 @@ type Props = PropsWithChildren<{
   style?: ViewStyle | ViewStyle[];
   disabled?: boolean;
   accessibilityLabel?: string;
+  accessibilityState?: { selected?: boolean; disabled?: boolean };
+  testID?: string;
+  hitSlop?: number;
   scaleTo?: number;
 }>;
 
@@ -27,6 +30,9 @@ export function PressableScale({
   style,
   disabled,
   accessibilityLabel,
+  accessibilityState,
+  testID,
+  hitSlop,
   scaleTo,
 }: Props) {
   const theme = useTheme();
@@ -41,6 +47,9 @@ export function PressableScale({
     <AnimatedPressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityState={accessibilityState}
+      testID={testID}
+      hitSlop={hitSlop}
       disabled={disabled}
       onPress={onPress}
       onLongPress={onLongPress}

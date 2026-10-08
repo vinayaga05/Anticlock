@@ -1,35 +1,14 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
+import { byTestId, countTestId } from '@/test/componentMocks';
 import { Text } from 'react-native';
 import { PostingAsCard } from './PostingAsCard';
 
-jest.mock('@/shared/hooks/useTheme', () => ({
-  useTheme: () => ({
-    colors: new Proxy({}, { get: () => '#000' }),
-    typography: new Proxy({}, { get: () => ({}) }),
-    radius: new Proxy({}, { get: () => 8 }),
-    spacing: new Proxy({}, { get: () => 8 }),
-    mode: 'light',
-  }),
-}));
-jest.mock('@/shared/components/Card', () => {
-  const { View } = require('react-native');
-  return { Card: ({ children }: any) => <View>{children}</View> };
-});
-jest.mock('@/shared/components/FilterPills', () => {
-  const { Text: RNText } = require('react-native');
-  return {
-    FilterPills: ({ pills, onChange }: any) =>
-      pills.map((pill: any) => (
-        <RNText
-          key={pill.id}
-          testID={`pill-${pill.id}`}
-          onPress={() => onChange(pill.id)}>
-          {pill.label}
-        </RNText>
-      )),
-  };
-});
+jest.mock('@/shared/hooks/useTheme', () => require('@/test/componentMocks').themeModule);
+jest.mock('@/shared/components/AppIcon', () => require('@/test/componentMocks').appIconModule);
+jest.mock('@/shared/components/PressableScale', () => require('@/test/componentMocks').pressableScaleModule);
+jest.mock('react-native-reanimated', () => require('@/test/componentMocks').reanimatedModule);
+jest.mock('react-native-safe-area-context', () => require('@/test/componentMocks').safeAreaModule);
 
 const personal = { type: 'user' as const, id: 'u1', name: 'Asha', avatarUrl: null };
 const business = {
@@ -47,27 +26,25 @@ function texts(renderer: ReactTestRenderer.ReactTestRenderer) {
 }
 
 describe('PostingAsCard', () => {
-  it('shows "Posting as" with the selected business and a switcher', () => {
+  it('shows the compact preselected business and switches via the sheet', () => {
     const onSelect = jest.fn();
     let renderer!: ReactTestRenderer.ReactTestRenderer;
     ReactTestRenderer.act(() => {
       renderer = ReactTestRenderer.create(
-        <PostingAsCard
-          identities={[personal, business]}
-          identity={business}
-          onSelect={onSelect}
-        />,
+        <PostingAsCard identities={[personal, business]} identity={business} onSelect={onSelect} />,
       );
     });
-    expect(texts(renderer)).toEqual(
-      expect.arrayContaining([
-        'Posting as Lotus Yoga',
-        'Business profile',
-        'Asha (Personal)',
-      ]),
-    );
+    expect(byTestId(renderer, 'posting-as-name').props.children).toBe('Lotus Yoga');
+    expect(texts(renderer)).toContain('Business');
+    expect(
+      renderer.root.findAll(node => node.props.accessibilityLabel === 'Posting as Lotus Yoga').length,
+    ).toBeGreaterThan(0);
+
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({ testID: 'pill-u1' }).props.onPress();
+      byTestId(renderer, 'posting-as-switch').props.onPress();
+    });
+    ReactTestRenderer.act(() => {
+      byTestId(renderer, 'switcher-row-u1').props.onPress();
     });
     expect(onSelect).toHaveBeenCalledWith('u1');
   });
@@ -76,14 +53,27 @@ describe('PostingAsCard', () => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
     ReactTestRenderer.act(() => {
       renderer = ReactTestRenderer.create(
+        <PostingAsCard identities={[personal]} identity={personal} onSelect={jest.fn()} />,
+      );
+    });
+    expect(texts(renderer)).toContain('Asha');
+    expect(countTestId(renderer, 'posting-as-switch')).toBe(0);
+  });
+
+  it('locks switching while publishing and reports an unavailable profile', () => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(
         <PostingAsCard
-          identities={[personal]}
+          identities={[personal, business]}
           identity={personal}
           onSelect={jest.fn()}
+          disabled
+          fallbackApplied
         />,
       );
     });
-    expect(texts(renderer)).toContain('Posting as Asha');
-    expect(renderer.root.findAllByProps({ testID: 'pill-u1' })).toHaveLength(0);
+    expect(byTestId(renderer, 'posting-as-switch').props.disabled).toBe(true);
+    expect(texts(renderer)).toContain('Previous profile unavailable');
   });
 });

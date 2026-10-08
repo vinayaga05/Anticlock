@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import type { MobileRole } from '@anticlock/contracts';
 import { db } from '../db/client.js';
 import { mobileUserRoles, providers } from '../db/schema.js';
@@ -14,6 +14,9 @@ export async function getMobileUserContext(mobileUserId: string) {
     .select()
     .from(providers)
     .where(eq(providers.mobileUserId, mobileUserId))
+    // A user can own several businesses; report the first one created
+    // (legacy single-provider field) deterministically.
+    .orderBy(asc(providers.createdAt))
     .limit(1);
 
   return {

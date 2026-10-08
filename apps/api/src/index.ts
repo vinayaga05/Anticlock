@@ -17,6 +17,7 @@ import {
 import {
   providerAdminRoutes,
   providerMobileRoutes,
+  marketplaceRoutes,
 } from './routes/provider.js';
 import { shopAdminRoutes, shopMobileRoutes } from './routes/shop.js';
 import { tripsAdminRoutes, tripsMobileRoutes } from './routes/trips.js';
@@ -99,6 +100,7 @@ app.route('/v1/catalog', catalogRoutes);
 app.route('/v1/media', mediaPublicRoutes);
 app.route('/v1/reels', reelsPublicRoutes);
 app.route('/v1/provider', providerMobileRoutes);
+app.route('/v1/marketplace', marketplaceRoutes);
 app.route('/v1/shop', shopMobileRoutes);
 app.route('/v1/trips', tripsMobileRoutes);
 app.route('/v1/bookings', bookingMobileRoutes);

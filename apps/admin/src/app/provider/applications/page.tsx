@@ -19,7 +19,8 @@ export default function ProviderApplicationsPage() {
     <AdminShell>
       <h1 className="page-title">Provider applications</h1>
       <p className="page-sub">
-        Review onboarding submissions. KYC documents and Aadhaar are shown only here.
+        Review onboarding submissions (drafts are private to the applicant). KYC
+        documents and Aadhaar are shown only here.
       </p>
       <div className="card">
         {isLoading ? <p className="muted">Loading…</p> : null}
@@ -28,9 +29,10 @@ export default function ProviderApplicationsPage() {
           <table className="table">
             <thead>
               <tr>
+                <th>Business</th>
                 <th>Status</th>
                 <th>Kind</th>
-                <th>Services</th>
+                <th>Service</th>
                 <th>Submitted</th>
                 <th />
               </tr>
@@ -38,11 +40,16 @@ export default function ProviderApplicationsPage() {
             <tbody>
               {data.data.map(app => (
                 <tr key={app.id}>
+                  <td>{app.businessName}</td>
                   <td>
                     <span className="badge">{app.status.replace(/_/g, ' ')}</span>
                   </td>
                   <td>{app.providerKind}</td>
-                  <td>{app.categoryIds.length}</td>
+                  <td>
+                    {(app.categories ?? []).map(c => c.name).join(', ') ||
+                      app.categoryIds.join(', ') ||
+                      '—'}
+                  </td>
                   <td>{app.submittedAt ? new Date(app.submittedAt).toLocaleString() : '—'}</td>
                   <td>
                     <Link href={`/provider/applications/${app.id}`} className="btn secondary">

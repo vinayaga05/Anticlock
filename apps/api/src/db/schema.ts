@@ -409,6 +409,8 @@ export const providers = pgTable("providers", {
   name: text("name").notNull(),
   status: text("status").notNull().default("active"),
   publicProfile: jsonb("public_profile").$type<Record<string, unknown>>(),
+  /** The approved application that created this business profile. */
+  sourceApplicationId: uuid("source_application_id"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

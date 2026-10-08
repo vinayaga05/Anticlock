@@ -1,7 +1,10 @@
 import { Hono } from 'hono';
 import { eq, desc } from 'drizzle-orm';
+import { ZodError } from 'zod';
 import {
   CreateProviderApplicationRequestSchema,
+  MarketplaceProviderListQuerySchema,
+  UpdateProviderBusinessRequestSchema,
   ProviderApplicationReviewRequestSchema,
   ProviderFormSchemaBodySchema,
   ProviderKycUploadRequestSchema,
@@ -16,6 +19,7 @@ import {
   resolveFormSchema,
 } from '../provider/FormSchemaService.js';
 import { providerApplicationService } from '../provider/ProviderApplicationService.js';
+import { providerBusinessService } from '../provider/ProviderBusinessService.js';
 import {
   requireAuth,
   requirePermission,
@@ -34,13 +38,32 @@ function requireMobileAuth(c: { get: (k: 'auth') => { kind: string; sub: string 
 }
 
 function httpError(err: unknown) {
-  const e = err as { status?: number; code?: string; message?: string };
+  if (err instanceof ZodError) {
+    const issue = err.issues[0];
+    return {
+      status: 400 as const,
+      body: {
+        error: {
+          code: 'validation_error',
+          message: issue
+            ? `${issue.path.join('.') || 'request'}: ${issue.message}`
+            : 'Invalid request',
+          details: err.issues.map(i => ({ path: i.path.join('.'), message: i.message })),
+        },
+      },
+    };
+  }
+  const e = err as { status?: number; code?: string; message?: string; details?: unknown };
+  if (!e.status || e.status >= 500) {
+    console.error('[provider routes]', err);
+  }
   return {
-    status: (e.status ?? 500) as 400 | 403 | 404 | 409 | 500,
+    status: (e.status ?? 500) as 400 | 403 | 404 | 409 | 410 | 500,
     body: {
       error: {
         code: e.code ?? 'error',
-        message: e.message ?? 'Unexpected error',
+        message: e.status && e.status < 500 ? (e.message ?? 'Request failed') : 'Unexpected error',
+        ...(e.details ? { details: e.details } : {}),
       },
     },
   };
@@ -148,6 +171,76 @@ providerMobileRoutes.put('/applications/:id/services', async c => {
   }
 });
 
+providerMobileRoutes.post('/applications/:id/reopen', async c => {
+  try {
+    const auth = requireMobileAuth(c);
+    const application = await providerApplicationService.reopenApplication(
+      auth.sub,
+      c.req.param('id'),
+    );
+    return c.json({ application });
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
+providerMobileRoutes.delete('/applications/:id/documents/:fieldKey', async c => {
+  try {
+    const auth = requireMobileAuth(c);
+    const application = await providerApplicationService.deleteDocument(
+      auth.sub,
+      c.req.param('id'),
+      decodeURIComponent(c.req.param('fieldKey')),
+    );
+    return c.json({ application });
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
+providerMobileRoutes.get('/businesses', async c => {
+  try {
+    const auth = requireMobileAuth(c);
+    const businesses = await providerBusinessService.listMyBusinesses(auth.sub);
+    return c.json({ businesses });
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
+providerMobileRoutes.get('/businesses/:providerId', async c => {
+  try {
+    const auth = requireMobileAuth(c);
+    const business = await providerBusinessService.getMyBusiness(
+      auth.sub,
+      c.req.param('providerId'),
+    );
+    return c.json({ business });
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
+providerMobileRoutes.patch('/businesses/:providerId', async c => {
+  try {
+    const auth = requireMobileAuth(c);
+    const body = UpdateProviderBusinessRequestSchema.parse(await c.req.json());
+    const business = await providerBusinessService.updateMyBusiness(
+      auth.sub,
+      c.req.param('providerId'),
+      body,
+    );
+    return c.json({ business });
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
 providerMobileRoutes.post('/applications/:id/submit', async c => {
   try {
     const auth = requireMobileAuth(c);
@@ -165,11 +258,19 @@ providerMobileRoutes.post('/applications/:id/submit', async c => {
 providerMobileRoutes.post('/applications/:id/kyc-upload-session', async c => {
   try {
     const auth = requireMobileAuth(c);
-    const body = ProviderKycUploadRequestSchema.parse(await c.req.json());
+    const raw = (await c.req.json()) as Record<string, unknown>;
+    const body = ProviderKycUploadRequestSchema.parse(raw);
+    const optionalInt = (v: unknown) =>
+      typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : undefined;
     const session = await providerApplicationService.createKycUploadSession(
       auth.sub,
       c.req.param('id'),
-      body,
+      {
+        ...body,
+        durationMs: optionalInt(raw.durationMs),
+        width: optionalInt(raw.width),
+        height: optionalInt(raw.height),
+      },
     );
     return c.json(session, 201);
   } catch (err) {
@@ -183,12 +284,16 @@ providerMobileRoutes.post(
   async c => {
     try {
       const auth = requireMobileAuth(c);
-      const { fieldKey } = (await c.req.json()) as { fieldKey: string };
+      const { fieldKey, purpose } = (await c.req.json()) as {
+        fieldKey: string;
+        purpose?: string;
+      };
       const result = await providerApplicationService.completeKycUpload(
         auth.sub,
         c.req.param('id'),
         c.req.param('sessionId'),
         fieldKey,
+        purpose === 'profile' ? 'profile' : 'document',
       );
       return c.json(result);
     } catch (err) {
@@ -316,7 +421,8 @@ providerAdminRoutes.get(
   '/applications',
   requirePermission('provider.read'),
   async c => {
-    const data = await providerApplicationService.listApplicationsAdmin();
+    const status = c.req.query('status')?.trim() || undefined;
+    const data = await providerApplicationService.listApplicationsAdmin(status);
     return c.json({ data, meta: { nextCursor: null } });
   },
 );
@@ -355,3 +461,34 @@ providerAdminRoutes.post(
     }
   },
 );
+
+/** Public marketplace: approved, active businesses only. */
+export const marketplaceRoutes = new Hono<AppEnv>();
+
+marketplaceRoutes.get('/providers', async c => {
+  try {
+    const query = MarketplaceProviderListQuerySchema.parse({
+      q: c.req.query('q') || undefined,
+      categoryId: c.req.query('categoryId') || undefined,
+      treeId: c.req.query('treeId') || undefined,
+      city: c.req.query('city') || undefined,
+      limit: c.req.query('limit') || undefined,
+      offset: c.req.query('offset') || undefined,
+    });
+    const result = await providerBusinessService.listMarketplaceProviders(query);
+    return c.json({ data: result.data, meta: { nextOffset: result.nextOffset } });
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
+marketplaceRoutes.get('/providers/:id', async c => {
+  try {
+    const provider = await providerBusinessService.getMarketplaceProvider(c.req.param('id'));
+    return c.json({ provider });
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});

@@ -46,9 +46,9 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
   const A = randomUUID();
   const B = randomUUID();
   const C = randomUUID();
-  // providers.mobile_user_id is unique (one provider application per
-  // account), so A's second business is held via a provider_memberships
-  // owner row — exactly how a user gets access to more than one business.
+  // BIZ2 is created by another account (D) and A is granted an owner
+  // provider_memberships row — how a user gets access to a business they
+  // did not create. (Owners can also create several businesses directly.)
   const D = randomUUID();
   const BIZ1 = randomUUID();
   const BIZ2 = randomUUID();

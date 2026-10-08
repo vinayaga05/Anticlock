@@ -14,6 +14,20 @@ export class BookingService {
     mobileUserId: string,
     request: CreateBookingRequest,
   ): Promise<Booking> {
+    if (request.providerId) {
+      // Only approved, active business profiles can take bookings.
+      const [provider] = await db
+        .select({ id: providers.id, status: providers.status })
+        .from(providers)
+        .where(eq(providers.id, request.providerId))
+        .limit(1);
+      if (!provider || provider.status !== 'active') {
+        throw Object.assign(new Error('This provider is not accepting bookings'), {
+          code: 'provider_unavailable',
+          status: 400,
+        });
+      }
+    }
     const [row] = await db
       .insert(bookings)
       .values({

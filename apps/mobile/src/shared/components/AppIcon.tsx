@@ -96,6 +96,15 @@ import {
   RefreshCw,
   TriangleAlert,
   MicOff,
+  ArrowLeftRight,
+  BriefcaseBusiness,
+  CircleCheck,
+  Eye,
+  LogOut,
+  ShieldCheck,
+  Store,
+  SunMoon,
+  UserRound,
 } from 'lucide-react-native';
 
 export const iconMap = {
@@ -245,6 +254,15 @@ export const iconMap = {
   refresh: RefreshCw,
   alert: TriangleAlert,
   'mic-off': MicOff,
+  switch: ArrowLeftRight,
+  briefcase: BriefcaseBusiness,
+  'circle-check': CircleCheck,
+  eye: Eye,
+  'log-out': LogOut,
+  'shield-check': ShieldCheck,
+  store: Store,
+  'sun-moon': SunMoon,
+  'user-round': UserRound,
 } as const;
 
 export type IconName = keyof typeof iconMap;

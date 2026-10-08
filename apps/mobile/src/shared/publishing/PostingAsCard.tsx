@@ -1,34 +1,31 @@
-import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
-import { Card } from '@/shared/components/Card';
-import { FilterPills } from '@/shared/components/FilterPills';
+import React, { useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { AppIcon } from '@/shared/components/AppIcon';
+import { PressableScale } from '@/shared/components/PressableScale';
 import { useTheme } from '@/shared/hooks/useTheme';
 import type { PublishingIdentity } from '@/shared/api/publishingHooks';
 import { identityProfileType, postingAsLabel } from './publisherSelection';
+import { ProfileAvatar } from './ProfileAvatar';
+import { ProfileTypeBadge } from './ProfileTypeBadge';
+import { ProfileSwitcherSheet, identityAvatarUrl } from './ProfileSwitcherSheet';
 
 export { postingAsLabel };
-
-export function profileKindLabel(identity: PublishingIdentity) {
-  const type = identityProfileType(identity);
-  if (type === 'personal') return 'Personal profile';
-  const category = identity.publisher?.businessCategory;
-  return category ? `Business profile · ${category}` : 'Business profile';
-}
 
 type PostingAsCardProps = {
   identities: PublishingIdentity[];
   identity: PublishingIdentity | null;
   onSelect: (id: string) => void;
   isLoading?: boolean;
-  /** Persisted profile is no longer available; tell the creator. */
+  /** Draft's profile is no longer available; tell the creator. */
   fallbackApplied?: boolean;
+  /** Locked while uploading/publishing (never switch mid-publish). */
   disabled?: boolean;
 };
 
 /**
- * "Posting as [profile]" with avatar, plus a switcher when the owner
- * manages more than one profile. Shown in the Reel publish screen, the
- * Flash composer and the Story composer.
+ * Compact "posting as" row: avatar/logo + name + type badge, preselected
+ * from the global active profile. With several owned profiles a Switch
+ * button opens the visual profile sheet (choice applies to this draft).
  */
 export function PostingAsCard({
   identities,
@@ -39,74 +36,103 @@ export function PostingAsCard({
   disabled,
 }: PostingAsCardProps) {
   const theme = useTheme();
-  const avatarUrl = identity?.publisher?.avatarUrl ?? identity?.avatarUrl;
+  const [open, setOpen] = useState(false);
+  const business = identity ? identityProfileType(identity) === 'business' : false;
+  const canSwitch = identities.length > 1;
+
   return (
-    <Card style={styles.card}>
-      <View style={styles.row} accessibilityRole="summary">
-        {avatarUrl ? (
-          <Image
-            source={{ uri: avatarUrl }}
-            style={styles.avatar}
-            accessibilityIgnoresInvertColors
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+      ]}>
+      <View
+        style={styles.row}
+        accessible
+        accessibilityLabel={identity ? postingAsLabel(identity) : 'Loading profile'}>
+        {identity ? (
+          <ProfileAvatar
+            name={identity.name}
+            uri={identityAvatarUrl(identity)}
+            size={40}
+            business={business}
+            active={business}
+            ringColor={theme.colors.primary}
           />
         ) : (
-          <View
-            style={[styles.avatar, styles.avatarFallback, { backgroundColor: theme.colors.primarySoft }]}>
-            <Text style={[theme.typography.section, { color: theme.colors.primary }]}>
-              {identity?.name?.trim().charAt(0).toUpperCase() ?? ''}
-            </Text>
-          </View>
+          <View style={[styles.skeleton, { backgroundColor: theme.colors.skeleton }]} />
         )}
         <View style={styles.copy}>
-          <Text
-            testID="posting-as-label"
-            numberOfLines={1}
-            style={[theme.typography.section, { color: theme.colors.textPrimary }]}>
-            {postingAsLabel(identity)}
-          </Text>
-          {identity ? (
-            <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
-              {profileKindLabel(identity)}
+          <View style={styles.nameLine}>
+            <Text
+              testID="posting-as-name"
+              numberOfLines={1}
+              style={[styles.name, { color: theme.colors.textPrimary }]}>
+              {identity?.name ?? (isLoading ? '' : 'Profile unavailable')}
             </Text>
+            {identity?.publisher?.verified ? (
+              <AppIcon name="verified" size={15} color={theme.colors.primary} strokeWidth={2.25} />
+            ) : null}
+          </View>
+          {identity ? (
+            <ProfileTypeBadge type={business ? 'business' : 'personal'} compact />
           ) : null}
         </View>
+        {canSwitch ? (
+          <PressableScale
+            testID="posting-as-switch"
+            accessibilityLabel="Change profile"
+            disabled={disabled}
+            onPress={() => setOpen(true)}
+            style={[
+              styles.switch,
+              {
+                backgroundColor: theme.colors.surfaceMuted,
+                opacity: disabled ? 0.5 : 1,
+              },
+            ]}>
+            <AppIcon name="switch" size={17} color={theme.colors.textPrimary} strokeWidth={2.25} />
+          </PressableScale>
+        ) : null}
       </View>
       {fallbackApplied ? (
-        <Text style={[theme.typography.caption, { color: theme.colors.warning }]}>
-          Your previous profile is no longer available. Choose who to post as.
+        <Text style={[styles.warning, { color: theme.colors.warning }]}>
+          Previous profile unavailable
         </Text>
       ) : null}
-      {identities.length > 1 ? (
-        <View style={styles.switcher} pointerEvents={disabled ? 'none' : 'auto'}>
-          <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
-            Switch profile
-          </Text>
-          <FilterPills
-            activeId={identity?.id ?? ''}
-            onChange={onSelect}
-            pills={identities.map(item => ({
-              id: item.id,
-              label:
-                identityProfileType(item) === 'personal'
-                  ? `${item.name} (Personal)`
-                  : item.name,
-            }))}
-          />
-        </View>
-      ) : isLoading ? (
-        <Text style={[theme.typography.caption, { color: theme.colors.textTertiary }]}>
-          Loading publishing profiles…
-        </Text>
+      {canSwitch ? (
+        <ProfileSwitcherSheet
+          visible={open && !disabled}
+          onClose={() => setOpen(false)}
+          title="Post as"
+          identities={identities}
+          activeId={identity?.id ?? null}
+          onSelect={item => onSelect(item.id)}
+        />
       ) : null}
-    </Card>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { gap: 12 },
+  card: {
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 6,
+  },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  avatar: { width: 44, height: 44, borderRadius: 22 },
-  avatarFallback: { alignItems: 'center', justifyContent: 'center' },
-  copy: { flex: 1, minWidth: 0, gap: 2 },
-  switcher: { gap: 6 },
+  skeleton: { width: 50, height: 50, borderRadius: 25 },
+  copy: { flex: 1, minWidth: 0, gap: 4 },
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  name: { fontSize: 16, fontWeight: '700', flexShrink: 1 },
+  switch: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  warning: { fontSize: 12.5, fontWeight: '600', paddingLeft: 2 },
 });

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   usePublishingIdentitiesQuery,
   type PublishingIdentity,
@@ -7,17 +7,21 @@ import {
   resolveActivePublisher,
   type PublishFormat,
 } from './publisherSelection';
-import { publisherSelectionStore } from './publisherSelectionStorage';
+import { getActiveProfileIdSnapshot } from './activeProfileStore';
 
 /**
  * Profile selection shared by the Reel, Flash and Story composers.
  *
- * - one owned profile → auto-selected
- * - several → the composer shows a switcher; the choice is persisted per
- *   format (MMKV) so it survives the editor, retries and an app relaunch
- * - `initialProfileId` lets a restored local draft re-assert its profile
- *   without racing the identities query (it is never overridden by the
- *   first/personal profile once set).
+ * - a NEW draft starts from the global active profile (Settings switcher),
+ *   read once when the composer mounts
+ * - `initialProfileId` / `restore()` let a recovered draft keep the profile
+ *   it was saved with, even if the global active profile changed since
+ * - the creator may change the profile before publishing (`select`); that
+ *   choice belongs to this draft only and does not move the global profile
+ * - once resolved, the selection is locked in: a later global switch, an
+ *   upload, a retry or draft recovery never silently changes it
+ * - one owned profile → auto-selected; a profile that is no longer owned
+ *   falls back to the personal profile and `fallbackApplied` is reported
  */
 export function usePublisherSelection(
   format: PublishFormat,
@@ -26,13 +30,16 @@ export function usePublisherSelection(
   const query = usePublishingIdentitiesQuery();
   const identities = useMemo(() => query.data ?? [], [query.data]);
   const [selectedId, setSelectedId] = useState<string | null>(
-    () =>
-      initialProfileId ??
-      publisherSelectionStore.loadSelection(format)?.publisherProfileId ??
-      null,
+    () => initialProfileId ?? getActiveProfileIdSnapshot(),
   );
 
   const resolved = resolveActivePublisher(identities, selectedId);
+  const resolvedId = resolved.active?.id ?? null;
+
+  // Lock in the first resolved profile so it can never drift afterwards.
+  useEffect(() => {
+    if (selectedId === null && resolvedId !== null) setSelectedId(resolvedId);
+  }, [selectedId, resolvedId]);
 
   const select = useCallback(
     (identityOrId: PublishingIdentity | string) => {
@@ -42,20 +49,20 @@ export function usePublisherSelection(
           : identityOrId;
       if (!identity) return;
       setSelectedId(identity.id);
-      publisherSelectionStore.saveSelection(format, identity);
     },
-    [format, identities],
+    [identities],
   );
 
-  /** Re-apply a profile restored from a saved draft. */
+  /** Re-apply the profile a recovered draft was saved with. */
   const restore = useCallback((profileId: string | null | undefined) => {
     if (profileId) setSelectedId(profileId);
   }, []);
 
   return {
+    format,
     identities,
     identity: resolved.active,
-    selectedId: resolved.active?.id ?? selectedId,
+    selectedId: resolvedId ?? selectedId,
     needsSwitcher: resolved.needsSwitcher,
     fallbackApplied: resolved.fallbackApplied,
     isLoading: query.isLoading,

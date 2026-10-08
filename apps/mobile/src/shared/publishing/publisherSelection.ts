@@ -3,9 +3,10 @@
  *
  * A Reel/Clip, Flash post or Story is always published AS one profile the
  * signed-in owner controls: their personal profile or a business profile
- * they manage. The chosen profile is persisted per content format so it
- * survives the draft → upload → editor → retry → publish flow and an app
- * relaunch, and is never silently reset to the personal profile.
+ * they manage. New drafts start from the global active profile
+ * (`activeProfile.ts`); a draft keeps its own profile through the
+ * draft → upload → editor → retry → publish flow and is never silently
+ * reset. `saveSelection`/`loadSelection` remain for older persisted data.
  *
  * This module has no React Native dependencies so it can be unit tested;
  * `publisherSelectionStorage.ts` binds it to MMKV.
@@ -65,8 +66,8 @@ export type ActivePublisher<T extends PublisherIdentityLike> = {
 };
 
 /**
- * One profile → auto-selected. Multiple → the persisted/selected one wins
- * when it is still owned; otherwise the first (personal) profile.
+ * One profile → auto-selected. Multiple → the selected one wins when it is
+ * still owned; otherwise the personal profile (or the first one).
  */
 export function resolveActivePublisher<T extends PublisherIdentityLike>(
   identities: readonly T[],
@@ -78,8 +79,11 @@ export function resolveActivePublisher<T extends PublisherIdentityLike>(
   const preferred = preferredId
     ? identities.find(identity => identity.id === preferredId)
     : undefined;
+  const personal = identities.find(
+    identity => identityProfileType(identity) === 'personal',
+  );
   return {
-    active: preferred ?? identities[0]!,
+    active: preferred ?? personal ?? identities[0]!,
     needsSwitcher: identities.length > 1,
     fallbackApplied: Boolean(preferredId) && !preferred,
   };

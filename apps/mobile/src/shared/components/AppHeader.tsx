@@ -8,6 +8,9 @@ import { AppIcon } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { APP_NAME } from '@/shared/constants';
 import { useAuth } from '@/shared/context/AuthProvider';
+import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
+import { identityAvatarUrl } from '@/shared/publishing/ProfileSwitcherSheet';
+import { identityProfileType } from '@/shared/publishing/publisherSelection';
 
 type AppHeaderProps = {
   showBrand?: boolean;
@@ -48,6 +51,16 @@ export function AppHeader({
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const { user } = useAuth();
+  // The header avatar follows the app-wide active profile (Settings switcher).
+  const { active } = useActiveProfile();
+  const headerAvatarUrl = active ? identityAvatarUrl(active) : user?.avatarUrl;
+  const openActiveProfile = () =>
+    active
+      ? navigation.navigate('Profile', {
+          profileType: identityProfileType(active),
+          profileId: active.id,
+        })
+      : navigation.navigate('Profile');
 
   const openNotifications =
     onNotificationsPress ??
@@ -94,11 +107,11 @@ export function AppHeader({
         {showActions ? (
           <View style={styles.actions}>
             <PressableScale
-              onPress={() => navigation.navigate('Profile')}
-              accessibilityLabel="Open profile"
+              onPress={openActiveProfile}
+              accessibilityLabel={active ? `Open profile, ${active.name}` : 'Open profile'}
               style={[styles.profileButton, { borderColor: theme.colors.primary }]}>
-              {user?.avatarUrl ? (
-                <Image source={{ uri: user.avatarUrl }} style={styles.profileImage} />
+              {headerAvatarUrl ? (
+                <Image source={{ uri: headerAvatarUrl }} style={styles.profileImage} />
               ) : (
                 <View style={[styles.profileFallback, { backgroundColor: theme.colors.surfaceMuted }]}>
                   <AppIcon name="profile" size={19} color={theme.colors.primary} />

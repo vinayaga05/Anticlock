@@ -70,14 +70,15 @@ export function ProfileAvatar({
   testID,
 }: Props) {
   const theme = useTheme();
-  const [failed, setFailed] = useState(false);
+  // Remember which uri failed so a later profile's valid photo still loads.
+  const [failedUri, setFailedUri] = useState<string | null>(null);
   const radius = business ? Math.round(size * 0.3) : size / 2;
   const ringWidth = size >= 64 ? 3 : 2.5;
   const gap = size >= 64 ? 3 : 2;
   const outer = size + (ringWidth + gap) * 2;
   const outerRadius = business ? radius + ringWidth + gap : outer / 2;
   const checkSize = Math.max(18, Math.round(size * 0.34));
-  const showImage = Boolean(uri) && !failed;
+  const showImage = Boolean(uri) && failedUri !== uri;
 
   return (
     <View
@@ -98,7 +99,7 @@ export function ProfileAvatar({
       {showImage ? (
         <Image
           source={{ uri: uri! }}
-          onError={() => setFailed(true)}
+          onError={() => setFailedUri(uri ?? null)}
           accessibilityIgnoresInvertColors
           style={{
             width: size,

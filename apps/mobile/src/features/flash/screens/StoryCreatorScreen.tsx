@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Alert,
   Image,
@@ -25,10 +25,13 @@ import { useStoryStore } from '@/shared/data/flash/storyStore';
 import type { StoryAudience, StoryMediaType } from '@/shared/data/flash/storyTypes';
 import { RootStackParamList } from '@/shared/navigation/types';
 import {
+  ensureContentDraft,
   usePublishContentMutation,
-  usePublishingIdentitiesQuery,
   uploadContentMedia,
+  type PublishingIdentity,
 } from '@/shared/api/publishingHooks';
+import { PostingAsCard } from '@/shared/publishing/PostingAsCard';
+import { usePublisherSelection } from '@/shared/publishing/usePublisherSelection';
 import { isApiEnabled } from '@/shared/api/config';
 import {
   pickClipVideo,
@@ -39,6 +42,7 @@ import {
 import type { PickedClipVideo, PickedClipCover } from '@/features/reels/media/clipMediaPicker';
 
 const AUDIENCE: { id: StoryAudience; label: string }[] = [
+  { id: 'public', label: 'Public' },
   { id: 'followers', label: 'Followers' },
   { id: 'close_friends', label: 'Close Friends' },
   { id: 'selected', label: 'Selected People' },
@@ -56,32 +60,44 @@ export function StoryCreatorScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const publishStory = useStoryStore(s => s.publishStory);
-  const { data: identities = [] } = usePublishingIdentitiesQuery();
+  const publisher = usePublisherSelection('story');
+  const { identities, identity } = publisher;
   const publishContent = usePublishContentMutation();
 
   const [mode, setMode] = useState<StoryMediaType>('photo');
-  const [audience, setAudience] = useState<StoryAudience>('followers');
+  // Public by default: the API has no follow graph yet, so a
+  // followers/friends story is only visible to the publisher's own team.
+  const [audience, setAudience] = useState<StoryAudience>('public');
   const [text, setText] = useState('');
   const [photoIndex, setPhotoIndex] = useState(0);
   const [bgIndex, setBgIndex] = useState(0);
-  const [identityId, setIdentityId] = useState<string | null>(null);
   const [pickedPhoto, setPickedPhoto] = useState<PickedClipCover | null>(null);
   const [pickedVideo, setPickedVideo] = useState<PickedClipVideo | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
-  useEffect(() => {
-    if (!identityId && identities[0]) setIdentityId(identities[0].id);
-  }, [identities, identityId]);
+  const apiVisibility =
+    audience === 'public'
+      ? 'public'
+      : audience === 'followers'
+        ? 'followers'
+        : audience === 'close_friends'
+          ? 'friends'
+          : 'community';
 
-  const identity = identities.find(item => item.id === identityId) ?? identities[0];
-  const identityPills = useMemo(
-    () => identities.map(item => ({
-      id: item.id,
-      label: item.type === 'provider' ? item.name : 'Personal',
-    })),
-    [identities],
-  );
+  /** API mode: the tray refetches after publish and shows the new story. */
+  const finishApiPublish = (
+    published: PublishingIdentity,
+    contentStatus: string | undefined,
+  ) => {
+    if (contentStatus === 'pending_review') {
+      Alert.alert(
+        'Story submitted',
+        `Your story from ${published.name} will appear once it is reviewed.`,
+      );
+    }
+    navigation.goBack();
+  };
 
   const handlePickPhoto = async () => {
     try {
@@ -116,26 +132,30 @@ export function StoryCreatorScreen() {
   const share = async () => {
     if (mode === 'text') {
       if (!text.trim()) return;
-      if (isApiEnabled && identity) {
+      if (isApiEnabled) {
+        if (!identity) {
+          Alert.alert(
+            'Publishing profile unavailable',
+            'Wait for your profiles to load, then try again.',
+          );
+          return;
+        }
         try {
-          await publishContent.mutateAsync({
+          const result = await publishContent.mutateAsync({
             format: 'story',
             mediaType: 'text',
             caption: text.trim(),
-            visibility: audience === 'followers'
-              ? 'followers'
-              : audience === 'close_friends'
-                ? 'friends'
-                : 'community',
+            visibility: apiVisibility,
             identity,
           });
+          finishApiPublish(identity, result?.post.contentStatus);
         } catch (error) {
           Alert.alert(
             'Could not share story',
             error instanceof Error ? error.message : 'Please try again.',
           );
-          return;
         }
+        return;
       }
       publishStory({
         type: 'text',
@@ -149,53 +169,52 @@ export function StoryCreatorScreen() {
 
     if (mode === 'photo' || mode === 'video') {
       const hasRealMedia = mode === 'photo' ? pickedPhoto : pickedVideo;
-      if (isApiEnabled && identity && hasRealMedia) {
+      if (isApiEnabled && hasRealMedia) {
+        if (!identity) {
+          Alert.alert(
+            'Publishing profile unavailable',
+            'Wait for your profiles to load, then try again.',
+          );
+          return;
+        }
+        let contentStatus: string | undefined;
         try {
           setUploading(true);
           setUploadProgress(0);
-          let mediaId: string;
-          if (mode === 'photo' && pickedPhoto) {
-            const file = await createCoverUploadFile(pickedPhoto);
-            setUploadProgress(30);
-            mediaId = await uploadContentMedia(
-              identity,
-              file,
-              audience === 'followers'
-                ? 'followers'
-                : audience === 'close_friends'
-                  ? 'friends'
-                  : 'community',
-            );
-            setUploadProgress(70);
-          } else if (mode === 'video' && pickedVideo) {
-            const file = await createVideoUploadFile(pickedVideo);
-            setUploadProgress(30);
-            mediaId = await uploadContentMedia(
-              identity,
-              file,
-              audience === 'followers'
-                ? 'followers'
-                : audience === 'close_friends'
-                  ? 'friends'
-                  : 'community',
-            );
-            setUploadProgress(70);
-          } else {
-            throw new Error('No media selected');
-          }
-          setUploadProgress(80);
-          await publishContent.mutateAsync({
+          const mediaType = mode === 'photo' ? 'image' : 'video';
+          const draftId = await ensureContentDraft({
             format: 'story',
-            mediaType: mode === 'photo' ? 'image' : 'video',
+            mediaType,
             caption: text.trim(),
-            mediaIds: [mediaId],
-            visibility: audience === 'followers'
-              ? 'followers'
-              : audience === 'close_friends'
-                ? 'friends'
-                : 'community',
+            visibility: apiVisibility,
             identity,
           });
+          setUploadProgress(15);
+          const file =
+            mode === 'photo' && pickedPhoto
+              ? await createCoverUploadFile(pickedPhoto)
+              : mode === 'video' && pickedVideo
+                ? await createVideoUploadFile(pickedVideo)
+                : null;
+          if (!file) throw new Error('No media selected');
+          setUploadProgress(30);
+          const mediaId = await uploadContentMedia(
+            identity,
+            file,
+            apiVisibility,
+            draftId,
+          );
+          setUploadProgress(80);
+          const result = await publishContent.mutateAsync({
+            draftId,
+            format: 'story',
+            mediaType,
+            caption: text.trim(),
+            mediaIds: [mediaId],
+            visibility: apiVisibility,
+            identity,
+          });
+          contentStatus = result?.post.contentStatus;
           setUploadProgress(100);
         } catch (error) {
           Alert.alert(
@@ -207,6 +226,8 @@ export function StoryCreatorScreen() {
           setUploading(false);
           setUploadProgress(0);
         }
+        finishApiPublish(identity, contentStatus);
+        return;
       }
 
       if (mode === 'photo') {
@@ -236,15 +257,15 @@ export function StoryCreatorScreen() {
         }}>
         <AppHeader title="Create Story" showBrand={false} showActions={false} />
 
-        {identityPills.length > 1 ? (
-          <View style={styles.identityPicker}>
-            <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>Publishing as</Text>
-            <FilterPills
-              activeId={identity?.id ?? ''}
-              onChange={setIdentityId}
-              pills={identityPills}
-            />
-          </View>
+        {isApiEnabled ? (
+          <PostingAsCard
+            identities={identities}
+            identity={identity}
+            onSelect={publisher.select}
+            isLoading={publisher.isLoading}
+            fallbackApplied={publisher.fallbackApplied}
+            disabled={uploading}
+          />
         ) : null}
 
         <View style={styles.modeGrid}>
@@ -404,7 +425,6 @@ export function StoryCreatorScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  identityPicker: { gap: 6 },
   modeGrid: { gap: 10 },
   modeCard: {
     padding: 14,

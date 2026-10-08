@@ -89,15 +89,15 @@ export const useStoryStore = create<StoryState>((set, get) => ({
 
   setApiStories: (apiStories: UserStory[]) => {
     if (!isApiEnabled) return;
+    // Replace the previous API snapshot entirely (so expired or removed
+    // server stories disappear, including when the list becomes empty) and
+    // keep local-only stories for authors the server did not return.
     set(state => {
-      const existingMap = new Map(state.stories.map(s => [s.authorId, s]));
-      const updatedStories = [...apiStories];
-      state.stories.forEach(story => {
-        if (!apiStories.find(s => s.authorId === story.authorId)) {
-          updatedStories.push(story);
-        }
-      });
-      return { stories: updatedStories };
+      const apiAuthorIds = new Set(apiStories.map(s => s.authorId));
+      const localStories = state.stories.filter(
+        story => story.source !== 'api' && !apiAuthorIds.has(story.authorId),
+      );
+      return { stories: [...apiStories, ...localStories] };
     });
   },
 

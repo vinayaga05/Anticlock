@@ -119,7 +119,15 @@ export function FlashPostCard({ post }: Props) {
   };
 
   const openAuthorProfile = () =>
-    navigation.navigate('Profile', { userId: post.author.id });
+    navigation.navigate(
+      'Profile',
+      post.source === 'api' && post.publisherProfileId && post.publisherProfileType
+        ? {
+            profileType: post.publisherProfileType,
+            profileId: post.publisherProfileId,
+          }
+        : { userId: post.author.id },
+    );
 
   return (
     <View style={[styles.post, { backgroundColor: theme.colors.background }]}>

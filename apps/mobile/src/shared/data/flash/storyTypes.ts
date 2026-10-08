@@ -1,6 +1,6 @@
 import type { PostAuthor } from './types';
 
-export type StoryAudience = 'followers' | 'close_friends' | 'selected';
+export type StoryAudience = 'public' | 'followers' | 'close_friends' | 'selected';
 
 export type StoryMediaType = 'photo' | 'video' | 'text';
 
@@ -35,6 +35,8 @@ export interface UserStory {
   author: PostAuthor;
   items: StoryItem[];
   audience: StoryAudience;
+  /** Server-published (refetched) story group. */
+  source?: 'api' | 'local';
 }
 
 export interface StoryArchiveEntry extends StoryItem {

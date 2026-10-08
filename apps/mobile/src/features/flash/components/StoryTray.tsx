@@ -6,7 +6,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { StoryRing } from '@/features/flash/components/StoryRing';
@@ -29,13 +29,20 @@ export function StoryTray() {
   const hasMoreTrayStories = useStoryStore(s => s.hasMoreTrayStories);
   const setApiStories = useStoryStore(s => s.setApiStories);
   const loadingMoreRef = useRef(false);
-  const { data: apiStories } = useStoriesQuery();
+  const { data: apiStories, refetch } = useStoriesQuery();
 
   useEffect(() => {
-    if (isApiEnabled && apiStories && apiStories.length > 0) {
+    if (isApiEnabled && apiStories) {
       setApiStories(apiStories);
     }
   }, [apiStories, setApiStories]);
+
+  // New stories from other profiles appear when the Flash tab regains focus.
+  useFocusEffect(
+    useCallback(() => {
+      if (isApiEnabled) refetch();
+    }, [refetch]),
+  );
 
   const entries = useMemo(
     () => getTrayEntries(),

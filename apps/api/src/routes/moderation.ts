@@ -11,6 +11,12 @@ import {
   users,
 } from '../db/schema.js';
 import { writeAudit } from '../lib/audit.js';
+import { ReviewContentRequestSchema } from '@anticlock/contracts';
+import {
+  listPendingReview,
+  reviewPost,
+} from '../content/ContentPublishingService.js';
+import { contentRequiresReview } from '../publishing/publisher.js';
 import { requireAuth, requirePermission, type AppEnv } from '../middleware/auth.js';
 
 type ReportStatus = 'open' | 'resolved' | 'dismissed';
@@ -523,4 +529,56 @@ moderationAdminRoutes.post('/reports/:contentType/:id/action', async c => {
   });
 
   return c.json({ ok: true });
+});
+
+/**
+ * Pre-publication review queue. Only populated when the API runs with
+ * CONTENT_REQUIRE_REVIEW=true; by default content publishes immediately and
+ * moderation stays report-based (see the reports endpoints above).
+ */
+moderationAdminRoutes.get('/content/pending', async c => {
+  const limit = Number(c.req.query('limit') ?? 50) || 50;
+  return c.json({
+    requireReview: contentRequiresReview(),
+    items: await listPendingReview(limit),
+  });
+});
+
+/** Approve/reject only changes the content status, never its publisher. */
+moderationAdminRoutes.post('/content/:id/review', async c => {
+  const auth = c.get('auth');
+  const parsed = ReviewContentRequestSchema.safeParse(
+    await c.req.json().catch(() => ({})),
+  );
+  if (!parsed.success) {
+    return c.json(
+      { error: { code: 'validation_error', message: 'Invalid request' } },
+      400,
+    );
+  }
+  try {
+    const result = await reviewPost(
+      c.req.param('id'),
+      parsed.data.decision,
+      parsed.data.note,
+    );
+    await writeAudit({
+      actorId: auth.sub,
+      actorEmail: auth.email,
+      action: `moderation.content_${parsed.data.decision}`,
+      entityType: 'content_post',
+      entityId: result.id,
+      metadata: { note: parsed.data.note ?? null },
+    });
+    return c.json({ content: result });
+  } catch (error) {
+    const err = error as { status?: number; code?: string; message?: string };
+    if (err.status === 404) {
+      return c.json(
+        { error: { code: 'not_found', message: err.message ?? 'Not found' } },
+        404,
+      );
+    }
+    throw error;
+  }
 });

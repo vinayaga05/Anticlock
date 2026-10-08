@@ -1284,6 +1284,59 @@ export class MediaService {
     return { assets: assets.filter(Boolean), thumbnail };
   }
 
+  /**
+   * Non-throwing readiness report used by the draft publish flow, so the
+   * caller can move a draft to `processing` (still uploading/processing) or
+   * `failed` (terminal) instead of returning a generic error.
+   */
+  async inspectMobileContentAssets(mobileUserId: string, mediaIds: string[]) {
+    const marker = `/content-${mobileUserId}/`;
+    const assets = await Promise.all(
+      [...new Set(mediaIds)].map((id) => this.repo.getAsset(id))
+    );
+    let state: "ready" | "pending" | "failed" | "forbidden" = "ready";
+    for (const asset of assets) {
+      if (!asset || !asset.storageKey.includes(marker)) return { state: "forbidden" as const };
+      if (
+        asset.processingStatus === "failed" ||
+        asset.deletedAt ||
+        asset.archivedAt ||
+        !["approved", "not_required"].includes(asset.moderationStatus)
+      ) {
+        state = "failed";
+      } else if (asset.processingStatus !== "ready" && state === "ready") {
+        state = "pending";
+      }
+    }
+    return { state };
+  }
+
+  /**
+   * Delivery URL for one content media item. Callers must have already run
+   * the post audience check; private (non-public) assets get a short-lived
+   * signed URL rather than a public one.
+   */
+  async getContentMediaForAuthorizedViewer(mediaId: string) {
+    const asset = await this.repo.getAsset(mediaId);
+    if (
+      !asset ||
+      (asset.kind !== "image" && asset.kind !== "video") ||
+      asset.processingStatus !== "ready" ||
+      asset.deletedAt ||
+      asset.archivedAt ||
+      !["approved", "not_required"].includes(asset.moderationStatus)
+    ) {
+      return null;
+    }
+    const url = await this.storage.createDownloadUrl({
+      bucket: asset.bucket as "public-media" | "private-documents",
+      key: asset.storageKey,
+      accessLevel: asset.accessLevel === "public" ? "public" : "private",
+    });
+    if (!url) return null;
+    return { id: asset.id, kind: asset.kind as "image" | "video", url };
+  }
+
   async completeMobileProviderUpload(
     mobileUserId: string,
     applicationId: string,

@@ -15,7 +15,14 @@ export type RootStackParamList = {
   InterestPreferences: undefined;
   Main: undefined | { screen: keyof MainTabParamList };
   Search: undefined;
-  Profile: { userId?: string } | undefined;
+  Profile:
+    | {
+        userId?: string;
+        /** Publisher profile (API): content published AS this profile. */
+        profileType?: 'personal' | 'business';
+        profileId?: string;
+      }
+    | undefined;
   AccountSettings: undefined;
   EditProfile: undefined;
   Doctors: undefined;

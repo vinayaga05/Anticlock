@@ -13,11 +13,16 @@ import {
 import { Hono } from "hono";
 import {
   ContentFormatSchema,
+  ContentPostsQuerySchema,
   CompleteUploadRequestSchema,
+  CreateContentCommentRequestSchema,
   CreateContentContainerRequestSchema,
+  CreateContentDraftRequestSchema,
   CreateContentUploadRequestSchema,
+  PublishContentDraftRequestSchema,
   RecordContentClipViewRequestSchema,
   SetContentClipLikeRequestSchema,
+  UpdateContentDraftRequestSchema,
 } from "@anticlock/contracts";
 import { ZodError } from "zod";
 import { db } from "../db/client.js";
@@ -37,7 +42,31 @@ import { requireAuth, type AppEnv } from "../middleware/auth.js";
 import {
   listPublishingIdentities,
   resolvePublishingContext,
+  toPublishingContext,
 } from "../publishing/PublishingContextService.js";
+import {
+  authorColumnsFor,
+  legacyAuthor,
+  loadPublishers,
+  normalizePublisherType,
+  publisherKey,
+  publisherRefFromAuthor,
+  resolveOwnedPublisher,
+} from "../publishing/publisher.js";
+import {
+  createComment,
+  createDraft,
+  discardDraft,
+  getDraft,
+  getProfileSummary,
+  listComments,
+  listMine,
+  listPosts,
+  markDraftUploading,
+  publishContainer,
+  requireVisiblePost,
+  updateDraft,
+} from "../content/ContentPublishingService.js";
 import {
   exceedsClipDuration,
   listActiveMusicTracks,
@@ -168,10 +197,14 @@ function clipTrendingScoreOrder(now: Date) {
     GREATEST(${contentPosts.commentCount}, 0) * 6 +
     GREATEST(${contentPosts.shareCount}, 0) * 8
   `;
+  // Bind the timestamp as an ISO string. Interpolating a raw Date here makes
+  // the drizzle/postgres-js driver throw ("argument must be of type string
+  // … Received an instance of Date"), which turned every Clips feed request
+  // into a 500 and hid all user-published Clips.
   const ageHours = sql`
     GREATEST(
       0,
-      EXTRACT(EPOCH FROM (${now} - ${contentPosts.publishedAt})) / 3600.0
+      EXTRACT(EPOCH FROM (${now.toISOString()}::timestamptz - ${contentPosts.publishedAt})) / 3600.0
     )
   `;
   // PostgreSQL can only round to a precision for numeric values. Matching the
@@ -335,6 +368,10 @@ contentMobileRoutes.use("/containers/*", requireAuth);
 contentMobileRoutes.use("/posts", requireAuth);
 contentMobileRoutes.use("/posts/*", requireAuth);
 contentMobileRoutes.use("/music-tracks", requireAuth);
+contentMobileRoutes.use("/drafts", requireAuth);
+contentMobileRoutes.use("/drafts/*", requireAuth);
+contentMobileRoutes.use("/profiles/*", requireAuth);
+contentMobileRoutes.use("/mine", requireAuth);
 
 /**
  * Server-managed music for the Clip editor. Returns only tracks an operator
@@ -369,6 +406,10 @@ contentMobileRoutes.post("/uploads", async (c) => {
     const mobileUserId = await requireActiveMobile(auth);
     const body = CreateContentUploadRequestSchema.parse(await c.req.json());
     const identity = await resolvePublishingContext(auth, requestContext(c));
+    if (body.draftId) {
+      // Only the draft owner can upload into it; it moves to `uploading`.
+      await markDraftUploading(mobileUserId, body.draftId);
+    }
     const upload = await mediaService.createMobileContentUploadSession(
       mobileUserId,
       body
@@ -421,7 +462,16 @@ contentMobileRoutes.post("/containers", async (c) => {
     const auth = c.get("auth");
     const mobileUserId = await requireActiveMobile(auth);
     const body = CreateContentContainerRequestSchema.parse(await c.req.json());
-    const actor = await resolvePublishingContext(auth, requestContext(c));
+    // The body's publisherProfileId wins over the legacy context headers.
+    const headerContext = requestContext(c);
+    const owned = await resolveOwnedPublisher(mobileUserId, {
+      id: body.publisherProfileId ?? headerContext.id ?? mobileUserId,
+      type:
+        body.publisherProfileType ??
+        normalizePublisherType(headerContext.type) ??
+        (body.publisherProfileId ? undefined : "personal"),
+    });
+    const actor = toPublishingContext(owned);
     const mediaIds = [...new Set(body.mediaIds)];
     const { assets } = await mediaService.requireMobileContentAssets(
       mobileUserId,
@@ -448,8 +498,7 @@ contentMobileRoutes.post("/containers", async (c) => {
       .insert(contentContainers)
       .values({
         createdByMobileUserId: mobileUserId,
-        authorMobileUserId: actor.type === "user" ? actor.id : null,
-        authorProviderId: actor.type === "provider" ? actor.id : null,
+        ...authorColumnsFor(owned.ref),
         format: body.format,
         mediaType: body.mediaType,
         caption: body.caption,
@@ -470,6 +519,9 @@ contentMobileRoutes.post("/containers", async (c) => {
           status: container!.status,
           format: container!.format,
           author: actor,
+          publisherProfileId: owned.ref.id,
+          publisherProfileType: owned.ref.type,
+          publisher: owned.publisher,
           createdAt: container!.createdAt.toISOString(),
         },
       },
@@ -485,117 +537,227 @@ contentMobileRoutes.post("/containers/:id/publish", async (c) => {
   try {
     const auth = c.get("auth");
     const mobileUserId = await requireActiveMobile(auth);
-    const actor = await resolvePublishingContext(auth, requestContext(c));
-    const [container] = await db
-      .select()
-      .from(contentContainers)
-      .where(
-        and(
-          eq(contentContainers.id, c.req.param("id")),
-          eq(contentContainers.createdByMobileUserId, mobileUserId)
-        )
-      )
-      .limit(1);
-    if (!container)
-      throw Object.assign(new Error("Content container not found"), {
-        code: "not_found",
-        status: 404,
-      });
-    if (container.status !== "ready_to_publish")
-      throw Object.assign(new Error("Content is not ready to publish"), {
-        code: "invalid_status",
-        status: 400,
-      });
-    if (
-      actor.type === "user"
-        ? container.authorMobileUserId !== actor.id
-        : container.authorProviderId !== actor.id
-    ) {
-      throw Object.assign(
-        new Error("Publishing identity does not match this container"),
-        { code: "forbidden", status: 403 }
-      );
-    }
-    // Recheck asset ownership/readiness at publish time; an archived or
-    // moderated asset must not be smuggled through an old draft.
-    const { assets } = await mediaService.requireMobileContentAssets(
-      mobileUserId,
-      container.mediaIds,
-      container.thumbnailMediaId,
-      container.visibility
-    );
-    if (
-      container.format === "clip" &&
-      (assets.length !== 1 || assets[0]?.kind !== "video")
-    ) {
-      throw Object.assign(new Error("A Clip needs exactly one ready video"), {
-        code: "invalid_clip_media",
-        status: 400,
-      });
-    }
-    const now = new Date();
-    const expiresAt =
-      container.format === "story"
-        ? new Date(now.getTime() + 24 * 60 * 60 * 1000)
-        : null;
-    const firstVideo = assets.find((asset) => asset.kind === "video");
-    const duplicateClusterId =
-      firstVideo?.checksumSha256 ?? firstVideo?.id ?? container.id;
-    // Claim the draft state and create its post in one transaction. Two taps
-    // (or two devices) must not turn one prepared upload into duplicate posts.
-    const post = await db.transaction(async (tx) => {
-      const [publishedContainer] = await tx
-        .update(contentContainers)
-        .set({ status: "published", publishedAt: now })
-        .where(
-          and(
-            eq(contentContainers.id, container.id),
-            eq(contentContainers.createdByMobileUserId, mobileUserId),
-            eq(contentContainers.status, "ready_to_publish")
-          )
-        )
-        .returning({ id: contentContainers.id });
-      if (!publishedContainer) {
-        throw Object.assign(new Error("Content is not ready to publish"), {
-          code: "invalid_status",
-          status: 400,
-        });
-      }
-
-      const [createdPost] = await tx
-        .insert(contentPosts)
-        .values({
-          containerId: container.id,
-          createdByMobileUserId: mobileUserId,
-          authorMobileUserId: container.authorMobileUserId,
-          authorProviderId: container.authorProviderId,
-          format: container.format,
-          mediaType: container.mediaType,
-          caption: container.caption,
-          mediaIds: container.mediaIds,
-          thumbnailMediaId: container.thumbnailMediaId,
-          hashtags: container.hashtags,
-          taggedMobileUserIds: container.taggedMobileUserIds,
-          location: container.location,
-          duplicateClusterId,
-          visibility: container.visibility,
-          edit: container.edit ?? null,
-          musicTrackId: container.edit?.music?.trackId ?? null,
-          status: "published",
-          expiresAt,
-          publishedAt: now,
-        })
-        .returning();
-      return createdPost!;
+    const headerContext = requestContext(c);
+    // Legacy clients send the identity they selected as headers. It must
+    // match the container's publisher; the shared publish path re-validates
+    // ownership, media readiness and visibility.
+    const result = await publishContainer(mobileUserId, c.req.param("id"), {
+      expectedPublisher: headerContext.type
+        ? {
+            id: headerContext.id ?? mobileUserId,
+            type: normalizePublisherType(headerContext.type),
+          }
+        : undefined,
     });
     return c.json(
       {
         post: {
-          id: post.id,
-          format: post.format,
-          expiresAt: post.expiresAt?.toISOString() ?? null,
+          id: result.post.id,
+          format: result.post.format,
+          expiresAt: result.post.expiresAt?.toISOString() ?? null,
+          contentStatus: result.draft.contentStatus,
+          publisherProfileId: result.draft.publisherProfileId,
+          publisherProfileType: result.draft.publisherProfileType,
         },
       },
+      201
+    );
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+// ── Draft-first publishing (`/v1/content/drafts`) ───────────────────────────
+// select profile → create draft (owner + publisher fixed) → upload media with
+// `draftId` → attach media → publish. Only the owner can touch a draft.
+
+contentMobileRoutes.post("/drafts", async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    const body = CreateContentDraftRequestSchema.parse(await c.req.json());
+    return c.json({ draft: await createDraft(mobileUserId, body) }, 201);
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+contentMobileRoutes.get("/drafts/:id", async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    return c.json({ draft: await getDraft(mobileUserId, c.req.param("id")) });
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+contentMobileRoutes.patch("/drafts/:id", async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    const body = UpdateContentDraftRequestSchema.parse(await c.req.json());
+    return c.json({
+      draft: await updateDraft(mobileUserId, c.req.param("id"), body),
+    });
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+contentMobileRoutes.delete("/drafts/:id", async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    return c.json({ draft: await discardDraft(mobileUserId, c.req.param("id")) });
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+contentMobileRoutes.post("/drafts/:id/publish", async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    const body = PublishContentDraftRequestSchema.parse(
+      await c.req.json().catch(() => ({}))
+    );
+    const result = await publishContainer(mobileUserId, c.req.param("id"), {
+      expectedPublisher: body.publisherProfileId
+        ? { id: body.publisherProfileId }
+        : undefined,
+    });
+    return c.json(
+      {
+        draft: result.draft,
+        post: {
+          id: result.post.id,
+          format: result.post.format,
+          contentStatus: result.draft.contentStatus,
+          expiresAt: result.post.expiresAt?.toISOString() ?? null,
+        },
+      },
+      201
+    );
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+/** Owner "My Content": every owned profile, every status. */
+contentMobileRoutes.get("/mine", async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    const publisherProfileId = c.req.query("publisherProfileId");
+    return c.json(
+      await listMine(mobileUserId, {
+        publisherProfileId:
+          publisherProfileId && /^[0-9a-f-]{36}$/i.test(publisherProfileId)
+            ? publisherProfileId
+            : undefined,
+        limit: Number(c.req.query("limit") ?? 50) || 50,
+      })
+    );
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+/**
+ * Viewer-aware feed for Flash, Stories and profile tabs. `data` is kept as
+ * an alias of `items` for the current mobile client.
+ */
+contentMobileRoutes.get("/posts", async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    const query = ContentPostsQuerySchema.parse({
+      format: c.req.query("format"),
+      publisherProfileId: c.req.query("publisherProfileId"),
+      limit: c.req.query("limit"),
+      cursor: c.req.query("cursor"),
+    });
+    const publisherType = normalizePublisherType(
+      c.req.query("publisherProfileType")
+    );
+    const result = await listPosts(mobileUserId, {
+      format: query.format,
+      publisher: query.publisherProfileId
+        ? { id: query.publisherProfileId, type: publisherType }
+        : undefined,
+      limit: query.limit,
+      cursor: query.cursor,
+    });
+    return c.json({ ...result, data: result.items });
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+function profileRef(type: string, id: string) {
+  const profileType = normalizePublisherType(type);
+  if (!profileType || !/^[0-9a-f-]{36}$/i.test(id)) {
+    throw Object.assign(new Error("Profile not found"), {
+      code: "not_found",
+      status: 404,
+    });
+  }
+  return { type: profileType, id };
+}
+
+/** Public profile header + counts for a personal or business profile. */
+contentMobileRoutes.get("/profiles/:type/:id", async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    const ref = profileRef(c.req.param("type"), c.req.param("id"));
+    return c.json({ profile: await getProfileSummary(mobileUserId, ref) });
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+/** Content published AS this profile (never by login user id). */
+contentMobileRoutes.get("/profiles/:type/:id/posts", async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    const ref = profileRef(c.req.param("type"), c.req.param("id"));
+    const query = ContentPostsQuerySchema.parse({
+      format: c.req.query("format") ?? "clip",
+      limit: c.req.query("limit"),
+      cursor: c.req.query("cursor"),
+    });
+    const result = await listPosts(mobileUserId, {
+      format: query.format,
+      publisher: ref,
+      limit: query.limit,
+      cursor: query.cursor,
+    });
+    return c.json({ ...result, data: result.items });
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+contentMobileRoutes.get("/posts/:id/comments", async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    return c.json(await listComments(mobileUserId, c.req.param("id")));
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+contentMobileRoutes.post("/posts/:id/comments", async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    const body = CreateContentCommentRequestSchema.parse(await c.req.json());
+    return c.json(
+      { comment: await createComment(mobileUserId, c.req.param("id"), body) },
       201
     );
   } catch (error) {
@@ -795,11 +957,20 @@ contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
           )
       : [];
     const likedPostIds = new Set(likedRows.map((row) => row.contentPostId));
+    const publisherRefs = selected
+      .map((candidate) => publisherRefFromAuthor(candidate.post))
+      .filter((ref): ref is NonNullable<typeof ref> => ref !== null);
+    const publishers = await loadPublishers(publisherRefs);
 
     return c.json({
       items: selected.map((candidate) => {
         const post = candidate.post;
+        const ref = publisherRefFromAuthor(post);
+        const publisher = ref ? publishers.get(publisherKey(ref)) ?? null : null;
         return {
+          publisherProfileId: ref?.id ?? candidate.author.id,
+          publisherProfileType: ref?.type ?? (candidate.author.type === "provider" ? "business" : "personal"),
+          publisher,
           id: post.id,
           format: post.format,
           mediaType: post.mediaType,
@@ -813,7 +984,7 @@ contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
           taggedUserIds: post.taggedMobileUserIds,
           location: post.location,
           visibility: post.visibility,
-          author: candidate.author,
+          author: publisher ? legacyAuthor(publisher) : candidate.author,
           createdAt: post.createdAt.toISOString(),
           publishedAt: post.publishedAt.toISOString(),
           expiresAt: post.expiresAt?.toISOString() ?? null,
@@ -909,12 +1080,51 @@ contentMobileRoutes.post("/posts/:id/view-events", async (c) => {
  * A set-state like endpoint makes repeats and racing devices idempotent while
  * keeping the rank counter server-owned.
  */
+/**
+ * Public Clips keep their stricter feed-equivalent gate (playable public
+ * video). Every other post (Flash, Stories, non-public content the viewer may
+ * see) goes through the shared audience check, so likes work for personal
+ * and business publishers alike.
+ */
+async function requireLikeablePost(
+  mobileUserId: string,
+  contentPostId: string,
+  now: Date
+) {
+  const [row] = await db
+    .select({ format: contentPosts.format, visibility: contentPosts.visibility })
+    .from(contentPosts)
+    .where(eq(contentPosts.id, contentPostId))
+    .limit(1);
+  if (row?.format === "clip" && row.visibility === "public") {
+    const { post, author } = await requireEligiblePublicClipForEngagement(
+      mobileUserId,
+      contentPostId,
+      now
+    );
+    return {
+      post,
+      author,
+      updateCondition: publishedPublicClipCondition(post.id, now),
+    };
+  }
+  const { post, publisher } = await requireVisiblePost(mobileUserId, contentPostId);
+  return {
+    post,
+    author: legacyAuthor(publisher) as ClipFeedAuthor,
+    updateCondition: and(
+      eq(contentPosts.id, post.id),
+      eq(contentPosts.status, "published")
+    ),
+  };
+}
+
 contentMobileRoutes.put("/posts/:id/like", async (c) => {
   try {
     const mobileUserId = await requireActiveMobile(c.get("auth"));
     const body = SetContentClipLikeRequestSchema.parse(await c.req.json());
     const now = new Date();
-    const { post, author } = await requireEligiblePublicClipForEngagement(
+    const { post, author, updateCondition } = await requireLikeablePost(
       mobileUserId,
       c.req.param("id"),
       now
@@ -938,7 +1148,7 @@ contentMobileRoutes.put("/posts/:id/like", async (c) => {
         const [updated] = await tx
           .update(contentPosts)
           .set({ likeCount: sql`${contentPosts.likeCount} + 1` })
-          .where(publishedPublicClipCondition(post.id, now))
+          .where(updateCondition)
           .returning({ likeCount: contentPosts.likeCount });
         if (!updated) throw clipNotFoundError();
         return { liked: true, changed: true, likeCount: updated.likeCount };
@@ -958,7 +1168,7 @@ contentMobileRoutes.put("/posts/:id/like", async (c) => {
       const [updated] = await tx
         .update(contentPosts)
         .set({ likeCount: sql`GREATEST(${contentPosts.likeCount} - 1, 0)` })
-        .where(publishedPublicClipCondition(post.id, now))
+        .where(updateCondition)
         .returning({ likeCount: contentPosts.likeCount });
       if (!updated) throw clipNotFoundError();
       return { liked: false, changed: true, likeCount: updated.likeCount };
@@ -994,39 +1204,27 @@ contentPublicRoutes.get("/feeds/:format", async (c) => {
     )
     .orderBy(desc(contentPosts.publishedAt))
     .limit(50);
-  const items = await Promise.all(
-    rows.map(async (post) => {
-      if (post.authorProviderId) {
-        const [provider] = await db
-          .select()
-          .from(providers)
-          .where(eq(providers.id, post.authorProviderId))
-          .limit(1);
-        return {
-          ...post,
-          author: {
-            type: "provider",
-            id: post.authorProviderId,
-            name: provider?.name ?? "Business",
-            avatarUrl: null,
-          },
-        };
-      }
-      const [user] = await db
-        .select()
-        .from(mobileUsers)
-        .where(eq(mobileUsers.id, post.authorMobileUserId!))
-        .limit(1);
-      return {
-        ...post,
-        author: {
-          type: "user",
-          id: post.authorMobileUserId,
-          name: user?.displayName ?? "User",
-          avatarUrl: user?.avatarUrl ?? null,
-        },
-      };
-    })
+  const publishers = await loadPublishers(
+    rows
+      .map((post) => publisherRefFromAuthor(post))
+      .filter((ref): ref is NonNullable<typeof ref> => ref !== null)
   );
+  const items = rows.flatMap((post) => {
+    const ref = publisherRefFromAuthor(post);
+    const publisher = ref ? publishers.get(publisherKey(ref)) : undefined;
+    // Inactive users / non-active businesses are dropped, as in every feed.
+    if (!ref || !publisher) return [];
+    const { createdByMobileUserId: _owner, ...rest } = post;
+    void _owner;
+    return [
+      {
+        ...rest,
+        publisherProfileId: ref.id,
+        publisherProfileType: ref.type,
+        publisher,
+        author: legacyAuthor(publisher),
+      },
+    ];
+  });
   return c.json({ items });
 });

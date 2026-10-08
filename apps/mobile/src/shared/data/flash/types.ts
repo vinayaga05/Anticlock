@@ -37,6 +37,10 @@ export interface PostAuthor {
   verified?: boolean;
   isProvider?: boolean;
   followed?: boolean;
+  /** Publisher profile kind when the author comes from the API. */
+  profileType?: 'personal' | 'business';
+  handle?: string | null;
+  businessCategory?: string | null;
 }
 
 export interface ProfileHighlight {
@@ -120,6 +124,10 @@ export interface FlashPost {
   commentsEnabled?: boolean;
   pinned?: boolean;
   hidden?: boolean;
+  /** `api` posts are server-published and refreshed from the Flash feed. */
+  source?: 'api' | 'local';
+  publisherProfileId?: string;
+  publisherProfileType?: 'personal' | 'business';
 }
 
 export interface SavedContent {

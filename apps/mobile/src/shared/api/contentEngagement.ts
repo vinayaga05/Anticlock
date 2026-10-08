@@ -59,3 +59,62 @@ export async function setContentClipLike(
   );
   return response.data;
 }
+
+/** Likes on any visible published post (Clip, Flash or Story). */
+export const setContentPostLike = setContentClipLike;
+
+export type ApiContentComment = {
+  id: string;
+  postId: string;
+  body: string;
+  publisherProfileId: string;
+  publisherProfileType: 'personal' | 'business';
+  publisher: {
+    id: string;
+    type: 'personal' | 'business';
+    displayName: string;
+    handle: string | null;
+    avatarUrl: string | null;
+    verified: boolean;
+  };
+  createdAt: string;
+};
+
+/** Published comments for a visible post, oldest first. */
+export async function fetchContentComments(
+  postId: string,
+): Promise<ApiContentComment[]> {
+  if (!isApiEnabled || !getApiToken()) return [];
+  const response = await apiRequest<{ items: ApiContentComment[] }>(
+    `/v1/content/posts/${encodeURIComponent(postId)}/comments`,
+  );
+  return response.items;
+}
+
+/**
+ * Comments as the personal profile unless a business profile the viewer
+ * manages is given (the API validates ownership).
+ */
+export async function createContentComment(
+  postId: string,
+  body: string,
+  publisher?: { id: string; type: 'personal' | 'business' },
+): Promise<ApiContentComment | null> {
+  if (!isApiEnabled || !getApiToken()) return null;
+  const response = await apiRequest<{ comment: ApiContentComment }>(
+    `/v1/content/posts/${encodeURIComponent(postId)}/comments`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        body,
+        ...(publisher
+          ? {
+              publisherProfileId: publisher.id,
+              publisherProfileType: publisher.type,
+            }
+          : {}),
+      }),
+    },
+  );
+  return response.comment;
+}

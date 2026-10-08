@@ -2,6 +2,7 @@ import React from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
 import { CommentsBottomSheet } from '@/shared/components/CommentsBottomSheet';
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
+import { useEngagementStore } from '@/shared/services/engagementRepository';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -18,6 +19,14 @@ export function CommentsBottomSheetHost() {
   const commentsEnabled = useCommentsSheetStore(s => s.commentsEnabled);
   const completeClose = useCommentsSheetStore(s => s.completeClose);
   const setPlaybackActive = useCommentsSheetStore(s => s.setPlaybackActive);
+  const syncApiComments = useEngagementStore(s => s.syncApiComments);
+
+  // Server-published Flash posts load their real comments when opened.
+  React.useEffect(() => {
+    if (open && sourceType === 'flashPost' && contentId) {
+      syncApiComments(contentId);
+    }
+  }, [open, sourceType, contentId, syncApiComments]);
 
   if ((!open && !closing) || !sourceType || !contentId) {
     return null;

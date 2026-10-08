@@ -200,6 +200,15 @@ export function VideoPlayer({
       ) : null}
       {!ready && !failed ? (
         <View style={styles.loading} pointerEvents="none">
+          {/* The cover frame stays visible until the first video frame. */}
+          {poster ? (
+            <Image
+              source={{ uri: poster }}
+              style={StyleSheet.absoluteFill}
+              resizeMode="cover"
+              accessibilityIgnoresInvertColors
+            />
+          ) : null}
           <ActivityIndicator color="#fff" />
         </View>
       ) : null}

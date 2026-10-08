@@ -404,6 +404,8 @@ export const ContentFeedItemSchema = ContentPostSchema.extend({
   trendingScore: z.number(),
   /** Current viewer state is returned with the personalized feed item. */
   viewerHasLiked: z.boolean(),
+  /** The viewer created this post or manages its business (can delete it). */
+  viewerCanManage: z.boolean().optional(),
   /** Music mixed into the Clip on-device, when the creator added any. */
   music: ClipMusicAttributionSchema.nullable().optional(),
   /** Duration of the playable video, when known. */

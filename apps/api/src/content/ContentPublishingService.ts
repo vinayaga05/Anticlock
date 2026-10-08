@@ -30,6 +30,7 @@ import {
   contentContainers,
   contentPostComments,
   contentPostLikes,
+  contentPostReports,
   contentPosts,
 } from "../db/schema.js";
 import { mediaService } from "../media/MediaService.js";
@@ -516,6 +517,18 @@ function liveCondition(now: Date) {
   return or(isNull(contentPosts.expiresAt), gt(contentPosts.expiresAt, now))!;
 }
 
+/**
+ * Content the viewer reported is hidden from their own feeds and profile
+ * grids right away (moderation decides for everyone else).
+ */
+export function notReportedByViewer(viewerUserId: string): SQL {
+  return sql`NOT EXISTS (
+    SELECT 1 FROM ${contentPostReports}
+    WHERE ${contentPostReports.contentPostId} = ${contentPosts.id}
+      AND ${contentPostReports.reporterMobileUserId} = ${viewerUserId}
+  )`;
+}
+
 export async function serializePosts(viewer: ViewerContext, rows: Post[]) {
   if (!rows.length) return [];
   const [publishers, likedRows] = await Promise.all([
@@ -610,6 +623,7 @@ export async function listPosts(
     eq(contentPosts.status, "published"),
     postVisibleToViewer(viewer),
     query.format === "story" ? gt(contentPosts.expiresAt, now) : liveCondition(now),
+    notReportedByViewer(viewerUserId),
     decodeCursor(query.cursor),
   ];
   if (query.publisher) {
@@ -789,6 +803,61 @@ export async function requireVisiblePost(viewerUserId: string, postId: string) {
   const publisher = await loadPublisher(ref);
   if (!publisher) throw appError("Content not found", "not_found", 404);
   return { post, viewer, publisher, ref };
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * One visible post (deep links / shared Reels). Same audience, block and
+ * liveness rules as the feeds; a video post carries its `playbackUrl`.
+ */
+export async function getPost(viewerUserId: string, postId: string) {
+  if (!UUID_RE.test(postId)) throw appError("Content not found", "not_found", 404);
+  const { post, viewer } = await requireVisiblePost(viewerUserId, postId);
+  const [item] = await serializePosts(viewer, [post]);
+  if (!item) throw appError("Content not found", "not_found", 404);
+  const video = item.media.find((media) => media.kind === "video");
+  return { ...item, playbackUrl: video?.url ?? null };
+}
+
+/**
+ * Owner delete. The account that created the post, or a member who manages
+ * the publishing business, can remove it; it then disappears from every
+ * feed, profile and engagement path (status `removed`). Anyone else gets
+ * 404 so the existence of a post is not disclosed.
+ */
+export async function deletePost(viewerUserId: string, postId: string) {
+  if (!UUID_RE.test(postId)) throw appError("Content not found", "not_found", 404);
+  const [post] = await db
+    .select()
+    .from(contentPosts)
+    .where(eq(contentPosts.id, postId))
+    .limit(1);
+  if (!post) throw appError("Content not found", "not_found", 404);
+  const ownsPost =
+    post.createdByMobileUserId === viewerUserId ||
+    post.authorMobileUserId === viewerUserId;
+  // Business posts can also be removed by a member who may publish for it.
+  const managesBusiness =
+    !ownsPost && post.authorProviderId
+      ? await resolveOwnedPublisher(viewerUserId, {
+          id: post.authorProviderId,
+          type: "business",
+        }).then(
+          () => true,
+          () => false
+        )
+      : false;
+  if (!ownsPost && !managesBusiness) {
+    throw appError("Content not found", "not_found", 404);
+  }
+  if (post.status !== "removed") {
+    await db
+      .update(contentPosts)
+      .set({ status: "removed" })
+      .where(eq(contentPosts.id, post.id));
+  }
+  return { id: post.id, contentStatus: "removed" as const };
 }
 
 type CommentRow = typeof contentPostComments.$inferSelect;

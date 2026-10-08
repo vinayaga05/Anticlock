@@ -371,17 +371,34 @@ export function postVisibleToViewer(viewer: ViewerContext): SQL {
   return or(...conditions)!;
 }
 
-/** Publisher keys the viewer has blocked (personal or business). */
+/**
+ * Publisher keys hidden from the viewer: profiles the viewer blocked
+ * (personal or business) and the personal profiles of people who blocked
+ * the viewer. A block works both ways for personal content, as on other
+ * social apps; a business stays visible to someone its owner blocked
+ * personally, because the business profile is public storefront content.
+ */
 export async function loadBlockedPublisherKeys(viewerUserId: string) {
   const rows = await db
     .select({
+      blockerMobileUserId: mobileUserBlocks.blockerMobileUserId,
       blockedMobileUserId: mobileUserBlocks.blockedMobileUserId,
       blockedProviderId: mobileUserBlocks.blockedProviderId,
     })
     .from(mobileUserBlocks)
-    .where(eq(mobileUserBlocks.blockerMobileUserId, viewerUserId));
+    .where(
+      or(
+        eq(mobileUserBlocks.blockerMobileUserId, viewerUserId),
+        eq(mobileUserBlocks.blockedMobileUserId, viewerUserId)
+      )
+    );
   const keys = new Set<string>();
   for (const row of rows) {
+    if (row.blockerMobileUserId !== viewerUserId) {
+      // Someone blocked the viewer: hide that person's personal profile.
+      keys.add(publisherKey({ type: "personal", id: row.blockerMobileUserId }));
+      continue;
+    }
     if (row.blockedMobileUserId)
       keys.add(publisherKey({ type: "personal", id: row.blockedMobileUserId }));
     if (row.blockedProviderId)

@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { navigateFromNotification } from '@/shared/navigation/rootNavigation';
 import { Platform, AppState } from 'react-native';
 import {
   requestNotificationPermission,
@@ -18,6 +20,7 @@ import {
  * Call this from your app root after user is logged in.
  */
 export function useNotificationSetup(isAuthenticated: boolean) {
+  const queryClient = useQueryClient();
   const registerToken = useRegisterDeviceToken();
   const unregisterToken = useUnregisterDeviceToken();
   const currentTokenRef = useRef<string | null>(null);
@@ -64,14 +67,25 @@ export function useNotificationSetup(isAuthenticated: boolean) {
       // Set up foreground handler
       unsubscribeForeground = setForegroundNotificationHandler((data, notification) => {
         console.log('[Notifications] Foreground:', notification?.title, data);
+        // Keep the in-app list and any open application status fresh.
+        void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        if ((data as Record<string, unknown>)?.kind === 'provider_application') {
+          void queryClient.invalidateQueries({ queryKey: ['provider'] });
+        }
         // TODO: Show in-app notification banner or update badge
       });
 
       // Set up background/quit handler
       setBackgroundNotificationHandler((data, notification) => {
         console.log('[Notifications] Background/quit tap:', notification?.title, data);
-        // TODO: Navigate to appropriate screen based on data.type and other fields
-        // This could be handled by RootNavigator using a deep link approach
+        // Cold start: the navigator may not be mounted yet, so retry briefly.
+        let attempts = 0;
+        const tryNavigate = () => {
+          if (navigateFromNotification(data as Record<string, unknown>) || attempts >= 10) return;
+          attempts += 1;
+          setTimeout(tryNavigate, 300);
+        };
+        tryNavigate();
       });
 
       // Set up token refresh handler
@@ -90,7 +104,7 @@ export function useNotificationSetup(isAuthenticated: boolean) {
       unsubscribeForeground?.();
       unsubscribeTokenRefresh?.();
     };
-  }, [isAuthenticated, registerToken, unregisterToken]);
+  }, [isAuthenticated, queryClient, registerToken, unregisterToken]);
 
   return null;
 }

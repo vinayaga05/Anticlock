@@ -34,6 +34,13 @@ export type FormFieldDefinition = {
   required?: boolean;
   sectionId: string;
   options?: { value: string; label: string }[];
+  validation?: {
+    min?: number;
+    max?: number;
+    minLength?: number;
+    maxLength?: number;
+    pattern?: string;
+  };
 };
 
 export type FormSection = {
@@ -56,12 +63,37 @@ export type ProviderApplicationDocument = {
   uploadedAt: string;
 };
 
+export type ProviderCategoryLabel = { id: string; name: string; treeId?: string };
+
+export type ProviderApplicationMissingItem = {
+  key: string;
+  label: string;
+  sectionId: string;
+  reason: 'required' | 'invalid' | 'document' | 'services';
+  message: string;
+};
+
+export type ProviderApplicationReadiness = {
+  complete: boolean;
+  requiredCount: number;
+  completedCount: number;
+  missing: ProviderApplicationMissingItem[];
+};
+
+export type ProviderMediaPreview = {
+  mediaId: string;
+  kind: 'image' | 'video' | 'document';
+  filename: string | null;
+  url: string | null;
+};
+
 export type ProviderApplicationDetail = {
   id: string;
   businessName: string;
   providerKind: ProviderKind;
   status: ProviderApplicationStatus;
   categoryIds: string[];
+  categories?: ProviderCategoryLabel[];
   submittedAt: string | null;
   reviewedAt: string | null;
   infoRequestMessage: string | null;
@@ -73,12 +105,92 @@ export type ProviderApplicationDetail = {
   dynamicPayload: Record<string, unknown>;
   documents: ProviderApplicationDocument[];
   aadhaarMasked?: string | null;
+  readiness?: ProviderApplicationReadiness;
+  mediaPreviews?: ProviderMediaPreview[];
 };
 
 export type ProviderApplicationSummary = Omit<
   ProviderApplicationDetail,
-  'commonPayload' | 'dynamicPayload' | 'documents' | 'aadhaarMasked'
+  | 'commonPayload'
+  | 'dynamicPayload'
+  | 'documents'
+  | 'aadhaarMasked'
+  | 'readiness'
+  | 'mediaPreviews'
 >;
+
+export type ServiceModeFlag = 'center' | 'home' | 'online';
+
+/** Approved business card from GET /v1/marketplace/providers. */
+export type MarketplaceProviderCard = {
+  id: string;
+  name: string;
+  providerKind: ProviderKind;
+  categoryIds: string[];
+  categories: Array<ProviderCategoryLabel & { actionType: string | null }>;
+  city: string | null;
+  area: string | null;
+  description: string | null;
+  priceFrom: number | null;
+  avatarUrl: string | null;
+  coverUrl: string | null;
+  modes: ServiceModeFlag[];
+  workingDays: string[];
+  openingTime: string | null;
+  closingTime: string | null;
+  verified: boolean;
+  createdAt: string;
+};
+
+export type ProviderBusinessSummary = {
+  id: string;
+  name: string;
+  providerKind: ProviderKind;
+  status: string;
+  role: string;
+  applicationId: string | null;
+  avatarUrl: string | null;
+  categories: ProviderCategoryLabel[];
+  counts: { services: number; upcomingBookings: number; totalBookings: number };
+  createdAt: string;
+};
+
+export type ProviderBusinessDetail = ProviderBusinessSummary & {
+  profile: {
+    description: string | null;
+    contactPerson: string | null;
+    mobile: string | null;
+    email: string | null;
+    address: string | null;
+    city: string | null;
+    area: string | null;
+    pricingStartsAt: number | null;
+    workingDays: string[];
+    openingTime: string | null;
+    closingTime: string | null;
+    modes: ServiceModeFlag[];
+  };
+  services: { categoryId: string; name: string; pricingStartsAt: number | null }[];
+  upcomingBookings: {
+    id: string;
+    status: string;
+    serviceTitle: string;
+    customerName: string;
+    startsAt: string;
+    serviceMode: string;
+    amount: number | null;
+  }[];
+};
+
+export type UpdateProviderBusinessRequest = {
+  description?: string;
+  contactPerson?: string;
+  mobile?: string;
+  email?: string;
+  pricingStartsAt?: number;
+  openingTime?: string;
+  closingTime?: string;
+};
 
 export type CreateProviderApplicationRequest = {
   providerKind: ProviderKind;

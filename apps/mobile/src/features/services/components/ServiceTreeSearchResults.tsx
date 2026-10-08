@@ -11,6 +11,11 @@ import {
   getProvidersForCategory,
   ServiceCategory,
 } from '@/shared/data/services';
+import {
+  marketplaceUsesApi,
+  useMarketplaceProvidersQuery,
+} from '@/shared/api/marketplaceHooks';
+import { useDebouncedValue } from '@/shared/hooks/useDebouncedValue';
 import { ServiceCategoryCard } from './ServiceCategoryGrid';
 import { ProviderCard } from './ProviderCard';
 import { EventCard } from './EventCard';
@@ -36,29 +41,38 @@ export function ServiceTreeSearchResults({
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const normalizedQuery = query.trim().toLowerCase();
+  const debouncedQuery = useDebouncedValue(normalizedQuery, 250);
+  const treeId = categories[0]?.treeId;
+  const providersQuery = useMarketplaceProvidersQuery(
+    { q: debouncedQuery, treeId, limit: 20 },
+    { enabled: marketplaceUsesApi && Boolean(debouncedQuery) },
+  );
+  const apiProviders = providersQuery.data;
   const results = useMemo(() => {
     const categoryIds = new Set(categories.map(category => category.id));
     const categoryResults = categories.filter(category =>
       matches(normalizedQuery, category.name, category.description),
     );
-    const providers = uniqueById(
-      categories
-        .flatMap(category => getProvidersForCategory(category.id))
-        .filter(provider =>
-          provider.categoryIds.some(id => categoryIds.has(id)),
-        )
-        .filter(provider =>
-          matches(
-            normalizedQuery,
-            provider.name,
-            provider.type,
-            provider.subtitle,
-            provider.location.city,
-            provider.location.area,
-            ...(provider.tags ?? []),
-          ),
-        ),
-    );
+    const providers = marketplaceUsesApi
+      ? apiProviders ?? []
+      : uniqueById(
+          categories
+            .flatMap(category => getProvidersForCategory(category.id))
+            .filter(provider =>
+              provider.categoryIds.some(id => categoryIds.has(id)),
+            )
+            .filter(provider =>
+              matches(
+                normalizedQuery,
+                provider.name,
+                provider.type,
+                provider.subtitle,
+                provider.location.city,
+                provider.location.area,
+                ...(provider.tags ?? []),
+              ),
+            ),
+        );
     const events = uniqueById(
       categories
         .flatMap(category => getEventsForCategory(category.id))
@@ -106,7 +120,7 @@ export function ServiceTreeSearchResults({
       courses,
       products,
     };
-  }, [categories, normalizedQuery]);
+  }, [apiProviders, categories, normalizedQuery]);
 
   const resultCount =
     results.categories.length +

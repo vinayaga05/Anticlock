@@ -11,9 +11,12 @@ import {
   getCourse,
   getEvent,
   getProduct,
-  getProvider,
   resolvePrimaryCta,
 } from '@/shared/data/services';
+import {
+  isMarketplaceProviderId,
+  useMarketplaceProviderQuery,
+} from '@/shared/api/marketplaceHooks';
 import { PrimaryActionBar } from '@/features/services/components/PrimaryActionBar';
 import { RootStackParamList } from '@/shared/navigation/types';
 import { useCartStore } from '@/shared/store/cartStore';
@@ -25,8 +28,14 @@ export function UniversalDetailScreen() {
   const { entityType, entityId, categoryId } = route.params;
   const addToCart = useCartStore(s => s.add);
 
-  const category = getCategory(categoryId);
-  const provider = entityType === 'provider' ? getProvider(entityId) : undefined;
+  const providerQuery = useMarketplaceProviderQuery(
+    entityType === 'provider' ? entityId : undefined,
+  );
+  const provider = providerQuery.data ?? undefined;
+  const category =
+    getCategory(categoryId) ??
+    (provider ? provider.categoryIds.map(id => getCategory(id)).find(Boolean) : undefined);
+  const isRealProvider = Boolean(provider && isMarketplaceProviderId(provider.id));
   const event = entityType === 'event' ? getEvent(entityId) : undefined;
   const course = entityType === 'course' ? getCourse(entityId) : undefined;
   const product = entityType === 'product' ? getProduct(entityId) : undefined;
@@ -56,6 +65,30 @@ export function UniversalDetailScreen() {
   const price =
     provider?.priceFrom ?? event?.price ?? course?.price ?? product?.price ?? 0;
 
+  if (entityType === 'provider' && providerQuery.isLoading) {
+    return (
+      <ScreenContainer tabAware={false}>
+        <EmptyState icon="search" title="Loading…" />
+      </ScreenContainer>
+    );
+  }
+
+  if (entityType === 'provider' && !provider) {
+    return (
+      <ScreenContainer tabAware={false}>
+        <EmptyState
+          icon="search"
+          title="Business not available"
+          description={
+            providerQuery.error instanceof Error
+              ? providerQuery.error.message
+              : 'This business is not accepting bookings right now.'
+          }
+        />
+      </ScreenContainer>
+    );
+  }
+
   if (!category && !provider && !event && !course && !product) {
     return (
       <ScreenContainer tabAware={false}>
@@ -75,7 +108,10 @@ export function UniversalDetailScreen() {
           kind,
           id: entityId,
           title,
-          fee: price || 499,
+          fee: price || (isRealProvider ? 0 : 499),
+          ...(isRealProvider && provider
+            ? { providerId: provider.id, categoryId: provider.categoryIds[0] ?? categoryId }
+            : {}),
         });
         break;
       }
@@ -123,7 +159,12 @@ export function UniversalDetailScreen() {
           <View style={styles.metaRow}>
             <AppIcon name="star" size={14} color={theme.colors.orange} />
             <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>
-              {provider.rating} ({provider.reviewCount}) · {provider.location.area}
+              {provider.reviewCount > 0
+                ? `${provider.rating} (${provider.reviewCount})`
+                : 'New on Anticlock'}
+              {provider.location.area || provider.location.city
+                ? ` · ${[provider.location.area, provider.location.city].filter(Boolean).join(', ')}`
+                : ''}
             </Text>
           </View>
         ) : null}

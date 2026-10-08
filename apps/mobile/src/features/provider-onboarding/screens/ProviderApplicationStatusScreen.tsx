@@ -1,6 +1,12 @@
-import React from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
-import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+import React, { useCallback } from 'react';
+import { Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  RouteProp,
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+} from '@react-navigation/native';
+import { AppIcon } from '@/shared/components/AppIcon';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { Button } from '@/shared/components/Button';
 import { useTheme } from '@/shared/hooks/useTheme';
@@ -9,7 +15,17 @@ import { statusLabel } from '@/features/provider-onboarding/utils/formValues';
 import {
   useDeleteProviderApplicationMutation,
   useProviderApplicationQuery,
+  useReopenProviderApplicationMutation,
 } from '@/shared/api/providerHooks';
+
+const STATUS_COPY: Record<string, string> = {
+  draft: 'Finish your details and submit when you’re ready.',
+  submitted: 'Submitted. Our team will start reviewing it shortly.',
+  under_review: 'Our team is reviewing your details and documents.',
+  more_info_requested: 'The reviewer needs a few changes before approving.',
+  approved: 'Approved! Your business is live in the marketplace.',
+  rejected: 'This application was not approved. You can fix it and resubmit.',
+};
 
 const STEPS = [
   'draft',
@@ -22,8 +38,19 @@ export function ProviderApplicationStatusScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<RootStackParamList, 'ProviderApplicationStatus'>>();
-  const { data: app, refetch } = useProviderApplicationQuery(route.params.applicationId);
+  const { data: app, refetch, isRefetching } = useProviderApplicationQuery(
+    route.params.applicationId,
+  );
   const deleteApplication = useDeleteProviderApplicationMutation();
+  const reopen = useReopenProviderApplicationMutation(route.params.applicationId);
+
+  // A reviewer decision may arrive while the app is open (push/in-app), so
+  // re-read the status every time this screen gains focus.
+  useFocusEffect(
+    useCallback(() => {
+      void refetch();
+    }, [refetch]),
+  );
 
   if (!app) {
     return (
@@ -34,7 +61,15 @@ export function ProviderApplicationStatusScreen() {
   }
 
   const canEdit = app.status === 'draft' || app.status === 'more_info_requested';
-  const canDelete = app.status !== 'approved';
+  const canDelete = app.status !== 'approved' && !app.providerId;
+  const onReopen = () => {
+    reopen.mutate(undefined, {
+      onSuccess: () =>
+        navigation.navigate('ProviderApplicationForm', { applicationId: app.id }),
+      onError: error =>
+        Alert.alert('Could not reopen', error instanceof Error ? error.message : 'Try again.'),
+    });
+  };
   const resumeEditing = () => {
     if (app.categoryIds.length === 0) {
       navigation.navigate('ProviderApplicationServices', {
@@ -73,19 +108,66 @@ export function ProviderApplicationStatusScreen() {
     );
   };
 
+  const reviewerMessage =
+    app.status === 'more_info_requested' ? app.infoRequestMessage : null;
+  const reviewerNotes =
+    app.status === 'rejected' || app.status === 'more_info_requested'
+      ? app.reviewNotes && app.reviewNotes !== reviewerMessage
+        ? app.reviewNotes
+        : null
+      : null;
+
   return (
     <ScreenContainer tabAware={false}>
-      <View style={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />
+        }>
         <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
           {app.businessName}
         </Text>
-        <Text style={[styles.status, { color: theme.colors.primary }]}>
+        <Text
+          style={[
+            styles.status,
+            {
+              color:
+                app.status === 'rejected'
+                  ? theme.colors.error
+                  : app.status === 'more_info_requested'
+                    ? theme.colors.warning
+                    : theme.colors.primary,
+            },
+          ]}>
           {statusLabel(app.status)}
         </Text>
-        {app.infoRequestMessage ? (
-          <Text style={{ color: theme.colors.warning }}>
-            {app.infoRequestMessage}
-          </Text>
+        <Text style={{ color: theme.colors.textSecondary }}>
+          {STATUS_COPY[app.status] ?? ''}
+        </Text>
+        {reviewerMessage || reviewerNotes ? (
+          <View
+            style={[
+              styles.noteCard,
+              {
+                backgroundColor:
+                  app.status === 'rejected'
+                    ? `${theme.colors.error}14`
+                    : `${theme.colors.warning}1A`,
+              },
+            ]}>
+            <View style={styles.noteHeader}>
+              <AppIcon name="message-circle" size={16} color={theme.colors.textPrimary} />
+              <Text style={[styles.noteTitle, { color: theme.colors.textPrimary }]}>
+                Reviewer notes
+              </Text>
+            </View>
+            {reviewerMessage ? (
+              <Text style={{ color: theme.colors.textPrimary }}>{reviewerMessage}</Text>
+            ) : null}
+            {reviewerNotes ? (
+              <Text style={{ color: theme.colors.textPrimary }}>{reviewerNotes}</Text>
+            ) : null}
+          </View>
         ) : null}
         <View style={styles.timeline}>
           {STEPS.map(step => {
@@ -105,12 +187,34 @@ export function ProviderApplicationStatusScreen() {
             );
           })}
         </View>
-        {canEdit ? (
+        {app.status === 'more_info_requested' ? (
+          <Button title="Edit & resubmit" onPress={resumeEditing} />
+        ) : canEdit ? (
           <Button
             title={app.categoryIds.length === 0 ? 'Choose services' : 'Continue editing'}
             onPress={resumeEditing}
           />
         ) : null}
+        {app.status === 'rejected' ? (
+          <Button
+            title="Fix & resubmit"
+            onPress={onReopen}
+            loading={reopen.isPending}
+          />
+        ) : null}
+        {app.status === 'approved' && app.providerId ? (
+          <Button
+            title="Open business dashboard"
+            onPress={() =>
+              navigation.navigate('ProviderDashboard', { providerId: app.providerId })
+            }
+          />
+        ) : null}
+        <Button
+          title="All businesses"
+          variant="secondary"
+          onPress={() => navigation.navigate('ProviderBusinesses')}
+        />
         {canDelete ? (
           <Button
             icon="trash"
@@ -122,19 +226,7 @@ export function ProviderApplicationStatusScreen() {
             style={styles.deleteButton}
           />
         ) : null}
-        {app.status === 'approved' ? (
-          <Button
-            title="View all businesses"
-            onPress={() => navigation.navigate('ProviderBusinesses')}
-          />
-        ) : null}
-        <Button
-          title="All businesses"
-          variant="secondary"
-          onPress={() => navigation.navigate('ProviderBusinesses')}
-        />
-        <Button title="Refresh status" variant="secondary" onPress={() => void refetch()} />
-      </View>
+      </ScrollView>
     </ScreenContainer>
   );
 }
@@ -158,5 +250,19 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     alignSelf: 'flex-start',
+  },
+  noteCard: {
+    borderRadius: 14,
+    gap: 6,
+    padding: 14,
+  },
+  noteHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  noteTitle: {
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

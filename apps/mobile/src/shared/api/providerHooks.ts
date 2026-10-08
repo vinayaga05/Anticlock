@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CreateProviderApplicationRequest,
+  ProviderBusinessDetail,
+  ProviderBusinessSummary,
+  UpdateProviderBusinessRequest,
   ProviderApplicationDetail,
   ProviderApplicationSummary,
   ProviderKind,
@@ -9,11 +12,12 @@ import type {
   UpdateProviderApplicationRequest,
 } from '@/features/provider-onboarding/types';
 import {
-  addLocalDocument,
   createLocalApplication,
   deleteLocalApplication,
   getLocalApplication,
   getLocalApplications,
+  reopenLocalApplication,
+  removeLocalDocument,
   setLocalServices,
   submitLocalApplication,
   updateLocalApplication,
@@ -48,13 +52,8 @@ export function useProviderApplicationsQuery() {
   return useQuery({
     queryKey: ['provider', 'applications', isApiEnabled ? 'api' : 'local'],
     queryFn: async () => {
-      if (!isApiEnabled) {
-        return getLocalApplications().filter(application =>
-          ['submitted', 'under_review', 'more_info_requested', 'approved'].includes(
-            application.status,
-          ),
-        );
-      }
+      // Every application is a business in progress, drafts included.
+      if (!isApiEnabled) return getLocalApplications();
       ensureAuthToken();
       const res = await apiRequest<{ applications: ProviderApplicationSummary[] }>(
         '/v1/provider/applications',
@@ -148,6 +147,113 @@ export function useUpdateProviderApplicationMutation(applicationId: string) {
   });
 }
 
+/**
+ * Draft autosave: writes the response straight into the detail cache
+ * instead of invalidating every provider query on each keystroke burst.
+ */
+export function useAutosaveProviderApplicationMutation(applicationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: UpdateProviderApplicationRequest) => {
+      if (!isApiEnabled) return updateLocalApplication(applicationId, body);
+      ensureAuthToken();
+      const res = await apiRequest<{ application: ProviderApplicationDetail }>(
+        `/v1/provider/applications/${applicationId}`,
+        { method: 'PATCH', body: JSON.stringify(body) },
+      );
+      return res.application;
+    },
+    onSuccess: application => {
+      if (application) {
+        qc.setQueryData(
+          ['provider', 'application', applicationId, isApiEnabled ? 'api' : 'local'],
+          application,
+        );
+      }
+      qc.invalidateQueries({ queryKey: ['provider', 'applications'] });
+    },
+  });
+}
+
+export async function deleteProviderDocument(applicationId: string, fieldKey: string) {
+  if (!isApiEnabled) {
+    removeLocalDocument(applicationId, fieldKey);
+    return;
+  }
+  ensureAuthToken();
+  await apiRequest<{ ok: true }>(
+    `/v1/provider/applications/${applicationId}/documents/${encodeURIComponent(fieldKey)}`,
+    { method: 'DELETE' },
+  );
+}
+
+/** Rejected -> draft again so the applicant can fix and resubmit. */
+export function useReopenProviderApplicationMutation(applicationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      if (!isApiEnabled) return reopenLocalApplication(applicationId);
+      ensureAuthToken();
+      const res = await apiRequest<{ application: ProviderApplicationDetail }>(
+        `/v1/provider/applications/${applicationId}/reopen`,
+        { method: 'POST' },
+      );
+      return res.application;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['provider'] });
+    },
+  });
+}
+
+/** Approved businesses the user owns or manages. */
+export function useMyBusinessesQuery() {
+  return useQuery({
+    queryKey: ['provider', 'businesses', isApiEnabled ? 'api' : 'local'],
+    queryFn: async (): Promise<ProviderBusinessSummary[]> => {
+      if (!isApiEnabled) return [];
+      ensureAuthToken();
+      const res = await apiRequest<{ businesses: ProviderBusinessSummary[] }>(
+        '/v1/provider/businesses',
+      );
+      return res.businesses;
+    },
+  });
+}
+
+export function useMyBusinessQuery(providerId: string | undefined) {
+  return useQuery({
+    queryKey: ['provider', 'business', providerId, isApiEnabled ? 'api' : 'local'],
+    enabled: Boolean(providerId) && isApiEnabled,
+    queryFn: async () => {
+      ensureAuthToken();
+      const res = await apiRequest<{ business: ProviderBusinessDetail }>(
+        `/v1/provider/businesses/${providerId}`,
+      );
+      return res.business;
+    },
+  });
+}
+
+export function useUpdateMyBusinessMutation(providerId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: UpdateProviderBusinessRequest) => {
+      ensureAuthToken();
+      const res = await apiRequest<{ business: ProviderBusinessDetail }>(
+        `/v1/provider/businesses/${providerId}`,
+        { method: 'PATCH', body: JSON.stringify(body) },
+      );
+      return res.business;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['provider', 'business'] });
+      qc.invalidateQueries({ queryKey: ['provider', 'businesses'] });
+      qc.invalidateQueries({ queryKey: ['marketplace'] });
+    },
+  });
+}
+
 export function useDeleteProviderApplicationMutation() {
   const qc = useQueryClient();
   return useMutation({
@@ -201,70 +307,4 @@ export function useSubmitProviderApplicationMutation(applicationId: string) {
       qc.invalidateQueries({ queryKey: ['provider'] });
     },
   });
-}
-
-export async function createProviderKycUploadSession(
-  applicationId: string,
-  body: {
-    fieldKey: string;
-    kind: 'image' | 'document' | 'video';
-    filename: string;
-    contentType: string;
-    byteSize: number;
-  },
-) {
-  ensureAuthToken();
-  return apiRequest<{
-    sessionId: string;
-    mediaId: string;
-    uploadUrl: string;
-    headers: Record<string, string>;
-  }>(`/v1/provider/applications/${applicationId}/kyc-upload-session`, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-}
-
-export async function uploadProviderDocument(
-  applicationId: string,
-  fieldKey: string,
-  filename: string,
-  contentType: string,
-  bytes: ArrayBuffer,
-) {
-  if (!isApiEnabled) {
-    addLocalDocument(applicationId, fieldKey);
-    return `local-doc-${fieldKey}`;
-  }
-  const session = await createProviderKycUploadSession(applicationId, {
-    fieldKey,
-    kind: contentType.startsWith('image/') ? 'image' : 'document',
-    filename,
-    contentType,
-    byteSize: bytes.byteLength,
-  });
-
-  await apiRequest(
-    `/v1/provider/applications/${applicationId}/kyc-upload-sessions/${session.sessionId}/content`,
-    {
-      method: 'PUT',
-      headers: { 'Content-Type': contentType },
-      body: bytes,
-    },
-  );
-
-  await completeProviderKycUpload(applicationId, session.sessionId, fieldKey);
-  return session.mediaId;
-}
-
-export async function completeProviderKycUpload(
-  applicationId: string,
-  sessionId: string,
-  fieldKey: string,
-) {
-  ensureAuthToken();
-  return apiRequest<{ mediaId: string }>(
-    `/v1/provider/applications/${applicationId}/kyc-upload-sessions/${sessionId}/complete`,
-    { method: 'POST', body: JSON.stringify({ fieldKey }) },
-  );
 }

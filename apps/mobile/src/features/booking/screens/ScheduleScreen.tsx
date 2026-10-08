@@ -15,6 +15,21 @@ import { useTheme } from '@/shared/hooks/useTheme';
 import { healthTheme } from '@/shared/theme/healthTheme';
 import { RootStackParamList } from '@/shared/navigation/types';
 import { ServiceMode } from '@/shared/types';
+import { useCreateBookingMutation } from '@/shared/api/bookingHooks';
+import { isApiEnabled } from '@/shared/api/config';
+
+/** "2026-10-09" + "10:30 AM" (device-local) -> ISO timestamp. */
+export function scheduleToIso(date: string, time: string): string | null {
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const t = /^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i.exec(time.trim());
+  if (!d || !t) return null;
+  let hour = Number(t[1]);
+  const meridiem = t[3]?.toUpperCase();
+  if (meridiem === 'PM' && hour < 12) hour += 12;
+  if (meridiem === 'AM' && hour === 12) hour = 0;
+  const at = new Date(Number(d[1]), Number(d[2]) - 1, Number(d[3]), hour, Number(t[2]));
+  return Number.isNaN(at.getTime()) ? null : at.toISOString();
+}
 
 const HEALTH_KINDS = new Set(['doctor', 'lab', 'appointment']);
 
@@ -22,13 +37,14 @@ export function ScheduleScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<RootStackParamList, 'Schedule'>>();
-  const { kind, title, fee } = route.params;
+  const { kind, title, fee, providerId, categoryId } = route.params;
+  const createBooking = useCreateBookingMutation();
   const isHealth = HEALTH_KINDS.has(kind);
   const [mode, setMode] = React.useState<ServiceMode>('center');
   const { selectedDate, selectedTime, setSelectedDate, setSelectedTime } =
     useScheduleState();
 
-  const confirm = () => {
+  const confirm = async () => {
     if (!selectedDate || !selectedTime) {
       Alert.alert('Select schedule', 'Please choose a date and time slot.');
       return;
@@ -38,7 +54,35 @@ export function ScheduleScreen() {
         ? 'Online session'
         : mode === 'home'
           ? 'Home visit'
-          : 'Anticlock Clinic';
+          : providerId
+            ? title
+            : 'Anticlock Clinic';
+    if (providerId && isApiEnabled) {
+      const startsAt = scheduleToIso(selectedDate, selectedTime);
+      if (!startsAt) {
+        Alert.alert('Select schedule', 'Please choose a valid date and time.');
+        return;
+      }
+      try {
+        await createBooking.mutateAsync({
+          providerId,
+          categoryId: categoryId ?? null,
+          category: kind === 'class' ? 'class' : 'appointment',
+          serviceMode: mode,
+          startsAt,
+          durationMinutes: 60,
+          amount: fee > 0 ? Math.round(fee) : null,
+          detail: {
+            providerName: title,
+            serviceTitle: title,
+            locationLabel: place,
+          },
+        });
+      } catch (err) {
+        Alert.alert('Booking failed', (err as Error).message);
+        return;
+      }
+    }
     navigation.replace('BookingConfirm', {
       kind,
       title,
@@ -90,7 +134,8 @@ export function ScheduleScreen() {
         title="Confirm booking"
         variant={isHealth ? 'health' : 'primary'}
         icon="calendar"
-        onPress={confirm}
+        onPress={() => void confirm()}
+        loading={createBooking.isPending}
       />
     </Shell>
   );

@@ -1426,6 +1426,181 @@ async function migrate() {
       ON music_tracks (is_active, sort_order)
   `;
 
+  // ── Content publisher profiles + lifecycle (fix/content-publisher-profiles)
+  //
+  // Every statement is idempotent and safe on a live database:
+  //  * publisher_profile_id/type are STORED generated columns derived from
+  //    the existing author_mobile_user_id/author_provider_id pair (which a
+  //    CHECK already requires to be exactly one). Adding them backfills every
+  //    existing row automatically (personal profile = the owning mobile user)
+  //    and they can never drift from the author columns afterwards.
+  //  * content_containers.status gains the full lifecycle vocabulary. The
+  //    constraint is replaced inside one ALTER so there is no window without it.
+  //  * Existing published rows are untouched. Only legacy containers stuck in
+  //    `ready_to_publish` whose media is all ready (an upload that never got a
+  //    post because the publish step failed) are published, once.
+  await sql`
+    ALTER TABLE content_containers
+      ADD COLUMN IF NOT EXISTS failure_reason text,
+      ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now(),
+      ADD COLUMN IF NOT EXISTS publisher_profile_id uuid GENERATED ALWAYS AS (COALESCE(author_provider_id, author_mobile_user_id)) STORED,
+      ADD COLUMN IF NOT EXISTS publisher_profile_type text GENERATED ALWAYS AS (CASE WHEN author_provider_id IS NOT NULL THEN 'business' ELSE 'personal' END) STORED
+  `;
+  await sql`
+    ALTER TABLE content_containers
+      DROP CONSTRAINT IF EXISTS content_containers_status_check,
+      ADD CONSTRAINT content_containers_status_check CHECK (status IN (
+        'draft', 'uploading', 'processing', 'ready_to_publish',
+        'pending_review', 'published', 'rejected', 'failed', 'discarded'
+      ))
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS content_containers_owner_status_idx
+      ON content_containers (created_by_mobile_user_id, status, created_at DESC)
+  `;
+  await sql`
+    ALTER TABLE content_posts
+      ADD COLUMN IF NOT EXISTS review_note text,
+      ADD COLUMN IF NOT EXISTS reviewed_at timestamptz,
+      ADD COLUMN IF NOT EXISTS publisher_profile_id uuid GENERATED ALWAYS AS (COALESCE(author_provider_id, author_mobile_user_id)) STORED,
+      ADD COLUMN IF NOT EXISTS publisher_profile_type text GENERATED ALWAYS AS (CASE WHEN author_provider_id IS NOT NULL THEN 'business' ELSE 'personal' END) STORED
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS content_posts_publisher_status_published_idx
+      ON content_posts (publisher_profile_id, status, published_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS content_posts_status_visibility_published_idx
+      ON content_posts (status, visibility, published_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS content_posts_story_expiry_status_idx
+      ON content_posts (expires_at, status)
+      WHERE format = 'story'
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS content_post_comments (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      content_post_id uuid NOT NULL REFERENCES content_posts(id) ON DELETE CASCADE,
+      owner_mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      author_mobile_user_id uuid REFERENCES mobile_users(id) ON DELETE CASCADE,
+      author_provider_id uuid REFERENCES providers(id) ON DELETE CASCADE,
+      publisher_profile_id uuid GENERATED ALWAYS AS (COALESCE(author_provider_id, author_mobile_user_id)) STORED,
+      publisher_profile_type text GENERATED ALWAYS AS (CASE WHEN author_provider_id IS NOT NULL THEN 'business' ELSE 'personal' END) STORED,
+      body text NOT NULL,
+      status text NOT NULL DEFAULT 'published',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      CHECK ((author_mobile_user_id IS NULL) <> (author_provider_id IS NULL))
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS content_post_comments_post_created_idx
+      ON content_post_comments (content_post_id, created_at)
+  `;
+
+  // content_post_reports was created without the resolution columns that the
+  // Drizzle schema (and the moderation routes) use, so every content report
+  // insert failed. Additive and nullable, therefore safe on live data.
+  await sql`
+    ALTER TABLE content_post_reports
+      ADD COLUMN IF NOT EXISTS resolution_action text,
+      ADD COLUMN IF NOT EXISTS resolution_note text,
+      ADD COLUMN IF NOT EXISTS resolved_by uuid REFERENCES users(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS resolved_at timestamptz
+  `;
+
+  // One-shot recovery of uploads whose publish call failed under the old
+  // client (it created the container and published in one tap, so these
+  // creators did press Publish). Guarded by a marker row so it runs exactly
+  // once (this script runs on every deploy), and limited to containers older
+  // than an hour so an in-flight composer at deploy time is never published
+  // on the creator's behalf. A container qualifies only when every attached
+  // media asset is ready, live and approved; text-only containers need a
+  // caption. With CONTENT_REQUIRE_REVIEW=true they go to `pending_review`
+  // instead of `published`. Stories keep their original 24h window; stories
+  // already past it are skipped entirely.
+  await sql`
+    CREATE TABLE IF NOT EXISTS app_data_backfills (
+      name text PRIMARY KEY,
+      applied_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  // Same parsing as contentRequiresReview() in publishing/publisher.ts.
+  const recoveredStatus =
+    (process.env.CONTENT_REQUIRE_REVIEW ?? "").trim().toLowerCase() === "true"
+      ? "pending_review"
+      : "published";
+  await sql.begin(async (tx) => {
+    const claimed = await tx`
+      INSERT INTO app_data_backfills (name)
+      VALUES ('content_publish_orphan_ready_containers_v1')
+      ON CONFLICT (name) DO NOTHING
+      RETURNING name
+    `;
+    if (claimed.length === 0) return;
+    await tx`
+    WITH eligible AS (
+      SELECT c.*
+      FROM content_containers c
+      WHERE c.status = 'ready_to_publish'
+        AND c.created_at < now() - interval '1 hour'
+        -- A story past its 24h window is not worth recovering (and must not
+        -- be revived through review approval).
+        AND NOT (c.format = 'story' AND c.created_at <= now() - interval '24 hours')
+        AND NOT EXISTS (SELECT 1 FROM content_posts p WHERE p.container_id = c.id)
+        AND (
+          (c.media_type = 'text' AND length(c.caption) > 0)
+          OR (c.media_type <> 'text' AND jsonb_array_length(c.media_ids) > 0)
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(c.media_ids) AS m(media_id)
+          LEFT JOIN media_assets a ON a.id::text = m.media_id
+          WHERE a.id IS NULL
+             OR a.processing_status <> 'ready'
+             OR a.deleted_at IS NOT NULL
+             OR a.archived_at IS NOT NULL
+             OR a.moderation_status NOT IN ('approved', 'not_required')
+        )
+    ),
+    inserted AS (
+      INSERT INTO content_posts (
+        container_id, created_by_mobile_user_id, author_mobile_user_id,
+        author_provider_id, format, media_type, caption, media_ids,
+        thumbnail_media_id, hashtags, tagged_mobile_user_ids, location,
+        duplicate_cluster_id, visibility, edit, music_track_id, status,
+        expires_at, created_at, published_at
+      )
+      SELECT
+        e.id, e.created_by_mobile_user_id, e.author_mobile_user_id,
+        e.author_provider_id, e.format, e.media_type, e.caption, e.media_ids,
+        e.thumbnail_media_id, e.hashtags, e.tagged_mobile_user_ids, e.location,
+        COALESCE(
+          (
+            SELECT COALESCE(a.checksum_sha256, a.id::text)
+            FROM jsonb_array_elements_text(e.media_ids) AS m(media_id)
+            JOIN media_assets a ON a.id::text = m.media_id
+            WHERE a.kind = 'video'
+            LIMIT 1
+          ),
+          e.id::text
+        ),
+        e.visibility, e.edit, e.edit -> 'music' ->> 'trackId', ${recoveredStatus}::text,
+        CASE WHEN e.format = 'story' THEN e.created_at + interval '24 hours' END,
+        e.created_at, e.created_at
+      FROM eligible e
+      RETURNING container_id
+    )
+    UPDATE content_containers c
+    SET status = ${recoveredStatus}::text,
+        published_at = CASE WHEN ${recoveredStatus}::text = 'published' THEN c.created_at END,
+        updated_at = now()
+    FROM inserted i
+    WHERE c.id = i.container_id
+    `;
+  });
+
   console.log("Migrations applied.");
   await sql.end({ timeout: 5 });
 }

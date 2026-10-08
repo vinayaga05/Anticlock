@@ -738,7 +738,20 @@ export function ReelFeedScreen() {
         <View style={[styles.meta, { bottom: bottomSafe }]}>
           <PressableScale
             accessibilityLabel={`Open ${item.author} profile`}
-            onPress={() => navigation.navigate('Profile')}
+            onPress={() =>
+              navigation.navigate(
+                'Profile',
+                item.feedSource === 'content_post' && item.authorProfile
+                  ? {
+                      profileType:
+                        item.authorProfile.type === 'user'
+                          ? 'personal'
+                          : 'business',
+                      profileId: item.authorProfile.id,
+                    }
+                  : undefined,
+              )
+            }
             style={styles.creatorRow}
           >
             <Image

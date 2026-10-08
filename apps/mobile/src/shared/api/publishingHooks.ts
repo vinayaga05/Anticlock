@@ -1,8 +1,26 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest, getApiToken, ApiError } from './client';
 import { getApiBaseUrl, isApiEnabled } from './config';
 import { readStoredSession } from '@/shared/services/auth/authService';
 import type { ClipEditMetadata } from '@/features/reels/editor/clipEditModel';
+import {
+  canReuseDraft,
+  identityProfileType,
+  type PublisherProfileType,
+} from '@/shared/publishing/publisherSelection';
+import { publisherSelectionStore } from '@/shared/publishing/publisherSelectionStorage';
+import { invalidateAfterPublish } from '@/shared/publishing/contentQueryKeys';
+
+/** Server-derived publisher card (never sent by the client). */
+export type ContentPublisher = {
+  id: string;
+  type: PublisherProfileType;
+  displayName: string;
+  handle: string | null;
+  avatarUrl: string | null;
+  verified: boolean;
+  businessCategory: string | null;
+};
 
 export type PublishingIdentity = {
   type: 'user' | 'provider';
@@ -10,6 +28,8 @@ export type PublishingIdentity = {
   name: string;
   avatarUrl: string | null;
   role?: 'owner' | 'admin' | 'content_creator' | 'analyst';
+  profileType?: PublisherProfileType;
+  publisher?: ContentPublisher;
 };
 
 type ContentContainerInput = {
@@ -123,6 +143,8 @@ export async function uploadContentMedia(
   identity: PublishingIdentity,
   file: ContentUploadFile,
   visibility: ContentContainerInput['visibility'],
+  /** Server draft this upload belongs to (moves it to `uploading`). */
+  draftId?: string,
 ): Promise<string> {
   const session = requireSession();
   if (!isApiEnabled) {
@@ -152,6 +174,7 @@ export async function uploadContentMedia(
       width: file.width,
       height: file.height,
       visibility,
+      ...(draftId ? { draftId } : {}),
     }),
   });
   const uploadHeaders = new Headers(created.upload.headers);
@@ -223,24 +246,160 @@ export function usePublishingIdentitiesQuery() {
   });
 }
 
-export function usePublishContentMutation() {
-  return useMutation({
-    mutationFn: async (input: ContentContainerInput) => {
-      if (!isApiEnabled) return null;
-      const { identity, ...body } = input;
-      const headers = contextHeaders(identity);
-      const created = await apiRequest<{ container: { id: string } }>(
-        '/v1/content/containers',
+type DraftResponse = {
+  draft: {
+    id: string;
+    contentStatus: string;
+    publisherProfileId: string;
+    publisherProfileType: PublisherProfileType;
+  };
+};
+
+const OPEN_DRAFT_STATUSES = new Set([
+  'draft',
+  'uploading',
+  'processing',
+  'failed',
+]);
+
+type DraftSeed = Pick<
+  ContentContainerInput,
+  'format' | 'mediaType' | 'caption' | 'visibility' | 'identity'
+>;
+
+/**
+ * Step 2 of the publish flow: a server draft that fixes owner + publisher
+ * before any upload. The draft id is persisted per format so a retry after
+ * a failed upload/publish (or an app relaunch) continues the same draft
+ * instead of resetting the profile.
+ */
+export async function ensureContentDraft(seed: DraftSeed): Promise<string> {
+  requireSession();
+  const { identity, format, visibility } = seed;
+  const persisted = publisherSelectionStore.loadDraft(format);
+  if (persisted && canReuseDraft(persisted, identity, visibility)) {
+    try {
+      const existing = await apiRequest<DraftResponse>(
+        `/v1/content/drafts/${persisted.draftId}`,
+      );
+      if (
+        OPEN_DRAFT_STATUSES.has(existing.draft.contentStatus) &&
+        existing.draft.publisherProfileId === identity.id
+      ) {
+        return existing.draft.id;
+      }
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 404) throw error;
+    }
+  } else if (persisted) {
+    // The creator switched profile/visibility: the old draft's publisher is
+    // immutable, so discard it (best effort) and start a new one.
+    apiRequest(`/v1/content/drafts/${persisted.draftId}`, {
+      method: 'DELETE',
+    }).catch(() => undefined);
+  }
+  const created = await apiRequest<DraftResponse>('/v1/content/drafts', {
+    method: 'POST',
+    body: JSON.stringify({
+      contentType: format,
+      publisherProfileId: identity.id,
+      publisherProfileType: identityProfileType(identity),
+      visibility,
+      metadata: {
+        mediaType: seed.mediaType,
+        caption: seed.caption,
+      },
+    }),
+  });
+  publisherSelectionStore.saveDraft({
+    format,
+    draftId: created.draft.id,
+    publisherProfileId: created.draft.publisherProfileId,
+    publisherProfileType: created.draft.publisherProfileType,
+    visibility,
+  });
+  return created.draft.id;
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+export type PublishContentInput = ContentContainerInput & {
+  /** Draft created by `ensureContentDraft` before uploading media. */
+  draftId?: string;
+};
+
+export type PublishContentResult = {
+  post: { id: string; format: string; contentStatus: string };
+} | null;
+
+async function publishViaDraft(
+  input: PublishContentInput,
+): Promise<NonNullable<PublishContentResult>> {
+  const { identity, draftId: givenDraftId, ...body } = input;
+  const draftId = givenDraftId ?? (await ensureContentDraft(input));
+  await apiRequest<DraftResponse>(`/v1/content/drafts/${draftId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      mediaIds: body.mediaIds ?? [],
+      thumbnailMediaId: body.thumbnailMediaId ?? null,
+      visibility: body.visibility,
+      metadata: {
+        mediaType: body.mediaType,
+        caption: body.caption,
+        hashtags: body.hashtags ?? [],
+        taggedUserIds: body.taggedUserIds ?? [],
+        location: body.location ?? null,
+        ...(body.edit ? { edit: body.edit } : {}),
+      },
+    }),
+  });
+  // Media is usually READY by the time the upload completes; a short wait
+  // covers a transcoding/processing window without dropping the draft.
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const published = await apiRequest<NonNullable<PublishContentResult>>(
+        `/v1/content/drafts/${draftId}/publish`,
         {
           method: 'POST',
-          headers,
-          body: JSON.stringify(body),
+          body: JSON.stringify({ publisherProfileId: identity.id }),
         },
       );
-      return apiRequest<{ post: { id: string } }>(
-        `/v1/content/containers/${created.container.id}/publish`,
-        { method: 'POST', headers },
-      );
+      publisherSelectionStore.clearDraft(input.format);
+      return published;
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.code === 'media_processing' &&
+        attempt < 4
+      ) {
+        await sleep(1500);
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
+/**
+ * Draft-first publish: draft (owner + publisher) → attach media/metadata →
+ * publish. On success every surface that can show the new post is
+ * invalidated (feed, publishing profile + counts, "My Content").
+ */
+export function usePublishContentMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      input: PublishContentInput,
+    ): Promise<PublishContentResult> => {
+      if (!isApiEnabled) return null;
+      return publishViaDraft(input);
+    },
+    onSuccess: async (_result, input) => {
+      await invalidateAfterPublish(queryClient, {
+        format: input.format,
+        publisherProfileId: input.identity.id,
+        publisherProfileType: identityProfileType(input.identity),
+      });
     },
   });
 }

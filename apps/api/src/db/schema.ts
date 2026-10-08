@@ -524,14 +524,38 @@ export const contentContainers = pgTable(
     visibility: text("visibility").notNull().default("public"),
     /** On-device Clip edit metadata (trim/music/volume); null for other formats. */
     edit: jsonb("edit").$type<ClipEditMetadata>(),
+    /**
+     * draft | uploading | processing | ready_to_publish (legacy) |
+     * pending_review | published | rejected | failed | discarded
+     */
     status: text("status").notNull().default("ready_to_publish"),
+    failureReason: text("failure_reason"),
+    /**
+     * Publishing profile (personal = mobile user id, business = provider id).
+     * Generated from the author columns so the two can never drift; these are
+     * the columns feed/profile queries filter on.
+     */
+    publisherProfileId: uuid("publisher_profile_id").generatedAlwaysAs(
+      sql`COALESCE(author_provider_id, author_mobile_user_id)`
+    ),
+    publisherProfileType: text("publisher_profile_type").generatedAlwaysAs(
+      sql`CASE WHEN author_provider_id IS NOT NULL THEN 'business' ELSE 'personal' END`
+    ),
     createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
     publishedAt: timestamp("published_at", { withTimezone: true }),
   },
   (table) => [
     index("content_containers_creator_idx").on(table.createdByMobileUserId),
+    index("content_containers_owner_status_idx").on(
+      table.createdByMobileUserId,
+      table.status,
+      table.createdAt
+    ),
   ]
 );
 
@@ -581,7 +605,21 @@ export const contentPosts = pgTable(
     edit: jsonb("edit").$type<ClipEditMetadata>(),
     /** Denormalized music track id for future "uses this audio" surfaces. */
     musicTrackId: text("music_track_id"),
+    /** published | pending_review | rejected | removed */
     status: text("status").notNull().default("published"),
+    /**
+     * Publishing profile (personal = mobile user id, business = provider id).
+     * Generated from the author columns so the two can never drift; these are
+     * the columns feed/profile queries filter on.
+     */
+    publisherProfileId: uuid("publisher_profile_id").generatedAlwaysAs(
+      sql`COALESCE(author_provider_id, author_mobile_user_id)`
+    ),
+    publisherProfileType: text("publisher_profile_type").generatedAlwaysAs(
+      sql`CASE WHEN author_provider_id IS NOT NULL THEN 'business' ELSE 'personal' END`
+    ),
+    reviewNote: text("review_note"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     viewCount: integer("view_count").notNull().default(0),
     likeCount: integer("like_count").notNull().default(0),
     commentCount: integer("comment_count").notNull().default(0),
@@ -598,6 +636,68 @@ export const contentPosts = pgTable(
     index("content_posts_feed_idx").on(table.format, table.publishedAt),
     index("content_posts_expiry_idx").on(table.expiresAt),
     index("content_posts_cluster_idx").on(table.duplicateClusterId),
+    index("content_posts_publisher_status_published_idx").on(
+      table.publisherProfileId,
+      table.status,
+      table.publishedAt
+    ),
+    index("content_posts_status_visibility_published_idx").on(
+      table.status,
+      table.visibility,
+      table.publishedAt
+    ),
+    index("content_posts_story_expiry_status_idx").on(
+      table.expiresAt,
+      table.status
+    ),
+  ]
+);
+
+/**
+ * Comments on content posts. The commenter's account owns the row; the
+ * publisher columns say which of their profiles (personal or a business)
+ * the comment is shown as.
+ */
+export const contentPostComments = pgTable(
+  "content_post_comments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    contentPostId: uuid("content_post_id")
+      .notNull()
+      .references(() => contentPosts.id, { onDelete: "cascade" }),
+    ownerMobileUserId: uuid("owner_mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    authorMobileUserId: uuid("author_mobile_user_id").references(
+      () => mobileUsers.id,
+      { onDelete: "cascade" }
+    ),
+    authorProviderId: uuid("author_provider_id").references(
+      () => providers.id,
+      { onDelete: "cascade" }
+    ),
+    /**
+     * Publishing profile (personal = mobile user id, business = provider id).
+     * Generated from the author columns so the two can never drift; these are
+     * the columns feed/profile queries filter on.
+     */
+    publisherProfileId: uuid("publisher_profile_id").generatedAlwaysAs(
+      sql`COALESCE(author_provider_id, author_mobile_user_id)`
+    ),
+    publisherProfileType: text("publisher_profile_type").generatedAlwaysAs(
+      sql`CASE WHEN author_provider_id IS NOT NULL THEN 'business' ELSE 'personal' END`
+    ),
+    body: text("body").notNull(),
+    status: text("status").notNull().default("published"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("content_post_comments_post_created_idx").on(
+      table.contentPostId,
+      table.createdAt
+    ),
   ]
 );
 

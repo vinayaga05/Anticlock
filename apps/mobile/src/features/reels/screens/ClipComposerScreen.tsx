@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Image,
@@ -16,10 +16,12 @@ import { Card } from '@/shared/components/Card';
 import { FilterPills } from '@/shared/components/FilterPills';
 import { PressableScale } from '@/shared/components/PressableScale';
 import {
+  ensureContentDraft,
   uploadContentMedia,
   usePublishContentMutation,
-  usePublishingIdentitiesQuery,
 } from '@/shared/api/publishingHooks';
+import { PostingAsCard } from '@/shared/publishing/PostingAsCard';
+import { usePublisherSelection } from '@/shared/publishing/usePublisherSelection';
 import { useTheme } from '@/shared/hooks/useTheme';
 import type { PostVisibility } from '@/shared/data/flash/types';
 import {
@@ -121,11 +123,16 @@ export function ClipComposerScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const { data: identities = [], isLoading: identitiesLoading } =
-    usePublishingIdentitiesQuery();
   const publishContent = usePublishContentMutation();
-
-  const [identityId, setIdentityId] = useState<string | null>(null);
+  // Persisted per format; a restored draft re-asserts its own profile and
+  // nothing resets it to the personal profile afterwards.
+  const publisher = usePublisherSelection('clip');
+  const {
+    identities,
+    identity,
+    selectedId: identityId,
+    restore: restoreIdentity,
+  } = publisher;
   const [stage, setStage] = useState<'capture' | 'editor' | 'publish'>(
     'capture',
   );
@@ -157,7 +164,7 @@ export function ClipComposerScreen() {
   useEffect(() => {
     const draft = loadDraft();
     if (!draft) return;
-    setIdentityId(draft.identityId);
+    restoreIdentity(draft.identityId);
     setCover(draft.cover);
     setCoverMode(draft.coverMode);
     setCaption(draft.caption);
@@ -170,22 +177,10 @@ export function ClipComposerScreen() {
       setSegments(draft.edit.sources.filter(s => s.origin === 'camera'));
       setStage('editor');
     }
+    // Restore once on mount; `restoreIdentity` is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (!identityId && identities[0]) setIdentityId(identities[0].id);
-  }, [identities, identityId]);
-
-  const identity =
-    identities.find(item => item.id === identityId) ?? identities[0];
-  const identityPills = useMemo(
-    () =>
-      identities.map(item => ({
-        id: item.id,
-        label: item.type === 'provider' ? item.name : 'Personal',
-      })),
-    [identities],
-  );
   const isPublishing =
     uploadStatus.phase !== 'idle' &&
     uploadStatus.phase !== 'complete' &&
@@ -320,6 +315,15 @@ export function ClipComposerScreen() {
 
     try {
       setUploadStatus({ phase: 'preparing', progress: 8 });
+      // Draft first: owner + publisher are fixed before any upload, and a
+      // retry continues the same draft for the same profile.
+      const draftId = await ensureContentDraft({
+        format: 'clip',
+        mediaType: 'video',
+        caption: caption.trim(),
+        visibility,
+        identity,
+      });
       const uploadFile = await createVideoUploadFile(video);
       setUploadStatus({
         phase: 'video',
@@ -330,6 +334,7 @@ export function ClipComposerScreen() {
         identity,
         uploadFile,
         visibility,
+        draftId,
       );
 
       let thumbnailMediaId: string | null = null;
@@ -346,11 +351,13 @@ export function ClipComposerScreen() {
           identity,
           coverFile,
           visibility,
+          draftId,
         );
       }
 
       setUploadStatus({ phase: 'publishing', progress: 88 });
-      await publishContent.mutateAsync({
+      const result = await publishContent.mutateAsync({
+        draftId,
         format: 'clip',
         mediaType: 'video',
         caption: caption.trim(),
@@ -365,9 +372,14 @@ export function ClipComposerScreen() {
       });
       setUploadStatus({ phase: 'complete', progress: 100 });
       storage.remove(STORAGE_KEYS.CLIP_COMPOSER_DRAFT);
-      Alert.alert('Clip published', 'Your video is ready to appear in Clips.', [
-        { text: 'Done', onPress: () => navigation.goBack() },
-      ]);
+      const pendingReview = result?.post.contentStatus === 'pending_review';
+      Alert.alert(
+        pendingReview ? 'Clip submitted' : 'Clip published',
+        pendingReview
+          ? `Your clip from ${identity.name} will appear once it is reviewed.`
+          : `Your clip is live on ${identity.name}.`,
+        [{ text: 'Done', onPress: () => navigation.goBack() }],
+      );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Please try publishing again.';
@@ -483,71 +495,14 @@ export function ClipComposerScreen() {
           </Text>
         </View>
 
-        <Card style={styles.profileCard}>
-          <View style={styles.authorRow}>
-            {identity?.avatarUrl ? (
-              <Image
-                source={{ uri: identity.avatarUrl }}
-                style={styles.avatar}
-              />
-            ) : (
-              <View
-                style={[
-                  styles.avatar,
-                  { backgroundColor: theme.colors.primarySoft },
-                ]}
-              />
-            )}
-            <View style={styles.authorCopy}>
-              <Text
-                style={[
-                  theme.typography.section,
-                  { color: theme.colors.textPrimary },
-                ]}
-                numberOfLines={1}
-              >
-                {identity?.name ?? 'Loading profile…'}
-              </Text>
-              <Text
-                style={[
-                  theme.typography.caption,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                {identity?.type === 'provider'
-                  ? 'Posting as business profile'
-                  : 'Posting as personal profile'}
-              </Text>
-            </View>
-          </View>
-
-          {identityPills.length > 1 ? (
-            <View style={styles.sectionGap}>
-              <Text
-                style={[
-                  theme.typography.caption,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                Publish as
-              </Text>
-              <FilterPills
-                activeId={identity?.id ?? ''}
-                onChange={setIdentityId}
-                pills={identityPills}
-              />
-            </View>
-          ) : identitiesLoading ? (
-            <Text
-              style={[
-                theme.typography.caption,
-                { color: theme.colors.textTertiary },
-              ]}
-            >
-              Loading publishing profiles…
-            </Text>
-          ) : null}
-        </Card>
+        <PostingAsCard
+          identities={identities}
+          identity={identity}
+          onSelect={publisher.select}
+          isLoading={publisher.isLoading}
+          fallbackApplied={publisher.fallbackApplied}
+          disabled={isPublishing}
+        />
 
         <Card style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -944,11 +899,6 @@ const styles = StyleSheet.create({
   content: { flexGrow: 1 },
   composerTopBar: { alignItems: 'flex-end' },
   heading: { gap: 5 },
-  profileCard: { gap: 14 },
-  authorRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  authorCopy: { flex: 1, gap: 2 },
-  avatar: { width: 44, height: 44, borderRadius: 22 },
-  sectionGap: { gap: 7 },
   section: { gap: 10 },
   mediaActions: { flexDirection: 'row', gap: 10 },
   actionButton: { flex: 1 },

@@ -53,12 +53,68 @@ export const ContentLocationSchema = z
   });
 export type ContentLocation = z.infer<typeof ContentLocationSchema>;
 
+/** A publishing profile is the user's personal profile or one of their businesses. */
+export const PublisherProfileTypeSchema = z.enum(["personal", "business"]);
+export type PublisherProfileType = z.infer<typeof PublisherProfileTypeSchema>;
+
+/**
+ * Lifecycle of a piece of content. Only `published` content is ever returned
+ * to other viewers; every other state is visible to the owner only.
+ */
+export const ContentLifecycleStatusSchema = z.enum([
+  "draft",
+  "uploading",
+  "processing",
+  "pending_review",
+  "published",
+  "rejected",
+  "failed",
+  "removed",
+]);
+export type ContentLifecycleStatus = z.infer<typeof ContentLifecycleStatusSchema>;
+
+/**
+ * Stored visibility values. `private` is accepted as an alias of the legacy
+ * `only_me` value and normalized before persistence.
+ */
+export const ContentVisibilitySchema = z.enum([
+  "public",
+  "followers",
+  "friends",
+  "community",
+  "only_me",
+]);
+export type ContentVisibility = z.infer<typeof ContentVisibilitySchema>;
+export const ContentVisibilityInputSchema = z
+  .enum(["public", "followers", "friends", "community", "only_me", "private"])
+  .transform((value): ContentVisibility =>
+    value === "private" ? "only_me" : value
+  );
+
+/**
+ * Public author of a piece of content. Always derived on the server from
+ * `publisherProfileId`; clients never supply display fields.
+ */
+export const ContentPublisherSchema = z.object({
+  id: z.string().uuid(),
+  type: PublisherProfileTypeSchema,
+  displayName: z.string(),
+  handle: z.string().nullable(),
+  avatarUrl: z.string().nullable(),
+  verified: z.boolean(),
+  businessCategory: z.string().nullable(),
+});
+export type ContentPublisher = z.infer<typeof ContentPublisherSchema>;
+
 export const PublishingIdentitySchema = z.object({
   type: PublishingActorTypeSchema,
   id: z.string().uuid(),
   name: z.string(),
   avatarUrl: z.string().nullable(),
   role: ProviderMembershipRoleSchema.optional(),
+  /** Canonical publisher fields (additive; `type`/`name` kept for old clients). */
+  profileType: PublisherProfileTypeSchema.optional(),
+  publisher: ContentPublisherSchema.optional(),
 });
 export type PublishingIdentity = z.infer<typeof PublishingIdentitySchema>;
 
@@ -157,6 +213,46 @@ export type ListMusicTracksResponse = z.infer<
   typeof ListMusicTracksResponseSchema
 >;
 
+type ContentShape = {
+  format: ContentFormat;
+  mediaType: ContentMediaType;
+  caption: string;
+  mediaIds: string[];
+  edit?: ClipEditMetadata | null;
+};
+
+/** Shared create/publish validation for every content format. */
+export function refineContentShape(value: ContentShape, ctx: z.RefinementCtx) {
+  if (value.edit && value.format !== "clip") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["edit"],
+      message: "Edit metadata is only supported for Clips",
+    });
+  }
+  if (value.mediaType === "text" && value.caption.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["caption"],
+      message: "Text is required",
+    });
+  }
+  if (value.mediaType !== "text" && value.mediaIds.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["mediaIds"],
+      message: "Media is required",
+    });
+  }
+  if (value.format === "clip" && value.mediaType !== "video") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["mediaType"],
+      message: "Clips must be videos",
+    });
+  }
+}
+
 export const CreateContentContainerRequestSchema = z
   .object({
     format: ContentFormatSchema,
@@ -168,42 +264,17 @@ export const CreateContentContainerRequestSchema = z
     hashtags: z.array(ContentHashtagSchema).max(30).default([]),
     taggedUserIds: z.array(z.string().uuid()).max(20).default([]),
     location: ContentLocationSchema.nullable().optional(),
-    visibility: z
-      .enum(["public", "followers", "friends", "community", "only_me"])
-      .default("public"),
+    visibility: ContentVisibilityInputSchema.default("public"),
     /** Optional on-device edit metadata; only accepted for Clips. */
     edit: ClipEditMetadataSchema.nullable().optional(),
+    /**
+     * Explicit publishing profile. Older clients send the
+     * `X-Anticlock-Context-*` headers instead; the body wins when both exist.
+     */
+    publisherProfileId: z.string().uuid().optional(),
+    publisherProfileType: PublisherProfileTypeSchema.optional(),
   })
-  .superRefine((value, ctx) => {
-    if (value.edit && value.format !== "clip") {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["edit"],
-        message: "Edit metadata is only supported for Clips",
-      });
-    }
-    if (value.mediaType === "text" && value.caption.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["caption"],
-        message: "Text is required",
-      });
-    }
-    if (value.mediaType !== "text" && value.mediaIds.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["mediaIds"],
-        message: "Media is required",
-      });
-    }
-    if (value.format === "clip" && value.mediaType !== "video") {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["mediaType"],
-        message: "Clips must be videos",
-      });
-    }
-  });
+  .superRefine((value, ctx) => refineContentShape(value, ctx));
 export type CreateContentContainerRequest = z.infer<
   typeof CreateContentContainerRequestSchema
 >;
@@ -222,9 +293,9 @@ export const CreateContentUploadRequestSchema = z
     durationMs: z.number().int().positive().optional(),
     width: z.number().int().positive().max(10_000).optional(),
     height: z.number().int().positive().max(10_000).optional(),
-    visibility: z
-      .enum(["public", "followers", "friends", "community", "only_me"])
-      .default("public"),
+    visibility: ContentVisibilityInputSchema.default("public"),
+    /** Optional draft this upload belongs to (moves it to `uploading`). */
+    draftId: z.string().uuid().optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -339,3 +410,167 @@ export const ContentFeedItemSchema = ContentPostSchema.extend({
   durationMs: z.number().int().positive().nullable().optional(),
 });
 export type ContentFeedItem = z.infer<typeof ContentFeedItemSchema>;
+
+/** `reel` is the product name for a Clip; both map to the `clip` format. */
+export const DraftContentTypeSchema = z
+  .enum(["clip", "reel", "flash", "story"])
+  .transform((value): ContentFormat => (value === "reel" ? "clip" : value));
+
+export const ContentDraftMetadataSchema = z
+  .object({
+    mediaType: ContentMediaTypeSchema.optional(),
+    caption: z.string().trim().max(2_200).optional(),
+    hashtags: z.array(ContentHashtagSchema).max(30).optional(),
+    taggedUserIds: z.array(z.string().uuid()).max(20).optional(),
+    location: ContentLocationSchema.nullable().optional(),
+    edit: ClipEditMetadataSchema.nullable().optional(),
+  })
+  .strict();
+export type ContentDraftMetadata = z.infer<typeof ContentDraftMetadataSchema>;
+
+/** `POST /v1/content/drafts` */
+export const CreateContentDraftRequestSchema = z
+  .object({
+    contentType: DraftContentTypeSchema,
+    publisherProfileId: z.string().uuid(),
+    publisherProfileType: PublisherProfileTypeSchema.optional(),
+    visibility: ContentVisibilityInputSchema.default("public"),
+    metadata: ContentDraftMetadataSchema.default({}),
+  })
+  .strict();
+export type CreateContentDraftRequest = z.infer<
+  typeof CreateContentDraftRequestSchema
+>;
+
+/** `PATCH /v1/content/drafts/:id` (owner only, before publish). */
+export const UpdateContentDraftRequestSchema = z
+  .object({
+    mediaIds: z.array(z.string().uuid()).max(10).optional(),
+    thumbnailMediaId: z.string().uuid().nullable().optional(),
+    visibility: ContentVisibilityInputSchema.optional(),
+    metadata: ContentDraftMetadataSchema.optional(),
+  })
+  .strict();
+export type UpdateContentDraftRequest = z.infer<
+  typeof UpdateContentDraftRequestSchema
+>;
+
+/**
+ * `POST /v1/content/drafts/:id/publish`. The publisher is fixed when the
+ * draft is created; a client may re-assert it, and a mismatch is rejected.
+ */
+export const PublishContentDraftRequestSchema = z
+  .object({
+    publisherProfileId: z.string().uuid().optional(),
+  })
+  .strict();
+export type PublishContentDraftRequest = z.infer<
+  typeof PublishContentDraftRequestSchema
+>;
+
+export const ContentDraftSchema = z.object({
+  id: z.string().uuid(),
+  contentType: ContentFormatSchema,
+  contentStatus: ContentLifecycleStatusSchema,
+  visibility: ContentVisibilitySchema,
+  publisherProfileId: z.string().uuid(),
+  publisherProfileType: PublisherProfileTypeSchema,
+  publisher: ContentPublisherSchema,
+  mediaIds: z.array(z.string().uuid()),
+  thumbnailMediaId: z.string().uuid().nullable(),
+  postId: z.string().uuid().nullable(),
+  failureReason: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  publishedAt: z.string().datetime().nullable(),
+});
+export type ContentDraft = z.infer<typeof ContentDraftSchema>;
+
+export const ContentMediaItemSchema = z.object({
+  id: z.string().uuid(),
+  kind: z.enum(["image", "video"]),
+  url: z.string().url(),
+});
+export type ContentMediaItem = z.infer<typeof ContentMediaItemSchema>;
+
+/** A viewer-safe post returned by feed and profile endpoints. */
+export const ContentPostViewSchema = z.object({
+  id: z.string().uuid(),
+  format: ContentFormatSchema,
+  mediaType: ContentMediaTypeSchema,
+  contentStatus: ContentLifecycleStatusSchema,
+  caption: z.string(),
+  mediaIds: z.array(z.string().uuid()),
+  media: z.array(ContentMediaItemSchema),
+  posterUrl: z.string().url().nullable(),
+  hashtags: z.array(z.string()),
+  location: ContentLocationSchema.nullable(),
+  visibility: ContentVisibilitySchema,
+  publisherProfileId: z.string().uuid(),
+  publisherProfileType: PublisherProfileTypeSchema,
+  publisher: ContentPublisherSchema,
+  /** Legacy author shape kept for older mobile builds. */
+  author: PublishingIdentitySchema,
+  viewCount: z.number().int(),
+  likeCount: z.number().int(),
+  commentCount: z.number().int(),
+  shareCount: z.number().int(),
+  viewerHasLiked: z.boolean(),
+  /** True when the viewer owns or manages this publisher. */
+  viewerCanManage: z.boolean(),
+  createdAt: z.string().datetime(),
+  publishedAt: z.string().datetime(),
+  expiresAt: z.string().datetime().nullable(),
+});
+export type ContentPostView = z.infer<typeof ContentPostViewSchema>;
+
+export const ContentPostsQuerySchema = z.object({
+  format: ContentFormatSchema,
+  publisherProfileId: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  /** Opaque cursor returned as `nextCursor`. */
+  cursor: z.string().max(200).optional(),
+});
+export type ContentPostsQuery = z.infer<typeof ContentPostsQuerySchema>;
+
+export const ContentProfileSummarySchema = z.object({
+  publisher: ContentPublisherSchema,
+  counts: z.object({
+    posts: z.number().int(),
+    clips: z.number().int(),
+    flash: z.number().int(),
+    stories: z.number().int(),
+  }),
+  viewerCanManage: z.boolean(),
+});
+export type ContentProfileSummary = z.infer<typeof ContentProfileSummarySchema>;
+
+export const CreateContentCommentRequestSchema = z
+  .object({
+    body: z.string().trim().min(1).max(2_000),
+    /** Comment as the personal profile (default) or an owned business. */
+    publisherProfileId: z.string().uuid().optional(),
+    publisherProfileType: PublisherProfileTypeSchema.optional(),
+  })
+  .strict();
+export type CreateContentCommentRequest = z.infer<
+  typeof CreateContentCommentRequestSchema
+>;
+
+export const ContentCommentSchema = z.object({
+  id: z.string().uuid(),
+  postId: z.string().uuid(),
+  body: z.string(),
+  publisherProfileId: z.string().uuid(),
+  publisherProfileType: PublisherProfileTypeSchema,
+  publisher: ContentPublisherSchema,
+  createdAt: z.string().datetime(),
+});
+export type ContentComment = z.infer<typeof ContentCommentSchema>;
+
+export const ReviewContentRequestSchema = z
+  .object({
+    decision: z.enum(["approve", "reject"]),
+    note: z.string().trim().max(1_000).optional(),
+  })
+  .strict();
+export type ReviewContentRequest = z.infer<typeof ReviewContentRequestSchema>;

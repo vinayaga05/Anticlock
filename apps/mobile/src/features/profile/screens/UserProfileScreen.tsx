@@ -28,6 +28,8 @@ import {
 import { useStoryStore } from '@/shared/data/flash/storyStore';
 import { useEngagementStore } from '@/shared/services/engagementRepository';
 import { useAuth } from '@/shared/context/AuthProvider';
+import { isApiEnabled } from '@/shared/api/config';
+import { PublisherProfileView } from '@/features/profile/components/PublisherProfileView';
 
 type ProfileTab = 'posts' | 'reels' | 'tagged';
 
@@ -48,7 +50,26 @@ function getPostThumbnail(post: FlashPost) {
   return null;
 }
 
+/**
+ * With the API enabled, profiles show content published AS a publisher
+ * profile (personal or business) from `/v1/content/profiles/...`. The local
+ * mock profile is kept for offline/mock mode and legacy `userId` links.
+ */
 export function UserProfileScreen() {
+  const route = useRoute<RouteProp<RootStackParamList, 'Profile'>>();
+  const params = route.params;
+  if (isApiEnabled && (params?.profileId || !params?.userId)) {
+    return (
+      <PublisherProfileView
+        profileType={params?.profileType}
+        profileId={params?.profileId}
+      />
+    );
+  }
+  return <LocalUserProfileScreen />;
+}
+
+function LocalUserProfileScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<RootStackParamList, 'Profile'>>();

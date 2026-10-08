@@ -2,62 +2,37 @@ import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from './client';
 import { isApiEnabled } from './config';
 import type { UserStory } from '@/shared/data/flash/storyTypes';
-import type { PostAuthor } from '@/shared/data/flash/types';
+import type { FlashPost } from '@/shared/data/flash/types';
+import { contentQueryKeys } from '@/shared/publishing/contentQueryKeys';
+import {
+  mapApiFlashPost,
+  mapApiStoriesToUserStories,
+  postsOf,
+  type ApiContentPost,
+  type ApiContentPostsResponse,
+  type ApiContentPublisher,
+} from '@/shared/publishing/contentPostMappers';
+import type {
+  PublishFormat,
+  PublisherProfileType,
+} from '@/shared/publishing/publisherSelection';
 
-type ApiContentPost = {
-  id: string;
-  format: 'story' | 'flash';
-  mediaType: 'text' | 'image' | 'video' | 'hybrid';
-  caption: string;
-  mediaIds: string[];
-  thumbnailMediaId: string | null;
-  visibility: string;
-  author: {
-    type: 'user' | 'provider';
-    id: string;
-    name: string;
-    avatarUrl: string | null;
-  };
-  createdAt: string;
-  expiresAt: string | null;
-};
+export type { ApiContentPost, ApiContentPublisher };
 
-function mapApiStoryToUserStory(apiPost: ApiContentPost): UserStory {
-  const author: PostAuthor = {
-    id: apiPost.author.id,
-    name: apiPost.author.name,
-    avatarUrl: apiPost.author.avatarUrl ?? '',
-    followed: false,
-  };
-
-  return {
-    authorId: apiPost.author.id,
-    author,
-    audience: apiPost.visibility === 'friends' ? 'close_friends' : 'followers',
-    items: [{
-      id: apiPost.id,
-      type: apiPost.mediaType === 'text' ? 'text' : apiPost.mediaType === 'video' ? 'video' : 'photo',
-      mediaUrl: apiPost.mediaIds[0] ? `/v1/content/posts/${apiPost.id}/media` : undefined,
-      textContent: apiPost.mediaType === 'text' ? apiPost.caption : undefined,
-      backgroundColor: apiPost.mediaType === 'text' ? '#0F766E' : undefined,
-      createdAt: apiPost.createdAt,
-      expiresAt: apiPost.expiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      durationMs: 5000,
-    }],
-  };
-}
-
+/**
+ * Story tray: live (`published`, not expired) stories the viewer may see,
+ * grouped per publisher profile. Previously this called a route that did
+ * not exist, so published stories never reached other users.
+ */
 export function useStoriesQuery() {
   return useQuery({
-    queryKey: ['stories', 'feed', isApiEnabled ? 'api' : 'local'],
+    queryKey: [...contentQueryKeys.storyTray, isApiEnabled ? 'api' : 'local'],
     queryFn: async (): Promise<UserStory[]> => {
-      if (!isApiEnabled) {
-        return [];
-      }
-      const response = await apiRequest<{ data: ApiContentPost[] }>(
-        '/v1/content/posts?format=story',
+      if (!isApiEnabled) return [];
+      const response = await apiRequest<ApiContentPostsResponse>(
+        '/v1/content/posts?format=story&limit=50',
       );
-      return response.data.map(mapApiStoryToUserStory);
+      return mapApiStoriesToUserStories(postsOf(response));
     },
     enabled: isApiEnabled,
     staleTime: 30_000,
@@ -65,20 +40,98 @@ export function useStoriesQuery() {
   });
 }
 
+/** Flash feed: published Flash posts from personal and business profiles. */
 export function useFlashPostsQuery() {
   return useQuery({
-    queryKey: ['flash', 'feed', isApiEnabled ? 'api' : 'local'],
-    queryFn: async (): Promise<ApiContentPost[]> => {
-      if (!isApiEnabled) {
-        return [];
-      }
-      const response = await apiRequest<{ data: ApiContentPost[] }>(
-        '/v1/content/posts?format=flash',
+    queryKey: [...contentQueryKeys.flashFeed, isApiEnabled ? 'api' : 'local'],
+    queryFn: async (): Promise<FlashPost[]> => {
+      if (!isApiEnabled) return [];
+      const response = await apiRequest<ApiContentPostsResponse>(
+        '/v1/content/posts?format=flash&limit=50',
       );
-      return response.data;
+      const now = Date.now();
+      return postsOf(response).map(post => mapApiFlashPost(post, now));
     },
     enabled: isApiEnabled,
     staleTime: 30_000,
     refetchInterval: 60_000,
+  });
+}
+
+export type ContentProfileSummary = {
+  publisher: ApiContentPublisher;
+  counts: { posts: number; clips: number; flash: number; stories: number };
+  viewerCanManage: boolean;
+};
+
+/** Profile header + counts for a personal or business publisher profile. */
+export function useContentProfileQuery(
+  type: PublisherProfileType | undefined,
+  id: string | undefined,
+) {
+  return useQuery({
+    queryKey: contentQueryKeys.profile(type ?? 'personal', id ?? ''),
+    queryFn: async () => {
+      const response = await apiRequest<{ profile: ContentProfileSummary }>(
+        `/v1/content/profiles/${type}/${id}`,
+      );
+      return response.profile;
+    },
+    enabled: isApiEnabled && Boolean(type && id),
+    staleTime: 15_000,
+  });
+}
+
+/** Content published AS a profile (filtered by publisher, never by owner). */
+export function useContentProfilePostsQuery(
+  type: PublisherProfileType | undefined,
+  id: string | undefined,
+  format: PublishFormat,
+) {
+  return useQuery({
+    queryKey: contentQueryKeys.profilePosts(type ?? 'personal', id ?? '', format),
+    queryFn: async (): Promise<ApiContentPost[]> => {
+      const response = await apiRequest<ApiContentPostsResponse>(
+        `/v1/content/profiles/${type}/${id}/posts?format=${format}&limit=30`,
+      );
+      return postsOf(response);
+    },
+    enabled: isApiEnabled && Boolean(type && id),
+    staleTime: 15_000,
+  });
+}
+
+export type MyContentItem = {
+  id: string;
+  draftId: string;
+  postId: string | null;
+  contentType: PublishFormat;
+  contentStatus: string;
+  visibility: string;
+  publisherProfileId: string;
+  publisherProfileType: PublisherProfileType;
+  publisher: ApiContentPublisher;
+  mediaType: string;
+  caption: string;
+  failureReason: string | null;
+  createdAt: string;
+  publishedAt: string | null;
+};
+
+/** Owner-only "My Content" (includes uploading/processing/review states). */
+export function useMyContentQuery(publisherProfileId?: string, enabled = true) {
+  return useQuery({
+    queryKey: [...contentQueryKeys.mine, publisherProfileId ?? 'all'],
+    queryFn: async (): Promise<MyContentItem[]> => {
+      const query = publisherProfileId
+        ? `?publisherProfileId=${encodeURIComponent(publisherProfileId)}`
+        : '';
+      const response = await apiRequest<{ items: MyContentItem[] }>(
+        `/v1/content/mine${query}`,
+      );
+      return response.items;
+    },
+    enabled: isApiEnabled && enabled,
+    staleTime: 10_000,
   });
 }

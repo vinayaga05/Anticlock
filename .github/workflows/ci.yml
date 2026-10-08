@@ -80,6 +80,22 @@ jobs:
   test-api:
     needs: setup
     runs-on: ubuntu-latest
+    services:
+      # Backs the DB integration suites (e.g. content-publisher.test.ts).
+      # Suites that need it are skipped when TEST_DATABASE_URL is unset.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: anticlock
+          POSTGRES_PASSWORD: anticlock
+          POSTGRES_DB: anticlock_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U anticlock -d anticlock_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -112,6 +128,12 @@ jobs:
         # the Dockerfiles, which build contracts before api/admin.
         run: pnpm --filter @anticlock/contracts build
 
+      - name: Apply migrations to the test database
+        working-directory: apps/api
+        run: pnpm db:migrate
+        env:
+          DATABASE_URL: postgres://anticlock:anticlock@localhost:5432/anticlock_test
+
       - name: Run API tests
         working-directory: apps/api
         run: pnpm test
@@ -121,6 +143,8 @@ jobs:
           GROQ_API_KEY: gsk_test
           OPENAI_API_KEY: sk_test
           NODE_ENV: test
+          # Opt-in DB integration suites (two-account publishing scenarios).
+          TEST_DATABASE_URL: postgres://anticlock:anticlock@localhost:5432/anticlock_test
         # Note: API tests are unit/integration tests using node:test.
         # They do not require a live Postgres database - they test
         # config loading, contract validation, AI provider setup, and

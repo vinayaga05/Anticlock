@@ -16,6 +16,32 @@ import {
   SavedContent,
   SavedContentKind,
 } from '@/shared/data/flash/types';
+import {
+  createContentComment,
+  fetchContentComments,
+  setContentPostLike,
+  type ApiContentComment,
+} from '@/shared/api/contentEngagement';
+
+function apiCommentToFlash(comment: ApiContentComment, ownIds: Set<string>): FlashComment {
+  return {
+    id: comment.id,
+    postId: comment.postId,
+    author: {
+      id: comment.publisher.id,
+      name: comment.publisher.displayName,
+      avatarUrl: comment.publisher.avatarUrl ?? '',
+      verified: comment.publisher.verified,
+      isProvider: comment.publisher.type === 'business',
+      profileType: comment.publisher.type,
+      handle: comment.publisher.handle,
+    },
+    text: comment.body,
+    createdAt: comment.createdAt,
+    likeCount: 0,
+    isOwn: ownIds.has(comment.id),
+  };
+}
 
 type EngagementState = {
   posts: FlashPost[];
@@ -49,6 +75,14 @@ type EngagementState = {
   toggleComments: (postId: string) => void;
   pinPost: (postId: string) => void;
   followAuthor: (authorId: string, follow: boolean) => void;
+
+  /**
+   * Replace the server-published Flash posts with a fresh feed snapshot.
+   * Local (mock/offline) posts are kept after them.
+   */
+  upsertApiPosts: (posts: FlashPost[]) => void;
+  /** Load server comments for an API post into the shared comments sheet. */
+  syncApiComments: (postId: string) => Promise<void>;
 
   publishPost: (input: {
     text: string;
@@ -102,7 +136,98 @@ export const useEngagementStore = create<EngagementState>((set, get) => ({
 
   getComments: postId => get().comments.filter(c => c.postId === postId),
 
+  upsertApiPosts: apiPosts => {
+    set(state => {
+      const previous = new Map(
+        state.posts.filter(p => p.source === 'api').map(p => [p.id, p]),
+      );
+      const fresh = apiPosts.map(post => {
+        const prev = previous.get(post.id);
+        if (!prev) return post;
+        return {
+          ...post,
+          // Keep a richer local reaction type while the server says liked.
+          viewerReaction: post.viewerReaction
+            ? prev.viewerReaction ?? post.viewerReaction
+            : null,
+          saved: prev.saved,
+          hidden: prev.hidden,
+          pinned: prev.pinned,
+        };
+      });
+      const apiIds = new Set(fresh.map(p => p.id));
+      return {
+        posts: [
+          ...fresh,
+          ...state.posts.filter(p => p.source !== 'api' && !apiIds.has(p.id)),
+        ],
+      };
+    });
+  },
+
+  syncApiComments: async postId => {
+    const post = get().getPost(postId);
+    if (post?.source !== 'api') return;
+    try {
+      const comments = await fetchContentComments(postId);
+      const ownIds = new Set(
+        get()
+          .comments.filter(c => c.postId === postId && c.isOwn)
+          .map(c => c.id),
+      );
+      const serverIds = new Set(comments.map(c => c.id));
+      set(state => ({
+        comments: [
+          ...state.comments.filter(
+            c => c.postId !== postId || (c.isOwn && !serverIds.has(c.id) && c.id.startsWith('c-')),
+          ),
+          ...comments.map(c => apiCommentToFlash(c, ownIds)),
+        ],
+        posts: state.posts.map(p =>
+          p.id === postId
+            ? { ...p, commentCount: Math.max(p.commentCount, comments.length) }
+            : p,
+        ),
+      }));
+    } catch {
+      // Comments stay as they were; the sheet keeps working offline.
+    }
+  },
+
   setReaction: (postId, reaction) => {
+    const before = get().getPost(postId);
+    if (before?.source === 'api') {
+      const wasLiked = Boolean(before.viewerReaction);
+      if (wasLiked !== Boolean(reaction)) {
+        // The API stores a per-account like; reaction kinds stay local.
+        setContentPostLike(postId, Boolean(reaction)).catch(() => {
+          const current = get().getPost(postId);
+          if (!current) return;
+          const counts = { ...current.reactionCounts };
+          if (current.viewerReaction) {
+            counts[current.viewerReaction] = Math.max(
+              0,
+              (counts[current.viewerReaction] ?? 0) - 1,
+            );
+          }
+          if (before.viewerReaction) {
+            counts[before.viewerReaction] =
+              (counts[before.viewerReaction] ?? 0) + 1;
+          }
+          set(state => ({
+            posts: state.posts.map(p =>
+              p.id === postId
+                ? {
+                    ...p,
+                    viewerReaction: before.viewerReaction ?? null,
+                    reactionCounts: counts,
+                  }
+                : p,
+            ),
+          }));
+        });
+      }
+    }
     set(state => ({
       posts: state.posts.map(p => {
         if (p.id !== postId) return p;
@@ -147,6 +272,29 @@ export const useEngagementStore = create<EngagementState>((set, get) => ({
         p.id === postId ? { ...p, commentCount: p.commentCount + 1 } : p,
       ),
     }));
+    if (get().getPost(postId)?.source === 'api') {
+      createContentComment(postId, trimmed)
+        .then(created => {
+          if (!created) return;
+          set(state => ({
+            comments: state.comments.map(c =>
+              c.id === comment.id
+                ? { ...apiCommentToFlash(created, new Set([created.id])) }
+                : c,
+            ),
+          }));
+        })
+        .catch(() => {
+          set(state => ({
+            comments: state.comments.filter(c => c.id !== comment.id),
+            posts: state.posts.map(p =>
+              p.id === postId
+                ? { ...p, commentCount: Math.max(0, p.commentCount - 1) }
+                : p,
+            ),
+          }));
+        });
+    }
   },
 
   createReply: (postId, parentId, text) => {

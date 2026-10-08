@@ -1,4 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useFlashPostsQuery } from '@/shared/api/storyHooks';
+import { isApiEnabled } from '@/shared/api/config';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppHeader } from '@/shared/components/AppHeader';
@@ -24,6 +27,20 @@ export function FlashFeedScreen() {
   const [tab, setTab] = useState<FeedTab>('forYou');
   const posts = useEngagementStore(s => s.posts);
   const hiddenIds = useEngagementStore(s => s.hiddenIds);
+  const upsertApiPosts = useEngagementStore(s => s.upsertApiPosts);
+  const { data: apiPosts, refetch, isRefetching } = useFlashPostsQuery();
+
+  // Server-published Flash posts (personal + business publishers) lead the
+  // feed; previously this screen only rendered the local mock store.
+  useEffect(() => {
+    if (isApiEnabled && apiPosts) upsertApiPosts(apiPosts);
+  }, [apiPosts, upsertApiPosts]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (isApiEnabled) refetch();
+    }, [refetch]),
+  );
   const commentsOpen = useCommentsSheetStore(
     s => (s.open || s.closing) && s.sourceType === 'flashPost',
   );
@@ -45,6 +62,8 @@ export function FlashFeedScreen() {
         data={feed}
         keyExtractor={item => item.id}
         scrollEnabled={!commentsOpen}
+        refreshing={isApiEnabled ? isRefetching : false}
+        onRefresh={isApiEnabled ? () => refetch() : undefined}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           paddingTop: insets.top + 10,

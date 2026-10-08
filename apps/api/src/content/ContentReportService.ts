@@ -10,6 +10,7 @@ import {
 } from "../db/schema.js";
 import type { AuthClaims } from "../lib/auth.js";
 import { mediaService } from "../media/MediaService.js";
+import { requireVisiblePost } from "./ContentPublishingService.js";
 
 function appError(
   message: string,
@@ -116,7 +117,38 @@ async function requireReportablePublicClip(
   return { post, author };
 }
 
-/** Moderation write path for profile-backed Clips (`content_posts`). */
+/**
+ * Public Clips keep the feed-equivalent gate above. Flash posts, Stories and
+ * non-public content use the shared audience check, so reports work for
+ * content from personal and business publishers wherever a viewer can see it.
+ */
+async function requireReportablePost(
+  reporterMobileUserId: string,
+  contentPostId: string
+) {
+  const [row] = await db
+    .select({ format: contentPosts.format, visibility: contentPosts.visibility })
+    .from(contentPosts)
+    .where(eq(contentPosts.id, contentPostId))
+    .limit(1);
+  if (!row) throw videoNotFound();
+  if (row.format === "clip" && row.visibility === "public") {
+    return requireReportablePublicClip(reporterMobileUserId, contentPostId);
+  }
+  const { post, ref } = await requireVisiblePost(
+    reporterMobileUserId,
+    contentPostId
+  );
+  return {
+    post,
+    author: {
+      type: ref.type === "business" ? ("provider" as const) : ("user" as const),
+      id: ref.id,
+    },
+  };
+}
+
+/** Moderation write path for profile-backed content (`content_posts`). */
 export class ContentReportService {
   async create(
     auth: AuthClaims,
@@ -124,7 +156,7 @@ export class ContentReportService {
     body: CreateContentPostReportRequest
   ) {
     const reporter = await requireMobileUser(auth);
-    const { post, author } = await requireReportablePublicClip(
+    const { post, author } = await requireReportablePost(
       reporter.id,
       contentPostId
     );

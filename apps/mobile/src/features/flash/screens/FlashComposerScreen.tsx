@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Alert,
   Image,
@@ -19,10 +19,12 @@ import { useEngagementStore } from '@/shared/services/engagementRepository';
 import { CURRENT_USER } from '@/shared/data/flash';
 import { getFlashCloudflareVideo } from '@/shared/data/cloudflareVideos';
 import {
+  ensureContentDraft,
   usePublishContentMutation,
-  usePublishingIdentitiesQuery,
   uploadContentMedia,
 } from '@/shared/api/publishingHooks';
+import { PostingAsCard } from '@/shared/publishing/PostingAsCard';
+import { usePublisherSelection } from '@/shared/publishing/usePublisherSelection';
 import { isApiEnabled } from '@/shared/api/config';
 import {
   pickClipVideo,
@@ -65,32 +67,17 @@ export function FlashComposerScreen() {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const publishPost = useEngagementStore(s => s.publishPost);
-  const { data: identities = [] } = usePublishingIdentitiesQuery();
+  const publisher = usePublisherSelection('flash');
+  const { identities, identity } = publisher;
   const publishContent = usePublishContentMutation();
 
   const [text, setText] = useState('');
   const [visibility, setVisibility] = useState<PostVisibility>('public');
   const [media, setMedia] = useState<PostMedia[]>([]);
-  const [identityId, setIdentityId] = useState<string | null>(null);
   const [pickedPhotos, setPickedPhotos] = useState<PickedClipCover[]>([]);
   const [pickedVideos, setPickedVideos] = useState<PickedClipVideo[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-
-  useEffect(() => {
-    if (!identityId && identities[0]) setIdentityId(identities[0].id);
-  }, [identities, identityId]);
-
-  const identity =
-    identities.find(item => item.id === identityId) ?? identities[0];
-  const identityPills = useMemo(
-    () =>
-      identities.map(item => ({
-        id: item.id,
-        label: item.type === 'provider' ? item.name : 'Personal',
-      })),
-    [identities],
-  );
 
   const handlePickPhoto = async () => {
     try {
@@ -124,40 +111,73 @@ export function FlashComposerScreen() {
     const hasRealMedia = pickedPhotos.length > 0 || pickedVideos.length > 0;
     if (!text.trim() && media.length === 0 && !hasRealMedia) return;
 
-    if (isApiEnabled && identity && hasRealMedia) {
+    // API mode: publish to the server as the selected profile only. The
+    // Flash feed and the profile refetch after publish (no local copy, which
+    // used to show the post under the mock personal user).
+    if (isApiEnabled && (hasRealMedia || media.length === 0)) {
+      if (!identity) {
+        Alert.alert(
+          'Publishing profile unavailable',
+          'Wait for your profiles to load, then try again.',
+        );
+        return;
+      }
+      const mediaType = hasRealMedia
+        ? pickedPhotos.length + pickedVideos.length > 1
+          ? 'hybrid'
+          : pickedVideos.length > 0
+            ? 'video'
+            : 'image'
+        : 'text';
       try {
         setUploading(true);
         setUploadProgress(0);
+        const draftId = await ensureContentDraft({
+          format: 'flash',
+          mediaType,
+          caption: text.trim(),
+          visibility,
+          identity,
+        });
         const mediaIds: string[] = [];
         const totalMedia = pickedPhotos.length + pickedVideos.length;
         let uploadedCount = 0;
 
         for (const photo of pickedPhotos) {
           const file = await createCoverUploadFile(photo);
-          const mediaId = await uploadContentMedia(identity, file, visibility);
-          mediaIds.push(mediaId);
+          mediaIds.push(
+            await uploadContentMedia(identity, file, visibility, draftId),
+          );
           uploadedCount++;
           setUploadProgress(Math.round((uploadedCount / totalMedia) * 70));
         }
 
         for (const video of pickedVideos) {
           const file = await createVideoUploadFile(video);
-          const mediaId = await uploadContentMedia(identity, file, visibility);
-          mediaIds.push(mediaId);
+          mediaIds.push(
+            await uploadContentMedia(identity, file, visibility, draftId),
+          );
           uploadedCount++;
           setUploadProgress(Math.round((uploadedCount / totalMedia) * 70));
         }
 
         setUploadProgress(80);
-        await publishContent.mutateAsync({
+        const result = await publishContent.mutateAsync({
+          draftId,
           format: 'flash',
-          mediaType: mediaIds.length > 1 ? 'hybrid' : pickedVideos.length > 0 ? 'video' : 'image',
+          mediaType,
           caption: text.trim(),
           mediaIds,
           visibility,
           identity,
         });
         setUploadProgress(100);
+        if (result?.post.contentStatus === 'pending_review') {
+          Alert.alert(
+            'Post submitted',
+            `Your post from ${identity.name} will appear once it is reviewed.`,
+          );
+        }
       } catch (error) {
         Alert.alert(
           'Could not publish',
@@ -168,22 +188,8 @@ export function FlashComposerScreen() {
         setUploading(false);
         setUploadProgress(0);
       }
-    } else if (isApiEnabled && identity && media.length === 0) {
-      try {
-        await publishContent.mutateAsync({
-          format: 'flash',
-          mediaType: 'text',
-          caption: text.trim(),
-          visibility,
-          identity,
-        });
-      } catch (error) {
-        Alert.alert(
-          'Could not publish',
-          error instanceof Error ? error.message : 'Please try again.',
-        );
-        return;
-      }
+      navigation.goBack();
+      return;
     }
 
     publishPost({
@@ -211,49 +217,33 @@ export function FlashComposerScreen() {
           gap: theme.spacing.lg,
         }}
       >
-        <View style={styles.author}>
-          <Image
-            source={{ uri: CURRENT_USER.avatarUrl }}
-            style={styles.avatar}
+        {isApiEnabled ? (
+          <PostingAsCard
+            identities={identities}
+            identity={identity}
+            onSelect={publisher.select}
+            isLoading={publisher.isLoading}
+            fallbackApplied={publisher.fallbackApplied}
+            disabled={uploading}
           />
-          <View style={{ flex: 1 }}>
-            <Text
-              style={[
-                theme.typography.section,
-                { color: theme.colors.textPrimary },
-              ]}
-            >
-              {identity?.name ?? CURRENT_USER.name}
-            </Text>
-            <Text
-              style={[
-                theme.typography.caption,
-                { color: theme.colors.textSecondary },
-              ]}
-            >
-              Publishing as{' '}
-              {identity?.type === 'provider' ? 'business' : 'personal profile'}
-            </Text>
-          </View>
-        </View>
-
-        {identityPills.length > 1 ? (
-          <View style={styles.identityPicker}>
-            <Text
-              style={[
-                theme.typography.caption,
-                { color: theme.colors.textSecondary },
-              ]}
-            >
-              Publishing as
-            </Text>
-            <FilterPills
-              activeId={identity?.id ?? ''}
-              onChange={setIdentityId}
-              pills={identityPills}
+        ) : (
+          <View style={styles.author}>
+            <Image
+              source={{ uri: CURRENT_USER.avatarUrl }}
+              style={styles.avatar}
             />
+            <View style={{ flex: 1 }}>
+              <Text
+                style={[
+                  theme.typography.section,
+                  { color: theme.colors.textPrimary },
+                ]}
+              >
+                {`Posting as ${identity?.name ?? CURRENT_USER.name}`}
+              </Text>
+            </View>
           </View>
-        ) : null}
+        )}
 
         <PressableScale
           onPress={() => navigation.navigate('ClipComposer')}
@@ -486,7 +476,6 @@ export function FlashComposerScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   author: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  identityPicker: { gap: 6 },
   clipEntry: {
     flexDirection: 'row',
     alignItems: 'center',

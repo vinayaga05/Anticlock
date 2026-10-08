@@ -18,6 +18,7 @@ import {
   requirePermission,
   type AppEnv,
 } from '../middleware/auth.js';
+import { httpError } from '../lib/httpError.js';
 
 function requireMobileAuth(c: { get: (k: 'auth') => { kind: string; sub: string } }) {
   const auth = c.get('auth');
@@ -28,19 +29,6 @@ function requireMobileAuth(c: { get: (k: 'auth') => { kind: string; sub: string 
     });
   }
   return auth;
-}
-
-function httpError(err: unknown) {
-  const e = err as { status?: number; code?: string; message?: string };
-  return {
-    status: (e.status ?? 500) as 400 | 403 | 404 | 409 | 500,
-    body: {
-      error: {
-        code: e.code ?? 'error',
-        message: e.message ?? 'Unexpected error',
-      },
-    },
-  };
 }
 
 export const communitiesMobileRoutes = new Hono<AppEnv>();
@@ -69,7 +57,7 @@ communitiesMobileRoutes.get('/', async (c) => {
     );
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -84,7 +72,7 @@ communitiesMobileRoutes.get('/my', async (c) => {
     const result = await communityService.listMyCommunities(auth.sub, query);
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -96,7 +84,7 @@ communitiesMobileRoutes.post('/', async (c) => {
     const community = await communityService.createCommunity(auth.sub, body);
     return c.json({ community }, 201);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -113,7 +101,7 @@ communitiesMobileRoutes.get('/:id', async (c) => {
     }
     return c.json({ community });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -133,7 +121,7 @@ communitiesMobileRoutes.patch('/:id', async (c) => {
     const community = await communityService.updateCommunity(communityId, body);
     return c.json({ community });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -144,7 +132,7 @@ communitiesMobileRoutes.post('/:id/join', async (c) => {
     const member = await communityService.joinCommunity(c.req.param('id'), auth.sub);
     return c.json({ member }, 201);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -155,7 +143,7 @@ communitiesMobileRoutes.post('/:id/leave', async (c) => {
     await communityService.leaveCommunity(c.req.param('id'), auth.sub);
     return c.json({ success: true });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -169,7 +157,7 @@ communitiesMobileRoutes.get('/:id/members', async (c) => {
     const result = await communityService.listMembers(c.req.param('id'), query);
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -193,7 +181,7 @@ communitiesMobileRoutes.patch('/:id/members/:memberId', async (c) => {
     );
     return c.json({ member });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -213,7 +201,7 @@ communitiesMobileRoutes.get('/:id/posts', async (c) => {
     );
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -233,7 +221,7 @@ communitiesMobileRoutes.post('/:id/posts', async (c) => {
     const post = await communityPostService.createPost(communityId, auth.sub, body);
     return c.json({ post }, 201);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -244,7 +232,7 @@ communitiesMobileRoutes.post('/posts/:postId/like', async (c) => {
     await communityPostService.likePost(c.req.param('postId'), auth.sub);
     return c.json({ success: true });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -255,7 +243,7 @@ communitiesMobileRoutes.post('/posts/:postId/unlike', async (c) => {
     await communityPostService.unlikePost(c.req.param('postId'), auth.sub);
     return c.json({ success: true });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -265,7 +253,7 @@ communitiesMobileRoutes.get('/posts/:postId/comments', async (c) => {
     const result = await communityPostService.listComments(c.req.param('postId'));
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -281,7 +269,7 @@ communitiesMobileRoutes.post('/posts/:postId/comments', async (c) => {
     );
     return c.json({ comment }, 201);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -293,7 +281,7 @@ communitiesMobileRoutes.post('/posts/:postId/report', async (c) => {
     await communityPostService.reportPost(c.req.param('postId'), auth.sub, body);
     return c.json({ success: true }, 201);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -318,7 +306,7 @@ communitiesAdminRoutes.get('/', async (c) => {
     const result = await communityService.listCommunities(validated);
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -334,7 +322,7 @@ communitiesAdminRoutes.get('/:id', async (c) => {
     }
     return c.json({ community });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -345,7 +333,7 @@ communitiesAdminRoutes.patch('/:id', async (c) => {
     const community = await communityService.updateCommunity(c.req.param('id'), body);
     return c.json({ community });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -356,7 +344,7 @@ communitiesAdminRoutes.post('/:id/suspend', async (c) => {
     const community = await communityService.suspendCommunity(c.req.param('id'));
     return c.json({ community });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -366,7 +354,7 @@ communitiesAdminRoutes.delete('/:id', async (c) => {
     await communityService.deleteCommunity(c.req.param('id'));
     return c.json({ success: true });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -381,7 +369,7 @@ communitiesAdminRoutes.get('/posts/reports', async (c) => {
     const result = await communityPostService.listReports(query);
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -391,7 +379,7 @@ communitiesAdminRoutes.post('/posts/:postId/remove', async (c) => {
     const post = await communityPostService.removePost(c.req.param('postId'));
     return c.json({ post });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });
@@ -401,7 +389,7 @@ communitiesAdminRoutes.post('/posts/reports/:reportId/resolve', async (c) => {
     await communityPostService.resolveReport(c.req.param('reportId'));
     return c.json({ success: true });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'communities');
     return c.json(body, status);
   }
 });

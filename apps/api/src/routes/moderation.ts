@@ -18,6 +18,7 @@ import {
 } from '../content/ContentPublishingService.js';
 import { contentRequiresReview } from '../publishing/publisher.js';
 import { requireAuth, requirePermission, type AppEnv } from '../middleware/auth.js';
+import { parseCursorIso } from '../lib/cursor.js';
 
 type ReportStatus = 'open' | 'resolved' | 'dismissed';
 type ContentType = 'reel' | 'content_post';
@@ -48,7 +49,7 @@ moderationAdminRoutes.get('/reports', async c => {
   const query: ModerationListQuery = c.req.query();
   const limitParam = parseInt(query.limit ?? '20', 10);
   const limit = Math.min(Math.max(limitParam, 1), 100);
-  const cursorParam = query.cursor;
+  const cursorParam = query.cursor ? parseCursorIso(query.cursor) : undefined;
   const statusFilter: ReportStatus = (query.status as ReportStatus) ?? 'open';
   const contentTypeFilter = query.contentType as ContentType | undefined;
   const reasonFilter = query.reason;

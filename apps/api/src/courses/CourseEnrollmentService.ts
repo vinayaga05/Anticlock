@@ -7,6 +7,7 @@ import type {
 } from '@anticlock/contracts';
 import { db } from '../db/client.js';
 import { courseEnrollments, courses, courseLessons, mobileUsers, mediaAssets } from '../db/schema.js';
+import { parseCursorIso } from '../lib/cursor.js';
 
 export class CourseEnrollmentService {
   async createEnrollment(
@@ -94,7 +95,7 @@ export class CourseEnrollmentService {
       conditions.push(eq(courseEnrollments.status, options.status));
     }
     if (options.cursor) {
-      conditions.push(sql`${courseEnrollments.createdAt} < ${new Date(options.cursor)}`);
+      conditions.push(sql`${courseEnrollments.createdAt} < ${parseCursorIso(options.cursor)}`);
     }
 
     const rows = await db
@@ -209,7 +210,7 @@ export class CourseEnrollmentService {
     if (filters.userId) conditions.push(eq(courseEnrollments.mobileUserId, filters.userId));
     if (filters.status) conditions.push(eq(courseEnrollments.status, filters.status));
     if (filters.cursor) {
-      conditions.push(sql`${courseEnrollments.createdAt} < ${new Date(filters.cursor)}`);
+      conditions.push(sql`${courseEnrollments.createdAt} < ${parseCursorIso(filters.cursor)}`);
     }
 
     const rows = await db

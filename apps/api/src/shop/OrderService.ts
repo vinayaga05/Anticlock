@@ -10,6 +10,7 @@ import type {
 import { db } from '../db/client.js';
 import { orders, mobileUsers, products } from '../db/schema.js';
 import { productService } from './ProductService.js';
+import { parseCursorDate } from '../lib/cursor.js';
 
 const FREE_SHIPPING_THRESHOLD = 50000;
 const FLAT_SHIPPING_RATE = 500;
@@ -127,7 +128,7 @@ export class OrderService {
     const conditions = [eq(orders.mobileUserId, mobileUserId)];
 
     if (options.cursor) {
-      conditions.push(lt(orders.createdAt, new Date(options.cursor)));
+      conditions.push(lt(orders.createdAt, parseCursorDate(options.cursor)));
     }
 
     if (options.status) {
@@ -203,7 +204,7 @@ export class OrderService {
     const conditions = [];
 
     if (options.cursor) {
-      conditions.push(lt(orders.createdAt, new Date(options.cursor)));
+      conditions.push(lt(orders.createdAt, parseCursorDate(options.cursor)));
     }
 
     if (options.userId) {

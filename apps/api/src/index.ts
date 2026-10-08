@@ -43,6 +43,7 @@ import {
   logAiProviderStartup,
 } from './config/ai-provider.config.js';
 import { logTestLoginWarning } from './lib/otp/testLogin.js';
+import { httpError } from './lib/httpError.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -130,17 +131,8 @@ app.route('/admin/communities', communitiesAdminRoutes);
 app.route('/webhooks/cloudflare/stream', streamWebhookRoutes);
 
 app.onError((err, c) => {
-  console.error(err);
-  if (err.name === 'ZodError') {
-    return c.json(
-      { error: { code: 'validation_error', message: err.message, details: err } },
-      400,
-    );
-  }
-  return c.json(
-    { error: { code: 'internal_error', message: 'Unexpected server error' } },
-    500,
-  );
+  const { status, body } = httpError(err, 'unhandled');
+  return c.json(body, status);
 });
 
 const port = Number(process.env.API_PORT ?? 4000);

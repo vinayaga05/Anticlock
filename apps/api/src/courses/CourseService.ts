@@ -8,6 +8,7 @@ import type {
 } from '@anticlock/contracts';
 import { db } from '../db/client.js';
 import { courses, courseLessons, mediaAssets } from '../db/schema.js';
+import { parseCursorIso } from '../lib/cursor.js';
 
 export class CourseService {
   async createCourse(request: CreateCourseRequest): Promise<Course> {
@@ -116,7 +117,7 @@ export class CourseService {
       );
     }
     if (options.cursor) {
-      conditions.push(sql`${courses.createdAt} < ${new Date(options.cursor)}`);
+      conditions.push(sql`${courses.createdAt} < ${parseCursorIso(options.cursor)}`);
     }
 
     const rows = await db

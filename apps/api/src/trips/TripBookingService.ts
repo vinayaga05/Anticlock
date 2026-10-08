@@ -10,6 +10,7 @@ import type {
 import { db } from '../db/client.js';
 import { tripBookings, trips, mobileUsers } from '../db/schema.js';
 import { tripService } from './TripService.js';
+import { parseCursorDate } from '../lib/cursor.js';
 
 export class TripBookingService {
   async createBooking(
@@ -135,7 +136,7 @@ export class TripBookingService {
     const conditions = [eq(tripBookings.mobileUserId, mobileUserId)];
     if (options.status) conditions.push(eq(tripBookings.status, options.status));
     if (options.cursor)
-      conditions.push(lt(tripBookings.createdAt, new Date(options.cursor)));
+      conditions.push(lt(tripBookings.createdAt, parseCursorDate(options.cursor)));
 
     const rows = await db
       .select({
@@ -246,7 +247,7 @@ export class TripBookingService {
       conditions.push(ilike(tripBookings.bookingNumber, `%${filters.search}%`));
     }
     if (filters.cursor)
-      conditions.push(lt(tripBookings.createdAt, new Date(filters.cursor)));
+      conditions.push(lt(tripBookings.createdAt, parseCursorDate(filters.cursor)));
 
     const rows = await db
       .select({

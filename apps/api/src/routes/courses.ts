@@ -18,6 +18,7 @@ import {
   requirePermission,
   type AppEnv,
 } from '../middleware/auth.js';
+import { httpError } from '../lib/httpError.js';
 
 function requireMobileAuth(c: { get: (k: 'auth') => { kind: string; sub: string } }) {
   const auth = c.get('auth');
@@ -28,19 +29,6 @@ function requireMobileAuth(c: { get: (k: 'auth') => { kind: string; sub: string 
     });
   }
   return auth;
-}
-
-function httpError(err: unknown) {
-  const e = err as { status?: number; code?: string; message?: string };
-  return {
-    status: (e.status ?? 500) as 400 | 403 | 404 | 409 | 500,
-    body: {
-      error: {
-        code: e.code ?? 'error',
-        message: e.message ?? 'Unexpected error',
-      },
-    },
-  };
 }
 
 export const coursesMobileRoutes = new Hono<AppEnv>();
@@ -59,23 +47,7 @@ coursesMobileRoutes.get('/', async c => {
     const result = await courseService.listCourses(validated);
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
-    return c.json(body, status);
-  }
-});
-
-coursesMobileRoutes.get('/:id', async c => {
-  try {
-    const course = await courseService.getCourseWithLessons(c.req.param('id'));
-    if (!course || course.status !== 'published') {
-      return c.json(
-        { error: { code: 'not_found', message: 'Course not found' } },
-        404,
-      );
-    }
-    return c.json({ course });
-  } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'courses');
     return c.json(body, status);
   }
 });
@@ -107,7 +79,7 @@ coursesMobileRoutes.post('/:id/enroll', async c => {
     );
     return c.json({ enrollment }, 201);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'courses');
     return c.json(body, status);
   }
 });
@@ -127,7 +99,7 @@ coursesMobileRoutes.get('/enrollments', async c => {
     );
     return c.json(result);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'courses');
     return c.json(body, status);
   }
 });
@@ -147,7 +119,7 @@ coursesMobileRoutes.get('/enrollments/:id', async c => {
     }
     return c.json({ enrollment });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'courses');
     return c.json(body, status);
   }
 });
@@ -170,7 +142,24 @@ coursesMobileRoutes.post('/enrollments/:id/lessons/complete', async c => {
     }
     return c.json({ enrollment });
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'courses');
+    return c.json(body, status);
+  }
+});
+
+// Registered after the static /enrollments routes so it doesn't shadow them.
+coursesMobileRoutes.get('/:id', async c => {
+  try {
+    const course = await courseService.getCourseWithLessons(c.req.param('id'));
+    if (!course || course.status !== 'published') {
+      return c.json(
+        { error: { code: 'not_found', message: 'Course not found' } },
+        404,
+      );
+    }
+    return c.json({ course });
+  } catch (err) {
+    const { status, body } = httpError(err, 'courses');
     return c.json(body, status);
   }
 });
@@ -194,7 +183,7 @@ coursesAdminRoutes.get(
       const result = await courseService.listCourses(validated);
       return c.json(result);
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'courses');
       return c.json(body, status);
     }
   },
@@ -209,7 +198,30 @@ coursesAdminRoutes.post(
       const course = await courseService.createCourse(body);
       return c.json({ course }, 201);
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'courses');
+      return c.json(body, status);
+    }
+  },
+);
+
+// Must be registered before /:id, otherwise '/enrollments' is captured as an id.
+coursesAdminRoutes.get(
+  '/enrollments',
+  requirePermission('catalog.read'),
+  async c => {
+    try {
+      const query = {
+        courseId: c.req.query('courseId'),
+        userId: c.req.query('userId'),
+        status: c.req.query('status'),
+        limit: c.req.query('limit') ? Number(c.req.query('limit')) : undefined,
+        cursor: c.req.query('cursor'),
+      };
+      const validated = EnrollmentAdminQuerySchema.parse(query);
+      const result = await courseEnrollmentService.listEnrollmentsAdmin(validated);
+      return c.json(result);
+    } catch (err) {
+      const { status, body } = httpError(err, 'courses');
       return c.json(body, status);
     }
   },
@@ -229,7 +241,7 @@ coursesAdminRoutes.get(
       }
       return c.json({ course });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'courses');
       return c.json(body, status);
     }
   },
@@ -250,7 +262,7 @@ coursesAdminRoutes.patch(
       }
       return c.json({ course });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'courses');
       return c.json(body, status);
     }
   },
@@ -270,7 +282,7 @@ coursesAdminRoutes.delete(
       }
       return c.json({ success: true });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'courses');
       return c.json(body, status);
     }
   },
@@ -288,7 +300,7 @@ coursesAdminRoutes.post(
       );
       return c.json({ lesson }, 201);
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'courses');
       return c.json(body, status);
     }
   },
@@ -312,7 +324,7 @@ coursesAdminRoutes.patch(
       }
       return c.json({ lesson });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'courses');
       return c.json(body, status);
     }
   },
@@ -332,30 +344,9 @@ coursesAdminRoutes.delete(
       }
       return c.json({ success: true });
     } catch (err) {
-      const { status, body } = httpError(err);
+      const { status, body } = httpError(err, 'courses');
       return c.json(body, status);
     }
   },
 );
 
-coursesAdminRoutes.get(
-  '/enrollments',
-  requirePermission('catalog.read'),
-  async c => {
-    try {
-      const query = {
-        courseId: c.req.query('courseId'),
-        userId: c.req.query('userId'),
-        status: c.req.query('status'),
-        limit: c.req.query('limit') ? Number(c.req.query('limit')) : undefined,
-        cursor: c.req.query('cursor'),
-      };
-      const validated = EnrollmentAdminQuerySchema.parse(query);
-      const result = await courseEnrollmentService.listEnrollmentsAdmin(validated);
-      return c.json(result);
-    } catch (err) {
-      const { status, body } = httpError(err);
-      return c.json(body, status);
-    }
-  },
-);

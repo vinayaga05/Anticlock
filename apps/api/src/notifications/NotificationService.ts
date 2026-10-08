@@ -3,6 +3,7 @@ import { db } from "../db/client.js";
 import { notifications, deviceTokens } from "../db/schema.js";
 import type { NotificationType } from "@anticlock/contracts";
 import type { Message } from "firebase-admin/messaging";
+import { parseCursorIso } from '../lib/cursor.js';
 
 interface FirebaseAdmin {
   messaging: () => {
@@ -192,7 +193,7 @@ class NotificationService {
     const conditions = [eq(notifications.mobileUserId, userId)];
 
     if (options.cursor) {
-      conditions.push(sql`${notifications.createdAt} < ${options.cursor}`);
+      conditions.push(sql`${notifications.createdAt} < ${parseCursorIso(options.cursor)}`);
     }
 
     if (options.unreadOnly) {

@@ -3,20 +3,7 @@ import { CreateContentPostReportRequestSchema } from '@anticlock/contracts';
 import { contentReportService } from '../content/ContentReportService.js';
 import { writeAudit } from '../lib/audit.js';
 import { requireAuth, type AppEnv } from '../middleware/auth.js';
-
-function httpError(err: unknown) {
-  const e = err as { status?: number; code?: string; message?: string };
-  const status = (e.status ?? 500) as 400 | 403 | 404 | 409 | 500;
-  return {
-    status,
-    body: {
-      error: {
-        code: e.code ?? 'error',
-        message: e.message ?? 'Unexpected error',
-      },
-    },
-  };
-}
+import { httpError } from '../lib/httpError.js';
 
 /** Safety writes for profile-published video posts. */
 export const contentSafetyRoutes = new Hono<AppEnv>();
@@ -37,7 +24,7 @@ contentSafetyRoutes.post('/posts/:id/reports', async c => {
     });
     return c.json({ data }, 201);
   } catch (err) {
-    const { status, body } = httpError(err);
+    const { status, body } = httpError(err, 'contentSafety');
     return c.json(body, status);
   }
 });

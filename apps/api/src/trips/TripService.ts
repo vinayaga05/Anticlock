@@ -8,6 +8,7 @@ import type {
 } from '@anticlock/contracts';
 import { db } from '../db/client.js';
 import { trips, mediaAssets } from '../db/schema.js';
+import { parseCursorDate } from '../lib/cursor.js';
 
 export class TripService {
   async createTrip(request: CreateTripRequest): Promise<Trip> {
@@ -90,7 +91,7 @@ export class TripService {
       );
     }
     if (options.cursor) {
-      conditions.push(lt(trips.createdAt, new Date(options.cursor)));
+      conditions.push(lt(trips.createdAt, parseCursorDate(options.cursor)));
     }
 
     const rows = await db

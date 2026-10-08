@@ -20,7 +20,7 @@
     "r2:sync-reels": "tsx scripts/sync-r2-reels-manifest.ts",
     "assistant:backfill-algolia": "tsx src/seed/backfillAlgoliaReels.ts",
     "assistant:eval": "tsx src/assistant/evaluate.ts",
-    "test": "AI_PROVIDER=groq GROQ_API_KEY=gsk_test OPENAI_API_KEY=sk_test tsx --test src/config/*.test.ts src/assistant/__tests__/*.test.ts src/interests/*.test.ts src/routes/*.test.ts src/provider/*.test.ts"
+    "test": "AI_PROVIDER=groq GROQ_API_KEY=gsk_test OPENAI_API_KEY=sk_test tsx --test src/config/*.test.ts src/assistant/__tests__/*.test.ts src/interests/*.test.ts src/routes/*.test.ts src/provider/*.test.ts src/lib/*.test.ts"
   },
   "dependencies": {
     "@anticlock/contracts": "workspace:*",

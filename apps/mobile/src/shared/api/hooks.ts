@@ -3,6 +3,9 @@ import { apiRequest, ApiError } from './client';
 import { isApiEnabled, isDevEnvironment } from './config';
 import { readStoredSession } from '@/shared/services/auth/authService';
 import type { ReelItem } from '@/shared/types';
+import { mergePublishedClipFeeds } from './clipFeedMerge';
+
+export { mergePublishedClipFeeds };
 
 export type ApiServiceTree = {
   id: string;
@@ -82,6 +85,8 @@ export type ApiContentClipFeedItem = {
   viewCount: number;
   /** The authenticated viewer's durable like state for this content Clip. */
   viewerHasLiked: boolean;
+  /** True when the viewer owns (or manages the business that owns) it. */
+  viewerCanManage?: boolean;
   shareCount: number;
   createdAt: string;
   publishedAt: string;
@@ -289,53 +294,10 @@ export function mapApiContentClipToItem(
     likeCount: nonNegativeNumber(item.likeCount),
     commentCount: nonNegativeNumber(item.commentCount),
     liked: item.viewerHasLiked === true,
+    viewerCanManage: item.viewerCanManage === true,
   };
 }
 
-function normalizedPlaybackUrl(value: ReelItem['videoUrl']): string | null {
-  if (typeof value !== 'string' || !isRemoteMediaUrl(value)) return null;
-  try {
-    const url = new URL(value);
-    // Signed delivery URLs for the same video can have different query
-    // strings. Their resource path is the useful duplicate signal.
-    return `${url.protocol}//${url.host}${url.pathname}`;
-  } catch {
-    return value;
-  }
-}
-
-/**
- * Profile-published Clips take precedence, then editorial Reels fill any
- * remaining slots. Deduping both media URLs and duplicate clusters means the
- * legacy feed cannot reintroduce a video the personalized feed has excluded.
- */
-function mergePublishedClipFeeds(
-  contentClips: ReelItem[],
-  legacyReels: ReelItem[],
-): ReelItem[] {
-  const seenIds = new Set<string>();
-  const seenMedia = new Set<string>();
-  const seenClusters = new Set<string>();
-  const merged: ReelItem[] = [];
-
-  for (const item of [...contentClips, ...legacyReels]) {
-    const mediaKey = normalizedPlaybackUrl(item.videoUrl);
-    const clusterId = item.contentMetadata?.duplicateClusterId;
-    if (
-      seenIds.has(item.id) ||
-      (mediaKey !== null && seenMedia.has(mediaKey)) ||
-      (clusterId !== undefined && seenClusters.has(clusterId))
-    ) {
-      continue;
-    }
-    seenIds.add(item.id);
-    if (mediaKey !== null) seenMedia.add(mediaKey);
-    if (clusterId !== undefined) seenClusters.add(clusterId);
-    merged.push(item);
-  }
-
-  return merged;
-}
 
 export function useServiceTreesQuery(fallback: ApiServiceTree[]) {
   return useQuery({
@@ -395,17 +357,88 @@ export function useServiceCategoriesQuery(
   });
 }
 
+export type ReelFeedPage = {
+  items: ReelItem[];
+  /** Cursor for the next personalized content page; null when exhausted. */
+  nextCursor: string | null;
+};
+
+function mapContentClipFeed(
+  response: ApiContentClipFeedResponse | undefined,
+): ReelFeedPage {
+  const items = Array.isArray(response?.items)
+    ? response.items
+        .filter(isPublishedContentClipFeedItem)
+        .map(mapApiContentClipToItem)
+    : [];
+  return {
+    items,
+    nextCursor:
+      typeof response?.nextCursor === 'string' && response.nextCursor
+        ? response.nextCursor
+        : null,
+  };
+}
+
+/** Next page of the personalized Clip feed (infinite scroll). */
+export async function fetchMoreContentClips(
+  cursor: string,
+): Promise<ReelFeedPage> {
+  await ensureAuthToken();
+  const response = await apiRequest<ApiContentClipFeedResponse>(
+    `/v1/content/feeds/clip?cursor=${encodeURIComponent(cursor)}`,
+  );
+  return mapContentClipFeed(response);
+}
+
+/**
+ * One Clip by id, for shared links that point outside the loaded feed.
+ * Returns null when it is gone or not visible to this viewer.
+ */
+export async function fetchContentClip(id: string): Promise<ReelItem | null> {
+  await ensureAuthToken();
+  try {
+    const response = await apiRequest<{
+      post: Partial<ApiContentClipFeedItem> & { id: string };
+    }>(`/v1/content/posts/${encodeURIComponent(id)}`);
+    const post = {
+      ...response.post,
+      duplicateClusterId: response.post.duplicateClusterId ?? response.post.id,
+    };
+    return isPublishedContentClipFeedItem(post)
+      ? mapApiContentClipToItem(post)
+      : null;
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 404 || error.status === 403)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/** Removes the viewer's own Clip everywhere (server sets it to removed). */
+export async function deleteContentClip(id: string): Promise<void> {
+  await ensureAuthToken();
+  await apiRequest(`/v1/content/posts/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
 /**
  * In development this is the checked-in Cloudflare R2 Clip catalog. It keeps
  * local UI work pointed at the same remote delivery layer as production,
  * while production only accepts the server-personalized feed.
  */
 export function useReelsQuery(developmentR2Clips: ReelItem[]) {
+  const developmentPage: ReelFeedPage = {
+    items: developmentR2Clips,
+    nextCursor: null,
+  };
   return useQuery({
     queryKey: ['reels', 'feed', 'content-first', isApiEnabled ? 'api' : 'mock'],
-    queryFn: async () => {
+    queryFn: async (): Promise<ReelFeedPage> => {
       if (!isApiEnabled) {
-        return isDevEnvironment ? developmentR2Clips : [];
+        return isDevEnvironment ? developmentPage : { items: [], nextCursor: null };
       }
       await ensureAuthToken();
 
@@ -414,13 +447,10 @@ export function useReelsQuery(developmentR2Clips: ReelItem[]) {
         apiRequest<{ data: ApiReelFeedItem[] }>('/v1/reels'),
       ]);
 
-      const contentClips =
-        contentResult.status === 'fulfilled' &&
-        Array.isArray(contentResult.value.items)
-          ? contentResult.value.items
-              .filter(isPublishedContentClipFeedItem)
-              .map(mapApiContentClipToItem)
-          : [];
+      const contentPage =
+        contentResult.status === 'fulfilled'
+          ? mapContentClipFeed(contentResult.value)
+          : { items: [], nextCursor: null };
       const legacyReels =
         legacyResult.status === 'fulfilled' &&
         Array.isArray(legacyResult.value.data)
@@ -430,23 +460,24 @@ export function useReelsQuery(developmentR2Clips: ReelItem[]) {
           : [];
 
       const publishedClips = mergePublishedClipFeeds(
-        contentClips,
+        contentPage.items,
         legacyReels,
       );
 
-      if (publishedClips.length) return publishedClips;
+      if (publishedClips.length) {
+        return { items: publishedClips, nextCursor: contentPage.nextCursor };
+      }
 
       // Local development intentionally previews the checked-in R2 catalog.
       // This is not a device-media fallback: every URL is an R2 delivery URL.
       // Release builds never bypass the personalized publishing feed.
-      return isDevEnvironment ? developmentR2Clips : [];
+      return isDevEnvironment ? developmentPage : { items: [], nextCursor: null };
     },
     // Development starts with the R2 Clip catalog while the local API feed is
     // being queried. It is not cached as an API response and is replaced by
     // the published feed as soon as that feed returns results.
-    initialData:
-      !isApiEnabled && isDevEnvironment ? developmentR2Clips : undefined,
-    placeholderData: isDevEnvironment ? developmentR2Clips : undefined,
+    initialData: !isApiEnabled && isDevEnvironment ? developmentPage : undefined,
+    placeholderData: isDevEnvironment ? developmentPage : undefined,
     staleTime: isApiEnabled ? 0 : 30_000,
     refetchOnMount: isApiEnabled ? 'always' : true,
     // A content-feed request reserves a viewer-specific batch. Background

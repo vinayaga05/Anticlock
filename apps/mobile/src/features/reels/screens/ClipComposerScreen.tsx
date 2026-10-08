@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -15,9 +15,12 @@ import { Button } from '@/shared/components/Button';
 import { Card } from '@/shared/components/Card';
 import { FilterPills } from '@/shared/components/FilterPills';
 import { PressableScale } from '@/shared/components/PressableScale';
+import { AppIcon } from '@/shared/components/AppIcon';
 import {
+  discardContentDraft,
   ensureContentDraft,
   uploadContentMedia,
+  UploadCancelledError,
   usePublishContentMutation,
 } from '@/shared/api/publishingHooks';
 import { PostingAsCard } from '@/shared/publishing/PostingAsCard';
@@ -51,9 +54,10 @@ import {
   type ClipSource,
 } from '@/features/reels/editor/clipEditModel';
 import {
-  displayBytes,
+  canCancelUpload,
   normalizeHashtags,
   normalizeTaggedUserIds,
+  uploadProgressPercent,
 } from './clipComposerUtils';
 import {
   parseDraft,
@@ -105,15 +109,13 @@ function phaseTitle(status: UploadStatus) {
   if (status.message) return status.message;
   switch (status.phase) {
     case 'preparing':
-      return 'Preparing your clip…';
     case 'video':
-      return 'Uploading video…';
     case 'cover':
-      return 'Uploading cover…';
+      return `Uploading… ${status.progress}%`;
     case 'publishing':
-      return 'Publishing your clip…';
+      return 'Posting…';
     case 'complete':
-      return 'Your clip is published.';
+      return 'Posted';
     default:
       return '';
   }
@@ -160,6 +162,17 @@ export function ClipComposerScreen() {
     phase: 'idle',
     progress: 0,
   });
+  /** In-flight upload: lets the creator cancel and discards its draft. */
+  const uploadAbortRef = useRef<AbortController | null>(null);
+  const uploadDraftIdRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  const scrollRef = useRef<ScrollView>(null);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
 
   useEffect(() => {
     const draft = loadDraft();
@@ -185,6 +198,49 @@ export function ClipComposerScreen() {
     uploadStatus.phase !== 'idle' &&
     uploadStatus.phase !== 'complete' &&
     uploadStatus.phase !== 'error';
+
+  const cancelUpload = () => {
+    const controller = uploadAbortRef.current;
+    if (!controller || controller.signal.aborted) return;
+    controller.abort();
+    const draftId = uploadDraftIdRef.current;
+    uploadDraftIdRef.current = null;
+    if (draftId) void discardContentDraft('clip', draftId);
+    if (mountedRef.current) setUploadStatus({ phase: 'idle', progress: 0 });
+  };
+
+  // Leaving mid-upload would orphan the upload (and its draft) and could let
+  // a second upload reuse the same draft. Ask first; cancelling discards it.
+  const uploadPhaseRef = useRef(uploadStatus.phase);
+  uploadPhaseRef.current = uploadStatus.phase;
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (event: any) => {
+      const phase = uploadPhaseRef.current;
+      if (
+        phase === 'idle' ||
+        phase === 'complete' ||
+        phase === 'error'
+      ) {
+        return;
+      }
+      event.preventDefault();
+      if (!canCancelUpload(phase)) return; // publishing: finishes in a moment
+      Alert.alert('Discard this clip?', 'Your upload will stop.', [
+        { text: 'Keep uploading', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: () => {
+            cancelUpload();
+            navigation.dispatch(event.data.action);
+          },
+        },
+      ]);
+    });
+    return unsubscribe;
+    // `cancelUpload` only reads refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation]);
 
   /** Any change to the edit invalidates a previous export. */
   const changeEdit = (next: ClipEditState) => {
@@ -313,10 +369,19 @@ export function ClipComposerScreen() {
       return;
     }
 
+    const controller = new AbortController();
+    uploadAbortRef.current = controller;
+    const { signal } = controller;
+    const ifActive = (update: () => void) => {
+      if (!signal.aborted && mountedRef.current) update();
+    };
     try {
-      setUploadStatus({ phase: 'preparing', progress: 8 });
+      setUploadStatus({ phase: 'preparing', progress: uploadProgressPercent('preparing') });
+      // Bring the progress (and Cancel) into view.
+      requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
       // Draft first: owner + publisher are fixed before any upload, and a
-      // retry continues the same draft for the same profile.
+      // retry continues the same draft for the same profile. `identity` is
+      // captured here, so switching profile later cannot change this post.
       const draftId = await ensureContentDraft({
         format: 'clip',
         mediaType: 'video',
@@ -324,17 +389,27 @@ export function ClipComposerScreen() {
         visibility,
         identity,
       });
+      uploadDraftIdRef.current = draftId;
+      if (signal.aborted) throw new UploadCancelledError();
       const uploadFile = await createVideoUploadFile(video);
-      setUploadStatus({
-        phase: 'video',
-        progress: 35,
-        message: `Uploading video (${displayBytes(uploadFile.byteSize)})…`,
-      });
+      ifActive(() =>
+        setUploadStatus({ phase: 'video', progress: uploadProgressPercent('video') }),
+      );
       const mediaId = await uploadContentMedia(
         identity,
         uploadFile,
         visibility,
         draftId,
+        {
+          signal,
+          onProgress: fraction =>
+            ifActive(() =>
+              setUploadStatus({
+                phase: 'video',
+                progress: uploadProgressPercent('video', fraction),
+              }),
+            ),
+        },
       );
 
       let thumbnailMediaId: string | null = null;
@@ -342,20 +417,20 @@ export function ClipComposerScreen() {
         coverMode === 'custom' ? cover : generatedCover;
       if (coverToUpload) {
         const coverFile = await createCoverUploadFile(coverToUpload);
-        setUploadStatus({
-          phase: 'cover',
-          progress: 68,
-          message: `Uploading cover (${displayBytes(coverFile.byteSize)})…`,
-        });
+        ifActive(() =>
+          setUploadStatus({ phase: 'cover', progress: uploadProgressPercent('cover') }),
+        );
         thumbnailMediaId = await uploadContentMedia(
           identity,
           coverFile,
           visibility,
           draftId,
+          { signal },
         );
       }
 
-      setUploadStatus({ phase: 'publishing', progress: 88 });
+      if (signal.aborted) throw new UploadCancelledError();
+      setUploadStatus({ phase: 'publishing', progress: uploadProgressPercent('publishing') });
       const result = await publishContent.mutateAsync({
         draftId,
         format: 'clip',
@@ -370,17 +445,33 @@ export function ClipComposerScreen() {
         edit: exportedEdit ?? undefined,
         identity,
       });
-      setUploadStatus({ phase: 'complete', progress: 100 });
+      uploadAbortRef.current = null;
+      uploadDraftIdRef.current = null;
       storage.remove(STORAGE_KEYS.CLIP_COMPOSER_DRAFT);
+      if (!mountedRef.current) return;
+      setUploadStatus({ phase: 'complete', progress: 100 });
       const pendingReview = result?.post.contentStatus === 'pending_review';
       Alert.alert(
         pendingReview ? 'Clip submitted' : 'Clip published',
         pendingReview
           ? `Your clip from ${identity.name} will appear once it is reviewed.`
           : `Your clip is live on ${identity.name}.`,
-        [{ text: 'Done', onPress: () => navigation.goBack() }],
+        [
+          {
+            text: 'Done',
+            onPress: () => {
+              // Only close this composer, never a screen opened since.
+              if (mountedRef.current && navigation.isFocused()) {
+                navigation.goBack();
+              }
+            },
+          },
+        ],
       );
     } catch (error) {
+      if (uploadAbortRef.current === controller) uploadAbortRef.current = null;
+      if (error instanceof UploadCancelledError || signal.aborted) return;
+      if (!mountedRef.current) return;
       const message =
         error instanceof Error ? error.message : 'Please try publishing again.';
       setUploadStatus({ phase: 'error', progress: 0, message });
@@ -457,6 +548,7 @@ export function ClipComposerScreen() {
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
       <ScrollView
+        ref={scrollRef}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[
           styles.content,
@@ -484,14 +576,6 @@ export function ClipComposerScreen() {
             ]}
           >
             Create a Clip
-          </Text>
-          <Text
-            style={[
-              theme.typography.bodySmall,
-              { color: theme.colors.textSecondary },
-            ]}
-          >
-            Preview your video and choose exactly how it is shared.
           </Text>
         </View>
 
@@ -521,7 +605,7 @@ export function ClipComposerScreen() {
                   { color: theme.colors.textSecondary },
                 ]}
               >
-                {video?.label ?? 'Edit your clip to preview it here.'}
+                {video?.label ?? ''}
               </Text>
             </View>
             {video ? (
@@ -558,16 +642,7 @@ export function ClipComposerScreen() {
                   backgroundColor: theme.colors.surfaceMuted,
                 },
               ]}
-            >
-              <Text
-                style={[
-                  theme.typography.bodySmall,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                Your selected video will play here before you publish it.
-              </Text>
-            </View>
+            />
           )}
 
           <View style={styles.mediaActions}>
@@ -580,15 +655,20 @@ export function ClipComposerScreen() {
               disabled={isPublishing}
             />
           </View>
-          <Text
-            style={[
-              theme.typography.caption,
-              { color: theme.colors.textTertiary },
-            ]}
-          >
-            Edited on this device: trimmed to 90 seconds max and exported as MP4
-            {exportedEdit?.music ? ` with ♪ ${exportedEdit.music.title}` : ''}.
-          </Text>
+          {exportedEdit?.music ? (
+            <View style={styles.musicRow}>
+              <AppIcon name="music" size={14} color={theme.colors.textTertiary} />
+              <Text
+                style={[
+                  theme.typography.caption,
+                  { color: theme.colors.textTertiary },
+                ]}
+                numberOfLines={1}
+              >
+                {exportedEdit.music.title}
+              </Text>
+            </View>
+          ) : null}
         </Card>
 
         <Card style={styles.section}>
@@ -599,14 +679,6 @@ export function ClipComposerScreen() {
             ]}
           >
             Cover image
-          </Text>
-          <Text
-            style={[
-              theme.typography.caption,
-              { color: theme.colors.textSecondary },
-            ]}
-          >
-            Use the frame you picked in the editor or choose a custom image.
           </Text>
           <FilterPills
             activeId={coverMode}
@@ -622,16 +694,7 @@ export function ClipComposerScreen() {
                 source={imageSource(coverPreview.previewSource)}
                 style={[styles.coverPreview, { borderRadius: theme.radius.md }]}
               />
-              <View style={styles.coverCopy}>
-                <Text
-                  style={[
-                    theme.typography.bodySmall,
-                    { color: theme.colors.textSecondary },
-                  ]}
-                >
-                  Frame from your edited clip. Change it in the editor’s Cover tool.
-                </Text>
-              </View>
+              <View style={styles.coverCopy} />
             </View>
           ) : null}
           {coverMode === 'custom' ? (
@@ -667,14 +730,6 @@ export function ClipComposerScreen() {
                 </View>
               )}
               <View style={styles.coverCopy}>
-                <Text
-                  style={[
-                    theme.typography.bodySmall,
-                    { color: theme.colors.textSecondary },
-                  ]}
-                >
-                  {cover?.label ?? 'Add a thumbnail image for your clip.'}
-                </Text>
                 <Button
                   title="Choose cover"
                   icon="camera"
@@ -740,41 +795,6 @@ export function ClipComposerScreen() {
               },
             ]}
           />
-          <Text
-            style={[
-              theme.typography.caption,
-              { color: theme.colors.textTertiary },
-            ]}
-          >
-            Hashtags (letters, numbers, and underscores)
-          </Text>
-          <TextInput
-            value={taggedUserIdsInput}
-            onChangeText={setTaggedUserIdsInput}
-            editable={!isPublishing}
-            placeholder="User IDs, separated by commas"
-            placeholderTextColor={theme.colors.textTertiary}
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={[
-              styles.input,
-              {
-                color: theme.colors.textPrimary,
-                borderColor: theme.colors.border,
-                backgroundColor: theme.colors.background,
-                borderRadius: theme.radius.md,
-              },
-            ]}
-          />
-          <Text
-            style={[
-              theme.typography.caption,
-              { color: theme.colors.textTertiary },
-            ]}
-          >
-            Tagged people — profile search can be connected when a people-search
-            API is available.
-          </Text>
           <TextInput
             value={locationName}
             onChangeText={setLocationName}
@@ -834,6 +854,23 @@ export function ClipComposerScreen() {
             >
               {phaseTitle(uploadStatus)}
             </Text>
+            {canCancelUpload(uploadStatus.phase) ? (
+              <PressableScale
+                onPress={cancelUpload}
+                accessibilityLabel="Cancel upload"
+                style={styles.cancelUpload}
+              >
+                <AppIcon name="close" size={16} color={theme.colors.textSecondary} />
+                <Text
+                  style={[
+                    theme.typography.bodySmall,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  Cancel
+                </Text>
+              </PressableScale>
+            ) : null}
             {uploadStatus.phase !== 'error' ? (
               <View
                 style={[
@@ -936,6 +973,15 @@ const styles = StyleSheet.create({
   captionCounter: { textAlign: 'right' },
   uploadStatus: { gap: 9 },
   uploadStatusLabel: { fontWeight: '700' },
+  cancelUpload: {
+    position: 'absolute',
+    right: 14,
+    top: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  musicRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   progressTrack: { height: 8, overflow: 'hidden' },
   progressFill: { height: '100%' },
   footer: {

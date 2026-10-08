@@ -10,6 +10,7 @@ import {
   Image,
   Platform,
   RefreshControl,
+  Share,
   StyleSheet,
   Text,
   Alert,
@@ -44,7 +45,20 @@ import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
 import { useClipPlaybackStore } from '@/shared/store/clipPlaybackStore';
-import { useReelsQuery } from '@/shared/api/hooks';
+import {
+  deleteContentClip,
+  fetchContentClip,
+  fetchMoreContentClips,
+  useReelsQuery,
+} from '@/shared/api/hooks';
+import {
+  appendClipPage,
+  canDeleteClip,
+  clipAuthorLabel,
+  clipShareUrl,
+  prependClip,
+  withoutHiddenClips,
+} from '@/features/reels/feed/clipFeedPaging';
 import {
   createAnalyticsEventId,
   recordReelAnalyticsEvent,
@@ -233,7 +247,40 @@ export function ReelFeedScreen() {
     s => s.registerSeekController,
   );
   const clearClipPlayback = useClipPlaybackStore(s => s.clear);
-  const { data: queriedReels, refetch } = useReelsQuery(r2Reels);
+  const { data: feedPage, refetch } = useReelsQuery(r2Reels);
+  const queriedReels = feedPage?.items;
+  // Infinite scroll: pages after the first are appended locally and reset
+  // whenever the first page is fetched again (pull-to-refresh, publish).
+  const [morePages, setMorePages] = useState<ReelItem[]>(EMPTY_REELS);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const morePagesRef = useRef<ReelItem[]>(EMPTY_REELS);
+  const loadingMoreRef = useRef(false);
+  const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [linkedClip, setLinkedClip] = useState<ReelItem | null>(null);
+  const requestedLinkRef = useRef<string | null>(null);
+  const firstPageLeadIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    morePagesRef.current = EMPTY_REELS;
+    setMorePages(EMPTY_REELS);
+    setNextCursor(feedPage?.nextCursor ?? null);
+    loadingMoreRef.current = false;
+    // A new first page that starts with a different Clip (for example the
+    // creator's just-published one) is shown from the top.
+    const leadId = feedPage?.items[0]?.id ?? null;
+    const previousLeadId = firstPageLeadIdRef.current;
+    firstPageLeadIdRef.current = leadId;
+    if (previousLeadId && leadId && previousLeadId !== leadId && !route.params?.reelId) {
+      activeIndexRef.current = 0;
+      setActiveIndex(0);
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      });
+    }
+    // Only a new first page resets paging.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedPage]);
   // Content-feed results are already block-filtered on the server. Hydrate the
   // same persisted block list for editorial/legacy Reels as well, whose public
   // endpoint deliberately has no viewer-specific server filter.
@@ -269,7 +316,14 @@ export function ReelFeedScreen() {
   // production fallback: the public feed endpoint is the publication gate.
   // Keep the empty state referentially stable so a loading/refetch transition
   // cannot make FlatList think its data changed and recalculate its viewport.
-  const feedReels = queriedReels ?? EMPTY_REELS;
+  const feedReels = useMemo(() => {
+    const firstPage = queriedReels ?? EMPTY_REELS;
+    const paged = morePages.length
+      ? appendClipPage(firstPage, morePages).items
+      : firstPage;
+    const linked = linkedClip ? prependClip(paged, linkedClip) : paged;
+    return withoutHiddenClips(linked, hiddenIds);
+  }, [hiddenIds, linkedClip, morePages, queriedReels]);
   const genieQ = route.params?.q?.trim().toLowerCase();
   const reels = useMemo(() => {
     const visibleReels = feedReels.filter(
@@ -291,6 +345,21 @@ export function ReelFeedScreen() {
   }, [activeIndex, reels, setActiveClip]);
 
   useEffect(() => clearClipPlayback, [clearClipPlayback]);
+
+  // A shared link can point at a Clip outside the loaded batch: load it by id
+  // and show it first.
+  useEffect(() => {
+    const reelId = route.params?.reelId;
+    if (!reelId || !queriedReels) return;
+    if (feedReels.some(r => r.id === reelId)) return;
+    if (requestedLinkRef.current === reelId) return;
+    requestedLinkRef.current = reelId;
+    fetchContentClip(reelId)
+      .then(clip => {
+        if (clip) setLinkedClip(clip);
+      })
+      .catch(() => undefined);
+  }, [feedReels, queriedReels, route.params?.reelId]);
 
   useEffect(() => {
     const reelId = route.params?.reelId;
@@ -468,6 +537,46 @@ export function ReelFeedScreen() {
     }
   }, [refetch]);
 
+  const loadMoreReels = useCallback(async () => {
+    const cursor = nextCursor;
+    if (!cursor || loadingMoreRef.current || genieQ) return;
+    loadingMoreRef.current = true;
+    try {
+      const page = await fetchMoreContentClips(cursor);
+      const previous = morePagesRef.current;
+      const { added } = appendClipPage(
+        appendClipPage(queriedReels ?? EMPTY_REELS, previous).items,
+        page.items,
+      );
+      const next = [...previous, ...page.items];
+      morePagesRef.current = next;
+      setMorePages(next);
+      // A page that only repeats what is on screen ends this session's feed.
+      setNextCursor(added > 0 || page.items.length === 0 ? page.nextCursor : null);
+    } catch {
+      // Keep the cursor so the next scroll to the end retries.
+    } finally {
+      loadingMoreRef.current = false;
+    }
+  }, [genieQ, nextCursor, queriedReels]);
+
+  const shareReel = useCallback(async (item: ReelItem) => {
+    const url = clipShareUrl(item.id);
+    try {
+      await Share.share(
+        Platform.OS === 'ios'
+          ? { url, message: item.caption?.trim() || undefined }
+          : { message: item.caption?.trim() ? `${item.caption.trim()}\n${url}` : url },
+      );
+    } catch {
+      // The share sheet was dismissed or is unavailable.
+    }
+  }, []);
+
+  const hideReel = useCallback((reelId: string) => {
+    setHiddenIds(previous => new Set(previous).add(reelId));
+  }, []);
+
   const blockClipAuthor = useCallback(
     async (profile: NonNullable<ReelItem['authorProfile']>) => {
       try {
@@ -597,6 +706,28 @@ export function ReelFeedScreen() {
           );
           break;
         }
+        case 'delete': {
+          setMenuReelId(null);
+          if (!reel || !canDeleteClip(reel)) break;
+          Alert.alert('Delete this clip?', 'It will be removed from your profile and everyone’s feed.', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Delete',
+              style: 'destructive',
+              onPress: () => {
+                deleteContentClip(reel.id)
+                  .then(() => hideReel(reel.id))
+                  .catch(error =>
+                    Alert.alert(
+                      'Couldn’t delete clip',
+                      error instanceof Error ? error.message : 'Please try again.',
+                    ),
+                  );
+              },
+            },
+          ]);
+          break;
+        }
         case 'caption':
           setMenuReelId(null);
           Alert.alert(
@@ -612,7 +743,7 @@ export function ReelFeedScreen() {
           break;
       }
     },
-    [blockClipAuthor, menuReelId, reels],
+    [blockClipAuthor, hideReel, menuReelId, reels],
   );
 
   const goToNextReel = useCallback(() => {
@@ -632,6 +763,7 @@ export function ReelFeedScreen() {
       <View style={[styles.reel, { height: pageHeight, width: pageWidth }]}>
         <VideoPlayer
           uri={item.videoUrl}
+          poster={item.posterUrl || undefined}
           muted={false}
           paused={index !== activeIndex || (commentsOpen && !playbackActive)}
           seekControllerId={index === activeIndex ? item.id : undefined}
@@ -716,7 +848,11 @@ export function ReelFeedScreen() {
               })
             }
           />
-          <SideAction icon="share" accessibilityLabel="Share" />
+          <SideAction
+            icon="share"
+            accessibilityLabel="Share"
+            onPress={() => void shareReel(item)}
+          />
           <SideAction
             icon="more"
             accessibilityLabel="More options"
@@ -758,7 +894,7 @@ export function ReelFeedScreen() {
               source={{ uri: getAuthorAvatar(item) }}
               style={styles.creatorAvatar}
             />
-            <Text style={styles.creator}>@{item.author}</Text>
+            <Text style={styles.creator}>{clipAuthorLabel(item)}</Text>
           </PressableScale>
           <Text style={styles.caption} numberOfLines={3}>
             {item.caption}
@@ -839,6 +975,8 @@ export function ReelFeedScreen() {
         {...(Platform.OS === 'android'
           ? { overScrollMode: 'never' as const }
           : null)}
+        onEndReached={() => void loadMoreReels()}
+        onEndReachedThreshold={2}
         refreshControl={
           <RefreshControl
             refreshing={isPullRefreshing}
@@ -853,6 +991,7 @@ export function ReelFeedScreen() {
         visible={Boolean(menuReel)}
         saved={menuReel ? Boolean(saved[menuReel.id] ?? menuReel.saved) : false}
         autoScroll={autoScroll}
+        canDelete={canDeleteClip(menuReel)}
         blockTarget={
           menuReel?.authorProfile
             ? { ...menuReel.authorProfile, name: menuReel.author }
@@ -866,9 +1005,19 @@ export function ReelFeedScreen() {
         onClose={() => setReportTarget(null)}
         onSubmit={reason => {
           if (!reportTarget) return;
-          return reportTarget.kind === 'content_post'
-            ? reportContentPost(reportTarget.id, reason)
-            : reportReel(reportTarget.id, reason);
+          const target = reportTarget;
+          const request =
+            target.kind === 'content_post'
+              ? reportContentPost(target.id, reason)
+              : reportReel(target.id, reason);
+          // A reported Clip leaves this viewer's feed right away.
+          return Promise.resolve(request).then(result => {
+            const reported = reels.find(
+              r => r.id === target.id || r.reportTarget?.id === target.id,
+            );
+            if (reported) hideReel(reported.id);
+            return result;
+          });
         }}
       />
     </View>

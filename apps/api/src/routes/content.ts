@@ -7,8 +7,10 @@ import {
   inArray,
   isNull,
   lte,
+  notInArray,
   or,
   sql,
+  type SQL,
 } from "drizzle-orm";
 import { Hono } from "hono";
 import {
@@ -48,21 +50,26 @@ import {
   authorColumnsFor,
   legacyAuthor,
   loadPublishers,
+  loadViewerContext,
   normalizePublisherType,
   publisherKey,
   publisherRefFromAuthor,
   resolveOwnedPublisher,
+  viewerCanManage,
 } from "../publishing/publisher.js";
 import {
   createComment,
   createDraft,
+  deletePost,
   discardDraft,
   getDraft,
+  getPost,
   getProfileSummary,
   listComments,
   listMine,
   listPosts,
   markDraftUploading,
+  notReportedByViewer,
   publishContainer,
   requireVisiblePost,
   updateDraft,
@@ -317,10 +324,57 @@ function blockConditionForAuthor(mobileUserId: string, author: ClipFeedAuthor) {
         eq(mobileUserBlocks.blockerMobileUserId, mobileUserId),
         eq(mobileUserBlocks.blockedProviderId, author.id)
       )
-    : and(
-        eq(mobileUserBlocks.blockerMobileUserId, mobileUserId),
-        eq(mobileUserBlocks.blockedMobileUserId, author.id)
+    : or(
+        and(
+          eq(mobileUserBlocks.blockerMobileUserId, mobileUserId),
+          eq(mobileUserBlocks.blockedMobileUserId, author.id)
+        ),
+        // A person who blocked the viewer is hidden from them as well.
+        and(
+          eq(mobileUserBlocks.blockerMobileUserId, author.id),
+          eq(mobileUserBlocks.blockedMobileUserId, mobileUserId)
+        )
       );
+}
+
+/** Rows that can enter a viewer's Clips feed (before block filtering). */
+function eligibleClipConditions(viewerUserId: string, now: Date): SQL {
+  return and(
+    eq(contentPosts.format, "clip"),
+    eq(contentPosts.mediaType, "video"),
+    eq(contentPosts.status, "published"),
+    eq(contentPosts.visibility, "public"),
+    or(isNull(contentPosts.expiresAt), gt(contentPosts.expiresAt, now)),
+    notReportedByViewer(viewerUserId)
+  )!;
+}
+
+/** How long an author's own new Reel is pinned to the top of their feed. */
+const OWN_FRESH_CLIP_MS = 24 * 60 * 60 * 1000;
+
+type ClipFeedCursor = { recycleOffset: number };
+
+function encodeClipFeedCursor(cursor: ClipFeedCursor) {
+  return Buffer.from(JSON.stringify({ r: cursor.recycleOffset })).toString(
+    "base64url"
+  );
+}
+
+function decodeClipFeedCursor(raw: string | undefined): ClipFeedCursor {
+  if (!raw) return { recycleOffset: 0 };
+  try {
+    const value = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+    const offset = Number(value?.r);
+    if (Number.isInteger(offset) && offset >= 0 && offset < 100_000) {
+      return { recycleOffset: offset };
+    }
+  } catch {
+    // fall through
+  }
+  throw Object.assign(new Error("Invalid cursor"), {
+    code: "validation_error",
+    status: 400,
+  });
 }
 
 /**
@@ -778,6 +832,7 @@ contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
       Math.max(Number(c.req.query("limit") ?? 12) || 12, 1),
       30
     );
+    const cursor = decodeClipFeedCursor(c.req.query("cursor"));
     const now = new Date();
     const expiresAt = new Date(now.getTime() + DELIVERY_CLAIM_TTL_MS);
     const selected = await db.transaction(async (tx) => {
@@ -788,23 +843,36 @@ contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
 
       // Re-read blocks under the same transaction immediately before writes.
       // A blocked user or business is filtered before it can consume a claim.
+      // People who blocked the viewer are hidden from them too.
       const blockRows = await tx
         .select({
+          blockerMobileUserId: mobileUserBlocks.blockerMobileUserId,
           blockedMobileUserId: mobileUserBlocks.blockedMobileUserId,
           blockedProviderId: mobileUserBlocks.blockedProviderId,
         })
         .from(mobileUserBlocks)
-        .where(eq(mobileUserBlocks.blockerMobileUserId, mobileUserId));
-      const blockedMobileUserIds = new Set(
-        blockRows
-          .map((row) => row.blockedMobileUserId)
-          .filter((id): id is string => Boolean(id))
-      );
-      const blockedProviderIds = new Set(
-        blockRows
-          .map((row) => row.blockedProviderId)
-          .filter((id): id is string => Boolean(id))
-      );
+        .where(
+          or(
+            eq(mobileUserBlocks.blockerMobileUserId, mobileUserId),
+            eq(mobileUserBlocks.blockedMobileUserId, mobileUserId)
+          )
+        );
+      const blockedMobileUserIds = new Set<string>();
+      const blockedProviderIds = new Set<string>();
+      for (const row of blockRows) {
+        if (row.blockerMobileUserId !== mobileUserId) {
+          blockedMobileUserIds.add(row.blockerMobileUserId);
+          continue;
+        }
+        if (row.blockedMobileUserId) blockedMobileUserIds.add(row.blockedMobileUserId);
+        if (row.blockedProviderId) blockedProviderIds.add(row.blockedProviderId);
+      }
+      const isBlocked = (post: ClipPost) =>
+        post.authorProviderId
+          ? blockedProviderIds.has(post.authorProviderId)
+          : post.authorMobileUserId
+          ? blockedMobileUserIds.has(post.authorMobileUserId)
+          : true;
 
       await tx
         .delete(contentPostDeliveries)
@@ -846,6 +914,11 @@ contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
       const deliveredClusters = new Set(clusterClaims.map((claim) => claim.id));
       const claimed: PreparedClipCandidate[] = [];
       const scoreOrder = clipTrendingScoreOrder(now);
+      // The author's own Reel from the last day leads their feed, so a new
+      // upload is visible to them immediately (as on other Reels apps).
+      const ownFreshFirst = sql<number>`CASE WHEN ${contentPosts.createdByMobileUserId} = ${mobileUserId}
+        AND ${contentPosts.publishedAt} > ${new Date(now.getTime() - OWN_FRESH_CLIP_MS).toISOString()}::timestamptz
+        THEN 0 ELSE 1 END`;
       let offset = 0;
 
       // Start with the highest-ranked rows from the entire eligible catalog,
@@ -857,19 +930,9 @@ contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
         const batch = await tx
           .select()
           .from(contentPosts)
-          .where(
-            and(
-              eq(contentPosts.format, "clip"),
-              eq(contentPosts.mediaType, "video"),
-              eq(contentPosts.status, "published"),
-              eq(contentPosts.visibility, "public"),
-              or(
-                isNull(contentPosts.expiresAt),
-                gt(contentPosts.expiresAt, now)
-              )
-            )
-          )
+          .where(eligibleClipConditions(mobileUserId, now))
           .orderBy(
+            asc(ownFreshFirst),
             desc(scoreOrder),
             desc(contentPosts.publishedAt),
             asc(contentPosts.id)
@@ -880,13 +943,8 @@ contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
         offset += batch.length;
 
         for (const post of batch) {
-          const authorIsBlocked = post.authorProviderId
-            ? blockedProviderIds.has(post.authorProviderId)
-            : post.authorMobileUserId
-            ? blockedMobileUserIds.has(post.authorMobileUserId)
-            : true;
           if (
-            authorIsBlocked ||
+            isBlocked(post) ||
             deliveredPosts.has(post.id) ||
             deliveredClusters.has(post.duplicateClusterId)
           ) {
@@ -939,31 +997,93 @@ contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
 
         if (batch.length < CLIP_FEED_CANDIDATE_BATCH_SIZE) break;
       }
-      return claimed;
-    });
 
-    const likedRows = selected.length
-      ? await db
-          .select({ contentPostId: contentPostLikes.contentPostId })
-          .from(contentPostLikes)
+      if (claimed.length >= limit) {
+        // More unseen Reels may exist; the next page claims them.
+        return { items: claimed, nextRecycleOffset: cursor.recycleOffset };
+      }
+
+      // Everything unseen has been delivered. Instead of an empty feed, keep
+      // the viewer scrolling through Reels they were already shown (best
+      // first). These rows are not re-claimed, so nothing new is consumed.
+      const recycled: PreparedClipCandidate[] = [];
+      const claimedIds = claimed.map((candidate) => candidate.post.id);
+      let recycleOffset = cursor.recycleOffset;
+      let exhausted = false;
+      while (claimed.length + recycled.length < limit) {
+        const batch = await tx
+          .select()
+          .from(contentPosts)
           .where(
             and(
-              eq(contentPostLikes.mobileUserId, mobileUserId),
-              inArray(
-                contentPostLikes.contentPostId,
-                selected.map((candidate) => candidate.post.id)
-              )
+              eligibleClipConditions(mobileUserId, now),
+              sql`${contentPosts.id} IN (
+                SELECT ${contentPostDeliveries.contentPostId} FROM ${contentPostDeliveries}
+                WHERE ${contentPostDeliveries.mobileUserId} = ${mobileUserId}
+                  AND ${contentPostDeliveries.expiresAt} > ${now.toISOString()}::timestamptz
+              )`,
+              claimedIds.length ? notInArray(contentPosts.id, claimedIds) : undefined
             )
           )
-      : [];
+          .orderBy(
+            desc(scoreOrder),
+            desc(contentPosts.publishedAt),
+            asc(contentPosts.id)
+          )
+          .limit(CLIP_FEED_CANDIDATE_BATCH_SIZE)
+          .offset(recycleOffset);
+        if (batch.length === 0) {
+          exhausted = true;
+          break;
+        }
+        for (const post of batch) {
+          recycleOffset += 1;
+          if (isBlocked(post)) continue;
+          const candidate = await prepareClipCandidate(post, now);
+          if (!candidate) continue;
+          recycled.push(candidate);
+          if (claimed.length + recycled.length >= limit) break;
+        }
+        if (
+          batch.length < CLIP_FEED_CANDIDATE_BATCH_SIZE &&
+          claimed.length + recycled.length < limit
+        ) {
+          exhausted = true;
+          break;
+        }
+      }
+      return {
+        items: [...claimed, ...recycled],
+        nextRecycleOffset: exhausted ? null : recycleOffset,
+      };
+    });
+
+    const items = selected.items;
+    const [likedRows, viewer] = await Promise.all([
+      items.length
+        ? db
+            .select({ contentPostId: contentPostLikes.contentPostId })
+            .from(contentPostLikes)
+            .where(
+              and(
+                eq(contentPostLikes.mobileUserId, mobileUserId),
+                inArray(
+                  contentPostLikes.contentPostId,
+                  items.map((candidate) => candidate.post.id)
+                )
+              )
+            )
+        : Promise.resolve([]),
+      loadViewerContext(mobileUserId),
+    ]);
     const likedPostIds = new Set(likedRows.map((row) => row.contentPostId));
-    const publisherRefs = selected
+    const publisherRefs = items
       .map((candidate) => publisherRefFromAuthor(candidate.post))
       .filter((ref): ref is NonNullable<typeof ref> => ref !== null);
     const publishers = await loadPublishers(publisherRefs);
 
     return c.json({
-      items: selected.map((candidate) => {
+      items: items.map((candidate) => {
         const post = candidate.post;
         const ref = publisherRefFromAuthor(post);
         const publisher = ref ? publishers.get(publisherKey(ref)) ?? null : null;
@@ -997,11 +1117,37 @@ contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
           commentCount: post.commentCount,
           shareCount: post.shareCount,
           viewerHasLiked: likedPostIds.has(post.id),
+          viewerCanManage: viewerCanManage(viewer, post),
           music: musicAttributionFromEdit(post.edit),
         };
       }),
-      nextCursor: null,
+      nextCursor:
+        selected.nextRecycleOffset === null
+          ? null
+          : encodeClipFeedCursor({ recycleOffset: selected.nextRecycleOffset }),
     });
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+/** One visible post, e.g. a shared Reel link. */
+contentMobileRoutes.get("/posts/:id", async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    return c.json({ post: await getPost(mobileUserId, c.req.param("id")) });
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+/** Owner (or managing business member) removes a published post. */
+contentMobileRoutes.delete("/posts/:id", async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    return c.json({ post: await deletePost(mobileUserId, c.req.param("id")) });
   } catch (error) {
     const { status, body } = errorResponse(error);
     return c.json(body, status);

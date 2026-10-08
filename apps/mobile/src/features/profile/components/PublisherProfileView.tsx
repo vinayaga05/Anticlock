@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
+  Alert,
   FlatList,
   Image,
   StyleSheet,
@@ -22,6 +23,7 @@ import {
   type ApiContentPost,
   type MyContentItem,
 } from '@/shared/api/storyHooks';
+import { discardContentDraft } from '@/shared/api/publishingHooks';
 import {
   identityProfileType,
   type PublisherProfileType,
@@ -38,6 +40,9 @@ const STATUS_LABEL: Record<string, string> = {
   failed: 'Failed',
   removed: 'Removed',
 };
+
+/** Unpublished drafts the owner can still throw away. */
+const DISCARDABLE = new Set(['draft', 'uploading', 'processing', 'failed']);
 
 function thumbnailOf(post: ApiContentPost): string | null {
   if (post.posterUrl) return post.posterUrl;
@@ -182,7 +187,7 @@ export function PublisherProfileView({
       {isOwner && inProgress.length > 0 ? (
         <View style={[styles.progressCard, { borderColor: theme.colors.borderSoft }]}>
           <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>
-            In progress (only you can see this)
+            In progress
           </Text>
           {inProgress.slice(0, 5).map(item => (
             <View key={item.id} style={styles.progressRow}>
@@ -195,6 +200,27 @@ export function PublisherProfileView({
               <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
                 {STATUS_LABEL[item.contentStatus] ?? item.contentStatus}
               </Text>
+              {DISCARDABLE.has(item.contentStatus) ? (
+                <PressableScale
+                  accessibilityLabel="Discard"
+                  hitSlop={8}
+                  onPress={() =>
+                    Alert.alert('Discard this draft?', undefined, [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Discard',
+                        style: 'destructive',
+                        onPress: () => {
+                          discardContentDraft(item.contentType, item.draftId).finally(
+                            () => refetchMine(),
+                          );
+                        },
+                      },
+                    ])
+                  }>
+                  <AppIcon name="trash" size={18} color={theme.colors.textSecondary} />
+                </PressableScale>
+              ) : null}
             </View>
           ))}
         </View>
@@ -269,8 +295,18 @@ export function PublisherProfileView({
         }
         renderItem={({ item }) => {
           const thumb = thumbnailOf(item);
+          const isClip = item.format === 'clip' && item.mediaType === 'video';
           return (
-            <View
+            <PressableScale
+              disabled={!isClip}
+              accessibilityLabel={isClip ? 'Open clip' : undefined}
+              // Clips open full screen in the Clips player, like a shared link.
+              onPress={() =>
+                navigation.navigate('Main', {
+                  screen: 'PlayFeed',
+                  params: { reelId: item.id },
+                })
+              }
               style={[
                 styles.cell,
                 { width: cellSize, height: cellSize, backgroundColor: theme.colors.surfaceMuted },
@@ -287,7 +323,7 @@ export function PublisherProfileView({
                   <AppIcon name="play" size={16} color="#fff" strokeWidth={2} fill="#fff" />
                 </View>
               ) : null}
-            </View>
+            </PressableScale>
           );
         }}
       />

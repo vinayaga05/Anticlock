@@ -25,7 +25,7 @@ import { isApiEnabled } from '@/shared/api/config';
 import { useMyInterestsQuery } from '@/features/interests/hooks/useInterestPreferences';
 import { InterestSelectionScreen } from '@/features/interests/screens/InterestSelectionScreen';
 import { SearchScreen } from '@/features/booking/screens/SearchScreen';
-import { ProfileScreen } from '@/features/booking/screens/ProfileScreen';
+import { AccountSettingsScreen } from '@/features/settings/screens/AccountSettingsScreen';
 import { UserProfileScreen } from '@/features/profile/screens/UserProfileScreen';
 import { EditProfileScreen } from '@/features/profile/screens/EditProfileScreen';
 import { DoctorsScreen } from '@/features/booking/screens/DoctorsScreen';
@@ -217,7 +217,7 @@ export function RootNavigator() {
             />
             <Stack.Screen
               name="AccountSettings"
-              component={ProfileScreen}
+              component={AccountSettingsScreen}
               options={{ headerShown: false }}
             />
             <Stack.Screen

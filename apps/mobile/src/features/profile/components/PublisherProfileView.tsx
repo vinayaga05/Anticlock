@@ -14,7 +14,7 @@ import { AppIcon } from '@/shared/components/AppIcon';
 import { FilterPills } from '@/shared/components/FilterPills';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { formatProfileCount } from '@/shared/data/flash';
-import { usePublishingIdentitiesQuery } from '@/shared/api/publishingHooks';
+import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
 import {
   useContentProfilePostsQuery,
   useContentProfileQuery,
@@ -64,15 +64,15 @@ export function PublisherProfileView({
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const cellSize = (width - 2) / 3;
-  const { data: identities = [] } = usePublishingIdentitiesQuery();
+  const { identities, active: globalActive } = useActiveProfile();
 
   // A switcher choice wins; then an explicit profile; otherwise the
-  // viewer's own personal profile (first identity).
+  // viewer's global active profile (personal unless switched in Settings).
   const [ownSelectedId, setOwnSelectedId] = useState<string | null>(null);
   const selectedOwned = ownSelectedId
     ? identities.find(item => item.id === ownSelectedId)
     : undefined;
-  const fallbackOwned = identities[0];
+  const fallbackOwned = globalActive;
   const activeRef: { type: PublisherProfileType; id: string } | null =
     selectedOwned
       ? { type: identityProfileType(selectedOwned), id: selectedOwned.id }

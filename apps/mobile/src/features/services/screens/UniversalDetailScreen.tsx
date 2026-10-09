@@ -161,7 +161,7 @@ export function UniversalDetailScreen() {
             <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>
               {provider.reviewCount > 0
                 ? `${provider.rating} (${provider.reviewCount})`
-                : 'New on Anticlock'}
+                : 'New on Knock'}
               {provider.location.area || provider.location.city
                 ? ` · ${[provider.location.area, provider.location.city].filter(Boolean).join(', ')}`
                 : ''}

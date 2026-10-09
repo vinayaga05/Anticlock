@@ -59,5 +59,5 @@ export function profileShareMessage(profile: {
   type: 'personal' | 'business';
 }) {
   const url = `https://anticlock.online/profile?profileType=${profile.type}&profileId=${encodeURIComponent(profile.id)}`;
-  return `${profile.name} on Anticlock\n${url}`;
+  return `${profile.name} on Knock\n${url}`;
 }

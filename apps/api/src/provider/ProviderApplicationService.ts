@@ -213,7 +213,7 @@ const NOTIFICATION_COPY: Partial<
   }),
   approved: name => ({
     title: `${name} is approved`,
-    body: `${name} is now live on Anticlock. Customers can find and book you.`,
+    body: `${name} is now live on Knock. Customers can find and book you.`,
   }),
 };
 

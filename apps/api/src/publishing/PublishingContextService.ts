@@ -10,7 +10,7 @@ import {
 /**
  * Legacy publishing identity (`type: user | provider`) plus the canonical
  * publisher card. Kept for clients that still send the
- * `X-Anticlock-Context-*` headers; all checks go through `publisher.ts`.
+ * `X-Knock-Context-*` headers; all checks go through `publisher.ts`.
  */
 export type PublishingContext = {
   type: 'user' | 'provider';

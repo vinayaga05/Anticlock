@@ -156,7 +156,7 @@ function LocalUserProfileScreen() {
 
   const onShareProfile = async () => {
     await Share.share({
-      message: `Check out @${meta.username} on Anticlock`,
+      message: `Check out @${meta.username} on Knock`,
     });
   };
 

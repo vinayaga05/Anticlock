@@ -1,6 +1,6 @@
 import type { ImageSourcePropType } from 'react-native';
 
-/** Central Anticlock brand assets — import from here, not individual files. */
+/** Central Knock brand assets — import from here, not individual files. */
 export const brandAssets = {
   logo: require('./logo.png') as ImageSourcePropType,
 } as const;

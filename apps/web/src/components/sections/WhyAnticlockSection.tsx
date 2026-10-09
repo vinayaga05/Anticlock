@@ -17,7 +17,7 @@ export function WhyAnticlockSection() {
           >
             Why Choose{' '}
             <span className="bg-gradient-to-r from-aqua to-coral bg-clip-text text-transparent">
-              Anticlock
+              Knock
             </span>
           </motion.h2>
           <motion.p

@@ -49,7 +49,7 @@ export const marketplaceProviders: MarketplaceProvider[] = [
   },
   {
     id: 'prov-hospital',
-    name: 'Anticlock Multispeciality',
+    name: 'Knock Multispeciality',
     type: 'Hospital',
     categoryIds: ['health.hospitals', 'health.scan'],
     actionType: 'appointment',
@@ -492,7 +492,7 @@ export const universalBookings: UniversalBooking[] = [
     subtitle: 'Consultation',
     date: '2025-10-22',
     time: '10:00 AM',
-    place: 'Anticlock Clinic',
+    place: 'Knock Clinic',
     status: 'confirmed',
     price: 300,
   },

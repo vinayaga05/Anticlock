@@ -87,7 +87,7 @@ export function MessageThread({
       renderItem={({ item }) => <Bubble message={item} onPressCard={onPressCard} />}
       ListEmptyComponent={
         <Text style={[styles.empty, { color: theme.colors.textSecondary }]}>
-          Ask Genie anything about Anticlock.
+          Ask Genie anything about Knock.
         </Text>
       }
     />

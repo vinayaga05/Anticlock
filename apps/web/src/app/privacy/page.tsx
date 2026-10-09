@@ -6,7 +6,7 @@ import { Footer } from '@/components/Footer';
 
 export const metadata: Metadata = generateMetadata({
   title: 'Privacy Policy',
-  description: 'Anticlock Privacy Policy',
+  description: 'Knock Privacy Policy',
 });
 
 export default function PrivacyPage() {
@@ -20,7 +20,7 @@ export default function PrivacyPage() {
           <div className="prose prose-lg max-w-none">
             <div className="bg-gradient-to-br from-gray-50 to-white border-l-4 border-aqua p-6 rounded-r-xl mb-8">
               <p className="text-lg text-gray-700 font-medium mb-0">
-                Privacy Policy content is to be provided by Anticlock.
+                Privacy Policy content is to be provided by Knock.
               </p>
             </div>
 
@@ -29,7 +29,7 @@ export default function PrivacyPage() {
             </p>
 
             <ul className="text-gray-600 space-y-2">
-              <li>What data Anticlock collects</li>
+              <li>What data Knock collects</li>
               <li>How user data is used and protected</li>
               <li>Cookie and tracking policies</li>
               <li>Third-party service integration</li>

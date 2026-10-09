@@ -3,8 +3,8 @@ import { AppProviders } from '@/components/AppProviders';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Anticlock Admin',
-  description: 'Anticlock control center',
+  title: 'Knock Admin',
+  description: 'Knock control center',
 };
 
 export default function RootLayout({

@@ -47,7 +47,7 @@ function buildInstructions(
     return `- ${c.route}${screen}: ${c.description} (aliases: ${c.aliases.join(', ')})`;
   }).join('\n');
 
-  return `You are Genie, a warm helpful friend inside the Anticlock lifestyle services app.
+  return `You are Genie, a warm helpful friend inside the Knock lifestyle services app.
 Persona version: ${personaVersion}
 Current screen: ${currentScreen ?? 'unknown'}
 Recent actions: ${recentActions.join(', ') || 'none'}

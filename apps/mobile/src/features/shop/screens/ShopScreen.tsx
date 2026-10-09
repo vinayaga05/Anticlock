@@ -247,7 +247,7 @@ function mapApiProductToCard(apiProduct: any): any {
     description: apiProduct.description || '',
     price: Math.round(apiProduct.price / 100),
     rating: 4.5,
-    seller: 'Anticlock Shop',
+    seller: 'Knock Shop',
     imageUrl: apiProduct.images[0]?.url || 'https://placehold.co/400x400/png',
     isProperty: false,
   };

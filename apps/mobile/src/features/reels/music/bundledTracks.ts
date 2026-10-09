@@ -1,7 +1,7 @@
 /**
  * Music bundled inside the app binary.
  *
- * This list is intentionally EMPTY. Only add audio that Anticlock has a
+ * This list is intentionally EMPTY. Only add audio that Knock has a
  * written licence to redistribute inside the app (royalty-free with
  * redistribution rights, commissioned, or owned). Never add commercial or
  * copyrighted songs. See README.md in this folder for the steps.
@@ -11,10 +11,10 @@
  *   {
  *     id: 'bundled-morning-run',            // stable, never reuse an id
  *     title: 'Morning Run',
- *     artist: 'Anticlock Studio',
+ *     artist: 'Knock Studio',
  *     durationMs: 62_000,
  *     asset: require('./bundled/morning-run.m4a'),
- *     license: 'Owned by Anticlock',
+ *     license: 'Owned by Knock',
  *     attribution: null,
  *   },
  */

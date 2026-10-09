@@ -80,7 +80,7 @@ const SAMPLE_QUEUE: QueueItem[] = [
 const SAMPLE_TEAMS = [
   { id: 'team-strikers', name: 'Chennai Strikers', sport: 'Cricket', members: 12 },
   { id: 'team-hawks', name: 'Blue Hawks', sport: 'Hockey', members: 9 },
-  { id: 'team-running', name: 'Anticlock Running Team', sport: 'Running', members: 186 },
+  { id: 'team-running', name: 'Knock Running Team', sport: 'Running', members: 186 },
   { id: 'team-football', name: 'Guindy United FC', sport: 'Football', members: 42 },
 ];
 
@@ -89,14 +89,14 @@ const SAMPLE_CHALLENGES: ChallengeRow[] = [
     id: 'chal-weekend-cricket',
     title: 'Weekend Cricket Challenge',
     status: 'upcoming',
-    organizer: 'Anticlock',
+    organizer: 'Knock',
     participants: 16,
   },
   {
     id: 'chal-30-run',
     title: '30 Day Running Challenge',
     status: 'active',
-    organizer: 'Anticlock Running Team',
+    organizer: 'Knock Running Team',
     participants: 1248,
   },
   {
@@ -110,7 +110,7 @@ const SAMPLE_CHALLENGES: ChallengeRow[] = [
     id: 'chal-100km',
     title: '100 KM Cycling Challenge',
     status: 'upcoming',
-    organizer: 'Anticlock',
+    organizer: 'Knock',
     participants: 89,
   },
 ];

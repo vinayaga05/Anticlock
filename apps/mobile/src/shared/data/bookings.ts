@@ -264,7 +264,7 @@ function seedBookings(now: Date): ConsolidatedBooking[] {
       serviceTitle: 'Sports Physiotherapy',
       providerRole: sathish.specialty,
       startsAt: pastWeek,
-      locationLabel: 'Anticlock Clinic',
+      locationLabel: 'Knock Clinic',
       mode: 'center',
       isOnline: false,
       isClass: false,

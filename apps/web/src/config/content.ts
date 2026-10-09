@@ -127,28 +127,28 @@ export const features: Feature[] = [
 
 export const faqs: FAQ[] = [
   {
-    question: 'What is Anticlock?',
-    answer: 'Anticlock is a lifestyle super-app that combines social video content with a comprehensive service marketplace. Discover and book health, fitness, wellness, beauty, travel, and lifestyle services—all in one place.',
+    question: 'What is Knock?',
+    answer: 'Knock is a lifestyle super-app that combines social video content with a comprehensive service marketplace. Discover and book health, fitness, wellness, beauty, travel, and lifestyle services—all in one place.',
   },
   {
-    question: 'What services can I find on Anticlock?',
+    question: 'What services can I find on Knock?',
     answer: 'We cover 9 service categories: Health (doctors, diagnostics), Fitness (gyms, trainers), Sports (teams, training), Wellness (holistic care), Tours & Events (travel, adventures), Beauty & Spa, Courses & Training, Home Services, and E-commerce (lifestyle products).',
   },
   {
-    question: 'How is Anticlock different from other booking apps?',
-    answer: 'Anticlock combines social discovery through video content (Clips and Flash) with comprehensive service booking. You can explore services through engaging content, join communities, message providers directly, and manage all your bookings in one app.',
+    question: 'How is Knock different from other booking apps?',
+    answer: 'Knock combines social discovery through video content (Clips and Flash) with comprehensive service booking. You can explore services through engaging content, join communities, message providers directly, and manage all your bookings in one app.',
   },
   {
-    question: 'Can I use Anticlock as a service provider?',
-    answer: 'Yes! Anticlock welcomes service providers and businesses. Complete the provider onboarding in the app to create your business profile, list your services, and access the provider dashboard to manage bookings and grow your business.',
+    question: 'Can I use Knock as a service provider?',
+    answer: 'Yes! Knock welcomes service providers and businesses. Complete the provider onboarding in the app to create your business profile, list your services, and access the provider dashboard to manage bookings and grow your business.',
   },
   {
-    question: 'Is Anticlock free to use?',
-    answer: 'The Anticlock app is free to download and use. Service providers may have their own pricing for bookings, classes, or products.',
+    question: 'Is Knock free to use?',
+    answer: 'The Knock app is free to download and use. Service providers may have their own pricing for bookings, classes, or products.',
   },
   {
-    question: 'What platforms is Anticlock available on?',
-    answer: 'Anticlock is a mobile app built with React Native. Check back for availability updates.',
+    question: 'What platforms is Knock available on?',
+    answer: 'Knock is a mobile app built with React Native. Check back for availability updates.',
   },
 ];
 

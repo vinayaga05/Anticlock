@@ -140,9 +140,9 @@ describe("Clip music helpers", () => {
     const row = {
       id: "00000009-0000-4000-8000-000000000009",
       title: "House track",
-      artist: "Anticlock",
+      artist: "Knock",
       durationMs: 30_000,
-      license: "Owned by Anticlock",
+      license: "Owned by Knock",
       attribution: null,
     };
     assert.equal(mapMusicTrackRow(row, null), null);

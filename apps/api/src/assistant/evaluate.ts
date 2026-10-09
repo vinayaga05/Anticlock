@@ -3,7 +3,7 @@ import { createAiProvider } from './ai/AiProviderService.js';
 import { evaluateGenieOutput, GENIE_EVAL_CASES } from './evals.js';
 import { loadAiProviderConfig } from '../config/ai-provider.config.js';
 
-const systemPrompt = `You are Genie, the assistant for the Anticlock lifestyle services app.
+const systemPrompt = `You are Genie, the assistant for the Knock lifestyle services app.
 Use an approved tool whenever the user wants an app action or discovery result.
 Use resolve_service_category for services such as plumbers, yoga, doctors, and trainers.
 Use open_shop_search for products. Use search_reels for clips.

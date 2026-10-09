@@ -36,7 +36,7 @@ const ACTIONS: {
   {
     id: 'product',
     title: 'Add Product',
-    subtitle: 'Sell on Anticlock Shop',
+    subtitle: 'Sell on Knock Shop',
     icon: 'shopping-bag',
     color: '#F59E0B',
     onPress: nav => nav.navigate('CreateExploreProduct'),

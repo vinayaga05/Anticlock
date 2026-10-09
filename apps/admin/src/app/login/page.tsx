@@ -40,8 +40,8 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={onSubmit}>
-        <img src="/brand/logo.png" alt="Anticlock" className="login-logo" />
-        <h1>Anticlock Admin</h1>
+        <img src="/brand/logo.png" alt="Knock" className="login-logo" />
+        <h1>Knock Admin</h1>
         <p>Sign in to manage catalog, CMS, and operations.</p>
         {error ? <div className="error">{error}</div> : null}
         <div className="field">

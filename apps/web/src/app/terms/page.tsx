@@ -6,7 +6,7 @@ import { Footer } from '@/components/Footer';
 
 export const metadata: Metadata = generateMetadata({
   title: 'Terms of Service',
-  description: 'Anticlock Terms of Service',
+  description: 'Knock Terms of Service',
 });
 
 export default function TermsPage() {
@@ -20,7 +20,7 @@ export default function TermsPage() {
           <div className="prose prose-lg max-w-none">
             <div className="bg-gradient-to-br from-gray-50 to-white border-l-4 border-coral p-6 rounded-r-xl mb-8">
               <p className="text-lg text-gray-700 font-medium mb-0">
-                Terms of Service content is to be provided by Anticlock.
+                Terms of Service content is to be provided by Knock.
               </p>
             </div>
 
@@ -38,7 +38,7 @@ export default function TermsPage() {
             </ul>
 
             <p className="text-gray-600 mt-8">
-              By using Anticlock, you agree to comply with these terms when they are published.
+              By using Knock, you agree to comply with these terms when they are published.
             </p>
 
             <div className="mt-12">

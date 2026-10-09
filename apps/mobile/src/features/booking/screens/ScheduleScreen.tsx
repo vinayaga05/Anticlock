@@ -46,7 +46,7 @@ export function ScheduleScreen() {
           ? 'Home visit'
           : providerId
             ? title
-            : 'Anticlock Clinic';
+            : 'Knock Clinic';
     if (providerId && isApiEnabled) {
       const startsAt = scheduleToIso(selectedDate, selectedTime);
       if (!startsAt) {

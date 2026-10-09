@@ -14,13 +14,13 @@ export function Footer() {
               <div className="relative w-12 h-12 flex-shrink-0">
                 <Image
                   src="/brand/logo-square.png"
-                  alt="Anticlock"
+                  alt="Knock"
                   fill
                   sizes="48px"
                   className="object-contain"
                 />
               </div>
-              <span className="text-2xl font-bold">Anticlock</span>
+              <span className="text-2xl font-bold">Knock</span>
             </Link>
             <p className="text-white/70 max-w-sm mb-6">
               Your lifestyle, simplified. Discover services, connect with communities, and book
@@ -119,7 +119,7 @@ export function Footer() {
         </div>
 
         <div className="border-t border-white/10 pt-8 text-center text-white/60 text-sm">
-          <p>© {currentYear} Anticlock. All rights reserved.</p>
+          <p>© {currentYear} Knock. All rights reserved.</p>
         </div>
       </div>
     </footer>

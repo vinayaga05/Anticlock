@@ -1,6 +1,6 @@
 /**
  * Mock app screen components
- * These are creative, polished mockups that resemble the real Anticlock app
+ * These are creative, polished mockups that resemble the real Knock app
  * 
  * NOTE: These are placeholder mockups to be replaced with real screenshots.
  * Real screenshots should be placed in public/screens/*.png

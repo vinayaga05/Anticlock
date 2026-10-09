@@ -94,7 +94,7 @@ export function legacyAuthor(publisher: ContentPublisher) {
 }
 
 /**
- * Review is opt-in. Moderation in Anticlock is report-based (post-hoc), so
+ * Review is opt-in. Moderation in Knock is report-based (post-hoc), so
  * requiring review by default would make nothing visible. Setting
  * CONTENT_REQUIRE_REVIEW=true sends every new post to `pending_review` until
  * an admin approves it.

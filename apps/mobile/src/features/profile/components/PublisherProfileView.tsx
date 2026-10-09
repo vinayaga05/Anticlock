@@ -269,8 +269,17 @@ export function PublisherProfileView({
         }
         renderItem={({ item }) => {
           const thumb = thumbnailOf(item);
+          const isClip = item.format === 'clip' && item.mediaType === 'video';
           return (
-            <View
+            <PressableScale
+              disabled={!isClip}
+              accessibilityLabel={isClip ? 'Open clip' : undefined}
+              onPress={() =>
+                navigation.navigate('Main', {
+                  screen: 'PlayFeed',
+                  params: { reelId: item.id },
+                })
+              }
               style={[
                 styles.cell,
                 { width: cellSize, height: cellSize, backgroundColor: theme.colors.surfaceMuted },
@@ -287,7 +296,7 @@ export function PublisherProfileView({
                   <AppIcon name="play" size={16} color="#fff" strokeWidth={2} fill="#fff" />
                 </View>
               ) : null}
-            </View>
+            </PressableScale>
           );
         }}
       />

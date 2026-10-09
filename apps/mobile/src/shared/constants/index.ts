@@ -10,7 +10,7 @@ export const STORAGE_KEYS = {
   CLIP_COMPOSER_DRAFT: 'clip_composer_draft',
 } as const;
 
-export const APP_NAME = 'Anticlock';
+export const APP_NAME = 'Knock';
 
 export { BRAND_LOGO } from '@/shared/assets/brand';
 

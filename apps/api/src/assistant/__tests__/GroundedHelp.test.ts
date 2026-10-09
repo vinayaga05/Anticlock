@@ -78,7 +78,7 @@ describe('grounded Genie help', () => {
       assert.equal(result.ok, true);
       if (!result.ok) return;
       assert.equal(result.resultOutcome, 'no_results');
-      assert.match(result.resultMessage ?? '', /verified Anticlock information/);
+      assert.match(result.resultMessage ?? '', /verified Knock information/);
       assert.deepEqual(result.data, {
         query: 'unpublished thing',
         sourceCount: 0,

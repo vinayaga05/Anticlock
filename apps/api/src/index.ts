@@ -138,7 +138,7 @@ app.onError((err, c) => {
 const port = Number(process.env.API_PORT ?? 4000);
 const hostname = process.env.API_HOST ?? '0.0.0.0';
 serve({ fetch: app.fetch, port, hostname }, info => {
-  console.log(`Anticlock API listening on http://${hostname}:${info.port}`);
+  console.log(`Knock API listening on http://${hostname}:${info.port}`);
   startAssistantLifecycleJob();
 });
 

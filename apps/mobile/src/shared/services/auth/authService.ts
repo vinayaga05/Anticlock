@@ -1,5 +1,4 @@
 import { apiRequest, setApiToken } from '@/shared/api/client';
-import { isApiEnabled } from '@/shared/api/config';
 import {
   clearStoredSession,
   getStoredSession,
@@ -64,10 +63,6 @@ export async function validateSession(session: AuthSession): Promise<MobileUser 
     return null;
   }
 
-  if (!isApiEnabled || session.token.startsWith('dev-')) {
-    return ensureUserAvatar(session.user);
-  }
-
   try {
     const res = await apiRequest<{ user: MobileUser }>('/auth/mobile/me');
     return ensureUserAvatar(res.user, session.user.avatarUrl);
@@ -78,11 +73,6 @@ export async function validateSession(session: AuthSession): Promise<MobileUser 
 }
 
 export async function logoutRemote(): Promise<void> {
-  const session = getStoredSession();
-  if (!isApiEnabled || session?.token.startsWith('dev-')) {
-    return;
-  }
-
   try {
     await apiRequest('/auth/mobile/logout', { method: 'POST' });
   } catch {
@@ -94,16 +84,11 @@ export async function updateProfile(input: ProfileUpdate): Promise<MobileUser> {
   const session = readStoredSession();
   if (!session) throw new Error('Please sign in to edit your profile.');
 
-  let user: MobileUser;
-  if (!isApiEnabled || session.token.startsWith('dev-')) {
-    user = { ...session.user, ...input };
-  } else {
-    const response = await apiRequest<{ user: MobileUser }>('/auth/mobile/profile', {
-      method: 'PUT',
-      body: JSON.stringify(input),
-    });
-    user = response.user;
-  }
+  const response = await apiRequest<{ user: MobileUser }>('/auth/mobile/profile', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+  const user = response.user;
 
   const updatedSession = { ...session, user: ensureUserAvatar(user) };
   persistSession(updatedSession);

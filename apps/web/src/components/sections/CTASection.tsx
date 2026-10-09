@@ -46,7 +46,7 @@ export function CTASection() {
           transition={{ delay: 0.2 }}
           className="text-xl text-white/80 mb-10 max-w-2xl mx-auto"
         >
-          Download Anticlock today and discover a world of services, communities, and experiences
+          Download Knock today and discover a world of services, communities, and experiences
           at your fingertips.
         </motion.p>
 

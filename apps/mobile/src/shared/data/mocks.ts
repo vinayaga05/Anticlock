@@ -413,7 +413,7 @@ export const conversations: Conversation[] = [
   },
   {
     id: 'msg-3',
-    name: 'Anticlock Support',
+    name: 'Knock Support',
     preview: 'Booking confirmed for Friday.',
     time: 'Mon',
     unread: 1,
@@ -447,7 +447,7 @@ export const bookings: BookingRecord[] = [
     patientName: 'Sathish Kumar',
     patientAge: 42,
     when: '10 AM Friday 22-10-2025',
-    place: 'Anticlock Clinic',
+    place: 'Knock Clinic',
     amountPaid: 300,
     status: 'confirmed',
   },

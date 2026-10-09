@@ -30,7 +30,6 @@ import {
   ClipMoreSheet,
 } from '@/features/reels/components/ClipMoreSheet';
 import { GuidedReportVideoSheet } from '@/features/reels/components/GuidedReportVideoSheet';
-import { reels as r2Reels } from '@/shared/data/mocks';
 import { ReelItem } from '@/shared/types';
 import { useCartStore } from '@/shared/store/cartStore';
 import {
@@ -233,7 +232,7 @@ export function ReelFeedScreen() {
     s => s.registerSeekController,
   );
   const clearClipPlayback = useClipPlaybackStore(s => s.clear);
-  const { data: queriedReels, refetch } = useReelsQuery(r2Reels);
+  const { data: queriedReels, refetch } = useReelsQuery();
   // Content-feed results are already block-filtered on the server. Hydrate the
   // same persisted block list for editorial/legacy Reels as well, whose public
   // endpoint deliberately has no viewer-specific server filter.

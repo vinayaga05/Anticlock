@@ -6,9 +6,8 @@ import { Button } from '@/shared/components/Button';
 import { Card } from '@/shared/components/Card';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { useTheme } from '@/shared/hooks/useTheme';
-import { getCourse } from '@/shared/data/services';
 import { RootStackParamList } from '@/shared/navigation/types';
-import { useCourseQuery, useEnrollCourseMutation, isApiEnabled } from '@/shared/api';
+import { useCourseQuery, useEnrollCourseMutation } from '@/shared/api';
 
 export function CourseDetailScreen() {
   const theme = useTheme();
@@ -18,8 +17,7 @@ export function CourseDetailScreen() {
   const { data: apiCourse, isLoading, error } = useCourseQuery(route.params.courseId);
   const enrollMutation = useEnrollCourseMutation(route.params.courseId);
   
-  const mockCourse = getCourse(route.params.courseId);
-  const course = isApiEnabled && apiCourse ? apiCourse : mockCourse;
+  const course = apiCourse;
 
   if (isLoading) {
     return (
@@ -37,7 +35,7 @@ export function CourseDetailScreen() {
         <EmptyState 
           icon="clipboard" 
           title="Error loading course"
-          subtitle={(error as Error).message}
+          description={(error as Error).message}
         />
       </ScreenContainer>
     );
@@ -52,32 +50,22 @@ export function CourseDetailScreen() {
   }
 
   const handleEnroll = async () => {
-    if (!isApiEnabled || !apiCourse) {
-      Alert.alert('Enrolled', `You are enrolled in ${mockCourse?.title || 'this course'}.`, [
-        { text: 'My learning', onPress: () => navigation.navigate('MyLearning') },
-      ]);
-      return;
-    }
-
     try {
       await enrollMutation.mutateAsync();
       Alert.alert('Enrolled', `You are enrolled in ${course.name}.`, [
         { text: 'My learning', onPress: () => navigation.navigate('MyLearning') },
       ]);
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to enroll in course');
     }
   };
 
-  const displayTitle = 'name' in course ? course.name : course.title;
-  const displayInstructor = 'instructorName' in course ? course.instructorName : course.instructor;
-  const displayPrice = 'price' in course && typeof course.price === 'number' 
-    ? `₹${(course.price / 100).toFixed(2)}`
-    : `Rs ${mockCourse?.price || 0}`;
-  const imageUrl = 'imageUrl' in course ? course.imageUrl : mockCourse?.imageUrl;
-  
-  const lessons = 'lessons' in course ? course.lessons : [];
-  const learningOutcomes = 'learningOutcomes' in course ? course.learningOutcomes : mockCourse?.curriculum || [];
+  const displayTitle = course.name;
+  const displayInstructor = course.instructorName;
+  const displayPrice = `₹${(course.price / 100).toFixed(2)}`;
+  const imageUrl = course.imageUrl;
+  const lessons = course.lessons;
+  const learningOutcomes = course.learningOutcomes;
 
   return (
     <ScreenContainer scrollable tabAware={false}>
@@ -88,7 +76,7 @@ export function CourseDetailScreen() {
       <Text style={[theme.typography.body, { color: theme.colors.textSecondary }]}>
         {displayInstructor}
         {' · '}
-        {'difficulty' in course ? course.difficulty : mockCourse?.level}
+        {course.difficulty}
       </Text>
       <Text style={[theme.typography.title, { color: theme.colors.primary, marginTop: 8 }]}>
         {displayPrice}
@@ -96,9 +84,9 @@ export function CourseDetailScreen() {
 
       <Card style={{ gap: 8, marginTop: 12 }}>
         <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>
-          {isApiEnabled && lessons.length > 0 ? 'Lessons' : 'Curriculum'}
+          {lessons.length > 0 ? 'Lessons' : 'Learning outcomes'}
         </Text>
-        {isApiEnabled && lessons.length > 0 ? (
+        {lessons.length > 0 ? (
           lessons.map((lesson, idx) => (
             <Text
               key={lesson.id || idx}
@@ -116,14 +104,6 @@ export function CourseDetailScreen() {
           ))
         )}
       </Card>
-
-      {!isApiEnabled && (
-        <Card style={{ marginTop: 12, backgroundColor: theme.colors.warning + '20' }}>
-          <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
-            Using mock data - API is disabled
-          </Text>
-        </Card>
-      )}
 
       <View style={{ marginTop: 16, gap: 10 }}>
         <Button

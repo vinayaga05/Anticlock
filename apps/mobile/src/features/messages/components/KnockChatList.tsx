@@ -5,9 +5,7 @@ import { ChannelList } from 'stream-chat-react-native';
 import { useStreamChat } from '@/shared/providers/StreamChatProvider';
 import { useAuth } from '@/shared/context/AuthProvider';
 import { useTheme } from '@/shared/hooks/useTheme';
-import { Card } from '@/shared/components/Card';
 import { EmptyState } from '@/shared/components/EmptyState';
-import { conversations } from '@/shared/data/mocks';
 
 export function KnockChatList() {
   const theme = useTheme();
@@ -30,58 +28,20 @@ export function KnockChatList() {
 
     if (error) {
       return (
-        <View style={styles.centerContainer}>
-          <Text style={[styles.statusText, { color: theme.colors.textSecondary }]}>
-            Chat unavailable (using mock data)
-          </Text>
-        </View>
-      );
-    }
-
-    // Mock fallback
-    if (conversations.length === 0) {
-      return (
         <EmptyState
           icon="messages"
-          title="No messages"
-          description="Your conversations will appear here."
+          title="Chat unavailable"
+          description="We could not connect to your conversations. Please try again."
         />
       );
     }
 
     return (
-      <View style={styles.wrap}>
-        {conversations.map(item => (
-          <Card
-            key={item.id}
-            onPress={() => navigation.navigate('Thread', { conversationId: item.id })}
-            style={styles.row}>
-            <View style={[styles.avatar, { backgroundColor: item.avatarColor }]}>
-              <Text style={styles.avatarText}>{item.name.slice(0, 1)}</Text>
-            </View>
-            <View style={styles.body}>
-              <View style={styles.top}>
-                <Text style={[styles.name, { color: theme.colors.textPrimary }]}>
-                  {item.name}
-                </Text>
-                <Text style={[styles.time, { color: theme.colors.textTertiary }]}>
-                  {item.time}
-                </Text>
-              </View>
-              <Text
-                style={[styles.preview, { color: theme.colors.textSecondary }]}
-                numberOfLines={1}>
-                {item.preview}
-              </Text>
-            </View>
-            {item.unread > 0 ? (
-              <View style={[styles.badge, { backgroundColor: theme.colors.primary }]}>
-                <Text style={styles.badgeText}>{item.unread}</Text>
-              </View>
-            ) : null}
-          </Card>
-        ))}
-      </View>
+      <EmptyState
+        icon="messages"
+        title="Chat unavailable"
+        description="Sign in and reconnect to load your conversations."
+      />
     );
   }
 
@@ -99,10 +59,7 @@ export function KnockChatList() {
         filters={filters}
         sort={sort}
         onSelect={(channel) => {
-          navigation.navigate('Thread', { 
-            channelId: channel.id,
-            channelType: channel.type 
-          });
+          navigation.navigate('Thread', { conversationId: channel.id });
         }}
         EmptyStateIndicator={() => (
           <EmptyState

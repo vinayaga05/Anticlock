@@ -212,7 +212,7 @@ export function NeedsScreen() {
                 />
               </Card>
 
-              <SectionHeader title="Trending on Anticlock" />
+              <SectionHeader title="Trending on Knock" />
               <PressableScale
                 onPress={() =>
                   navigation.navigate('ClassDetail', {

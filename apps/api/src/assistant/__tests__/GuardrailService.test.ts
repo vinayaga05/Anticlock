@@ -7,7 +7,7 @@ import {
 } from '../GuardrailService.js';
 
 describe('Genie guardrails', () => {
-  it('allows normal Anticlock service discovery', () => {
+  it('allows normal Knock service discovery', () => {
     assert.deepEqual(evaluateAssistantInput('Find plumbers in Chennai'), { ok: true });
   });
 

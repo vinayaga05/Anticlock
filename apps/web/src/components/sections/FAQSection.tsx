@@ -27,7 +27,7 @@ export function FAQSection() {
             transition={{ delay: 0.2 }}
             className="text-xl text-gray-600"
           >
-            Everything you need to know about Anticlock
+            Everything you need to know about Knock
           </motion.p>
         </div>
 

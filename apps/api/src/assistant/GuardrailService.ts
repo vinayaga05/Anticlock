@@ -64,7 +64,7 @@ export function evaluateAssistantInput(value: string): GuardrailResult {
       ok: false,
       reason: 'prompt_injection',
       message:
-        'I can help with Anticlock, but I can’t follow requests that change my safety rules or reveal internal instructions.',
+        'I can help with Knock, but I can’t follow requests that change my safety rules or reveal internal instructions.',
     };
   }
 

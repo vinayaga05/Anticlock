@@ -7,7 +7,7 @@ import { NativeModules, Platform } from 'react-native';
  * (`https://api.anticlock.online`). Set to `false` only when you deliberately
  * need a local Docker/Metro API on the same Wi‑Fi.
  */
-export const USE_PRODUCTION_ENVIRONMENT = true;
+export const USE_PRODUCTION_ENVIRONMENT = true; // TEMP-LOCAL: device testing against production API
 
 export const isProductionEnvironment = USE_PRODUCTION_ENVIRONMENT;
 export const isDevEnvironment = !USE_PRODUCTION_ENVIRONMENT;
@@ -62,4 +62,4 @@ export const DEVELOPMENT_API_BASE_URL = DEVELOPMENT_LAN_API_BASE_URL;
 /** Prefer getApiBaseUrl() for request-time resolution. */
 export const API_BASE_URL = getApiBaseUrl();
 
-export const isApiEnabled = Boolean(getApiBaseUrl());
+export const isApiEnabled = true; // Production requirement: Always attempt API calls

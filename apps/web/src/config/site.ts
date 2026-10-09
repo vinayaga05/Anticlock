@@ -1,5 +1,5 @@
 export const siteConfig = {
-  name: 'Anticlock',
+  name: 'Knock',
   description: 'Your lifestyle, simplified. Discover services, connect with communities, and book everything from health to travel—all in one place.',
   url: process.env.NEXT_PUBLIC_SITE_URL || 'https://anticlock.online',
   ogImage: '/og-image.png',

@@ -26,9 +26,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <img src="/brand/logo.png" alt="Anticlock" className="brand-logo" />
+          <img src="/brand/logo.png" alt="Knock" className="brand-logo" />
           <div>
-            Anticlock
+            Knock
             <span>Control center</span>
           </div>
         </div>

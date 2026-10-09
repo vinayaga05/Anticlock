@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Anticlock</string>
+	<string>Knock</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -34,19 +34,19 @@
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Anticlock uses the local network to reach the development API on your computer.</string>
+	<string>Knock uses the local network to reach the development API on your computer.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_http._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>Anticlock uses your camera to record Clips.</string>
+	<string>Knock uses your camera to record Clips.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string></string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Anticlock uses your photo library so you can choose videos and cover images for Clips.</string>
+	<string>Knock uses your photo library so you can choose videos and cover images for Clips.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Anticlock uses the microphone for Genie voice input and Clip recordings.</string>
+	<string>Knock uses the microphone for Genie voice input and Clip recordings.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Genie uses speech recognition to transcribe your requests.</string>
 	<key>RCTNewArchEnabled</key>

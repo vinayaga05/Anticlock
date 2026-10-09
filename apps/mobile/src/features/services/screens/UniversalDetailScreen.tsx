@@ -182,7 +182,7 @@ export function UniversalDetailScreen() {
             About
           </Text>
           <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>
-            {about || category?.description || 'Premium Anticlock partner.'}
+            {about || category?.description || 'Premium Knock partner.'}
           </Text>
         </Card>
 

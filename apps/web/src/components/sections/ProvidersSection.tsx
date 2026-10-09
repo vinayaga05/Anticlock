@@ -26,11 +26,11 @@ export function ProvidersSection() {
                 Grow Your Business
               </span>
               <br />
-              With Anticlock
+              With Knock
             </h2>
             <p className="text-lg md:text-xl text-white/80 mb-8 leading-relaxed">
               Service providers from health practitioners to fitness trainers, beauty professionals to tour operators—grow
-              your business on Anticlock.
+              your business on Knock.
             </p>
             <div className="space-y-3 md:space-y-4 mb-8">
               {providerBenefits.map((benefit, index) => (

@@ -29,8 +29,8 @@ export function generateMetadata({
       'travel booking',
       'lifestyle social network',
     ],
-    authors: [{ name: 'Anticlock' }],
-    creator: 'Anticlock',
+    authors: [{ name: 'Knock' }],
+    creator: 'Knock',
     metadataBase: new URL(siteConfig.url),
     openGraph: {
       type: 'website',

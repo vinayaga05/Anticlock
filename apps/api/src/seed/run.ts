@@ -136,7 +136,7 @@ async function seed() {
           .insert(users)
           .values({
             email: credentials.email,
-            name: 'Anticlock Admin',
+            name: 'Knock Admin',
             passwordHash,
           })
           .returning();
@@ -454,7 +454,7 @@ async function seed() {
           serviceTitle: 'Sports Physiotherapy',
           providerName: 'Dr. Sathish Kumar',
           providerRole: 'Sports Physiotherapist',
-          locationLabel: 'Anticlock Clinic',
+          locationLabel: 'Knock Clinic',
         },
       },
     ];

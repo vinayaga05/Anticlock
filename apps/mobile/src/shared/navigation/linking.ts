@@ -2,7 +2,7 @@ import { LinkingOptions } from '@react-navigation/native';
 import { RootStackParamList } from '@/shared/navigation/types';
 
 /**
- * Deep linking configuration for Anticlock.
+ * Deep linking configuration for Knock.
  * 
  * Supports:
  * - Custom scheme: anticlock://

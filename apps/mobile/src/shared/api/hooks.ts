@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest, ApiError } from './client';
-import { isApiEnabled, isDevEnvironment } from './config';
+import { isApiEnabled } from './config';
 import { readStoredSession } from '@/shared/services/auth/authService';
 import type { ReelItem } from '@/shared/types';
 
@@ -400,13 +400,10 @@ export function useServiceCategoriesQuery(
  * local UI work pointed at the same remote delivery layer as production,
  * while production only accepts the server-personalized feed.
  */
-export function useReelsQuery(developmentR2Clips: ReelItem[]) {
+export function useReelsQuery() {
   return useQuery({
-    queryKey: ['reels', 'feed', 'content-first', isApiEnabled ? 'api' : 'mock'],
+    queryKey: ['reels', 'feed', 'content-first', 'api'],
     queryFn: async () => {
-      if (!isApiEnabled) {
-        return isDevEnvironment ? developmentR2Clips : [];
-      }
       await ensureAuthToken();
 
       const [contentResult, legacyResult] = await Promise.allSettled([
@@ -429,26 +426,14 @@ export function useReelsQuery(developmentR2Clips: ReelItem[]) {
               .map(mapApiReelToItem)
           : [];
 
-      const publishedClips = mergePublishedClipFeeds(
+      return mergePublishedClipFeeds(
         contentClips,
         legacyReels,
       );
-
-      if (publishedClips.length) return publishedClips;
-
-      // Local development intentionally previews the checked-in R2 catalog.
-      // This is not a device-media fallback: every URL is an R2 delivery URL.
-      // Release builds never bypass the personalized publishing feed.
-      return isDevEnvironment ? developmentR2Clips : [];
     },
-    // Development starts with the R2 Clip catalog while the local API feed is
-    // being queried. It is not cached as an API response and is replaced by
-    // the published feed as soon as that feed returns results.
-    initialData:
-      !isApiEnabled && isDevEnvironment ? developmentR2Clips : undefined,
-    placeholderData: isDevEnvironment ? developmentR2Clips : undefined,
-    staleTime: isApiEnabled ? 0 : 30_000,
-    refetchOnMount: isApiEnabled ? 'always' : true,
+    staleTime: 0,
+    refetchOnMount: 'always',
+
     // A content-feed request reserves a viewer-specific batch. Background
     // reconnects or polling would discard unseen clips, so the user refreshes
     // explicitly when ready for another batch.

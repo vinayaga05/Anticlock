@@ -220,7 +220,7 @@ export async function getProductHelp(
     resultOutcome: cards.length ? 'success' : 'no_results',
     resultMessage: cards.length
       ? undefined
-      : `I couldn't find verified Anticlock information for "${args.query}".`,
+      : `I couldn't find verified Knock information for "${args.query}".`,
   };
 }
 

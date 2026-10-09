@@ -31,14 +31,14 @@ export function Navbar() {
             <div className="relative w-10 h-10 md:w-11 md:h-11 flex-shrink-0">
               <Image
                 src="/brand/logo-square.png"
-                alt="Anticlock"
+                alt="Knock"
                 fill
                 sizes="(max-width: 768px) 40px, 44px"
                 className="object-contain"
                 priority
               />
             </div>
-            <span className="text-xl md:text-2xl font-bold text-white">Anticlock</span>
+            <span className="text-xl md:text-2xl font-bold text-white">Knock</span>
           </Link>
 
           <div className="hidden md:flex items-center space-x-8">

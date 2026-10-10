@@ -2,7 +2,15 @@ export type KnockTab = 'notifications' | 'bookings' | 'chat';
 
 export type MainTabParamList = {
   Flash: undefined;
-  PlayFeed: { reelId?: string; q?: string } | undefined;
+  PlayFeed:
+    | {
+        reelId?: string;
+        q?: string;
+        /** When launched from a profile, play only that profile's Clips. */
+        profileType?: 'personal' | 'business';
+        profileId?: string;
+      }
+    | undefined;
   Needs: undefined;
   Community: undefined;
   Knock: { initialTab?: KnockTab } | undefined;

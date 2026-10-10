@@ -277,7 +277,11 @@ export function PublisherProfileView({
               onPress={() =>
                 navigation.navigate('Main', {
                   screen: 'PlayFeed',
-                  params: { reelId: item.id },
+                  params: {
+                    reelId: item.id,
+                    profileType: activeRef?.type,
+                    profileId: activeRef?.id,
+                  },
                 })
               }
               style={[

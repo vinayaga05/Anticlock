@@ -43,7 +43,7 @@ import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
 import { useClipPlaybackStore } from '@/shared/store/clipPlaybackStore';
-import { useReelsQuery } from '@/shared/api/hooks';
+import { useProfileClipReelsQuery, useReelsQuery } from '@/shared/api/hooks';
 import {
   createAnalyticsEventId,
   recordReelAnalyticsEvent,
@@ -232,7 +232,20 @@ export function ReelFeedScreen() {
     s => s.registerSeekController,
   );
   const clearClipPlayback = useClipPlaybackStore(s => s.clear);
-  const { data: queriedReels, refetch } = useReelsQuery();
+  const profilePlayback = Boolean(
+    route.params?.profileType && route.params?.profileId,
+  );
+  const globalReelsQuery = useReelsQuery(!profilePlayback);
+  const profileReelsQuery = useProfileClipReelsQuery(
+    route.params?.profileType,
+    route.params?.profileId,
+  );
+  const queriedReels = profilePlayback
+    ? profileReelsQuery.data
+    : globalReelsQuery.data;
+  const refetch = profilePlayback
+    ? profileReelsQuery.refetch
+    : globalReelsQuery.refetch;
   // Content-feed results are already block-filtered on the server. Hydrate the
   // same persisted block list for editorial/legacy Reels as well, whose public
   // endpoint deliberately has no viewer-specific server filter.

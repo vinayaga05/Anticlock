@@ -73,7 +73,11 @@ describe('PublisherProfileView', () => {
     ReactTestRenderer.act(() => clip.props.onPress());
     expect(mockNavigate).toHaveBeenCalledWith('Main', {
       screen: 'PlayFeed',
-      params: { reelId: 'clip-42' },
+      params: {
+        reelId: 'clip-42',
+        profileType: 'personal',
+        profileId: 'profile-1',
+      },
     });
   });
 });

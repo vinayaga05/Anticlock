@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { apiRequest, ApiError } from './client';
 import { isApiEnabled } from './config';
 import { readStoredSession } from '@/shared/services/auth/authService';
+import type { ApiContentPost, ApiContentPostsResponse } from '@/shared/publishing/contentPostMappers';
+import type { PublisherProfileType } from '@/shared/publishing/publisherSelection';
 import type { ReelItem } from '@/shared/types';
 
 export type ApiServiceTree = {
@@ -396,11 +398,76 @@ export function useServiceCategoriesQuery(
 }
 
 /**
+ * Converts a profile post into the Clip-player model without depending on the
+ * personalized feed. Profile playback must retain the profile's own sequence.
+ */
+export function mapApiProfileClipToItem(item: ApiContentPost): ReelItem | null {
+  const playbackUrl = item.media?.find(media => media.kind === 'video')?.url;
+  if (!playbackUrl || item.format !== 'clip' || item.mediaType !== 'video') {
+    return null;
+  }
+  const publisher = item.publisher;
+  const author = publisher
+    ? {
+        type: publisher.type === 'business' ? ('business' as const) : ('user' as const),
+        id: publisher.id,
+        name: publisher.displayName,
+        avatarUrl: publisher.avatarUrl,
+      }
+    : item.author;
+  return {
+    id: item.id,
+    title: '',
+    author: author.name,
+    authorAvatarUrl: author.avatarUrl ?? undefined,
+    authorProfile: { type: author.type === 'provider' ? 'business' : author.type, id: author.id },
+    reportTarget: { kind: 'content_post', id: item.id },
+    feedSource: 'content_post',
+    contentMetadata: {
+      hashtags: [],
+      taggedUserIds: [],
+      location: null,
+      visibility: item.visibility,
+      duplicateClusterId: item.id,
+      publishedAt: item.publishedAt ?? item.createdAt,
+      viewCount: item.viewCount ?? 0,
+      shareCount: item.shareCount ?? 0,
+    },
+    caption: item.caption,
+    videoUrl: playbackUrl,
+    posterUrl: item.posterUrl ?? '',
+    likeCount: item.likeCount ?? 0,
+    commentCount: item.commentCount ?? 0,
+    liked: item.viewerHasLiked === true,
+  };
+}
+
+/** Clips published by one profile, in the profile's chronological order. */
+export function useProfileClipReelsQuery(
+  profileType: PublisherProfileType | undefined,
+  profileId: string | undefined,
+) {
+  return useQuery({
+    queryKey: ['reels', 'profile', profileType ?? '', profileId ?? ''],
+    queryFn: async (): Promise<ReelItem[]> => {
+      const response = await apiRequest<ApiContentPostsResponse>(
+        `/v1/content/profiles/${profileType}/${profileId}/posts?format=clip&limit=30`,
+      );
+      return (response.items ?? response.data ?? [])
+        .map(mapApiProfileClipToItem)
+        .filter((item): item is ReelItem => item !== null);
+    },
+    enabled: isApiEnabled && Boolean(profileType && profileId),
+    staleTime: 15_000,
+  });
+}
+
+/**
  * In development this is the checked-in Cloudflare R2 Clip catalog. It keeps
  * local UI work pointed at the same remote delivery layer as production,
  * while production only accepts the server-personalized feed.
  */
-export function useReelsQuery() {
+export function useReelsQuery(enabled = true) {
   return useQuery({
     queryKey: ['reels', 'feed', 'content-first', 'api'],
     queryFn: async () => {
@@ -431,6 +498,7 @@ export function useReelsQuery() {
         legacyReels,
       );
     },
+    enabled,
     staleTime: 0,
     refetchOnMount: 'always',
 

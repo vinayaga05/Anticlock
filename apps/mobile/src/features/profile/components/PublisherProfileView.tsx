@@ -82,7 +82,7 @@ export function PublisherProfileView({
           ? { type: identityProfileType(fallbackOwned), id: fallbackOwned.id }
           : null;
 
-  const [tab, setTab] = useState<Tab>('flash');
+  const [tab, setTab] = useState<Tab>('clip');
   const profileQuery = useContentProfileQuery(activeRef?.type, activeRef?.id);
   const postsQuery = useContentProfilePostsQuery(
     activeRef?.type,
@@ -203,8 +203,8 @@ export function PublisherProfileView({
       <View style={[styles.tabBar, { borderColor: theme.colors.borderSoft }]}>
         {(
           [
-            { id: 'flash' as const, icon: 'grid' },
             { id: 'clip' as const, icon: 'reels' },
+            { id: 'flash' as const, icon: 'grid' },
           ] as const
         ).map(item => {
           const active = tab === item.id;

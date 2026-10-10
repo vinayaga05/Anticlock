@@ -55,16 +55,20 @@ describe('PublisherProfileView', () => {
     mockNavigate.mockClear();
   });
 
-  it('opens a published profile clip in the clip player', () => {
+  it('shows Clips first and opens a published profile clip in the player', () => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
     ReactTestRenderer.act(() => {
       renderer = ReactTestRenderer.create(<PublisherProfileView />);
     });
 
-    const clipsTab = renderer.root.findAll(
-      node => node.props.accessibilityLabel === 'Clips',
-    )[0];
-    ReactTestRenderer.act(() => clipsTab.props.onPress());
+    const tabLabels = [
+      ...new Set(
+        renderer.root
+          .findAll(node => ['Clips', 'Posts'].includes(node.props.accessibilityLabel))
+          .map(node => node.props.accessibilityLabel),
+      ),
+    ];
+    expect(tabLabels).toEqual(['Clips', 'Posts']);
 
     const clip = renderer.root.findAll(
       node => node.props.accessibilityLabel === 'Open clip',

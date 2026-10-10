@@ -7,6 +7,8 @@ import {
   formatClock,
   locateInSources,
   maxMusicStartMs,
+  muteOriginalAudio,
+  removeMusic,
   usedSegmentCount,
   type ClipSource,
   type MusicTrackOption,
@@ -97,6 +99,19 @@ describe('clipEditModel', () => {
       sources: ['file:///tmp/a.mp4', 'file:///tmp/b.mp4'],
       music: { uri: 'https://cdn.example.com/a.m4a', startMs: 12_346, volume: 0.8 },
       originalVolume: 0.25,
+    });
+  });
+
+  it('mutes original sound independently and keeps that choice when music is removed', () => {
+    const edit = {
+      ...createEditState([source('a', 3_000)]),
+      music: { track, startMs: 0, volume: 0.8 },
+      originalVolume: 0.35,
+    };
+    expect(muteOriginalAudio(edit).originalVolume).toBe(0);
+    expect(removeMusic(muteOriginalAudio(edit))).toMatchObject({
+      music: null,
+      originalVolume: 0,
     });
   });
 

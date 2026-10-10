@@ -104,6 +104,16 @@ export function createEditState(sources: ClipSource[]): ClipEditState {
   };
 }
 
+/** Turns off only the recorded/natural audio; selected music is unchanged. */
+export function muteOriginalAudio(edit: ClipEditState): ClipEditState {
+  return { ...edit, originalVolume: 0 };
+}
+
+/** Removes the music track while preserving the creator's original-audio mix. */
+export function removeMusic(edit: ClipEditState): ClipEditState {
+  return { ...edit, music: null };
+}
+
 /**
  * Clamps a requested trim window to the timeline, the 90 s cap and the 1 s
  * minimum. `anchor` says which edge the user is dragging so the other edge

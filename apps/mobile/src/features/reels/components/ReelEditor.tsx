@@ -28,6 +28,8 @@ import {
   formatClock,
   formatSeconds,
   maxMusicStartMs,
+  muteOriginalAudio,
+  removeMusic,
   segmentOffsets,
   totalDurationMs,
   trimmedDurationMs,
@@ -338,6 +340,13 @@ export function ReelEditor({
                       bare
                       iconSize={20}
                     />
+                    <GlassIconButton
+                      icon="trash"
+                      accessibilityLabel="Remove music"
+                      onPress={() => update(removeMusic(editRef.current))}
+                      bare
+                      iconSize={20}
+                    />
                   </View>
                   <EditorSlider
                     icon="clock"
@@ -377,6 +386,35 @@ export function ReelEditor({
 
           {tab === 'volume' ? (
             <View style={styles.panelBody}>
+              {hasOriginalAudio ? (
+                <PressableScale
+                  accessibilityLabel={
+                    edit.originalVolume <= 0.001
+                      ? 'Restore original sound'
+                      : 'Mute original sound'
+                  }
+                  onPress={() =>
+                    update(
+                      edit.originalVolume <= 0.001
+                        ? { originalVolume: 1 }
+                        : muteOriginalAudio(editRef.current),
+                    )
+                  }
+                  style={styles.audioToggle}
+                >
+                  <AppIcon
+                    name={edit.originalVolume <= 0.001 ? 'volume' : 'mute'}
+                    size={18}
+                    color="#fff"
+                    strokeWidth={2.25}
+                  />
+                  <Text style={styles.audioToggleText}>
+                    {edit.originalVolume <= 0.001
+                      ? 'Restore original sound'
+                      : 'Mute original sound'}
+                  </Text>
+                </PressableScale>
+              ) : null}
               <EditorSlider
                 icon={hasOriginalAudio ? 'volume' : 'mute'}
                 valueLabel={`${Math.round(edit.originalVolume * 100)}`}
@@ -464,7 +502,7 @@ export function ReelEditor({
         selectedId={music?.track.id ?? null}
         onSelect={selectTrack}
         onRemove={() => {
-          update({ music: null, originalVolume: 1 });
+          update(removeMusic(editRef.current));
           setMusicOpen(false);
         }}
         onClose={() => setMusicOpen(false)}
@@ -549,6 +587,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   panelBody: { gap: 10 },
+  audioToggle: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  audioToggleText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   warning: {
     position: 'absolute',
     top: 8,

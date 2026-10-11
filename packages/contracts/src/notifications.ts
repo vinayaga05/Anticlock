@@ -12,6 +12,9 @@ export const NotificationTypeSchema = z.enum([
   'order_confirmed',
   'order_shipped',
   'order_delivered',
+  'follow_request',
+  'follow_accepted',
+  'new_follower',
   'system',
 ]);
 export type NotificationType = z.infer<typeof NotificationTypeSchema>;

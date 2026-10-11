@@ -11,6 +11,7 @@ import {
   providers,
 } from '../db/schema.js';
 import type { AuthClaims } from '../lib/auth.js';
+import { profileFollowService } from '../social/ProfileFollowService.js';
 
 export type BlockedProfileIds = {
   mobileUserIds: ReadonlySet<string>;
@@ -150,6 +151,12 @@ export class BlockService {
       }
     }
 
+    await profileFollowService.block(
+      blocker.id,
+      { type: 'personal', id: blocker.id },
+      { type: target.type === 'user' ? 'personal' : 'business', id: target.id },
+    );
+
     const [inserted] = await db
       .insert(mobileUserBlocks)
       .values({
@@ -186,6 +193,11 @@ export class BlockService {
 
   async remove(auth: AuthClaims, target: ProfileBlockTarget) {
     const blocker = await requireMobileUser(auth);
+    await profileFollowService.unblock(
+      blocker.id,
+      { type: 'personal', id: blocker.id },
+      { type: target.type === 'user' ? 'personal' : 'business', id: target.id },
+    );
     const condition =
       target.type === 'business'
         ? and(

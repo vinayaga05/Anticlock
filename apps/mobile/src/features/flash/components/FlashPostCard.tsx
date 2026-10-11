@@ -93,8 +93,11 @@ export function FlashPostCard({ post }: Props) {
         { text: 'Save post', onPress: () => toggleSavePost(post.id) },
         { text: 'Hide post', onPress: () => hidePost(post.id) },
         {
-          text: post.author.followed ? 'Unfollow' : 'Follow',
-          onPress: () => followAuthor(post.author.id, !post.author.followed),
+          text: post.author.followed ? 'Following' : 'Follow',
+          onPress: () =>
+            post.source === 'api'
+              ? openAuthorProfile()
+              : followAuthor(post.author.id, !post.author.followed),
         },
         {
           text: 'Mute user',
@@ -167,7 +170,11 @@ export function FlashPostCard({ post }: Props) {
           </View>
           {!post.isOwn && !post.author.followed ? (
             <PressableScale
-              onPress={() => followAuthor(post.author.id, true)}
+              onPress={() =>
+                post.source === 'api'
+                  ? openAuthorProfile()
+                  : followAuthor(post.author.id, true)
+              }
               scaleTo={0.96}
               style={[
                 styles.follow,

@@ -7,6 +7,7 @@ import {
   createChannelResponseSchema,
   streamTokenResponseSchema,
 } from '@anticlock/contracts';
+import { profilesAreBlocked } from '../social/ProfileFollowService.js';
 
 const messagesRoutes = new Hono<AppEnv>();
 
@@ -82,6 +83,15 @@ messagesRoutes.post('/channels', requireAuth, async (c) => {
   const service = new StreamChatService(streamClient);
 
   try {
+    if (await profilesAreBlocked(
+      { type: 'personal', id: userId },
+      { type: 'personal', id: otherUserId },
+    )) {
+      return c.json(
+        { error: { code: 'profile_blocked', message: 'Conversation unavailable' } },
+        403,
+      );
+    }
     const channelId = await service.createOrGetChannel(userId, otherUserId);
 
     const response = createChannelResponseSchema.parse({

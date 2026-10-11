@@ -132,6 +132,10 @@ export const mobileUsers = pgTable("mobile_users", {
   bio: text("bio"),
   location: text("location"),
   website: text("website"),
+  /** Privacy is profile-scoped: a personal profile can differ from its businesses. */
+  isPrivate: boolean("is_private").notNull().default(false),
+  allowFollowRequests: boolean("allow_follow_requests").notNull().default(true),
+  showFollowerLists: boolean("show_follower_lists").notNull().default(true),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -409,6 +413,10 @@ export const providers = pgTable("providers", {
   name: text("name").notNull(),
   status: text("status").notNull().default("active"),
   publicProfile: jsonb("public_profile").$type<Record<string, unknown>>(),
+  /** Privacy is independent for each business profile. */
+  isPrivate: boolean("is_private").notNull().default(false),
+  allowFollowRequests: boolean("allow_follow_requests").notNull().default(true),
+  showFollowerLists: boolean("show_follower_lists").notNull().default(true),
   /** The approved application that created this business profile. */
   sourceApplicationId: uuid("source_application_id"),
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -457,6 +465,60 @@ export const mobileUserBlocks = pgTable(
       table.createdAt
     ),
   ]
+);
+
+/**
+ * Profile-level social graph. IDs are polymorphic (personal/mobile user or
+ * business/provider) and their matching type columns keep the identity exact.
+ */
+export const profileFollows = pgTable(
+  "profile_follows",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    followerProfileId: uuid("follower_profile_id").notNull(),
+    followerProfileType: text("follower_profile_type").notNull(),
+    followedProfileId: uuid("followed_profile_id").notNull(),
+    followedProfileType: text("followed_profile_type").notNull(),
+    status: text("status").notNull(), // pending | accepted
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("profile_follows_pair_uidx").on(
+      table.followerProfileId,
+      table.followedProfileId,
+    ),
+    index("profile_follows_followed_status_idx").on(
+      table.followedProfileId,
+      table.status,
+    ),
+    index("profile_follows_follower_status_idx").on(
+      table.followerProfileId,
+      table.status,
+    ),
+  ],
+);
+
+/** Blocks are profile-scoped and override follow/request state in both directions. */
+export const profileBlocks = pgTable(
+  "profile_blocks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    blockerProfileId: uuid("blocker_profile_id").notNull(),
+    blockerProfileType: text("blocker_profile_type").notNull(),
+    blockedProfileId: uuid("blocked_profile_id").notNull(),
+    blockedProfileType: text("blocked_profile_type").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("profile_blocks_pair_uidx").on(
+      table.blockerProfileId,
+      table.blockedProfileId,
+    ),
+    index("profile_blocks_blocker_idx").on(table.blockerProfileId, table.blockerProfileType),
+    index("profile_blocks_blocked_idx").on(table.blockedProfileId, table.blockedProfileType),
+  ],
 );
 
 /** Users who can act on behalf of an approved provider/business. */

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -18,6 +19,12 @@ import { AppIcon } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { palette } from '@/shared/theme/colors';
 import { useProviderApplicationsQuery } from '@/shared/api/providerHooks';
+import { useContentProfileQuery } from '@/shared/api/storyHooks';
+import {
+  useFollowRequestAction,
+  useFollowRequestsQuery,
+  useProfilePrivacyMutation,
+} from '@/shared/api/profileFollows';
 import type { PublishingIdentity } from '@/shared/api/publishingHooks';
 import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
 import {
@@ -71,6 +78,13 @@ export function AccountSettingsScreen() {
 
   const isGuest = !user || user.id === 'temporary-guest';
   const activeType = active ? identityProfileType(active) : 'personal';
+  const activeRef = active ? { id: active.id, type: activeType } : null;
+  const activeProfileQuery = useContentProfileQuery(activeRef?.type, activeRef?.id);
+  const privacyMutation = useProfilePrivacyMutation(activeRef);
+  const followRequestsQuery = useFollowRequestsQuery(activeRef);
+  const followRequestAction = useFollowRequestAction(activeRef);
+  const followRequests = followRequestsQuery.data ?? [];
+  const profileIsPrivate = activeProfileQuery.data?.isPrivate === true;
   const isBusiness = activeType === 'business';
 
   const card: ActiveProfileCardData = active
@@ -124,6 +138,27 @@ export function AccountSettingsScreen() {
   const shareProfile = () => {
     Share.share({ message: profileShareMessage(card) }).catch(() => undefined);
   };
+
+  const chooseProfilePrivacy = () =>
+    Alert.alert('Profile privacy', `Applies to ${card.name}`, [
+      {
+        text: 'Public',
+        onPress: () => privacyMutation.mutate({
+          isPrivate: false,
+          allowFollowRequests: true,
+          showFollowerLists: true,
+        }),
+      },
+      {
+        text: 'Private',
+        onPress: () => privacyMutation.mutate({
+          isPrivate: true,
+          allowFollowRequests: true,
+          showFollowerLists: true,
+        }),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
 
   const confirmLogout = () =>
     Alert.alert('Log out?', undefined, [
@@ -237,6 +272,56 @@ export function AccountSettingsScreen() {
           />
         ) : null}
 
+        {followRequests.length > 0 ? (
+          <SettingsSection label="Follow requests" testID="section-follow-requests">
+            {followRequests.map(request => {
+              const follower = { id: request.follower.id, type: request.follower.type };
+              return (
+                <View key={request.id} style={[styles.requestCard, { borderColor: theme.colors.borderSoft }]}>
+                  {request.follower.avatarUrl ? (
+                    <Image source={{ uri: request.follower.avatarUrl }} style={styles.requestAvatar} />
+                  ) : (
+                    <View style={[styles.requestAvatar, styles.requestAvatarFallback, { backgroundColor: theme.colors.primarySoft }]}>
+                      <Text style={{ color: theme.colors.primary, fontWeight: '800' }}>
+                        {request.follower.displayName.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.requestIdentity}>
+                    <View style={styles.requestNameRow}>
+                      <Text numberOfLines={1} style={[styles.requestName, { color: theme.colors.textPrimary }]}>
+                        {request.follower.displayName}
+                      </Text>
+                      {request.follower.verified ? <AppIcon name="verified" size={13} color={theme.colors.primary} /> : null}
+                    </View>
+                    <Text style={[styles.requestType, { color: theme.colors.textSecondary }]}>
+                      {request.follower.type === 'business' ? 'Business' : 'Personal'}
+                    </Text>
+                  </View>
+                  <PressableScale
+                    accessibilityLabel="Accept follow request"
+                    style={[styles.requestAction, { backgroundColor: theme.colors.primary }]}
+                    onPress={() => followRequestAction.mutate({ action: 'accept', follower })}>
+                    <AppIcon name="check" size={15} color="#fff" />
+                  </PressableScale>
+                  <PressableScale
+                    accessibilityLabel="Delete follow request"
+                    style={[styles.requestAction, { backgroundColor: theme.colors.surfaceMuted }]}
+                    onPress={() => followRequestAction.mutate({ action: 'reject', follower })}>
+                    <AppIcon name="close" size={15} color={theme.colors.textPrimary} />
+                  </PressableScale>
+                  <PressableScale
+                    accessibilityLabel="Block follow requester"
+                    style={[styles.requestAction, { backgroundColor: theme.colors.surfaceMuted }]}
+                    onPress={() => followRequestAction.mutate({ action: 'block', follower })}>
+                    <AppIcon name="alert" size={15} color={theme.colors.error} />
+                  </PressableScale>
+                </View>
+              );
+            })}
+          </SettingsSection>
+        ) : null}
+
         <SettingsSection label="Activity" testID="section-activity">
           <TileGrid tiles={activityTiles} />
         </SettingsSection>
@@ -255,8 +340,15 @@ export function AccountSettingsScreen() {
           />
           <SettingsRow
             testID="row-privacy"
-            icon="shield-check"
+            icon="lock"
             label="Privacy"
+            value={privacyMutation.isPending ? 'Saving…' : profileIsPrivate ? 'Private' : 'Public'}
+            onPress={chooseProfilePrivacy}
+          />
+          <SettingsRow
+            testID="row-assistant-privacy"
+            icon="shield-check"
+            label="Genie data privacy"
             onPress={() => setPrivacyOpen(true)}
           />
           <SettingsRow
@@ -355,6 +447,27 @@ const styles = StyleSheet.create({
   },
   topTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '800' },
   scroll: { paddingHorizontal: 16, paddingTop: 8, gap: 20 },
+  requestCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+  },
+  requestAvatar: { width: 40, height: 40, borderRadius: 20 },
+  requestAvatarFallback: { alignItems: 'center', justifyContent: 'center' },
+  requestIdentity: { flex: 1, minWidth: 0 },
+  requestNameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  requestName: { flexShrink: 1, fontSize: 14, fontWeight: '700' },
+  requestType: { fontSize: 12, marginTop: 2 },
+  requestAction: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   modalFill: { position: 'absolute', top: 0, left: 0, right: 0, justifyContent: 'flex-end' },
   privacySheet: {
     borderTopLeftRadius: 28,

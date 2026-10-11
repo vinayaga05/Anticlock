@@ -1,5 +1,6 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   FlatList,
   Image,
   StyleSheet,
@@ -26,6 +27,10 @@ import {
   identityProfileType,
   type PublisherProfileType,
 } from '@/shared/publishing/publisherSelection';
+import {
+  useProfileFollowMutation,
+  type ProfileRelationship,
+} from '@/shared/api/profileFollows';
 
 type Tab = 'flash' | 'clip';
 
@@ -82,14 +87,19 @@ export function PublisherProfileView({
           ? { type: identityProfileType(fallbackOwned), id: fallbackOwned.id }
           : null;
 
+  const followerRef = globalActive
+    ? { id: globalActive.id, type: identityProfileType(globalActive) }
+    : null;
   const [tab, setTab] = useState<Tab>('clip');
-  const profileQuery = useContentProfileQuery(activeRef?.type, activeRef?.id);
+  const profileQuery = useContentProfileQuery(activeRef?.type, activeRef?.id, followerRef);
   const postsQuery = useContentProfilePostsQuery(
     activeRef?.type,
     activeRef?.id,
     tab,
+    followerRef,
   );
   const profile = profileQuery.data;
+  const relationship = profile?.relationship;
   const isOwner = Boolean(profile?.viewerCanManage);
   const mineQuery = useMyContentQuery(activeRef?.id, isOwner);
   const inProgress = useMemo<MyContentItem[]>(
@@ -111,12 +121,76 @@ export function PublisherProfileView({
       if (isOwner) refetchMine();
     }, [activeRef?.id, isOwner, refetchProfile, refetchPosts, refetchMine]),
   );
+  useEffect(() => {
+    if (relationship?.canViewContent !== undefined) refetchPosts();
+  }, [relationship?.canViewContent, refetchPosts]);
 
   const ownedIds = new Set(identities.map(item => item.id));
   const showSwitcher =
     identities.length > 1 && activeRef !== null && ownedIds.has(activeRef.id);
   const publisher = profile?.publisher;
+  const followedRef = publisher ? { id: publisher.id, type: publisher.type } : null;
+  const followerAvatarUrl =
+    globalActive?.publisher?.avatarUrl ?? globalActive?.avatarUrl ?? null;
+  const followMutation = useProfileFollowMutation(followerRef, followedRef);
+  const [followOverride, setFollowOverride] = useState<
+    ProfileRelationship['followStatus'] | null
+  >(null);
+  useEffect(() => setFollowOverride(null), [
+    followerRef?.id,
+    followedRef?.id,
+    relationship?.followStatus,
+  ]);
+  const displayedFollowStatus = followOverride ?? relationship?.followStatus;
+  const isDisplayedFollowing = displayedFollowStatus === 'following';
+  const isDisplayedRequested = displayedFollowStatus === 'requested';
   const posts = postsQuery.data ?? [];
+  const followLabel = isDisplayedRequested
+    ? 'Requested'
+    : isDisplayedFollowing
+      ? 'Following'
+      : 'Follow';
+
+  const runFollowMutation = (
+    action: 'follow' | 'unfollow',
+    optimisticStatus: ProfileRelationship['followStatus'],
+    previousStatus: ProfileRelationship['followStatus'],
+  ) => {
+    setFollowOverride(optimisticStatus);
+    followMutation.mutate(action, {
+      onSuccess: () => setFollowOverride(null),
+      onError: () => {
+        setFollowOverride(previousStatus);
+        Alert.alert('Couldn’t update follow', 'Please try again.', [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Try again',
+            onPress: () => runFollowMutation(action, optimisticStatus, previousStatus),
+          },
+        ]);
+      },
+    });
+  };
+
+  const onFollowPress = () => {
+    if (!relationship?.canFollow || followMutation.isPending || !displayedFollowStatus) return;
+    if (isDisplayedFollowing || isDisplayedRequested) {
+      Alert.alert(isDisplayedRequested ? 'Requested' : 'Following', undefined, [
+        {
+          text: isDisplayedRequested ? 'Cancel request' : 'Unfollow',
+          style: 'destructive',
+          onPress: () => runFollowMutation('unfollow', 'not_following', displayedFollowStatus),
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+      return;
+    }
+    runFollowMutation(
+      'follow',
+      profile?.isPrivate ? 'requested' : 'following',
+      displayedFollowStatus,
+    );
+  };
 
   const header = (
     <View style={styles.header}>
@@ -146,9 +220,9 @@ export function PublisherProfileView({
         <View style={styles.stats}>
           {(
             [
-              ['posts', profile?.counts.flash ?? 0],
-              ['clips', profile?.counts.clips ?? 0],
-              ['stories', profile?.counts.stories ?? 0],
+              ['posts', profile?.counts.posts ?? 0],
+              ['followers', profile?.socialCounts?.followers ?? 0],
+              ['following', profile?.socialCounts?.following ?? 0],
             ] as const
           ).map(([label, value]) => (
             <View key={label} style={styles.statItem}>
@@ -178,6 +252,35 @@ export function PublisherProfileView({
           </Text>
         ) : null}
       </View>
+
+      {!isOwner && relationship && !relationship.isBlocked ? (
+        <PressableScale
+          accessibilityLabel={followLabel}
+          onPress={onFollowPress}
+          disabled={followMutation.isPending || !relationship.canFollow}
+          style={[
+            styles.followButton,
+            {
+              borderColor: theme.colors.border,
+              backgroundColor: isDisplayedFollowing || isDisplayedRequested
+                ? theme.colors.surface
+                : theme.colors.primary,
+            },
+          ]}>
+          {followerAvatarUrl ? (
+            <Image source={{ uri: followerAvatarUrl }} style={styles.followerAvatar} />
+          ) : null}
+          <AppIcon
+            name={isDisplayedFollowing ? 'follow' : 'user'}
+            size={16}
+            color={isDisplayedFollowing || isDisplayedRequested ? theme.colors.textPrimary : '#fff'}
+            strokeWidth={2}
+          />
+          <Text style={[styles.followButtonText, { color: isDisplayedFollowing || isDisplayedRequested ? theme.colors.textPrimary : '#fff' }]}>
+            {followMutation.isPending ? '…' : followLabel}
+          </Text>
+        </PressableScale>
+      ) : null}
 
       {isOwner && inProgress.length > 0 ? (
         <View style={[styles.progressCard, { borderColor: theme.colors.borderSoft }]}>
@@ -261,7 +364,9 @@ export function PublisherProfileView({
             <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>
               {postsQuery.isLoading
                 ? 'Loading…'
-                : tab === 'clip'
+                : relationship && !relationship.canViewContent
+                  ? 'Private profile · follow to view'
+                  : tab === 'clip'
                   ? 'No clips yet'
                   : 'No posts yet'}
             </Text>
@@ -328,6 +433,18 @@ const styles = StyleSheet.create({
   statNumber: { fontSize: 16, fontWeight: '700' },
   statLabel: { fontSize: 14 },
   identity: { gap: 4 },
+  followButton: {
+    alignSelf: 'stretch',
+    minHeight: 38,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  followButtonText: { fontSize: 14, fontWeight: '700' },
+  followerAvatar: { width: 20, height: 20, borderRadius: 10 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   displayName: { fontSize: 14, fontWeight: '700' },
   progressCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 12, gap: 8 },

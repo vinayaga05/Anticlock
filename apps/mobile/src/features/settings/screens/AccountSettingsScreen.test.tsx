@@ -82,6 +82,14 @@ jest.mock('@/shared/publishing/useActiveProfile', () => ({
 jest.mock('@/shared/api/providerHooks', () => ({
   useProviderApplicationsQuery: () => ({ data: mockApplications }),
 }));
+jest.mock('@/shared/api/storyHooks', () => ({
+  useContentProfileQuery: () => ({ data: { isPrivate: false } }),
+}));
+jest.mock('@/shared/api/profileFollows', () => ({
+  useProfilePrivacyMutation: () => ({ mutate: jest.fn(), isPending: false }),
+  useFollowRequestsQuery: () => ({ data: [] }),
+  useFollowRequestAction: () => ({ mutate: jest.fn(), isPending: false }),
+}));
 
 function render() {
   let renderer!: ReactTestRenderer.ReactTestRenderer;

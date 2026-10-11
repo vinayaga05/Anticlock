@@ -50,6 +50,7 @@ import {
   type PublisherRef,
   type ViewerContext,
 } from "../publishing/publisher.js";
+import { canProfileViewContent, getProfilePrivacy, hasAcceptedFollow, profileConnectionCounts, profileFollowService, profilesAreBlocked } from "../social/ProfileFollowService.js";
 import { exceedsClipDuration } from "./musicTracks.js";
 
 type Container = typeof contentContainers.$inferSelect;
@@ -120,6 +121,20 @@ function refOf(row: {
   const ref = publisherRefFromAuthor(row);
   if (!ref) throw appError("Content has no publisher", "invalid_content", 409);
   return ref;
+}
+
+/** Applies profile privacy and post audience after lifecycle/owner checks. */
+async function viewerCanSeePublishedPost(
+  viewer: ViewerContext,
+  row: Post,
+  viewerProfile: PublisherRef = { type: "personal", id: viewer.userId },
+) {
+  if (viewerCanManage(viewer, row)) return true;
+  const publisher = refOf(row);
+  if (!(await canProfileViewContent(viewerProfile, publisher))) return false;
+  if (row.visibility === "public") return true;
+  if (row.visibility === "followers") return hasAcceptedFollow(viewerProfile, publisher);
+  return false;
 }
 
 export function serializeDraft(
@@ -516,10 +531,18 @@ function liveCondition(now: Date) {
   return or(isNull(contentPosts.expiresAt), gt(contentPosts.expiresAt, now))!;
 }
 
-export async function serializePosts(viewer: ViewerContext, rows: Post[]) {
+export async function serializePosts(
+  viewer: ViewerContext,
+  rows: Post[],
+  viewerProfile: PublisherRef = { type: "personal", id: viewer.userId },
+) {
   if (!rows.length) return [];
-  const [publishers, likedRows] = await Promise.all([
-    loadPublishers(rows.map((row) => refOf(row))),
+  const publisherRefs = rows.map(row => refOf(row));
+  const uniquePublisherRefs = [
+    ...new Map(publisherRefs.map(item => [publisherKey(item), item])).values(),
+  ];
+  const [publishers, likedRows, relationshipEntries] = await Promise.all([
+    loadPublishers(publisherRefs),
     db
       .select({ contentPostId: contentPostLikes.contentPostId })
       .from(contentPostLikes)
@@ -532,7 +555,14 @@ export async function serializePosts(viewer: ViewerContext, rows: Post[]) {
           )
         )
       ),
+    Promise.all(
+      uniquePublisherRefs.map(async publisherRef => [
+        publisherKey(publisherRef),
+        await profileFollowService.relationship(viewerProfile, publisherRef),
+      ] as const),
+    ),
   ]);
+  const relationships = new Map(relationshipEntries);
   const liked = new Set(likedRows.map((row) => row.contentPostId));
   const items = await Promise.all(
     rows.map(async (row) => {
@@ -569,6 +599,7 @@ export async function serializePosts(viewer: ViewerContext, rows: Post[]) {
         publisherProfileId: ref.id,
         publisherProfileType: ref.type,
         publisher,
+        relationship: relationships.get(publisherKey(ref)),
         author: legacyAuthor(publisher),
         viewCount: row.viewCount,
         likeCount: row.likeCount,
@@ -596,6 +627,7 @@ export async function listPosts(
   query: {
     format: ContentFormat;
     publisher?: Partial<PublisherRef> & { id: string };
+    viewerProfile?: PublisherRef;
     limit: number;
     cursor?: string;
   }
@@ -608,7 +640,6 @@ export async function listPosts(
   const conditions: (SQL | undefined)[] = [
     eq(contentPosts.format, query.format),
     eq(contentPosts.status, "published"),
-    postVisibleToViewer(viewer),
     query.format === "story" ? gt(contentPosts.expiresAt, now) : liveCondition(now),
     decodeCursor(query.cursor),
   ];
@@ -625,9 +656,17 @@ export async function listPosts(
     .orderBy(desc(contentPosts.publishedAt), desc(contentPosts.id))
     .limit(query.limit + 1);
   const page = rows.slice(0, query.limit);
-  const visible = page.filter((row) => !blocked.has(publisherKey(refOf(row))));
+  const visible = (
+    await Promise.all(
+      page.map(async (row) =>
+        !blocked.has(publisherKey(refOf(row))) && (await viewerCanSeePublishedPost(viewer, row, query.viewerProfile))
+          ? row
+          : null,
+      ),
+    )
+  ).filter((row): row is Post => row !== null);
   return {
-    items: await serializePosts(viewer, visible),
+    items: await serializePosts(viewer, visible, query.viewerProfile),
     nextCursor:
       rows.length > query.limit && page.length
         ? encodeCursor(page[page.length - 1]!)
@@ -635,7 +674,11 @@ export async function listPosts(
   };
 }
 
-export async function getProfileSummary(viewerUserId: string, ref: PublisherRef) {
+export async function getProfileSummary(
+  viewerUserId: string,
+  ref: PublisherRef,
+  viewerProfile: PublisherRef = { type: "personal", id: viewerUserId },
+) {
   const [publisher, viewer, blocked] = await Promise.all([
     loadPublisher(ref),
     loadViewerContext(viewerUserId),
@@ -645,24 +688,33 @@ export async function getProfileSummary(viewerUserId: string, ref: PublisherRef)
     throw appError("Profile not found", "not_found", 404);
   }
   const now = new Date();
-  const rows = await db
-    .select({ format: contentPosts.format, total: sql<number>`count(*)::int` })
-    .from(contentPosts)
-    .where(
-      and(
-        eq(contentPosts.publisherProfileId, ref.id),
-        eq(contentPosts.publisherProfileType, ref.type),
-        eq(contentPosts.status, "published"),
-        postVisibleToViewer(viewer),
-        liveCondition(now)
-      )
-    )
-    .groupBy(contentPosts.format);
+  const relationship = await profileFollowService.relationship(viewerProfile, ref);
+  const privacy = await getProfilePrivacy(ref);
+  const maySeeProfileContent = relationship.canViewContent;
+  const rows = maySeeProfileContent
+    ? await db
+        .select({ format: contentPosts.format, total: sql<number>`count(*)::int` })
+        .from(contentPosts)
+        .where(
+          and(
+            eq(contentPosts.publisherProfileId, ref.id),
+            eq(contentPosts.publisherProfileType, ref.type),
+            eq(contentPosts.status, "published"),
+            liveCondition(now)
+          )
+        )
+        .groupBy(contentPosts.format)
+    : [];
   const byFormat = new Map(rows.map((row) => [row.format, Number(row.total)]));
   const clips = byFormat.get("clip") ?? 0;
   const flash = byFormat.get("flash") ?? 0;
+  const socialCounts = await profileConnectionCounts(ref);
   return {
     publisher,
+    relationship,
+    ...relationship,
+    isPrivate: privacy.isPrivate,
+    socialCounts,
     counts: {
       posts: clips + flash,
       clips,
@@ -779,7 +831,7 @@ export async function requireVisiblePost(viewerUserId: string, postId: string) {
       .limit(1),
   ]);
   const post = rows[0];
-  if (!post || !canViewerSee(viewer, post)) {
+  if (!post || !(await viewerCanSeePublishedPost(viewer, post))) {
     throw appError("Content not found", "not_found", 404);
   }
   const ref = refOf(post);
@@ -846,6 +898,9 @@ export async function createComment(
     id: body.publisherProfileId,
     type: body.publisherProfileType,
   });
+  if (await profilesAreBlocked(owned.ref, refOf(post))) {
+    throw appError("Content not found", "not_found", 404);
+  }
   const comment = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(contentPostComments)

@@ -72,6 +72,7 @@ import {
   listActiveMusicTracks,
   musicAttributionFromEdit,
 } from "../content/musicTracks.js";
+import { canProfileViewContent, getProfilePrivacy, hasAcceptedFollow } from "../social/ProfileFollowService.js";
 
 function errorResponse(error: unknown) {
   const err = error as { status?: number; code?: string; message?: string };
@@ -342,6 +343,10 @@ async function requireEligiblePublicClipForEngagement(
 
   const author = await resolveClipAuthor(post);
   if (!author) throw clipNotFoundError();
+  const publisher = publisherRefFromAuthor(post);
+  if (!publisher || !(await canProfileViewContent({ type: "personal", id: mobileUserId }, publisher))) {
+    throw clipNotFoundError();
+  }
 
   const [block] = await db
     .select({ id: mobileUserBlocks.id })
@@ -681,11 +686,15 @@ contentMobileRoutes.get("/posts", async (c) => {
     const publisherType = normalizePublisherType(
       c.req.query("publisherProfileType")
     );
+    const viewerType = normalizePublisherType(c.req.query("viewerProfileType")) ?? "personal";
+    const viewerId = c.req.query("viewerProfileId") ?? mobileUserId;
+    const viewerProfile = (await resolveOwnedPublisher(mobileUserId, { id: viewerId, type: viewerType })).ref;
     const result = await listPosts(mobileUserId, {
       format: query.format,
       publisher: query.publisherProfileId
         ? { id: query.publisherProfileId, type: publisherType }
         : undefined,
+      viewerProfile,
       limit: query.limit,
       cursor: query.cursor,
     });
@@ -712,7 +721,10 @@ contentMobileRoutes.get("/profiles/:type/:id", async (c) => {
   try {
     const mobileUserId = await requireActiveMobile(c.get("auth"));
     const ref = profileRef(c.req.param("type"), c.req.param("id"));
-    return c.json({ profile: await getProfileSummary(mobileUserId, ref) });
+    const viewerType = normalizePublisherType(c.req.query("viewerProfileType")) ?? "personal";
+    const viewerId = c.req.query("viewerProfileId") ?? mobileUserId;
+    const viewerProfile = (await resolveOwnedPublisher(mobileUserId, { id: viewerId, type: viewerType })).ref;
+    return c.json({ profile: await getProfileSummary(mobileUserId, ref, viewerProfile) });
   } catch (error) {
     const { status, body } = errorResponse(error);
     return c.json(body, status);
@@ -729,9 +741,13 @@ contentMobileRoutes.get("/profiles/:type/:id/posts", async (c) => {
       limit: c.req.query("limit"),
       cursor: c.req.query("cursor"),
     });
+    const viewerType = normalizePublisherType(c.req.query("viewerProfileType")) ?? "personal";
+    const viewerId = c.req.query("viewerProfileId") ?? mobileUserId;
+    const viewerProfile = (await resolveOwnedPublisher(mobileUserId, { id: viewerId, type: viewerType })).ref;
     const result = await listPosts(mobileUserId, {
       format: query.format,
       publisher: ref,
+      viewerProfile,
       limit: query.limit,
       cursor: query.cursor,
     });
@@ -862,7 +878,6 @@ contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
               eq(contentPosts.format, "clip"),
               eq(contentPosts.mediaType, "video"),
               eq(contentPosts.status, "published"),
-              eq(contentPosts.visibility, "public"),
               or(
                 isNull(contentPosts.expiresAt),
                 gt(contentPosts.expiresAt, now)
@@ -889,6 +904,16 @@ contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
             authorIsBlocked ||
             deliveredPosts.has(post.id) ||
             deliveredClusters.has(post.duplicateClusterId)
+          ) {
+            continue;
+          }
+          const publisherRef = publisherRefFromAuthor(post);
+          const viewerRef = { type: "personal" as const, id: mobileUserId };
+          if (
+            !publisherRef ||
+            !(await canProfileViewContent(viewerRef, publisherRef)) ||
+            (post.visibility === "followers" && !(await hasAcceptedFollow(viewerRef, publisherRef))) ||
+            !["public", "followers"].includes(post.visibility)
           ) {
             continue;
           }
@@ -1204,12 +1229,21 @@ contentPublicRoutes.get("/feeds/:format", async (c) => {
     )
     .orderBy(desc(contentPosts.publishedAt))
     .limit(50);
+  const publicRows = (
+    await Promise.all(
+      rows.map(async post => {
+        const ref = publisherRefFromAuthor(post);
+        if (!ref) return null;
+        return (await getProfilePrivacy(ref)).isPrivate ? null : post;
+      }),
+    )
+  ).filter((post): post is ClipPost => post !== null);
   const publishers = await loadPublishers(
-    rows
+    publicRows
       .map((post) => publisherRefFromAuthor(post))
       .filter((ref): ref is NonNullable<typeof ref> => ref !== null)
   );
-  const items = rows.flatMap((post) => {
+  const items = publicRows.flatMap((post) => {
     const ref = publisherRefFromAuthor(post);
     const publisher = ref ? publishers.get(publisherKey(ref)) : undefined;
     // Inactive users / non-active businesses are dropped, as in every feed.

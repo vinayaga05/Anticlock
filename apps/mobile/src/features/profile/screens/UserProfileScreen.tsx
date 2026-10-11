@@ -58,11 +58,11 @@ function getPostThumbnail(post: FlashPost) {
 export function UserProfileScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'Profile'>>();
   const params = route.params;
-  if (isApiEnabled && (params?.profileId || !params?.userId)) {
+  if (isApiEnabled) {
     return (
       <PublisherProfileView
-        profileType={params?.profileType}
-        profileId={params?.profileId}
+        profileType={params?.profileType ?? 'personal'}
+        profileId={params?.profileId ?? params?.userId}
       />
     );
   }
@@ -113,8 +113,10 @@ function LocalUserProfileScreen() {
   const followerCount = getFollowerCount(userId);
   const followingCount = getFollowingCount(userId);
 
+  // Store revisions intentionally invalidate this derived, non-hook selector.
   const highlights = useMemo(
     () => getProfileHighlights(userId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [userId, storyRevision, followingIds],
   );
 

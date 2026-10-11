@@ -152,6 +152,7 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
   before(async () => {
     const { Hono } = await import("hono");
     const content = await import("./content.js");
+    const { profileFollowRoutes } = await import("./profile-follows.js");
     const { moderationAdminRoutes } = await import("./moderation.js");
     const { contentSafetyRoutes } = await import("./contentSafety.js");
     ({ signToken } = await import("../lib/auth.js"));
@@ -164,6 +165,7 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
     hono.route("/v1/content", content.contentMobileRoutes);
     hono.route("/v1/content", content.contentPublicRoutes);
     hono.route("/v1/content", contentSafetyRoutes);
+    hono.route("/v1/profile-follows", profileFollowRoutes);
     hono.route("/admin/moderation", moderationAdminRoutes);
     app = hono as unknown as typeof app;
 
@@ -602,5 +604,163 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
     assert.equal(published.status, 201, JSON.stringify(published.json));
     const profile = await call("B", "GET", `/v1/content/profiles/business/${BIZ1}/posts?format=flash&limit=50`);
     assert.ok(ids(profile.json.items).includes(published.json.post.id));
+  });
+
+  it("enforces profile-scoped follows, private requests, rejection, blocking, and business privacy", async () => {
+    const follow = (who: string, followerId: string, followerType: "personal" | "business", followedId: string, followedType: "personal" | "business") =>
+      call(who, "POST", "/v1/profile-follows", {
+        followerProfileId: followerId,
+        followerProfileType: followerType,
+        followedProfileId: followedId,
+        followedProfileType: followedType,
+      });
+
+    // Public personal relationship persists across independent profile reads.
+    const publicPersonalFollow = await follow("A", A, "personal", B, "personal");
+    assert.equal(publicPersonalFollow.status, 201, JSON.stringify(publicPersonalFollow.json));
+    assert.equal(publicPersonalFollow.json.data.relationship.followStatus, "following");
+    const followedAuthorPost = await publish("B", {
+      contentType: "flash",
+      publisherProfileId: B,
+      visibility: "public",
+      mediaType: "text",
+      caption: "follow-state post",
+    });
+    const followingFeed = await call("A", "GET", "/v1/content/posts?format=flash&limit=50");
+    const followedFeedItem = (followingFeed.json.items as Json[]).find(item => item.id === followedAuthorPost.postId);
+    assert.ok(followedFeedItem);
+    assert.equal(followedFeedItem.relationship.followStatus, "following");
+    const persisted = await call("A", "GET", `/v1/content/profiles/personal/${B}`);
+    assert.equal(persisted.json.profile.followStatus, "following");
+    assert.equal(persisted.json.profile.socialCounts.followers, 1);
+    const publicPersonalUnfollow = await call("A", "DELETE", "/v1/profile-follows", {
+      followerProfileId: A, followerProfileType: "personal", followedProfileId: B, followedProfileType: "personal",
+    });
+    assert.equal(publicPersonalUnfollow.status, 200);
+    assert.equal(publicPersonalUnfollow.json.data.relationship.followStatus, "not_following");
+    const afterUnfollow = await call("A", "GET", `/v1/content/profiles/personal/${B}`);
+    assert.equal(afterUnfollow.json.profile.followStatus, "not_following");
+    assert.equal(afterUnfollow.json.profile.socialCounts.followers, 0);
+    const unfollowedFeed = await call("A", "GET", "/v1/content/posts?format=flash&limit=50");
+    const unfollowedFeedItem = (unfollowedFeed.json.items as Json[]).find(item => item.id === followedAuthorPost.postId);
+    assert.ok(unfollowedFeedItem);
+    assert.equal(unfollowedFeedItem.relationship.followStatus, "not_following");
+
+    // One account's personal and business profiles follow independently.
+    const personalBusinessFollow = await follow("A", A, "personal", BIZ_C, "business");
+    assert.equal(personalBusinessFollow.status, 201, JSON.stringify(personalBusinessFollow.json));
+    const ownerPersonalStillSeparate = await call("A", "GET", `/v1/content/profiles/personal/${C}`);
+    assert.equal(ownerPersonalStillSeparate.json.profile.followStatus, "not_following");
+    const businessBusinessFollow = await follow("A", BIZ1, "business", BIZ_C, "business");
+    assert.equal(businessBusinessFollow.status, 201, JSON.stringify(businessBusinessFollow.json));
+    await call("A", "DELETE", "/v1/profile-follows", {
+      followerProfileId: A, followerProfileType: "personal", followedProfileId: BIZ_C, followedProfileType: "business",
+    });
+    const personalIdentityState = await call("A", "GET", `/v1/content/profiles/business/${BIZ_C}`);
+    assert.equal(personalIdentityState.json.profile.followStatus, "not_following");
+    const businessIdentityState = await call(
+      "A",
+      "GET",
+      `/v1/content/profiles/business/${BIZ_C}?viewerProfileType=business&viewerProfileId=${BIZ1}`,
+    );
+    assert.equal(businessIdentityState.json.profile.followStatus, "following");
+    await follow("A", A, "personal", BIZ_C, "business");
+
+    // Private personal profile: request has no followers-only access until accepted.
+    const privacy = await call("A", "PATCH", `/v1/profile-follows/privacy/personal/${A}`, {
+      isPrivate: true,
+      allowFollowRequests: true,
+      showFollowerLists: true,
+    });
+    assert.equal(privacy.status, 200, JSON.stringify(privacy.json));
+    const pending = await follow("C", C, "personal", A, "personal");
+    assert.equal(pending.status, 202, JSON.stringify(pending.json));
+    assert.equal(pending.json.data.relationship.followStatus, "requested");
+    const { and: sqlAnd, eq: sqlEq } = await import("drizzle-orm");
+    const requestNotifications = await db.select().from(schema.notifications).where(sqlAnd(
+      sqlEq(schema.notifications.mobileUserId, A),
+      sqlEq(schema.notifications.type, "follow_request"),
+    ));
+    assert.ok(requestNotifications.some((item: Json) =>
+      item.data?.followerProfile?.id === C && item.data?.followedProfile?.id === A
+    ));
+    const unauthorizedCreate = await follow("B", C, "personal", BIZ_C, "business");
+    assert.equal(unauthorizedCreate.status, 403);
+    const unauthorizedCancel = await call("B", "DELETE", "/v1/profile-follows", {
+      followerProfileId: C, followerProfileType: "personal", followedProfileId: A, followedProfileType: "personal",
+    });
+    assert.equal(unauthorizedCancel.status, 403);
+    const unauthorizedAccept = await call("B", "POST", `/v1/profile-follows/requests/personal/${A}/accept`, {
+      id: C,
+      type: "personal",
+    });
+    assert.equal(unauthorizedAccept.status, 403);
+    const followersOnly = await publish("A", {
+      contentType: "flash",
+      publisherProfileId: A,
+      visibility: "followers",
+      mediaType: "text",
+      caption: "private follower post",
+    });
+    const before = await call("C", "GET", `/v1/content/profiles/personal/${A}/posts?format=flash`);
+    assert.ok(!ids(before.json.items).includes(followersOnly.postId));
+    const accepted = await call("A", "POST", `/v1/profile-follows/requests/personal/${A}/accept`, {
+      id: C,
+      type: "personal",
+    });
+    assert.equal(accepted.status, 200, JSON.stringify(accepted.json));
+    const acceptedNotifications = await db.select().from(schema.notifications).where(sqlAnd(
+      sqlEq(schema.notifications.mobileUserId, C),
+      sqlEq(schema.notifications.type, "follow_accepted"),
+    ));
+    assert.ok(acceptedNotifications.some((item: Json) =>
+      item.data?.followerProfile?.id === C && item.data?.followedProfile?.id === A
+    ));
+    const afterAccept = await call("C", "GET", `/v1/content/profiles/personal/${A}/posts?format=flash`);
+    assert.ok(ids(afterAccept.json.items).includes(followersOnly.postId));
+
+    // Rejection deletes the pending row and exposes no permanent rejected state.
+    await call("C", "DELETE", "/v1/profile-follows", {
+      followerProfileId: C, followerProfileType: "personal", followedProfileId: A, followedProfileType: "personal",
+    });
+    await follow("C", C, "personal", A, "personal");
+    const rejected = await call("A", "POST", `/v1/profile-follows/requests/personal/${A}/reject`, {
+      id: C,
+      type: "personal",
+    });
+    assert.equal(rejected.status, 200);
+    const relationship = await call("C", "GET", `/v1/profile-follows/relationship/personal/${A}`);
+    assert.equal(relationship.json.data.followStatus, "not_following");
+
+    // Block removes both-direction requests/follows and prevents future requests.
+    const blocked = await call("A", "POST", "/v1/profile-follows/blocks", {
+      followerProfileId: A, followerProfileType: "personal", followedProfileId: C, followedProfileType: "personal",
+    });
+    assert.equal(blocked.status, 201);
+    const blockedAttempt = await follow("C", C, "personal", A, "personal");
+    assert.equal(blockedAttempt.status, 403);
+
+    // A private business keeps the two profile-specific existing followers.
+    await call("C", "PATCH", `/v1/profile-follows/privacy/business/${BIZ_C}`, {
+      isPrivate: true,
+      allowFollowRequests: true,
+      showFollowerLists: true,
+    });
+    const businessPost = await publish("C", {
+      contentType: "clip",
+      publisherProfileId: BIZ_C,
+      publisherProfileType: "business",
+      visibility: "followers",
+      media: ["video"],
+      mediaType: "video",
+    });
+    const asBusinessFollower = await call(
+      "A",
+      "GET",
+      `/v1/content/profiles/business/${BIZ_C}/posts?format=clip&viewerProfileType=business&viewerProfileId=${BIZ1}`,
+    );
+    assert.ok(ids(asBusinessFollower.json.items).includes(businessPost.postId));
+    const outsider = await call("B", "GET", `/v1/content/profiles/business/${BIZ_C}/posts?format=clip`);
+    assert.ok(!ids(outsider.json.items).includes(businessPost.postId));
   });
 });

@@ -9,10 +9,9 @@ import { seedStories } from '@/shared/data/flash/stories';
 import { useCommunityStore } from '@/shared/data/community/store';
 
 function seedFollowingIds(): string[] {
-  const ids = Object.values(flashAuthors)
-    .filter(a => a.followed)
-    .map(a => a.id);
-  return [...new Set([...ids, 'user-priya', 'user-arun'])];
+  // Follow state is server-owned. Offline/mock mode starts empty rather than
+  // presenting fabricated relationships as if they were real.
+  return [];
 }
 
 type ProfileState = {

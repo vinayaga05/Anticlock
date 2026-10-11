@@ -26,6 +26,7 @@ import { assistantRoutes } from './routes/assistant.js';
 import { interestRoutes } from './routes/interests.js';
 import { contentMobileRoutes, contentPublicRoutes } from './routes/content.js';
 import { profileBlockRoutes } from './routes/blocks.js';
+import { profileFollowRoutes } from './routes/profile-follows.js';
 import { contentSafetyRoutes } from './routes/contentSafety.js';
 import { moderationAdminRoutes } from './routes/moderation.js';
 import {
@@ -111,6 +112,7 @@ app.route('/v1/content', contentMobileRoutes);
 app.route('/v1/content', contentPublicRoutes);
 app.route('/v1/content', contentSafetyRoutes);
 app.route('/v1/blocks', profileBlockRoutes);
+app.route('/v1/profile-follows', profileFollowRoutes);
 app.route('/v1/notifications', notificationsMobileRoutes);
 app.route('/v1/devices', devicesMobileRoutes);
 app.route('/v1/messages', messagesRoutes);

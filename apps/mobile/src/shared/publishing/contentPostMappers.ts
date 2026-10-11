@@ -5,6 +5,7 @@ import type {
   PostMedia,
   PostVisibility,
 } from '@/shared/data/flash/types';
+import type { ProfileRelationship } from '@/shared/api/profileFollows';
 import type { PublisherProfileType } from './publisherSelection';
 
 /** `publisher` block returned by every content feed/profile endpoint. */
@@ -33,6 +34,7 @@ export type ApiContentPost = {
   publisherProfileId?: string;
   publisherProfileType?: PublisherProfileType;
   publisher?: ApiContentPublisher;
+  relationship?: ProfileRelationship;
   author: {
     type: 'user' | 'provider';
     id: string;
@@ -84,7 +86,10 @@ function publisherOf(post: ApiContentPost): ApiContentPublisher {
 }
 
 /** The shown creator is always the publisher profile, never the owner. */
-export function publisherToAuthor(publisher: ApiContentPublisher): PostAuthor {
+export function publisherToAuthor(
+  publisher: ApiContentPublisher,
+  relationship?: ProfileRelationship,
+): PostAuthor {
   return {
     id: publisher.id,
     name: publisher.displayName,
@@ -94,7 +99,7 @@ export function publisherToAuthor(publisher: ApiContentPublisher): PostAuthor {
     profileType: publisher.type,
     handle: publisher.handle,
     businessCategory: publisher.businessCategory,
-    followed: false,
+    followed: relationship?.isFollowing ?? false,
   };
 }
 
@@ -127,7 +132,7 @@ export function mapApiFlashPost(post: ApiContentPost, now = Date.now()): FlashPo
   const publishedAt = post.publishedAt ?? post.createdAt;
   return {
     id: post.id,
-    author: publisherToAuthor(publisher),
+    author: publisherToAuthor(publisher, post.relationship),
     createdAt: publishedAt,
     timeLabel: relativeTimeLabel(publishedAt, now),
     visibility: VISIBILITIES.includes(post.visibility as PostVisibility)
@@ -187,7 +192,7 @@ export function mapApiStoriesToUserStories(
     const key = `${publisher.type}:${publisher.id}`;
     const group = groups.get(key) ?? {
       authorId: publisher.id,
-      author: publisherToAuthor(publisher),
+      author: publisherToAuthor(publisher, post.relationship),
       audience:
         post.visibility === 'public'
           ? ('public' as const)

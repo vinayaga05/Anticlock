@@ -1648,6 +1648,63 @@ async function migrate() {
     `;
   });
 
+  /** Profile-scoped follow graph and privacy. */
+  await sql`
+    ALTER TABLE mobile_users
+      ADD COLUMN IF NOT EXISTS is_private boolean NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS allow_follow_requests boolean NOT NULL DEFAULT true,
+      ADD COLUMN IF NOT EXISTS show_follower_lists boolean NOT NULL DEFAULT true
+  `;
+  await sql`
+    ALTER TABLE providers
+      ADD COLUMN IF NOT EXISTS is_private boolean NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS allow_follow_requests boolean NOT NULL DEFAULT true,
+      ADD COLUMN IF NOT EXISTS show_follower_lists boolean NOT NULL DEFAULT true
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS profile_follows (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      follower_profile_id uuid NOT NULL,
+      follower_profile_type text NOT NULL CHECK (follower_profile_type IN ('personal', 'business')),
+      followed_profile_id uuid NOT NULL,
+      followed_profile_type text NOT NULL CHECK (followed_profile_type IN ('personal', 'business')),
+      status text NOT NULL CHECK (status IN ('pending', 'accepted')),
+      created_at timestamptz NOT NULL DEFAULT now(),
+      accepted_at timestamptz,
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      CONSTRAINT profile_follows_pair_uidx UNIQUE (follower_profile_id, followed_profile_id),
+      CONSTRAINT profile_follows_not_self CHECK (follower_profile_id <> followed_profile_id OR follower_profile_type <> followed_profile_type)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS profile_follows_followed_status_idx
+      ON profile_follows (followed_profile_id, status)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS profile_follows_follower_status_idx
+      ON profile_follows (follower_profile_id, status)
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS profile_blocks (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      blocker_profile_id uuid NOT NULL,
+      blocker_profile_type text NOT NULL CHECK (blocker_profile_type IN ('personal', 'business')),
+      blocked_profile_id uuid NOT NULL,
+      blocked_profile_type text NOT NULL CHECK (blocked_profile_type IN ('personal', 'business')),
+      created_at timestamptz NOT NULL DEFAULT now(),
+      CONSTRAINT profile_blocks_pair_uidx UNIQUE (blocker_profile_id, blocked_profile_id),
+      CONSTRAINT profile_blocks_not_self CHECK (blocker_profile_id <> blocked_profile_id OR blocker_profile_type <> blocked_profile_type)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS profile_blocks_blocker_idx
+      ON profile_blocks (blocker_profile_id, blocker_profile_type)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS profile_blocks_blocked_idx
+      ON profile_blocks (blocked_profile_id, blocked_profile_type)
+  `;
+
   console.log("Migrations applied.");
   await sql.end({ timeout: 5 });
 }

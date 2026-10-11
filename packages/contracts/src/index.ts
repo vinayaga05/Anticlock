@@ -8,6 +8,7 @@ export * from './booking.js';
 export * from './assistant.js';
 export * from './interests.js';
 export * from './publishing.js';
+export * from './profile-follows.js';
 export * from './payment.js';
 export * from './moderation.js';
 export * from './notifications.js';

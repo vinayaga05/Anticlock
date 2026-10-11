@@ -54,6 +54,10 @@ import {
 } from '@/shared/api/contentEngagement';
 import { useTabBarBottomInset } from '@/shared/navigation/tabBarInset';
 import type { MainTabParamList } from '@/shared/navigation/types';
+import {
+  buildLoopedClipFeed,
+  type LoopedClipFeedEntry,
+} from './clipFeedLoop';
 
 const DEFAULT_AUTHOR_AVATAR =
   'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&h=200&q=80';
@@ -196,6 +200,7 @@ export function ReelFeedScreen() {
   const pageHeight = Math.max(1, Math.round(windowHeight));
   const addToCart = useCartStore(s => s.add);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [playbackCycle, setPlaybackCycle] = useState(0);
   const [liked, setLiked] = useState<Record<string, boolean>>({});
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
@@ -214,8 +219,12 @@ export function ReelFeedScreen() {
   const likedByIdRef = useRef<Record<string, boolean>>({});
   const likeCountByIdRef = useRef<Record<string, number>>({});
   const likeRequestVersions = useRef<Record<string, number>>({});
-  const listRef = useRef<FlatList<ReelItem>>(null);
+  const listRef = useRef<FlatList<LoopedClipFeedEntry>>(null);
   const activeIndexRef = useRef(activeIndex);
+  const loopedFeedRef = useRef<LoopedClipFeedEntry[]>([]);
+  const activeReelIdRef = useRef<string | null>(null);
+  const feedSignatureRef = useRef('');
+  const loopJumpPendingRef = useRef(false);
   const pageFrameRef = useRef({ width: pageWidth, height: pageHeight });
   const analyticsSessionId = useRef<string | null>(null);
   if (!analyticsSessionId.current) {
@@ -297,10 +306,35 @@ export function ReelFeedScreen() {
         r.author?.toLowerCase().includes(genieQ),
     );
   }, [blockedProfileKeys, feedReels, genieQ]);
+  const loopedReels = useMemo(() => buildLoopedClipFeed(reels), [reels]);
+  loopedFeedRef.current = loopedReels;
 
   useEffect(() => {
-    setActiveClip(reels[activeIndex]?.id ?? null);
-  }, [activeIndex, reels, setActiveClip]);
+    const signature = reels.map(reel => reel.id).join('|');
+    const previousSignature = feedSignatureRef.current;
+    feedSignatureRef.current = signature;
+    if (!previousSignature || previousSignature === signature) return;
+
+    const retainedIndex = activeReelIdRef.current
+      ? reels.findIndex(reel => reel.id === activeReelIdRef.current)
+      : -1;
+    const nextIndex = retainedIndex >= 0 ? retainedIndex : 0;
+    activeIndexRef.current = nextIndex;
+    activeReelIdRef.current = reels[nextIndex]?.id ?? null;
+    setActiveIndex(nextIndex);
+    setPlaybackCycle(cycle => cycle + 1);
+    requestAnimationFrame(() => {
+      if (reels.length) {
+        listRef.current?.scrollToIndex({ index: nextIndex, animated: false });
+      }
+    });
+  }, [reels]);
+
+  useEffect(() => {
+    const activeEntry = loopedReels[activeIndex];
+    activeReelIdRef.current = activeEntry?.reel.id ?? null;
+    setActiveClip(activeEntry?.reel.id ?? null);
+  }, [activeIndex, loopedReels, setActiveClip]);
 
   useEffect(() => clearClipPlayback, [clearClipPlayback]);
 
@@ -459,11 +493,26 @@ export function ReelFeedScreen() {
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      if (viewableItems[0]?.index != null) {
-        const nextIndex = viewableItems[0].index;
-        activeIndexRef.current = nextIndex;
-        setActiveIndex(nextIndex);
-      }
+      if (viewableItems[0]?.index == null) return;
+      const nextIndex = viewableItems[0].index;
+      const entry = loopedFeedRef.current[nextIndex];
+      if (!entry) return;
+      activeIndexRef.current = nextIndex;
+      activeReelIdRef.current = entry.reel.id;
+      setActiveIndex(nextIndex);
+
+      if (!entry.loopSentinel || loopJumpPendingRef.current) return;
+      loopJumpPendingRef.current = true;
+      // The sentinel renders clip 1, then swaps to its canonical row without a
+      // visible transition. Remounting playback guarantees a zero-time start.
+      requestAnimationFrame(() => {
+        setPlaybackCycle(cycle => cycle + 1);
+        activeIndexRef.current = 0;
+        activeReelIdRef.current = loopedFeedRef.current[0]?.reel.id ?? null;
+        listRef.current?.scrollToIndex({ index: 0, animated: false });
+        setActiveIndex(0);
+        loopJumpPendingRef.current = false;
+      });
     },
   ).current;
 
@@ -628,14 +677,15 @@ export function ReelFeedScreen() {
   );
 
   const goToNextReel = useCallback(() => {
-    const next = activeIndex + 1;
-    if (next >= reels.length) return;
+    if (reels.length <= 1) return;
+    const next = Math.min(activeIndexRef.current + 1, loopedFeedRef.current.length - 1);
     activeIndexRef.current = next;
     listRef.current?.scrollToIndex({ index: next, animated: true });
     setActiveIndex(next);
-  }, [activeIndex, reels.length]);
+  }, [reels.length]);
 
-  const renderItem = ({ item, index }: { item: ReelItem; index: number }) => {
+  const renderItem = ({ item: entry, index }: { item: LoopedClipFeedEntry; index: number }) => {
+    const item = entry.reel;
     const isLiked = liked[item.id] ?? !!item.liked;
     const action = getReelAction(item);
     const musicLabel = item.title ? `♪ ${item.title}` : '♪ Original audio';
@@ -643,6 +693,7 @@ export function ReelFeedScreen() {
     return (
       <View style={[styles.reel, { height: pageHeight, width: pageWidth }]}>
         <VideoPlayer
+          key={`${entry.key}:playback:${playbackCycle}`}
           uri={item.videoUrl}
           muted={false}
           paused={index !== activeIndex || (commentsOpen && !playbackActive)}
@@ -827,8 +878,8 @@ export function ReelFeedScreen() {
       <FlatList
         ref={listRef}
         style={styles.list}
-        data={reels}
-        keyExtractor={item => item.id}
+        data={loopedReels}
+        keyExtractor={entry => entry.key}
         renderItem={renderItem}
         pagingEnabled
         scrollEnabled={!commentsOpen}

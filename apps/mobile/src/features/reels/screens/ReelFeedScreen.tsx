@@ -43,11 +43,13 @@ import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
 import { useClipPlaybackStore } from '@/shared/store/clipPlaybackStore';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   deleteContentClip,
   useProfileClipReelsQuery,
   useReelsQuery,
 } from '@/shared/api/hooks';
+import { evictDeletedClipFromCaches } from '@/shared/api/clipCacheEviction';
 import { canDeleteClip, withoutHiddenClips } from './clipOwnership';
 import {
   createAnalyticsEventId,
@@ -216,6 +218,7 @@ export function ReelFeedScreen() {
   const [blockedProfileKeys, setBlockedProfileKeys] = useState<
     ReadonlySet<string>
   >(() => new Set());
+  const queryClient = useQueryClient();
   const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -537,9 +540,15 @@ export function ReelFeedScreen() {
     }
   }, [refetch]);
 
-  const hideReel = useCallback((reelId: string) => {
-    setHiddenIds(previous => new Set(previous).add(reelId));
-  }, []);
+  const hideReel = useCallback(
+    (reelId: string) => {
+      setHiddenIds(previous => new Set(previous).add(reelId));
+      // Local state dies with this screen; also evict the Clip from the
+      // shared caches so profile players and other lists don't bring it back.
+      evictDeletedClipFromCaches(queryClient, reelId).catch(() => undefined);
+    },
+    [queryClient],
+  );
 
   const blockClipAuthor = useCallback(
     async (profile: NonNullable<ReelItem['authorProfile']>) => {

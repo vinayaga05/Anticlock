@@ -61,8 +61,11 @@ import {
 } from '@/shared/api/contentEngagement';
 import { useTabBarBottomInset } from '@/shared/navigation/tabBarInset';
 import type { MainTabParamList } from '@/shared/navigation/types';
+import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
+import { identityProfileType } from '@/shared/publishing/publisherSelection';
 import {
   buildLoopedClipFeed,
+  mergeLoadedReelPages,
   type LoopedClipFeedEntry,
 } from './clipFeedLoop';
 
@@ -206,7 +209,7 @@ export function ReelFeedScreen() {
   const pageWidth = Math.max(1, Math.round(windowWidth));
   const pageHeight = Math.max(1, Math.round(windowHeight));
   const addToCart = useCartStore(s => s.add);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [playbackCycle, setPlaybackCycle] = useState(0);
   const [liked, setLiked] = useState<Record<string, boolean>>({});
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
@@ -231,7 +234,7 @@ export function ReelFeedScreen() {
   const likeCountByIdRef = useRef<Record<string, number>>({});
   const likeRequestVersions = useRef<Record<string, number>>({});
   const listRef = useRef<FlatList<LoopedClipFeedEntry>>(null);
-  const activeIndexRef = useRef(activeIndex);
+  const currentIndexRef = useRef(currentIndex);
   const loopedFeedRef = useRef<LoopedClipFeedEntry[]>([]);
   const activeReelIdRef = useRef<string | null>(null);
   const feedSignatureRef = useRef('');
@@ -255,17 +258,39 @@ export function ReelFeedScreen() {
   const profilePlayback = Boolean(
     route.params?.profileType && route.params?.profileId,
   );
-  const globalReelsQuery = useReelsQuery(!profilePlayback);
+  const { active: activeViewerProfile } = useActiveProfile();
+  const globalReelsQuery = useReelsQuery(
+    !profilePlayback,
+    activeViewerProfile
+      ? {
+          id: activeViewerProfile.id,
+          type: identityProfileType(activeViewerProfile),
+        }
+      : undefined,
+  );
   const profileReelsQuery = useProfileClipReelsQuery(
     route.params?.profileType,
     route.params?.profileId,
   );
-  const queriedReels = profilePlayback
-    ? profileReelsQuery.data
-    : globalReelsQuery.data;
+  // Canonical server data only. Page overlap is removed by stable Reel id
+  // without creating client-side duplicate records.
+  const loadedReels = useMemo(
+    () =>
+      mergeLoadedReelPages(
+        (globalReelsQuery.data?.pages ?? []).map(page => page.items),
+      ),
+    [globalReelsQuery.data?.pages],
+  );
+  const queriedReels = profilePlayback ? profileReelsQuery.data : loadedReels;
   const refetch = profilePlayback
     ? profileReelsQuery.refetch
     : globalReelsQuery.refetch;
+  const hasNextPage = !profilePlayback && Boolean(globalReelsQuery.hasNextPage);
+  const isFetchingNextPage =
+    !profilePlayback && globalReelsQuery.isFetchingNextPage;
+  const hasReachedEndOfServerFeed = profilePlayback
+    ? true
+    : Boolean(globalReelsQuery.data) && !hasNextPage && !isFetchingNextPage;
   // Content-feed results are already block-filtered on the server. Hydrate the
   // same persisted block list for editorial/legacy Reels as well, whose public
   // endpoint deliberately has no viewer-specific server filter.
@@ -317,7 +342,10 @@ export function ReelFeedScreen() {
         r.author?.toLowerCase().includes(genieQ),
     );
   }, [blockedProfileKeys, feedReels, genieQ, hiddenIds]);
-  const loopedReels = useMemo(() => buildLoopedClipFeed(reels), [reels]);
+  const loopedReels = useMemo(
+    () => buildLoopedClipFeed(reels, hasReachedEndOfServerFeed),
+    [hasReachedEndOfServerFeed, reels],
+  );
   loopedFeedRef.current = loopedReels;
 
   useEffect(() => {
@@ -330,9 +358,9 @@ export function ReelFeedScreen() {
       ? reels.findIndex(reel => reel.id === activeReelIdRef.current)
       : -1;
     const nextIndex = retainedIndex >= 0 ? retainedIndex : 0;
-    activeIndexRef.current = nextIndex;
+    currentIndexRef.current = nextIndex;
     activeReelIdRef.current = reels[nextIndex]?.id ?? null;
-    setActiveIndex(nextIndex);
+    setCurrentIndex(nextIndex);
     setPlaybackCycle(cycle => cycle + 1);
     requestAnimationFrame(() => {
       if (reels.length) {
@@ -342,10 +370,10 @@ export function ReelFeedScreen() {
   }, [reels]);
 
   useEffect(() => {
-    const activeEntry = loopedReels[activeIndex];
+    const activeEntry = loopedReels[currentIndex];
     activeReelIdRef.current = activeEntry?.reel.id ?? null;
     setActiveClip(activeEntry?.reel.id ?? null);
-  }, [activeIndex, loopedReels, setActiveClip]);
+  }, [currentIndex, loopedReels, setActiveClip]);
 
   useEffect(() => clearClipPlayback, [clearClipPlayback]);
 
@@ -354,8 +382,8 @@ export function ReelFeedScreen() {
     if (!reelId || !reels.length) return;
     const idx = reels.findIndex(r => r.id === reelId);
     if (idx >= 0) {
-      activeIndexRef.current = idx;
-      setActiveIndex(idx);
+      currentIndexRef.current = idx;
+      setCurrentIndex(idx);
       requestAnimationFrame(() => {
         listRef.current?.scrollToIndex({ index: idx, animated: false });
       });
@@ -379,7 +407,7 @@ export function ReelFeedScreen() {
     pageFrameRef.current = { width: pageWidth, height: pageHeight };
     const frame = requestAnimationFrame(() => {
       listRef.current?.scrollToOffset({
-        offset: activeIndexRef.current * pageHeight,
+        offset: currentIndexRef.current * pageHeight,
         animated: false,
       });
     });
@@ -502,15 +530,38 @@ export function ReelFeedScreen() {
       });
   }, []);
 
+  const fetchNextServerPage = useCallback(() => {
+    if (
+      profilePlayback ||
+      !hasNextPage ||
+      isFetchingNextPage ||
+      globalReelsQuery.isFetching
+    ) return;
+    globalReelsQuery.fetchNextPage().catch(() => undefined);
+  }, [
+    globalReelsQuery,
+    hasNextPage,
+    isFetchingNextPage,
+    profilePlayback,
+  ]);
+  const fetchNextServerPageRef = useRef(fetchNextServerPage);
+  fetchNextServerPageRef.current = fetchNextServerPage;
+
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       if (viewableItems[0]?.index == null) return;
       const nextIndex = viewableItems[0].index;
       const entry = loopedFeedRef.current[nextIndex];
       if (!entry) return;
-      activeIndexRef.current = nextIndex;
+      currentIndexRef.current = nextIndex;
       activeReelIdRef.current = entry.reel.id;
-      setActiveIndex(nextIndex);
+      setCurrentIndex(nextIndex);
+
+      // Always attempt the next chronological page before the local loop is
+      // possible. Once hasNextPage is false this remains a no-op.
+      if (!entry.loopSentinel && nextIndex >= loopedFeedRef.current.length - 2) {
+        fetchNextServerPageRef.current();
+      }
 
       if (!entry.loopSentinel || loopJumpPendingRef.current) return;
       loopJumpPendingRef.current = true;
@@ -518,10 +569,10 @@ export function ReelFeedScreen() {
       // visible transition. Remounting playback guarantees a zero-time start.
       requestAnimationFrame(() => {
         setPlaybackCycle(cycle => cycle + 1);
-        activeIndexRef.current = 0;
+        currentIndexRef.current = 0;
         activeReelIdRef.current = loopedFeedRef.current[0]?.reel.id ?? null;
         listRef.current?.scrollToIndex({ index: 0, animated: false });
-        setActiveIndex(0);
+        setCurrentIndex(0);
         loopJumpPendingRef.current = false;
       });
     },
@@ -535,6 +586,13 @@ export function ReelFeedScreen() {
     setIsPullRefreshing(true);
     try {
       await refetch();
+      currentIndexRef.current = 0;
+      activeReelIdRef.current = null;
+      setCurrentIndex(0);
+      setPlaybackCycle(cycle => cycle + 1);
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToIndex({ index: 0, animated: false });
+      });
     } finally {
       setIsPullRefreshing(false);
     }
@@ -727,10 +785,10 @@ export function ReelFeedScreen() {
 
   const goToNextReel = useCallback(() => {
     if (reels.length <= 1) return;
-    const next = Math.min(activeIndexRef.current + 1, loopedFeedRef.current.length - 1);
-    activeIndexRef.current = next;
+    const next = Math.min(currentIndexRef.current + 1, loopedFeedRef.current.length - 1);
+    currentIndexRef.current = next;
     listRef.current?.scrollToIndex({ index: next, animated: true });
-    setActiveIndex(next);
+    setCurrentIndex(next);
   }, [reels.length]);
 
   const renderItem = ({ item: entry, index }: { item: LoopedClipFeedEntry; index: number }) => {
@@ -745,13 +803,13 @@ export function ReelFeedScreen() {
           key={`${entry.key}:playback:${playbackCycle}`}
           uri={item.videoUrl}
           muted={false}
-          paused={index !== activeIndex || (commentsOpen && !playbackActive)}
-          seekControllerId={index === activeIndex ? item.id : undefined}
+          paused={index !== currentIndex || (commentsOpen && !playbackActive)}
+          seekControllerId={index === currentIndex ? item.id : undefined}
           onSeekControllerChange={
-            index === activeIndex ? registerClipSeekController : undefined
+            index === currentIndex ? registerClipSeekController : undefined
           }
           onPlaybackProgress={(currentTime, _duration) => {
-            if (index !== activeIndex || (commentsOpen && !playbackActive)) {
+            if (index !== currentIndex || (commentsOpen && !playbackActive)) {
               return;
             }
             updateClipProgress(item.id, currentTime, _duration);
@@ -759,7 +817,7 @@ export function ReelFeedScreen() {
           }}
           onPlaybackComplete={duration => {
             if (
-              index !== activeIndex ||
+              index !== currentIndex ||
               (commentsOpen && !playbackActive) ||
               duration <= 0
             ) {
@@ -941,6 +999,8 @@ export function ReelFeedScreen() {
           index,
         })}
         onViewableItemsChanged={onViewableItemsChanged}
+        onEndReached={fetchNextServerPage}
+        onEndReachedThreshold={0.6}
         viewabilityConfig={{ itemVisiblePercentThreshold: 80 }}
         // iOS safe-area inset auto-adjust shrinks the scroll viewport after mount
         // and makes full-screen pages drift downward under the tab bar.

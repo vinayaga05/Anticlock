@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { apiRequest, ApiError } from './client';
 import { isApiEnabled } from './config';
 import { readStoredSession } from '@/shared/services/auth/authService';
@@ -89,6 +89,24 @@ export type ApiContentClipFeedItem = {
   shareCount: number;
   createdAt: string;
   publishedAt: string;
+  publisherProfileId: string;
+  publisherProfileType: PublisherProfileType;
+  publisher: {
+    id: string;
+    type: PublisherProfileType;
+    displayName: string;
+    handle: string | null;
+    avatarUrl: string | null;
+    verified: boolean;
+    businessCategory: string | null;
+  };
+  relationship?: {
+    followStatus: 'not_following' | 'requested' | 'following' | 'blocked';
+    isFollowing: boolean;
+    isRequested: boolean;
+    isBlocked: boolean;
+    canViewContent: boolean;
+  };
   /** Music the creator mixed in on-device (display/attribution only). */
   music?: {
     trackId: string;
@@ -218,24 +236,19 @@ function contentLocation(
   return { name: location.name, latitude, longitude };
 }
 
-function isPublishedReelFeedItem(
-  value: ApiReelFeedItem,
-): value is ApiReelFeedItem {
-  return value?.status === 'published' && isRemoteMediaUrl(value.playbackUrl);
-}
-
 function isPublishedContentClipFeedItem(
   value: unknown,
 ): value is ApiContentClipFeedItem {
   if (!value || typeof value !== 'object') return false;
   const item = value as Partial<ApiContentClipFeedItem>;
   const author = item.author;
+  const publisher = item.publisher;
   return (
     isNonEmptyString(item.id) &&
     item.format === 'clip' &&
     item.mediaType === 'video' &&
     (item.status === undefined || item.status === 'published') &&
-    item.visibility === 'public' &&
+    (item.visibility === 'public' || item.visibility === 'followers') &&
     isRemoteMediaUrl(item.playbackUrl) &&
     isNonEmptyString(item.duplicateClusterId) &&
     Boolean(author) &&
@@ -243,7 +256,11 @@ function isPublishedContentClipFeedItem(
       author?.type === 'provider' ||
       author?.type === 'business') &&
     isNonEmptyString(author?.id) &&
-    isNonEmptyString(author?.name)
+    isNonEmptyString(author?.name) &&
+    Boolean(publisher) &&
+    isNonEmptyString(publisher?.id) &&
+    isNonEmptyString(publisher?.displayName) &&
+    (publisher?.type === 'personal' || publisher?.type === 'business')
   );
 }
 
@@ -257,19 +274,19 @@ function contentMusicLabel(music: ApiContentClipFeedItem['music']): string {
 export function mapApiContentClipToItem(
   item: ApiContentClipFeedItem,
 ): ReelItem {
-  const author = item.author;
+  const publisher = item.publisher;
   return {
     id: item.id,
     // `title` drives the feed's "♪" label. Only Clips with on-device music
     // carry one; everything else keeps the honest "Original audio" fallback.
     title: contentMusicLabel(item.music),
-    author: author.name,
-    authorAvatarUrl: isRemoteMediaUrl(author.avatarUrl)
-      ? author.avatarUrl
+    author: publisher.displayName,
+    authorAvatarUrl: isRemoteMediaUrl(publisher.avatarUrl)
+      ? publisher.avatarUrl
       : undefined,
     authorProfile: {
-      type: author.type === 'user' ? 'user' : 'business',
-      id: author.id,
+      type: publisher.type === 'personal' ? 'user' : 'business',
+      id: publisher.id,
     },
     reportTarget: { kind: 'content_post', id: item.id },
     feedSource: 'content_post',
@@ -295,51 +312,6 @@ export function mapApiContentClipToItem(
     liked: item.viewerHasLiked === true,
     viewerCanManage: item.viewerCanManage === true,
   };
-}
-
-function normalizedPlaybackUrl(value: ReelItem['videoUrl']): string | null {
-  if (typeof value !== 'string' || !isRemoteMediaUrl(value)) return null;
-  try {
-    const url = new URL(value);
-    // Signed delivery URLs for the same video can have different query
-    // strings. Their resource path is the useful duplicate signal.
-    return `${url.protocol}//${url.host}${url.pathname}`;
-  } catch {
-    return value;
-  }
-}
-
-/**
- * Profile-published Clips take precedence, then editorial Reels fill any
- * remaining slots. Deduping both media URLs and duplicate clusters means the
- * legacy feed cannot reintroduce a video the personalized feed has excluded.
- */
-function mergePublishedClipFeeds(
-  contentClips: ReelItem[],
-  legacyReels: ReelItem[],
-): ReelItem[] {
-  const seenIds = new Set<string>();
-  const seenMedia = new Set<string>();
-  const seenClusters = new Set<string>();
-  const merged: ReelItem[] = [];
-
-  for (const item of [...contentClips, ...legacyReels]) {
-    const mediaKey = normalizedPlaybackUrl(item.videoUrl);
-    const clusterId = item.contentMetadata?.duplicateClusterId;
-    if (
-      seenIds.has(item.id) ||
-      (mediaKey !== null && seenMedia.has(mediaKey)) ||
-      (clusterId !== undefined && seenClusters.has(clusterId))
-    ) {
-      continue;
-    }
-    seenIds.add(item.id);
-    if (mediaKey !== null) seenMedia.add(mediaKey);
-    if (clusterId !== undefined) seenClusters.add(clusterId);
-    merged.push(item);
-  }
-
-  return merged;
 }
 
 export function useServiceTreesQuery(fallback: ApiServiceTree[]) {
@@ -474,50 +446,48 @@ export function useProfileClipReelsQuery(
   });
 }
 
-/**
- * In development this is the checked-in Cloudflare R2 Clip catalog. It keeps
- * local UI work pointed at the same remote delivery layer as production,
- * while production only accepts the server-personalized feed.
- */
-export function useReelsQuery(enabled = true) {
-  return useQuery({
-    queryKey: ['reels', 'feed', 'content-first', 'api'],
-    queryFn: async () => {
+/** Complete, server-ordered Clip feed with cursor pagination. */
+export function useReelsQuery(
+  enabled = true,
+  viewerProfile?: { id: string; type: PublisherProfileType },
+) {
+  return useInfiniteQuery({
+    queryKey: [
+      'reels',
+      'feed',
+      'complete-published',
+      viewerProfile?.type ?? 'personal',
+      viewerProfile?.id ?? 'default',
+      'api',
+    ],
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam }): Promise<{
+      items: ReelItem[];
+      nextCursor: string | null;
+    }> => {
       await ensureAuthToken();
-
-      const [contentResult, legacyResult] = await Promise.allSettled([
-        apiRequest<ApiContentClipFeedResponse>('/v1/content/feeds/clip'),
-        apiRequest<{ data: ApiReelFeedItem[] }>('/v1/reels'),
-      ]);
-
-      const contentClips =
-        contentResult.status === 'fulfilled' &&
-        Array.isArray(contentResult.value.items)
-          ? contentResult.value.items
+      const cursor = typeof pageParam === 'string' ? pageParam : null;
+      const cursorSuffix = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
+      const viewerSuffix = viewerProfile
+        ? `&viewerProfileType=${encodeURIComponent(viewerProfile.type)}&viewerProfileId=${encodeURIComponent(viewerProfile.id)}`
+        : '';
+      const response = await apiRequest<ApiContentClipFeedResponse>(
+        `/v1/content/feeds/clip?limit=20${cursorSuffix}${viewerSuffix}`,
+      );
+      return {
+        items: Array.isArray(response.items)
+          ? response.items
               .filter(isPublishedContentClipFeedItem)
               .map(mapApiContentClipToItem)
-          : [];
-      const legacyReels =
-        legacyResult.status === 'fulfilled' &&
-        Array.isArray(legacyResult.value.data)
-          ? legacyResult.value.data
-              .filter(isPublishedReelFeedItem)
-              .map(mapApiReelToItem)
-          : [];
-
-      return mergePublishedClipFeeds(
-        contentClips,
-        legacyReels,
-      );
+          : [],
+        nextCursor: response.nextCursor,
+      };
     },
-    enabled,
+    getNextPageParam: lastPage => lastPage.nextCursor ?? undefined,
+    enabled: enabled && isApiEnabled,
     staleTime: 0,
     refetchOnMount: 'always',
-
-    // A content-feed request reserves a viewer-specific batch. Background
-    // reconnects or polling would discard unseen clips, so the user refreshes
-    // explicitly when ready for another batch.
-    refetchOnReconnect: false,
+    refetchOnReconnect: true,
     refetchInterval: false,
   });
 }

@@ -606,6 +606,61 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
     assert.ok(ids(profile.json.items).includes(published.json.post.id));
   });
 
+  it("returns every eligible Clip newest-first through cursor pagination without watched suppression", async () => {
+    const created = [
+      await publish("A", { contentType: "clip", publisherProfileId: A, publisherProfileType: "personal", media: ["video"], mediaType: "video" }),
+      await publish("A", { contentType: "clip", publisherProfileId: BIZ1, publisherProfileType: "business", media: ["video"], mediaType: "video" }),
+      await publish("B", { contentType: "clip", publisherProfileId: B, publisherProfileType: "personal", media: ["video"], mediaType: "video" }),
+      await publish("C", { contentType: "clip", publisherProfileId: BIZ_C, publisherProfileType: "business", media: ["video"], mediaType: "video" }),
+    ];
+    const { eq } = await import("drizzle-orm");
+    for (let index = 0; index < created.length; index += 1) {
+      await db.update(schema.contentPosts).set({
+        publishedAt: new Date(Date.UTC(2030, 0, index + 1)),
+      }).where(eq(schema.contentPosts.id, created[index]!.postId));
+    }
+    const expected = created.map(item => item.postId).reverse();
+    const page1 = await call("C", "GET", "/v1/content/feeds/clip?limit=2");
+    assert.equal(page1.status, 200, JSON.stringify(page1.json));
+    assert.deepEqual(ids(page1.json.items), expected.slice(0, 2));
+    assert.ok(page1.json.nextCursor);
+    const page2 = await call(
+      "C",
+      "GET",
+      `/v1/content/feeds/clip?limit=2&cursor=${encodeURIComponent(page1.json.nextCursor)}`,
+    );
+    assert.deepEqual(ids(page2.json.items), expected.slice(2));
+    const allIds = [...ids(page1.json.items), ...ids(page2.json.items)];
+    let cursor = page2.json.nextCursor as string | null;
+    while (cursor) {
+      const page = await call("C", "GET", `/v1/content/feeds/clip?limit=2&cursor=${encodeURIComponent(cursor)}`);
+      allIds.push(...ids(page.json.items));
+      cursor = page.json.nextCursor;
+    }
+    assert.equal(new Set(allIds).size, allIds.length, "pages never duplicate Reel IDs");
+    for (const id of expected) assert.ok(allIds.includes(id));
+    const refreshed = await call("C", "GET", "/v1/content/feeds/clip?limit=2");
+    assert.deepEqual(ids(refreshed.json.items), expected.slice(0, 2), "watched Clips remain in canonical feed");
+    const newlyPublished = await publish("A", {
+      contentType: "clip",
+      publisherProfileId: BIZ1,
+      publisherProfileType: "business",
+      media: ["video"],
+      mediaType: "video",
+    });
+    await db.update(schema.contentPosts).set({
+      publishedAt: new Date(Date.UTC(2031, 0, 1)),
+    }).where(eq(schema.contentPosts.id, newlyPublished.postId));
+    const refreshedWithNew = await call("C", "GET", "/v1/content/feeds/clip?limit=2");
+    assert.equal(refreshedWithNew.json.items[0].id, newlyPublished.postId);
+    assert.equal(refreshedWithNew.json.items[0].publisherProfileId, BIZ1);
+    assert.equal(refreshedWithNew.json.items[0].publisher.displayName, "Asha Yoga Studio");
+    assert.deepEqual(
+      page1.json.items.map((item: Json) => [item.publisherProfileType, item.publisher.displayName]),
+      [["business", "Chitra Clinic"], ["personal", "Bala Viewer"]],
+    );
+  });
+
   it("enforces profile-scoped follows, private requests, rejection, blocking, and business privacy", async () => {
     const follow = (who: string, followerId: string, followerType: "personal" | "business", followedId: string, followedType: "personal" | "business") =>
       call(who, "POST", "/v1/profile-follows", {
@@ -762,5 +817,13 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
     assert.ok(ids(asBusinessFollower.json.items).includes(businessPost.postId));
     const outsider = await call("B", "GET", `/v1/content/profiles/business/${BIZ_C}/posts?format=clip`);
     assert.ok(!ids(outsider.json.items).includes(businessPost.postId));
+    const outsiderFeed = await call("B", "GET", "/v1/content/feeds/clip?limit=50");
+    assert.ok(!ids(outsiderFeed.json.items).includes(businessPost.postId));
+    const acceptedBusinessFeed = await call(
+      "A",
+      "GET",
+      `/v1/content/feeds/clip?limit=50&viewerProfileType=business&viewerProfileId=${BIZ1}`,
+    );
+    assert.ok(ids(acceptedBusinessFeed.json.items).includes(businessPost.postId));
   });
 });

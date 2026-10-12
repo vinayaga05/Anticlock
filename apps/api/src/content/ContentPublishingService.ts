@@ -51,7 +51,7 @@ import {
   type ViewerContext,
 } from "../publishing/publisher.js";
 import { canProfileViewContent, getProfilePrivacy, hasAcceptedFollow, profileConnectionCounts, profileFollowService, profilesAreBlocked } from "../social/ProfileFollowService.js";
-import { exceedsClipDuration } from "./musicTracks.js";
+import { exceedsClipDuration, musicAttributionFromEdit } from "./musicTracks.js";
 
 type Container = typeof contentContainers.$inferSelect;
 type Post = typeof contentPosts.$inferSelect;
@@ -596,6 +596,8 @@ export async function serializePosts(
         taggedUserIds: row.taggedMobileUserIds,
         location: row.location ?? null,
         visibility: row.visibility,
+        duplicateClusterId: row.duplicateClusterId,
+        music: musicAttributionFromEdit(row.edit),
         publisherProfileId: ref.id,
         publisherProfileType: ref.type,
         publisher,

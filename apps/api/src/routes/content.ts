@@ -786,11 +786,57 @@ contentMobileRoutes.post("/posts/:id/comments", async (c) => {
 });
 
 /**
- * Authenticated Clips feed. It claims both a post and its exact media cluster
- * for the same 90-day retention period, so refreshes and concurrent devices
- * cannot surface repeated videos or duplicate uploads to one viewer.
+ * Complete authenticated Clips feed. Published rows are ordered newest-first
+ * by `listPosts`, cursor-paginated, profile-attributed, and privacy-filtered.
+ * Watched state never removes a Reel from this canonical catalog.
  */
 contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    const query = ContentPostsQuerySchema.parse({
+      format: "clip",
+      limit: c.req.query("limit") ?? "20",
+      cursor: c.req.query("cursor"),
+    });
+    const viewerType = normalizePublisherType(c.req.query("viewerProfileType")) ?? "personal";
+    const viewerId = c.req.query("viewerProfileId") ?? mobileUserId;
+    const viewerProfile = (await resolveOwnedPublisher(mobileUserId, {
+      id: viewerId,
+      type: viewerType,
+    })).ref;
+    const result = await listPosts(mobileUserId, {
+      format: "clip",
+      viewerProfile,
+      limit: query.limit,
+      cursor: query.cursor,
+    });
+    const items = result.items.flatMap((post) => {
+      const video = post.media.find((item) => item.kind === "video");
+      if (!video || post.mediaType !== "video") return [];
+      return [{
+        ...post,
+        format: "clip" as const,
+        mediaType: "video" as const,
+        status: "published" as const,
+        playbackUrl: video.url,
+        duplicateClusterId: post.duplicateClusterId ?? post.id,
+        // Canonical ordering is publishedAt DESC. Recommendation scoring is
+        // deliberately out of scope for this temporary complete-feed mode.
+        trendingScore: 0,
+      }];
+    });
+    return c.json({ items, nextCursor: result.nextCursor });
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+/**
+ * Legacy delivery-claim/ranking feed retained temporarily for rollback and
+ * analytics comparison. The mobile app no longer calls this route.
+ */
+contentMobileRoutes.get("/feeds/clip-ranked-legacy", requireAuth, async (c) => {
   try {
     const mobileUserId = await requireActiveMobile(c.get("auth"));
     const limit = Math.min(

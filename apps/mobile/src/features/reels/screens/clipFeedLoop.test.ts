@@ -1,6 +1,7 @@
 import {
   buildLoopedClipFeed,
-  loopClipsFeedWhenExhausted,
+  loopCompleteClipsFeedWhenExhausted,
+  mergeLoadedReelPages,
   nextClipFeedIndex,
 } from './clipFeedLoop';
 import type { ReelItem } from '@/shared/types';
@@ -11,9 +12,12 @@ function reel(id: string): ReelItem {
 
 describe('temporary Clips feed loop', () => {
   it('cycles 1 → 2 → 3 → 1 → 2 → 3 without duplicate keys', () => {
-    expect(loopClipsFeedWhenExhausted).toBe(true);
+    expect(loopCompleteClipsFeedWhenExhausted).toBe(true);
     const loaded = [reel('1'), reel('2'), reel('3')];
-    const looped = buildLoopedClipFeed(loaded);
+    expect(buildLoopedClipFeed(loaded, false).map(entry => entry.reel.id)).toEqual([
+      '1', '2', '3',
+    ]);
+    const looped = buildLoopedClipFeed(loaded, true);
 
     expect(looped.map(entry => entry.reel.id)).toEqual(['1', '2', '3', '1']);
     expect(new Set(looped.map(entry => entry.key)).size).toBe(looped.length);
@@ -28,15 +32,24 @@ describe('temporary Clips feed loop', () => {
     expect(played).toEqual(['1', '2', '3', '1', '2', '3']);
   });
 
-  it('rebuilds the sentinel from refreshed server data including clip 4', () => {
+  it('rebuilds the loop after refresh with a newly published clip first', () => {
     const refreshed = buildLoopedClipFeed([
+      reel('4'),
       reel('1'),
       reel('2'),
       reel('3'),
-      reel('4'),
-    ]);
-    expect(refreshed.map(entry => entry.reel.id)).toEqual(['1', '2', '3', '4', '1']);
+    ], true);
+    expect(refreshed.map(entry => entry.reel.id)).toEqual(['4', '1', '2', '3', '4']);
     expect(new Set(refreshed.map(entry => entry.key)).size).toBe(5);
+  });
+
+  it('merges paginated server pages without duplicate Reel IDs', () => {
+    const merged = mergeLoadedReelPages([
+      [reel('4'), reel('3')],
+      [reel('3'), reel('2')],
+      [reel('1')],
+    ]);
+    expect(merged.map(item => item.id)).toEqual(['4', '3', '2', '1']);
   });
 
   it('does not duplicate an empty or single-clip feed', () => {

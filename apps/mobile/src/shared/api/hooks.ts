@@ -84,6 +84,8 @@ export type ApiContentClipFeedItem = {
   viewCount: number;
   /** The authenticated viewer's durable like state for this content Clip. */
   viewerHasLiked: boolean;
+  /** True when the viewer owns (or manages the business that owns) it. */
+  viewerCanManage?: boolean;
   shareCount: number;
   createdAt: string;
   publishedAt: string;
@@ -291,6 +293,7 @@ export function mapApiContentClipToItem(
     likeCount: nonNegativeNumber(item.likeCount),
     commentCount: nonNegativeNumber(item.commentCount),
     liked: item.viewerHasLiked === true,
+    viewerCanManage: item.viewerCanManage === true,
   };
 }
 
@@ -439,7 +442,16 @@ export function mapApiProfileClipToItem(item: ApiContentPost): ReelItem | null {
     likeCount: item.likeCount ?? 0,
     commentCount: item.commentCount ?? 0,
     liked: item.viewerHasLiked === true,
+    viewerCanManage: item.viewerCanManage === true,
   };
+}
+
+/** Removes the viewer's own Clip everywhere (server sets it to removed). */
+export async function deleteContentClip(id: string): Promise<void> {
+  await ensureAuthToken();
+  await apiRequest(`/v1/content/posts/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
 }
 
 /** Clips published by one profile, in the profile's chronological order. */

@@ -86,6 +86,8 @@ export interface ReelItem {
   };
   /** Where this feed item originated. Kept separate from its visual shape. */
   feedSource?: 'legacy_reel' | 'content_post';
+  /** True when the signed-in viewer may delete this Clip (its owner). */
+  viewerCanManage?: boolean;
   /**
    * Creator-post metadata carried from the authenticated content feed. This
    * stays structured so UI surfaces can add tags or location without parsing

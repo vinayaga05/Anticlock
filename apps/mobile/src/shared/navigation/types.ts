@@ -62,7 +62,24 @@ export type RootStackParamList = {
   MyBookings: undefined;
   Communities: undefined;
   Inbox: undefined;
-  Thread: { conversationId: string };
+  Call: {
+    mode: 'audio' | 'video';
+    name: string;
+    userId?: string;
+    avatarUrl?: string | null;
+  };
+  Thread: {
+    conversationId: string;
+    channelId?: string;
+    channelType?: string;
+    profile?: {
+      id: string;
+      type: 'personal' | 'business';
+      displayName: string;
+      avatarUrl: string | null;
+      verified: boolean;
+    };
+  };
   ServiceTree: { treeId: string; q?: string };
   ServiceCategory: {
     treeId: string;

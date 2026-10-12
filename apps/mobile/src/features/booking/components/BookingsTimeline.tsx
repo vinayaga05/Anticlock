@@ -11,7 +11,6 @@ import { NextUpBookingCard } from '@/features/booking/components/NextUpBookingCa
 import { UnifiedBookingCard } from '@/features/booking/components/UnifiedBookingCard';
 import { useBookingsQuery } from '@/shared/api';
 import { isApiEnabled } from '@/shared/api/config';
-import { getApiToken } from '@/shared/api/client';
 import { mapApiBookingToConsolidated } from '@/shared/utils/bookingMappers';
 import {
   applyAdvancedFilters,
@@ -21,7 +20,6 @@ import {
   ConsolidatedBooking,
   DEFAULT_ADVANCED_FILTERS,
   filterBookings,
-  getConsolidatedBookings,
   getPastBookings,
   groupBookingsByTimeline,
   navigateBookingTarget,
@@ -48,16 +46,13 @@ export function BookingsTimeline({
   const sheetOpen = filterSheetOpen ?? internalSheetOpen;
   const setSheetOpen = onFilterSheetOpenChange ?? setInternalSheetOpen;
 
-  // Fetch bookings from API (with mock fallback)
-  const { data: apiData, isLoading, error } = useBookingsQuery('all');
+  // Bookings are server-owned; never show fixture bookings to signed-in users.
+  const { data: apiData, isLoading, error, refetch } = useBookingsQuery('all');
 
   const allBookings = useMemo(() => {
-    // Authenticated API data only; no token keeps the mock timeline.
-    if (isApiEnabled && getApiToken() && apiData?.bookings) {
-      return apiData.bookings.map(mapApiBookingToConsolidated);
-    }
-    // Otherwise fall back to mock data
-    return getConsolidatedBookings();
+    return isApiEnabled
+      ? (apiData?.bookings ?? []).map(mapApiBookingToConsolidated)
+      : [];
   }, [apiData]);
 
   const filtered = useMemo(() => {
@@ -125,7 +120,7 @@ export function BookingsTimeline({
           title="Failed to load bookings"
           description="Please check your connection and try again."
           actionLabel="Retry"
-          onAction={() => {}}
+          onAction={() => void refetch()}
         />
       </View>
     );

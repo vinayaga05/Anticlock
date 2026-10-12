@@ -276,6 +276,11 @@ async function upsertPublishedReel(
 }
 
 async function main() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'R2 clip import is disabled in production. Upload media through the Admin, then review and publish it through the audited publishing flow.',
+    );
+  }
   const uploadDirArg = process.argv.find((_, i, arr) => arr[i - 1] === '--upload-dir');
   const bucket = process.env.R2_BUCKET_PUBLIC?.trim() ?? 'reels';
   const { accountId, accessKeyId, secretAccessKey } = resolveR2Credentials();

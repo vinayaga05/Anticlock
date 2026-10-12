@@ -55,6 +55,7 @@ import { ChallengeDetailScreen } from '@/features/community/screens/ChallengeDet
 import { ChallengeParticipateScreen } from '@/features/community/screens/ChallengeParticipateScreen';
 import { InboxScreen } from '@/features/messages/screens/InboxScreen';
 import { ThreadScreen } from '@/features/messages/screens/ThreadScreen';
+import { CallScreen } from '@/features/calls/screens/CallScreen';
 import { ServiceTreeScreen } from '@/features/services/screens/ServiceTreeScreen';
 import { ServiceCategoryScreen } from '@/features/services/screens/ServiceCategoryScreen';
 import { UniversalDetailScreen } from '@/features/services/screens/UniversalDetailScreen';
@@ -300,6 +301,11 @@ export function RootNavigator() {
               name="Thread"
               component={ThreadScreen}
               options={{ title: 'Chat' }}
+            />
+            <Stack.Screen
+              name="Call"
+              component={CallScreen}
+              options={{ headerShown: false, presentation: 'fullScreenModal' }}
             />
             <Stack.Screen
               name="ServiceTree"

@@ -68,7 +68,7 @@ function initialAdminCredentials() {
 }
 
 async function seed() {
-  const seedDemoData = enabled('SEED_DEMO_DATA', !isProduction);
+  const seedDemoData = !isProduction && enabled('SEED_DEMO_DATA', true);
   const roleValues = RoleSchema.options.map(id => ({
     id,
     name: id

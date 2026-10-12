@@ -31,6 +31,8 @@ import {
   contentPostComments,
   contentPostLikes,
   contentPosts,
+  mobileUsers,
+  providers,
 } from "../db/schema.js";
 import { mediaService } from "../media/MediaService.js";
 import {
@@ -690,6 +692,22 @@ export async function getProfileSummary(
     throw appError("Profile not found", "not_found", 404);
   }
   const now = new Date();
+  const details = ref.type === "personal"
+    ? await db.select({ bio: mobileUsers.bio, location: mobileUsers.location, website: mobileUsers.website })
+        .from(mobileUsers).where(eq(mobileUsers.id, ref.id)).limit(1).then(rows => rows[0] ?? null)
+    : await db.select({ publicProfile: providers.publicProfile })
+        .from(providers).where(eq(providers.id, ref.id)).limit(1).then(rows => {
+          const common = (rows[0]?.publicProfile?.common ?? {}) as Record<string, any>;
+          const profile = (common.profile ?? {}) as Record<string, unknown>;
+          const location = (common.location ?? {}) as Record<string, unknown>;
+          const city = typeof location.city === "string" ? location.city : "";
+          const area = typeof location.area === "string" ? location.area : "";
+          return {
+            bio: typeof profile.description === "string" ? profile.description : null,
+            location: [area, city].filter(Boolean).join(", ") || null,
+            website: null,
+          };
+        });
   const relationship = await profileFollowService.relationship(viewerProfile, ref);
   const privacy = await getProfilePrivacy(ref);
   const maySeeProfileContent = relationship.canViewContent;
@@ -713,6 +731,7 @@ export async function getProfileSummary(
   const socialCounts = await profileConnectionCounts(ref);
   return {
     publisher,
+    details,
     relationship,
     ...relationship,
     isPrivate: privacy.isPrivate,

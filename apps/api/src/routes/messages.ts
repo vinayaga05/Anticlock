@@ -7,7 +7,12 @@ import {
   createChannelResponseSchema,
   streamTokenResponseSchema,
 } from '@anticlock/contracts';
-import { profilesAreBlocked } from '../social/ProfileFollowService.js';
+import {
+  getProfilePrivacy,
+  hasAcceptedFollow,
+  profilesAreBlocked,
+} from '../social/ProfileFollowService.js';
+import { loadPublisher, resolveOwnedPublisher } from '../publishing/publisher.js';
 
 const messagesRoutes = new Hono<AppEnv>();
 
@@ -78,24 +83,52 @@ messagesRoutes.post('/channels', requireAuth, async (c) => {
     );
   }
 
-  const { otherUserId } = parsed.data;
+  const { otherProfile, viewerProfile } = parsed.data;
   const streamClient = getStreamClient();
   const service = new StreamChatService(streamClient);
 
   try {
-    if (await profilesAreBlocked(
-      { type: 'personal', id: userId },
-      { type: 'personal', id: otherUserId },
-    )) {
+    const viewer = await resolveOwnedPublisher(userId, viewerProfile);
+    const target = { id: otherProfile.id, type: otherProfile.type } as const;
+    const targetProfile = await loadPublisher(target);
+    if (!targetProfile) {
+      return c.json({ error: { code: 'not_found', message: 'Profile unavailable' } }, 404);
+    }
+    const targetPrivacy = await getProfilePrivacy(target);
+    if (await profilesAreBlocked(viewer.ref, target)) {
       return c.json(
         { error: { code: 'profile_blocked', message: 'Conversation unavailable' } },
         403,
       );
     }
-    const channelId = await service.createOrGetChannel(userId, otherUserId);
+    // Messaging policy: public profiles may be messaged; private profiles
+    // require an accepted follow. A pending request does not grant access.
+    if (targetPrivacy.isPrivate && !(await hasAcceptedFollow(viewer.ref, target))) {
+      return c.json(
+        { error: { code: 'private_profile', message: 'Follow this private profile before messaging' } },
+        403,
+      );
+    }
+    const channelId = await service.createOrGetProfileChannel({
+      viewerUserId: userId,
+      targetUserId: targetPrivacy.ownerUserId,
+      viewerProfile: {
+        id: viewer.ref.id,
+        type: viewer.ref.type,
+        name: viewer.publisher.displayName,
+        image: viewer.publisher.avatarUrl,
+      },
+      targetProfile: {
+        id: target.id,
+        type: target.type,
+        name: targetProfile.displayName,
+        image: targetProfile.avatarUrl,
+      },
+    });
 
     const response = createChannelResponseSchema.parse({
       channelId,
+      profile: targetProfile,
     });
 
     return c.json(response);
@@ -113,6 +146,13 @@ messagesRoutes.post('/channels', requireAuth, async (c) => {
       return c.json(
         { error: { code: 'user_not_found', message: error.message } },
         404
+      );
+    }
+
+    if (typeof error?.status === 'number' && error.status >= 400 && error.status < 500) {
+      return c.json(
+        { error: { code: error.code ?? 'conversation_unavailable', message: error.message ?? 'Conversation unavailable' } },
+        error.status as 400 | 401 | 403 | 404 | 409 | 422,
       );
     }
 

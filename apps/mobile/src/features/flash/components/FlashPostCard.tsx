@@ -19,6 +19,7 @@ import { PostEndDivider } from '@/features/flash/components/PostEndDivider';
 import { ReactionPicker } from '@/features/flash/components/ReactionPicker';
 import { FlashShareSheet } from '@/features/flash/components/FlashShareSheet';
 import { conversations } from '@/shared/data/mocks';
+import { UserCallActions } from '@/features/calls/components/UserCallActions';
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
 
 const CONTENT_PAD = 12;
@@ -186,6 +187,13 @@ export function FlashPostCard({ post }: Props) {
               <Text style={[styles.followLabel, { color: theme.colors.primary }]}>Follow</Text>
             </PressableScale>
           ) : null}
+          {post.isOwn ? null : (
+            <UserCallActions
+              name={post.author.name}
+              userId={post.author.id}
+              avatarUrl={post.author.avatarUrl}
+            />
+          )}
           <PressableScale
             onPress={openMenu}
             accessibilityLabel="Post menu"

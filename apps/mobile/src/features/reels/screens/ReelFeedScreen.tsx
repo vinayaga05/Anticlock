@@ -13,6 +13,7 @@ import {
   StyleSheet,
   Text,
   Alert,
+  ActivityIndicator,
   useWindowDimensions,
   View,
   ViewToken,
@@ -51,6 +52,10 @@ import {
 } from '@/shared/api/hooks';
 import { evictDeletedClipFromCaches } from '@/shared/api/clipCacheEviction';
 import { canDeleteClip, withoutHiddenClips } from './clipOwnership';
+import { useContentProfileQuery } from '@/shared/api/storyHooks';
+import { useProfileFollowMutation } from '@/shared/api/profileFollows';
+import { createOrGetChannel } from '@/shared/api/messagesClient';
+import { useStreamChat } from '@/shared/providers/StreamChatProvider';
 import {
   createAnalyticsEventId,
   recordReelAnalyticsEvent,
@@ -146,6 +151,97 @@ function TopChromeButton({
         <AppIcon name={icon} size={22} color="#fff" strokeWidth={1.85} />
       </View>
     </PressableScale>
+  );
+}
+
+/**
+ * Social actions stay on the Clip itself, so viewers can follow or start a
+ * profile-scoped conversation without first opening the profile tab.
+ */
+function ClipCreatorActions({ item }: { item: ReelItem }) {
+  const navigation = useNavigation<any>();
+  const { active } = useActiveProfile();
+  const { isReady: chatReady } = useStreamChat();
+  const [openingChat, setOpeningChat] = useState(false);
+  const target = item.authorProfile
+    ? {
+        id: item.authorProfile.id,
+        type: item.authorProfile.type === 'business' ? ('business' as const) : ('personal' as const),
+      }
+    : null;
+  const viewer = active
+    ? { id: active.id, type: identityProfileType(active) }
+    : null;
+  const profileQuery = useContentProfileQuery(target?.type, target?.id, viewer);
+  const profile = profileQuery.data;
+  const relationship = profile?.relationship;
+  const followMutation = useProfileFollowMutation(viewer, target);
+  const isOwnProfile = Boolean(profile?.viewerCanManage) || Boolean(target && viewer && target.id === viewer.id && target.type === viewer.type);
+
+  if (!target || isOwnProfile) return null;
+
+  const status = relationship?.followStatus;
+  const label = status === 'following' ? 'Following' : status === 'requested' ? 'Requested' : 'Follow';
+  const canMessage = chatReady && !relationship?.isBlocked && !(profile?.isPrivate && status !== 'following');
+
+  const updateFollow = (action: 'follow' | 'unfollow') => {
+    followMutation.mutate(action, {
+      onError: error => {
+        Alert.alert('Couldn’t update follow', error instanceof Error ? error.message : 'Please try again.');
+      },
+    });
+  };
+
+  const onFollowPress = () => {
+    if (!relationship?.canFollow || followMutation.isPending) return;
+    if (status === 'following' || status === 'requested') {
+      Alert.alert(label, undefined, [
+        { text: status === 'requested' ? 'Cancel request' : 'Unfollow', style: 'destructive', onPress: () => updateFollow('unfollow') },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+      return;
+    }
+    updateFollow('follow');
+  };
+
+  const onMessagePress = async () => {
+    if (!viewer || !target || !canMessage || openingChat) return;
+    setOpeningChat(true);
+    try {
+      const result = await createOrGetChannel(target, viewer);
+      navigation.navigate('Thread', {
+        conversationId: result.channelId,
+        channelId: result.channelId,
+        profile: result.profile,
+      });
+    } catch (error) {
+      Alert.alert('Couldn’t open chat', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setOpeningChat(false);
+    }
+  };
+
+  return (
+    <View style={styles.creatorActions}>
+      <PressableScale
+        accessibilityLabel={`${label} ${item.author}`}
+        accessibilityState={{ disabled: followMutation.isPending || !relationship?.canFollow }}
+        disabled={followMutation.isPending || !relationship?.canFollow}
+        onPress={onFollowPress}
+        style={[styles.creatorActionButton, status === 'following' || status === 'requested' ? styles.creatorActionSecondary : styles.creatorActionPrimary]}>
+        {followMutation.isPending ? <ActivityIndicator size="small" color="#fff" /> : <AppIcon name={status === 'following' ? 'follow' : 'user'} size={15} color="#fff" strokeWidth={2} />}
+        <Text style={styles.creatorActionText}>{label}</Text>
+      </PressableScale>
+      <PressableScale
+        accessibilityLabel={`Message ${item.author}`}
+        accessibilityState={{ disabled: !canMessage || openingChat }}
+        disabled={!canMessage || openingChat}
+        onPress={() => void onMessagePress()}
+        style={[styles.creatorActionButton, styles.creatorActionSecondary, (!canMessage || openingChat) ? styles.creatorActionDisabled : {}]}>
+        {openingChat ? <ActivityIndicator size="small" color="#fff" /> : <AppIcon name="message-circle" size={15} color="#fff" strokeWidth={2} />}
+        <Text style={styles.creatorActionText}>Message</Text>
+      </PressableScale>
+    </View>
   );
 }
 
@@ -272,8 +368,9 @@ export function ReelFeedScreen() {
     route.params?.profileType,
     route.params?.profileId,
   );
-  // Canonical server data only. Page overlap is removed by stable Reel id
-  // without creating client-side duplicate records.
+  // `loadedReels` is the one canonical collection used by the global feed.
+  // It only contains server-published Clips and preserves page order
+  // (publishedAt DESC) while removing overlap caused by refreshes/cursors.
   const loadedReels = useMemo(
     () =>
       mergeLoadedReelPages(
@@ -290,7 +387,9 @@ export function ReelFeedScreen() {
     !profilePlayback && globalReelsQuery.isFetchingNextPage;
   const hasReachedEndOfServerFeed = profilePlayback
     ? true
-    : Boolean(globalReelsQuery.data) && !hasNextPage && !isFetchingNextPage;
+    : Boolean(globalReelsQuery.data) &&
+      !hasNextPage &&
+      !isFetchingNextPage;
   // Content-feed results are already block-filtered on the server. Hydrate the
   // same persisted block list for editorial/legacy Reels as well, whose public
   // endpoint deliberately has no viewer-specific server filter.
@@ -536,7 +635,9 @@ export function ReelFeedScreen() {
       !hasNextPage ||
       isFetchingNextPage ||
       globalReelsQuery.isFetching
-    ) return;
+    ) {
+      return;
+    }
     globalReelsQuery.fetchNextPage().catch(() => undefined);
   }, [
     globalReelsQuery,
@@ -557,8 +658,10 @@ export function ReelFeedScreen() {
       activeReelIdRef.current = entry.reel.id;
       setCurrentIndex(nextIndex);
 
-      // Always attempt the next chronological page before the local loop is
-      // possible. Once hasNextPage is false this remains a no-op.
+      // Request the following chronological page before a viewer reaches the
+      // current tail. The loop sentinel is only appended after the server has
+      // explicitly exhausted this cursor, so this never starts a local cycle
+      // while another server page is available.
       if (!entry.loopSentinel && nextIndex >= loopedFeedRef.current.length - 2) {
         fetchNextServerPageRef.current();
       }
@@ -586,6 +689,8 @@ export function ReelFeedScreen() {
     setIsPullRefreshing(true);
     try {
       await refetch();
+      // A refresh starts the next cycle from the newest server page. The
+      // incoming pages are reconciled by stable Reel id above.
       currentIndexRef.current = 0;
       activeReelIdRef.current = null;
       setCurrentIndex(0);
@@ -930,6 +1035,7 @@ export function ReelFeedScreen() {
             />
             <Text style={styles.creator}>@{item.author}</Text>
           </PressableScale>
+          <ClipCreatorActions item={item} />
           <Text style={styles.caption} numberOfLines={3}>
             {item.caption}
           </Text>
@@ -1133,6 +1239,29 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
+  creatorActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+  },
+  creatorActionButton: {
+    minHeight: 34,
+    paddingHorizontal: 11,
+    borderRadius: 17,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  creatorActionPrimary: { backgroundColor: '#14B8A6' },
+  creatorActionSecondary: {
+    backgroundColor: 'rgba(0,0,0,0.40)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.72)',
+  },
+  creatorActionDisabled: { opacity: 0.55 },
+  creatorActionText: { color: '#fff', fontSize: 13, fontWeight: '800' },
   sideAction: {
     alignItems: 'center',
     gap: 4,

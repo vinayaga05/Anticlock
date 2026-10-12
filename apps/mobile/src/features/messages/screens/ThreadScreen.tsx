@@ -1,5 +1,6 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
+  Image,
   StyleSheet,
   Text,
   View,
@@ -15,6 +16,7 @@ import { RootStackParamList } from '@/shared/navigation/types';
 import { Message } from '@/shared/types';
 import { FlatList, TextInput } from 'react-native';
 import { IconButton } from '@/shared/components/IconButton';
+import { AppIcon } from '@/shared/components/AppIcon';
 
 export function ThreadScreen() {
   const theme = useTheme();
@@ -30,7 +32,12 @@ export function ThreadScreen() {
   );
   const [draft, setDraft] = useState('');
 
-  const title = useMemo(() => conversation?.name ?? 'Chat', [conversation]);
+  const profileMembers = channel?.data?.profile_members as Array<{ user_id?: string; profile_id?: string; name?: string; image?: string | null; profile_type?: 'personal' | 'business' }> | undefined;
+  const peerProfile = profileMembers?.find(member => member.user_id !== client?.userID);
+  const ownProfile = profileMembers?.find(member => member.user_id === client?.userID);
+  const title = route.params.profile?.displayName ?? peerProfile?.name ?? conversation?.name ?? 'Chat';
+  const avatarUrl = route.params.profile?.avatarUrl ?? peerProfile?.image ?? null;
+  const profileType = route.params.profile?.type ?? peerProfile?.profile_type;
 
   // Load Stream channel if available
   useEffect(() => {
@@ -94,6 +101,20 @@ export function ThreadScreen() {
       <SafeAreaView
         style={[styles.root, { backgroundColor: theme.colors.background }]}
         edges={['bottom']}>
+        <View style={[styles.chatHeader, { borderBottomColor: theme.colors.borderSoft }]}>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.chatAvatar} />
+          ) : (
+            <View style={[styles.chatAvatar, styles.avatarFallback, { backgroundColor: theme.colors.primarySoft }]}>
+              <AppIcon name={profileType === 'business' ? 'shop' : 'profile'} size={19} color={theme.colors.primary} />
+            </View>
+          )}
+          <View style={{ flex: 1 }}>
+            <Text numberOfLines={1} style={[theme.typography.section, { color: theme.colors.textPrimary }]}>{title}</Text>
+            {profileType ? <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>{profileType === 'business' ? 'Business profile' : 'Personal profile'}{ownProfile?.name ? ` · As ${ownProfile.name}` : ''}</Text> : null}
+          </View>
+          {route.params.profile?.verified || peerProfile?.profile_type === 'business' ? <AppIcon name="verified" size={16} color={theme.colors.primary} /> : null}
+        </View>
         <Channel channel={channel}>
           <MessageList />
           <MessageComposer />
@@ -183,6 +204,9 @@ export function ThreadScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  chatHeader: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth },
+  chatAvatar: { width: 38, height: 38, borderRadius: 19 },
+  avatarFallback: { alignItems: 'center', justifyContent: 'center' },
   centerContainer: {
     flex: 1,
     alignItems: 'center',

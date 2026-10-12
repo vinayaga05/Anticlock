@@ -36,7 +36,6 @@ export function r2PublicDeliveryUrl(key: string): string | null {
 export class R2ObjectStorageProvider implements ObjectStorageProvider {
   readonly name = 'r2' as const;
   private client: S3Client;
-  private publicBase: string | undefined;
 
   constructor() {
     const accountId = process.env.R2_ACCOUNT_ID;
@@ -58,7 +57,6 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
         secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
       },
     });
-    this.publicBase = process.env.R2_PUBLIC_BASE_URL?.trim();
   }
 
   async createUploadTarget(input: {
@@ -208,14 +206,10 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
     expiresInSeconds?: number;
     transform?: MediaTransform;
   }): Promise<string | null> {
-    if (input.accessLevel === 'public' && this.publicBase) {
-      const base = r2PublicDeliveryUrl(input.key)!;
-      // Cloudflare Images transform hook when configured on the public base.
-      if (input.transform) {
-        return `${base}?transform=${input.transform}`;
-      }
-      return base;
-    }
+    // Never expose raw R2 keys through a public custom domain. Every delivery
+    // URL must be minted by the API after its caller has checked publication,
+    // visibility, moderation, and ownership rules. Signed URLs also keep the
+    // bucket private and naturally expire if an asset is later unpublished.
     const command = new GetObjectCommand({
       Bucket: bucketName(input.bucket),
       Key: input.key,

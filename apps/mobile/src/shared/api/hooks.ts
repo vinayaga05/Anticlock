@@ -135,16 +135,6 @@ export type ApiCmsBanner = {
   imageUrl: string | null;
 };
 
-/** Temporary local fallback shown until the CMS has a published banner. */
-const MOCK_CMS_BANNERS: ApiCmsBanner[] = [
-  {
-    id: 'mock-health-ad',
-    title: 'Complete health check-ups, made easy',
-    imageUrl:
-      'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1200&h=500&q=85',
-  },
-];
-
 function ensureAuthToken() {
   const session = readStoredSession();
   if (!session?.token) {
@@ -332,17 +322,14 @@ export function useServiceTreesQuery(fallback: ApiServiceTree[]) {
 
 export function useCmsBannersQuery() {
   return useQuery({
-    queryKey: ['cms', 'banners', isApiEnabled ? 'api' : 'mock'],
+    queryKey: ['cms', 'banners', 'api'],
     queryFn: async () => {
-      if (!isApiEnabled) return MOCK_CMS_BANNERS;
+      if (!isApiEnabled) return [];
       const res = await apiRequest<{ data: ApiCmsBanner[] }>(
         '/v1/media/banners',
       );
-      const live = res.data.filter(b => Boolean(b.imageUrl));
-      return live.length ? live : MOCK_CMS_BANNERS;
+      return res.data.filter(b => Boolean(b.imageUrl));
     },
-    initialData: MOCK_CMS_BANNERS,
-    placeholderData: MOCK_CMS_BANNERS,
     staleTime: 60_000,
   });
 }

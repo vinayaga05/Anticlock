@@ -14,10 +14,7 @@ import { useTheme } from '@/shared/hooks/useTheme';
 import { Button } from '@/shared/components/Button';
 import { FilterPills } from '@/shared/components/FilterPills';
 import { PressableScale } from '@/shared/components/PressableScale';
-import { PostMedia, PostVisibility } from '@/shared/data/flash/types';
-import { useEngagementStore } from '@/shared/services/engagementRepository';
-import { CURRENT_USER } from '@/shared/data/flash';
-import { getFlashCloudflareVideo } from '@/shared/data/cloudflareVideos';
+import { PostVisibility } from '@/shared/data/flash/types';
 import {
   ensureContentDraft,
   usePublishContentMutation,
@@ -34,7 +31,6 @@ import {
 } from '@/features/reels/media/clipMediaPicker';
 import type { PickedClipVideo, PickedClipCover } from '@/features/reels/media/clipMediaPicker';
 
-const canvaSampleVideo = getFlashCloudflareVideo();
 
 const VISIBILITY: { id: PostVisibility; label: string }[] = [
   { id: 'public', label: 'Public' },
@@ -44,36 +40,16 @@ const VISIBILITY: { id: PostVisibility; label: string }[] = [
   { id: 'only_me', label: 'Only me' },
 ];
 
-const SAMPLE_MEDIA: PostMedia[] = [
-  {
-    id: 'sample-img',
-    type: 'image',
-    url: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=800&h=600&q=80',
-  },
-  {
-    id: 'sample-vid',
-    type: 'video',
-    url:
-      canvaSampleVideo?.url ??
-      require('@/shared/assets/videos/canva/yoga-flow.mp4'),
-    posterUrl:
-      canvaSampleVideo?.posterUrl ??
-      'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=800&h=600&q=80',
-  },
-];
-
 export function FlashComposerScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const publishPost = useEngagementStore(s => s.publishPost);
   const publisher = usePublisherSelection('flash');
   const { identities, identity } = publisher;
   const publishContent = usePublishContentMutation();
 
   const [text, setText] = useState('');
   const [visibility, setVisibility] = useState<PostVisibility>('public');
-  const [media, setMedia] = useState<PostMedia[]>([]);
   const [pickedPhotos, setPickedPhotos] = useState<PickedClipCover[]>([]);
   const [pickedVideos, setPickedVideos] = useState<PickedClipVideo[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -109,12 +85,13 @@ export function FlashComposerScreen() {
 
   const publish = async () => {
     const hasRealMedia = pickedPhotos.length > 0 || pickedVideos.length > 0;
-    if (!text.trim() && media.length === 0 && !hasRealMedia) return;
+    if (!text.trim() && !hasRealMedia) return;
+    if (!isApiEnabled) {
+      Alert.alert('Publishing unavailable', 'Connect to the Anticlock service to publish this post.');
+      return;
+    }
 
-    // API mode: publish to the server as the selected profile only. The
-    // Flash feed and the profile refetch after publish (no local copy, which
-    // used to show the post under the mock personal user).
-    if (isApiEnabled && (hasRealMedia || media.length === 0)) {
+    // Publish to the server as the selected profile only.
       if (!identity) {
         Alert.alert(
           'Publishing profile unavailable',
@@ -190,22 +167,6 @@ export function FlashComposerScreen() {
       }
       navigation.goBack();
       return;
-    }
-
-    publishPost({
-      text: text.trim(),
-      visibility,
-      media,
-    });
-    navigation.goBack();
-  };
-
-  const toggleSampleMedia = (item: PostMedia) => {
-    setMedia(prev =>
-      prev.some(m => m.id === item.id)
-        ? prev.filter(m => m.id !== item.id)
-        : [...prev, item],
-    );
   };
 
   return (
@@ -217,33 +178,14 @@ export function FlashComposerScreen() {
           gap: theme.spacing.lg,
         }}
       >
-        {isApiEnabled ? (
-          <PostingAsCard
-            identities={identities}
-            identity={identity}
-            onSelect={publisher.select}
-            isLoading={publisher.isLoading}
-            fallbackApplied={publisher.fallbackApplied}
-            disabled={uploading}
-          />
-        ) : (
-          <View style={styles.author}>
-            <Image
-              source={{ uri: CURRENT_USER.avatarUrl }}
-              style={styles.avatar}
-            />
-            <View style={{ flex: 1 }}>
-              <Text
-                style={[
-                  theme.typography.section,
-                  { color: theme.colors.textPrimary },
-                ]}
-              >
-                {`Posting as ${identity?.name ?? CURRENT_USER.name}`}
-              </Text>
-            </View>
-          </View>
-        )}
+        <PostingAsCard
+          identities={identities}
+          identity={identity}
+          onSelect={publisher.select}
+          isLoading={publisher.isLoading}
+          fallbackApplied={publisher.fallbackApplied}
+          disabled={uploading}
+        />
 
         <PressableScale
           onPress={() => navigation.navigate('ClipComposer')}
@@ -386,70 +328,6 @@ export function FlashComposerScreen() {
               </Text>
             </PressableScale>
           </>
-        ) : null}
-        <Text
-          style={[
-            theme.typography.caption,
-            { color: theme.colors.textTertiary },
-          ]}
-        >
-          Or use sample media for testing
-        </Text>
-        <View style={styles.row}>
-          {SAMPLE_MEDIA.map(m => {
-            const active = media.some(x => x.id === m.id);
-            return (
-              <PressableScale
-                key={m.id}
-                onPress={() => toggleSampleMedia(m)}
-                style={[
-                  styles.mediaChip,
-                  {
-                    borderColor: active
-                      ? theme.colors.primary
-                      : theme.colors.border,
-                    borderRadius: theme.radius.md,
-                  },
-                ]}
-              >
-                <Image
-                  source={
-                    typeof m.url === 'number' && !m.posterUrl
-                      ? m.url
-                      : {
-                          uri:
-                            m.posterUrl ??
-                            (typeof m.url === 'string'
-                              ? m.url
-                              : Image.resolveAssetSource(m.url)?.uri ?? ''),
-                        }
-                  }
-                  style={styles.mediaThumb}
-                />
-                <Text
-                  style={[
-                    theme.typography.caption,
-                    { color: theme.colors.textSecondary },
-                  ]}
-                >
-                  {m.type}
-                  {active ? ' · added' : ''}
-                </Text>
-              </PressableScale>
-            );
-          })}
-        </View>
-        {media.length > 0 ? (
-          <PressableScale onPress={() => setMedia([])}>
-            <Text
-              style={[
-                theme.typography.caption,
-                { color: theme.colors.primary },
-              ]}
-            >
-              Clear sample media
-            </Text>
-          </PressableScale>
         ) : null}
       </ScrollView>
 

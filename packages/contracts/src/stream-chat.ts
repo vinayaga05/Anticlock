@@ -13,11 +13,25 @@ export const streamTokenResponseSchema = z.object({
 
 // POST /v1/messages/channels - Create or get 1:1 channel
 export const createChannelRequestSchema = z.object({
-  otherUserId: z.string().uuid(),
+  otherProfile: z.object({
+    id: z.string().uuid(),
+    type: z.enum(['personal', 'business']),
+  }),
+  viewerProfile: z.object({
+    id: z.string().uuid(),
+    type: z.enum(['personal', 'business']),
+  }),
 });
 
 export const createChannelResponseSchema = z.object({
   channelId: z.string(),
+  profile: z.object({
+    id: z.string().uuid(),
+    type: z.enum(['personal', 'business']),
+    displayName: z.string(),
+    avatarUrl: z.string().nullable(),
+    verified: z.boolean(),
+  }),
 });
 
 // ============================================================================

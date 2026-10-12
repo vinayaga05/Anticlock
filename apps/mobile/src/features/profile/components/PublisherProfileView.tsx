@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  ActivityIndicator,
   FlatList,
   Image,
   StyleSheet,
@@ -14,6 +15,8 @@ import { useTheme } from '@/shared/hooks/useTheme';
 import { AppIcon } from '@/shared/components/AppIcon';
 import { FilterPills } from '@/shared/components/FilterPills';
 import { PressableScale } from '@/shared/components/PressableScale';
+import { createOrGetChannel } from '@/shared/api/messagesClient';
+import { useStreamChat } from '@/shared/providers/StreamChatProvider';
 import { formatProfileCount } from '@/shared/data/flash';
 import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
 import {
@@ -31,6 +34,7 @@ import {
   useProfileFollowMutation,
   type ProfileRelationship,
 } from '@/shared/api/profileFollows';
+import { UserCallActions } from '@/features/calls/components/UserCallActions';
 
 type Tab = 'flash' | 'clip';
 
@@ -70,6 +74,7 @@ export function PublisherProfileView({
   const { width } = useWindowDimensions();
   const cellSize = (width - 2) / 3;
   const { identities, active: globalActive } = useActiveProfile();
+  const { isReady: chatReady } = useStreamChat();
 
   // A switcher choice wins; then an explicit profile; otherwise the
   // viewer's global active profile (personal unless switched in Settings).
@@ -130,9 +135,8 @@ export function PublisherProfileView({
     identities.length > 1 && activeRef !== null && ownedIds.has(activeRef.id);
   const publisher = profile?.publisher;
   const followedRef = publisher ? { id: publisher.id, type: publisher.type } : null;
-  const followerAvatarUrl =
-    globalActive?.publisher?.avatarUrl ?? globalActive?.avatarUrl ?? null;
   const followMutation = useProfileFollowMutation(followerRef, followedRef);
+  const [openingChat, setOpeningChat] = useState(false);
   const [followOverride, setFollowOverride] = useState<
     ProfileRelationship['followStatus'] | null
   >(null);
@@ -150,6 +154,11 @@ export function PublisherProfileView({
     : isDisplayedFollowing
       ? 'Following'
       : 'Follow';
+  const ownedTarget = activeRef
+    ? identities.some(item => item.id === activeRef.id)
+    : false;
+  const isOwnProfile = profile?.viewerCanManage ?? ownedTarget;
+  const showSocialActions = Boolean(activeRef) && !isOwnProfile;
 
   const runFollowMutation = (
     action: 'follow' | 'unfollow',
@@ -190,6 +199,38 @@ export function PublisherProfileView({
       profile?.isPrivate ? 'requested' : 'following',
       displayedFollowStatus,
     );
+  };
+
+  const onMessagePress = async () => {
+    if (!followerRef || !followedRef || !publisher || openingChat || !chatReady) return;
+    if (relationship?.isBlocked) {
+      Alert.alert('Conversation unavailable', 'This profile cannot be messaged.');
+      return;
+    }
+    if (profile?.isPrivate && !isDisplayedFollowing) {
+      Alert.alert('Private profile', 'Follow this profile and wait for approval before messaging.');
+      return;
+    }
+    setOpeningChat(true);
+    try {
+      const result = await createOrGetChannel(followedRef, followerRef);
+      navigation.navigate('Thread', {
+        conversationId: result.channelId,
+        channelId: result.channelId,
+        profile: result.profile,
+      });
+    } catch (error) {
+      Alert.alert(
+        'Couldn’t open chat',
+        error instanceof Error ? error.message : 'Please try again.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Try again', onPress: () => void onMessagePress() },
+        ],
+      );
+    } finally {
+      setOpeningChat(false);
+    }
   };
 
   const header = (
@@ -252,34 +293,63 @@ export function PublisherProfileView({
           </Text>
         ) : null}
       </View>
+      {profile?.details?.location ? (
+        <View style={styles.detailRow}>
+          <AppIcon name="location" size={13} color={theme.colors.textSecondary} />
+          <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>{profile.details.location}</Text>
+        </View>
+      ) : null}
+      {profile?.details?.bio ? (
+        <Text style={[theme.typography.bodySmall, { color: theme.colors.textPrimary }]}>{profile.details.bio}</Text>
+      ) : null}
+      {profile?.details?.website ? (
+        <View style={styles.detailRow}>
+          <AppIcon name="globe" size={13} color={theme.colors.textSecondary} />
+          <Text numberOfLines={1} style={[theme.typography.caption, { color: theme.colors.link }]}>{profile.details.website}</Text>
+        </View>
+      ) : null}
 
-      {!isOwner && relationship && !relationship.isBlocked ? (
-        <PressableScale
-          accessibilityLabel={followLabel}
-          onPress={onFollowPress}
-          disabled={followMutation.isPending || !relationship.canFollow}
-          style={[
-            styles.followButton,
-            {
-              borderColor: theme.colors.border,
-              backgroundColor: isDisplayedFollowing || isDisplayedRequested
-                ? theme.colors.surface
-                : theme.colors.primary,
-            },
-          ]}>
-          {followerAvatarUrl ? (
-            <Image source={{ uri: followerAvatarUrl }} style={styles.followerAvatar} />
-          ) : null}
-          <AppIcon
-            name={isDisplayedFollowing ? 'follow' : 'user'}
-            size={16}
-            color={isDisplayedFollowing || isDisplayedRequested ? theme.colors.textPrimary : '#fff'}
-            strokeWidth={2}
+      {showSocialActions ? (
+        <View style={styles.socialActions}>
+          <PressableScale
+            accessibilityLabel={followLabel}
+            accessibilityState={{ disabled: followMutation.isPending || !relationship?.canFollow || !displayedFollowStatus }}
+            onPress={onFollowPress}
+            disabled={followMutation.isPending || !relationship?.canFollow || !displayedFollowStatus}
+            style={[
+              styles.followButton,
+              {
+                borderColor: theme.colors.border,
+                backgroundColor: isDisplayedFollowing || isDisplayedRequested ? theme.colors.surface : theme.colors.primary,
+                opacity: relationship?.isBlocked ? 0.55 : 1,
+              },
+            ]}>
+            {followMutation.isPending ? <ActivityIndicator size="small" color={isDisplayedFollowing || isDisplayedRequested ? theme.colors.textPrimary : '#fff'} /> : null}
+            <AppIcon
+              name={isDisplayedFollowing ? 'follow' : 'user'}
+              size={16}
+              color={isDisplayedFollowing || isDisplayedRequested ? theme.colors.textPrimary : '#fff'}
+              strokeWidth={2}
+            />
+            <Text style={[styles.followButtonText, { color: isDisplayedFollowing || isDisplayedRequested ? theme.colors.textPrimary : '#fff' }]}>
+              {followLabel}
+            </Text>
+          </PressableScale>
+          <PressableScale
+            accessibilityLabel="Message profile"
+            accessibilityState={{ disabled: openingChat || !chatReady || !publisher || Boolean(relationship?.isBlocked) || Boolean(profile?.isPrivate && !isDisplayedFollowing) }}
+            onPress={() => void onMessagePress()}
+            disabled={openingChat || !chatReady || !publisher || Boolean(relationship?.isBlocked) || Boolean(profile?.isPrivate && !isDisplayedFollowing)}
+            style={[styles.messageButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, opacity: openingChat || !chatReady || relationship?.isBlocked || (profile?.isPrivate && !isDisplayedFollowing) ? 0.55 : 1 }]}>
+            {openingChat ? <ActivityIndicator size="small" color={theme.colors.textPrimary} /> : <AppIcon name="message-circle" size={17} color={theme.colors.textPrimary} strokeWidth={2} />}
+            <Text style={[styles.messageButtonText, { color: theme.colors.textPrimary }]}>{openingChat ? 'Opening' : 'Message'}</Text>
+          </PressableScale>
+          <UserCallActions
+            name={publisher?.displayName ?? 'User'}
+            userId={publisher?.id}
+            avatarUrl={publisher?.avatarUrl}
           />
-          <Text style={[styles.followButtonText, { color: isDisplayedFollowing || isDisplayedRequested ? theme.colors.textPrimary : '#fff' }]}>
-            {followMutation.isPending ? '…' : followLabel}
-          </Text>
-        </PressableScale>
+        </View>
       ) : null}
 
       {isOwner && inProgress.length > 0 ? (
@@ -433,8 +503,10 @@ const styles = StyleSheet.create({
   statNumber: { fontSize: 16, fontWeight: '700' },
   statLabel: { fontSize: 14 },
   identity: { gap: 4 },
+  detailRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  socialActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   followButton: {
-    alignSelf: 'stretch',
+    flex: 1,
     minHeight: 38,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 9,
@@ -443,8 +515,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 7,
   },
+  messageButton: { minHeight: 40, paddingHorizontal: 14, borderWidth: StyleSheet.hairlineWidth, borderRadius: 9, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  messageButtonText: { fontSize: 14, fontWeight: '700' },
   followButtonText: { fontSize: 14, fontWeight: '700' },
-  followerAvatar: { width: 20, height: 20, borderRadius: 10 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   displayName: { fontSize: 14, fontWeight: '700' },
   progressCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 12, gap: 8 },

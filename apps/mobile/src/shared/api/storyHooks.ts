@@ -61,6 +61,7 @@ export function useFlashPostsQuery() {
 
 export type ContentProfileSummary = {
   publisher: ApiContentPublisher;
+  details?: { bio: string | null; location: string | null; website: string | null } | null;
   counts: { posts: number; clips: number; flash: number; stories: number };
   socialCounts?: { followers: number; following: number; pendingRequests: number };
   viewerCanManage: boolean;

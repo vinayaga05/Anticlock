@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto';
 import { StreamChat } from 'stream-chat';
 import { db } from '../db/client.js';
 import { mobileUsers } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
+import type { PublisherProfileType } from '@anticlock/contracts';
 
 export class StreamChatService {
   constructor(private client: StreamChat) {}
@@ -68,6 +70,49 @@ export class StreamChatService {
 
     await channel.create();
 
+    return channel.id as string;
+  }
+
+  /**
+   * Profile-scoped 1:1 channel. The Stream members remain account users, while
+   * the deterministic channel identity preserves which publisher profiles
+   * each side chose to represent.
+   */
+  async createOrGetProfileChannel(input: {
+    viewerUserId: string;
+    targetUserId: string;
+    viewerProfile: { id: string; type: PublisherProfileType; name: string; image: string | null };
+    targetProfile: { id: string; type: PublisherProfileType; name: string; image: string | null };
+  }): Promise<string> {
+    if (input.viewerUserId === input.targetUserId) {
+      throw new Error('Cannot create conversation with yourself');
+    }
+    const members = [input.viewerUserId, input.targetUserId].sort();
+    const profilePair = [
+      `${input.viewerProfile.type}:${input.viewerProfile.id}`,
+      `${input.targetProfile.type}:${input.targetProfile.id}`,
+    ].sort();
+    const channelId = `profile-${createHash('sha256').update(profilePair.join('|')).digest('hex').slice(0, 48)}`;
+    const channel = this.client.channel('messaging', channelId, {
+      members,
+      profile_members: [
+        {
+          user_id: input.viewerUserId,
+          profile_id: input.viewerProfile.id,
+          profile_type: input.viewerProfile.type,
+          name: input.viewerProfile.name,
+          image: input.viewerProfile.image,
+        },
+        {
+          user_id: input.targetUserId,
+          profile_id: input.targetProfile.id,
+          profile_type: input.targetProfile.type,
+          name: input.targetProfile.name,
+          image: input.targetProfile.image,
+        },
+      ],
+    } as any);
+    await channel.create();
     return channel.id as string;
   }
 

@@ -7,9 +7,16 @@ jest.mock('@/shared/hooks/useTheme', () => require('@/test/componentMocks').them
 jest.mock('@/shared/components/AppIcon', () => require('@/test/componentMocks').appIconModule);
 jest.mock('@/shared/components/PressableScale', () => require('@/test/componentMocks').pressableScaleModule);
 const mockFollowMutate = jest.fn();
+const mockCreateOrGetChannel = jest.fn();
+let mockFollowRefs: any[] = [];
 jest.mock('@/shared/api/profileFollows', () => ({
-  useProfileFollowMutation: () => ({ mutate: mockFollowMutate, isPending: false }),
+  useProfileFollowMutation: (...refs: any[]) => {
+    mockFollowRefs = refs;
+    return { mutate: mockFollowMutate, isPending: false };
+  },
 }));
+jest.mock('@/shared/api/messagesClient', () => ({ createOrGetChannel: (...args: any[]) => mockCreateOrGetChannel(...args) }));
+jest.mock('@/shared/providers/StreamChatProvider', () => ({ useStreamChat: () => ({ isReady: true }) }));
 jest.mock('react-native-safe-area-context', () => require('@/test/componentMocks').safeAreaModule);
 
 const mockNavigate = jest.fn();
@@ -62,6 +69,12 @@ describe('PublisherProfileView', () => {
     jest.useFakeTimers();
     mockNavigate.mockClear();
     mockFollowMutate.mockClear();
+    mockCreateOrGetChannel.mockReset();
+    mockCreateOrGetChannel.mockResolvedValue({
+      channelId: 'profile-channel',
+      profile: { id: 'business-2', type: 'business', displayName: 'Studio', avatarUrl: 'https://cdn.example/logo.png', verified: true },
+    });
+    mockFollowRefs = [];
     mockProfileSummary = {
       publisher: { id: 'profile-1', type: 'personal', displayName: 'Me', handle: 'me' },
       counts: { posts: 0, clips: 1, flash: 0, stories: 0 },
@@ -134,6 +147,34 @@ describe('PublisherProfileView', () => {
     );
     ReactTestRenderer.act(() => follow.props.onPress());
     expect(mockFollowMutate.mock.calls.at(-1)?.[0]).toBe('follow');
+    expect(mockFollowRefs).toEqual([
+      { id: 'profile-1', type: 'personal' },
+      { id, type },
+    ]);
+  });
+
+  it('opens chat addressed to the displayed business profile using the active viewer profile', async () => {
+    mockProfileSummary = {
+      publisher: { id: 'business-2', type: 'business', displayName: 'Studio', avatarUrl: 'https://cdn.example/logo.png', verified: true },
+      counts: { posts: 0, clips: 0, flash: 0, stories: 0 },
+      viewerCanManage: false,
+      relationship: { canFollow: true, followStatus: 'not_following', isFollowing: false, isRequested: false, isBlocked: false, canViewContent: true },
+    };
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(<PublisherProfileView profileType="business" profileId="business-2" />);
+    });
+    const message = renderer.root.find(node => node.props.accessibilityLabel === 'Message profile');
+    await ReactTestRenderer.act(async () => message.props.onPress());
+    expect(mockCreateOrGetChannel).toHaveBeenCalledWith(
+      { id: 'business-2', type: 'business' },
+      { id: 'profile-1', type: 'personal' },
+    );
+    expect(mockNavigate).toHaveBeenCalledWith('Thread', expect.objectContaining({
+      conversationId: 'profile-channel',
+      channelId: 'profile-channel',
+      profile: expect.objectContaining({ displayName: 'Studio', type: 'business' }),
+    }));
   });
 
   it('offers Unfollow for Following and Cancel request for Requested', () => {
@@ -222,7 +263,7 @@ describe('PublisherProfileView', () => {
     alert.mockRestore();
   });
 
-  it('does not render Follow for owned or blocked profiles', () => {
+  it('does not render social actions for owned profiles and disables them for blocked profiles', () => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
     ReactTestRenderer.act(() => {
       renderer = ReactTestRenderer.create(<PublisherProfileView />);
@@ -242,6 +283,8 @@ describe('PublisherProfileView', () => {
       },
     };
     ReactTestRenderer.act(() => renderer.update(<PublisherProfileView profileId="blocked" />));
-    expect(renderer.root.findAll(node => ['Follow', 'Requested', 'Following'].includes(node.props.accessibilityLabel))).toHaveLength(0);
+    expect(renderer.root.findAll(node => node.props.accessibilityLabel === 'Follow').length).toBeGreaterThan(0);
+    expect(renderer.root.find(node => node.props.accessibilityLabel === 'Follow').props.disabled).toBe(true);
+    expect(renderer.root.find(node => node.props.accessibilityLabel === 'Message profile').props.disabled).toBe(true);
   });
 });

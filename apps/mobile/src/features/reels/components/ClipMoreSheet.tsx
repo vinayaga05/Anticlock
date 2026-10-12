@@ -19,6 +19,7 @@ export type ClipMoreAction =
   | 'report'
   | 'block'
   | 'caption'
+  | 'delete'
   | 'auto_scroll';
 
 /** The exact profile to block; personal and business scopes must not blur. */
@@ -34,12 +35,14 @@ type Props = {
   autoScroll: boolean;
   /** Omit for legacy/editorial clips that are not tied to a profile. */
   blockTarget?: ClipBlockTarget | null;
+  /** The viewer owns this Clip: offer Delete instead of Report/Block. */
+  canDelete?: boolean;
   onClose: () => void;
   onAction: (action: ClipMoreAction) => void;
 };
 
 const ACTIONS: Array<{
-  key: Exclude<ClipMoreAction, 'auto_scroll' | 'block'>;
+  key: Exclude<ClipMoreAction, 'auto_scroll' | 'block' | 'delete'>;
   label: string;
   icon: IconName;
   destructive?: boolean;
@@ -56,12 +59,23 @@ export function ClipMoreSheet({
   saved,
   autoScroll,
   blockTarget,
+  canDelete = false,
   onClose,
   onAction,
 }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const actions = blockTarget
+  const actions: Array<{
+    key: Exclude<ClipMoreAction, 'auto_scroll'>;
+    label: string;
+    icon: IconName;
+    destructive?: boolean;
+  }> = canDelete
+    ? [
+        ...ACTIONS.filter(action => action.key !== 'report'),
+        { key: 'delete', label: 'Delete', icon: 'trash', destructive: true },
+      ]
+    : blockTarget
     ? [
         ...ACTIONS,
         {

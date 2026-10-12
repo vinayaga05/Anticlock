@@ -48,14 +48,17 @@ import {
   authorColumnsFor,
   legacyAuthor,
   loadPublishers,
+  loadViewerContext,
   normalizePublisherType,
   publisherKey,
   publisherRefFromAuthor,
   resolveOwnedPublisher,
+  viewerCanManage,
 } from "../publishing/publisher.js";
 import {
   createComment,
   createDraft,
+  deletePost,
   discardDraft,
   getDraft,
   getProfileSummary,
@@ -967,6 +970,7 @@ contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
       return claimed;
     });
 
+    const viewerPromise = loadViewerContext(mobileUserId);
     const likedRows = selected.length
       ? await db
           .select({ contentPostId: contentPostLikes.contentPostId })
@@ -985,7 +989,10 @@ contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
     const publisherRefs = selected
       .map((candidate) => publisherRefFromAuthor(candidate.post))
       .filter((ref): ref is NonNullable<typeof ref> => ref !== null);
-    const publishers = await loadPublishers(publisherRefs);
+    const [publishers, viewer] = await Promise.all([
+      loadPublishers(publisherRefs),
+      viewerPromise,
+    ]);
 
     return c.json({
       items: selected.map((candidate) => {
@@ -1022,11 +1029,23 @@ contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
           commentCount: post.commentCount,
           shareCount: post.shareCount,
           viewerHasLiked: likedPostIds.has(post.id),
+          viewerCanManage: viewerCanManage(viewer, post),
           music: musicAttributionFromEdit(post.edit),
         };
       }),
       nextCursor: null,
     });
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+/** Owner (or managing business member) removes a published post. */
+contentMobileRoutes.delete("/posts/:id", async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    return c.json({ post: await deletePost(mobileUserId, c.req.param("id")) });
   } catch (error) {
     const { status, body } = errorResponse(error);
     return c.json(body, status);

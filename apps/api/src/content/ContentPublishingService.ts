@@ -843,6 +843,33 @@ export async function requireVisiblePost(viewerUserId: string, postId: string) {
   return { post, viewer, publisher, ref };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Owner delete. The account that created the post, or a member who manages
+ * the publishing business (the same rule as `viewerCanManage` on feed items),
+ * can remove it; it then disappears from every feed, profile and engagement
+ * path (status `removed`). Anyone else gets 404 so the existence of a post is
+ * not disclosed.
+ */
+export async function deletePost(viewerUserId: string, postId: string) {
+  if (!UUID_RE.test(postId)) throw appError("Content not found", "not_found", 404);
+  const [[post], viewer] = await Promise.all([
+    db.select().from(contentPosts).where(eq(contentPosts.id, postId)).limit(1),
+    loadViewerContext(viewerUserId),
+  ]);
+  if (!post || !viewerCanManage(viewer, post)) {
+    throw appError("Content not found", "not_found", 404);
+  }
+  if (post.status !== "removed") {
+    await db
+      .update(contentPosts)
+      .set({ status: "removed" })
+      .where(eq(contentPosts.id, post.id));
+  }
+  return { id: post.id, contentStatus: "removed" as const };
+}
+
 type CommentRow = typeof contentPostComments.$inferSelect;
 
 async function serializeComments(rows: CommentRow[]) {

@@ -43,7 +43,12 @@ import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
 import { useClipPlaybackStore } from '@/shared/store/clipPlaybackStore';
-import { useProfileClipReelsQuery, useReelsQuery } from '@/shared/api/hooks';
+import {
+  deleteContentClip,
+  useProfileClipReelsQuery,
+  useReelsQuery,
+} from '@/shared/api/hooks';
+import { canDeleteClip, withoutHiddenClips } from './clipOwnership';
 import {
   createAnalyticsEventId,
   recordReelAnalyticsEvent,
@@ -211,6 +216,9 @@ export function ReelFeedScreen() {
   const [blockedProfileKeys, setBlockedProfileKeys] = useState<
     ReadonlySet<string>
   >(() => new Set());
+  const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [autoScroll, setAutoScroll] = useState(false);
   const [isPullRefreshing, setIsPullRefreshing] = useState(false);
   const [coins] = useState(120);
@@ -293,7 +301,7 @@ export function ReelFeedScreen() {
   const feedReels = queriedReels ?? EMPTY_REELS;
   const genieQ = route.params?.q?.trim().toLowerCase();
   const reels = useMemo(() => {
-    const visibleReels = feedReels.filter(
+    const visibleReels = withoutHiddenClips(feedReels, hiddenIds).filter(
       reel =>
         !reel.authorProfile ||
         !blockedProfileKeys.has(profileKey(reel.authorProfile)),
@@ -305,7 +313,7 @@ export function ReelFeedScreen() {
         r.caption?.toLowerCase().includes(genieQ) ||
         r.author?.toLowerCase().includes(genieQ),
     );
-  }, [blockedProfileKeys, feedReels, genieQ]);
+  }, [blockedProfileKeys, feedReels, genieQ, hiddenIds]);
   const loopedReels = useMemo(() => buildLoopedClipFeed(reels), [reels]);
   loopedFeedRef.current = loopedReels;
 
@@ -529,6 +537,10 @@ export function ReelFeedScreen() {
     }
   }, [refetch]);
 
+  const hideReel = useCallback((reelId: string) => {
+    setHiddenIds(previous => new Set(previous).add(reelId));
+  }, []);
+
   const blockClipAuthor = useCallback(
     async (profile: NonNullable<ReelItem['authorProfile']>) => {
       try {
@@ -658,6 +670,34 @@ export function ReelFeedScreen() {
           );
           break;
         }
+        case 'delete': {
+          setMenuReelId(null);
+          if (!reel || !canDeleteClip(reel)) break;
+          Alert.alert(
+            'Delete this clip?',
+            'It will be removed from your profile and everyone’s feed.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: () => {
+                  deleteContentClip(reel.id)
+                    .then(() => hideReel(reel.id))
+                    .catch(error =>
+                      Alert.alert(
+                        'Couldn’t delete clip',
+                        error instanceof Error
+                          ? error.message
+                          : 'Please try again.',
+                      ),
+                    );
+                },
+              },
+            ],
+          );
+          break;
+        }
         case 'caption':
           setMenuReelId(null);
           Alert.alert(
@@ -673,7 +713,7 @@ export function ReelFeedScreen() {
           break;
       }
     },
-    [blockClipAuthor, menuReelId, reels],
+    [blockClipAuthor, hideReel, menuReelId, reels],
   );
 
   const goToNextReel = useCallback(() => {
@@ -921,6 +961,7 @@ export function ReelFeedScreen() {
             ? { ...menuReel.authorProfile, name: menuReel.author }
             : null
         }
+        canDelete={canDeleteClip(menuReel)}
         onClose={() => setMenuReelId(null)}
         onAction={handleMoreAction}
       />

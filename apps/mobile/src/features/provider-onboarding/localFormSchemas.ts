@@ -31,7 +31,7 @@ const GLOBAL_SCHEMA: LocalSchema = {
     { key: 'location.area', type: 'text', label: 'Area / locality', sectionId: 'location' },
     { key: 'location.city', type: 'text', label: 'City', required: true, sectionId: 'location' },
     { key: 'location.pincode', type: 'text', label: 'Pincode', required: true, sectionId: 'location' },
-    { key: 'location.map', type: 'location', label: 'Map location', sectionId: 'location' },
+    { key: 'location.map', type: 'location', label: 'Pin on map', required: true, sectionId: 'location', helpText: 'Search the address or use your current location, then drag the pin to the entrance.' },
     { key: 'location.serviceRadiusKm', type: 'number', label: 'Service radius (km)', sectionId: 'location' },
     { key: 'profile.logo', type: 'image', label: 'Logo / profile image', sectionId: 'profile' },
     { key: 'profile.coverImages', type: 'image', label: 'Cover images', sectionId: 'profile' },

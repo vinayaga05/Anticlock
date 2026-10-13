@@ -309,7 +309,7 @@ export function validateField(
     if (!hasAny) return field.required ? `${field.label} is required` : null;
     return parseLocationValue(value)
       ? null
-      : 'Enter a valid latitude and longitude';
+      : 'Choose a point on the map';
   }
   if (isEmptyValue(value)) {
     return field.required ? `${field.label} is required` : null;

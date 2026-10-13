@@ -229,7 +229,7 @@ describe('validation', () => {
     );
     expect(
       validateField(field('location.map'), { latitude: '200', longitude: '1' }),
-    ).toBe('Enter a valid latitude and longitude');
+    ).toBe('Choose a point on the map');
     expect(validateField(field('identity.aadhaarNumber'), '1234')).toBe(
       'Aadhaar must be 12 digits',
     );

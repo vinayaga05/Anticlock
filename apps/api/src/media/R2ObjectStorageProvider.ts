@@ -1,7 +1,9 @@
 import {
   CopyObjectCommand,
+  CreateBucketCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadBucketCommand,
   HeadObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -57,6 +59,36 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
         secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
       },
     });
+  }
+
+  /**
+   * KYC photos are signed directly to the private bucket. A missing bucket
+   * makes that PUT return 404, so create it once when the API starts.
+   */
+  async ensurePrivateBucket(): Promise<void> {
+    const Bucket = bucketName('private-documents');
+    try {
+      await this.client.send(new HeadBucketCommand({ Bucket }));
+      return;
+    } catch (err) {
+      const status = (err as { $metadata?: { httpStatusCode?: number } })
+        .$metadata?.httpStatusCode;
+      if (status !== 404) {
+        console.warn(
+          `[media] private document bucket check failed (${status ?? 'unknown'})`,
+        );
+        return;
+      }
+    }
+    try {
+      await this.client.send(new CreateBucketCommand({ Bucket }));
+      console.log(`[media] created private document bucket ${Bucket}`);
+    } catch (err) {
+      console.warn(
+        '[media] could not create private document bucket',
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 
   async createUploadTarget(input: {

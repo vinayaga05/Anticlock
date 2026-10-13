@@ -38,8 +38,12 @@ jest.mock('@/shared/components/PressableScale', () => {
   };
 });
 
+import { PermissionsAndroid, Platform } from 'react-native';
+import { launchCamera } from 'react-native-image-picker';
 import {
+  ensureCameraPermission,
   fileFromAsset,
+  pickProviderFiles,
   resolveUploadTarget,
   validatePickedFile,
 } from '@/features/provider-onboarding/utils/providerUploads';
@@ -123,6 +127,53 @@ describe('provider upload validation', () => {
       url: r2,
       needsAuth: false,
     });
+  });
+});
+
+describe('camera permission', () => {
+  it('asks for the Android camera permission before opening the camera', async () => {
+    const previousOs = Platform.OS;
+    Platform.OS = 'android';
+    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(false);
+    jest
+      .spyOn(PermissionsAndroid, 'request')
+      .mockResolvedValue(PermissionsAndroid.RESULTS.GRANTED);
+    (launchCamera as jest.Mock).mockResolvedValue({
+      assets: [
+        {
+          uri: 'file:///aadhaar.jpg',
+          type: 'image/jpeg',
+          fileName: 'aadhaar.jpg',
+          fileSize: 1200,
+        },
+      ],
+    });
+
+    try {
+      const files = await pickProviderFiles('document', 'camera');
+
+      expect(PermissionsAndroid.request).toHaveBeenCalledWith(
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+        expect.objectContaining({ title: 'Camera access' }),
+      );
+      expect(launchCamera).toHaveBeenCalled();
+      expect(files[0]?.uri).toBe('file:///aadhaar.jpg');
+    } finally {
+      Platform.OS = previousOs;
+    }
+  });
+
+  it('does not open the camera when permission is denied', async () => {
+    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(false);
+    jest
+      .spyOn(PermissionsAndroid, 'request')
+      .mockResolvedValue(PermissionsAndroid.RESULTS.DENIED);
+    (launchCamera as jest.Mock).mockClear();
+
+    await expect(ensureCameraPermission('android')).rejects.toThrow(
+      /Allow camera access/,
+    );
+    expect(launchCamera).not.toHaveBeenCalled();
   });
 });
 

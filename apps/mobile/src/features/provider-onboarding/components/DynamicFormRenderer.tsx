@@ -25,6 +25,8 @@ import {
   DateField,
   TimeField,
 } from '@/features/provider-onboarding/components/DateTimeFields';
+import { MapLocationField } from '@/features/provider-onboarding/components/MapLocationField';
+import { placeQueryFromValues } from '@/features/provider-onboarding/utils/placeSearch';
 
 export type FormValueUpdate = unknown | ((previous: unknown) => unknown);
 
@@ -126,6 +128,7 @@ function FieldInput({
   onPreview,
   hasError,
   onBlur,
+  addressQuery = '',
 }: {
   field: FormFieldDefinition;
   value: unknown;
@@ -139,6 +142,7 @@ function FieldInput({
   onPreview: (mediaId: string, uri?: string | null) => void;
   hasError?: boolean;
   onBlur?: () => void;
+  addressQuery?: string;
 }) {
   const theme = useTheme();
   const [editingAadhaar, setEditingAadhaar] = useState(false);
@@ -236,40 +240,15 @@ function FieldInput({
   }
 
   if (field.type === 'location') {
-    const loc =
-      value && typeof value === 'object' && !Array.isArray(value)
-        ? (value as Record<string, unknown>)
-        : {};
-    const setPart = (part: 'latitude' | 'longitude', text: string) => {
-      // Accept a pasted "12.97, 77.59" pair in either box.
-      const pair = text.split(',').map(t => t.trim());
-      if (pair.length === 2 && pair[0] && pair[1]) {
-        onChange({ latitude: pair[0], longitude: pair[1] });
-        return;
-      }
-      onChange({ ...loc, [part]: text });
-    };
     return (
-      <View style={styles.inlineRow}>
-        <TextInput
-          style={[inputStyle, styles.flex1]}
-          placeholder="Latitude"
-          placeholderTextColor={theme.colors.textTertiary}
-          keyboardType="numbers-and-punctuation"
-          value={loc.latitude == null ? '' : String(loc.latitude)}
-          onChangeText={text => setPart('latitude', text)}
-          onBlur={onBlur}
-        />
-        <TextInput
-          style={[inputStyle, styles.flex1]}
-          placeholder="Longitude"
-          placeholderTextColor={theme.colors.textTertiary}
-          keyboardType="numbers-and-punctuation"
-          value={loc.longitude == null ? '' : String(loc.longitude)}
-          onChangeText={text => setPart('longitude', text)}
-          onBlur={onBlur}
-        />
-      </View>
+      <MapLocationField
+        value={value}
+        addressQuery={addressQuery}
+        onChange={point => {
+          onChange(point);
+          onBlur?.();
+        }}
+      />
     );
   }
 
@@ -624,6 +603,11 @@ export function DynamicFormRenderer({
                       }
                       hasError={Boolean(errors[field.key])}
                       onBlur={() => onFieldBlur?.(field.key)}
+                      addressQuery={
+                        field.type === 'location'
+                          ? placeQueryFromValues(values, field.key)
+                          : undefined
+                      }
                     />
                     {errors[field.key] ? (
                       <Text style={[styles.errorText, { color: theme.colors.error }]}>

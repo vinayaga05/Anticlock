@@ -1,3 +1,4 @@
+import { PermissionsAndroid, Platform } from 'react-native';
 import {
   launchCamera,
   launchImageLibrary,
@@ -136,6 +137,29 @@ function selectedAssets(response: ImagePickerResponse) {
 }
 
 /**
+ * react-native-image-picker refuses to open the camera when CAMERA is in the
+ * manifest but has not been granted yet. Reels already declares that
+ * permission, so document and profile photos must request it first.
+ */
+export async function ensureCameraPermission(os: string = Platform.OS) {
+  if (os !== 'android') return;
+  const permission = PermissionsAndroid.PERMISSIONS.CAMERA;
+  if (await PermissionsAndroid.check(permission)) return;
+  const result = await PermissionsAndroid.request(permission, {
+    title: 'Camera access',
+    message: 'Allow the camera so you can photograph documents and photos.',
+    buttonPositive: 'Allow',
+    buttonNegative: 'Not now',
+  });
+  if (result === PermissionsAndroid.RESULTS.GRANTED) return;
+  throw new Error(
+    result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
+      ? 'Camera access is turned off. Enable it in Settings to take a photo.'
+      : 'Allow camera access to take a photo.',
+  );
+}
+
+/**
  * Opens the camera or library for the field's media type. Documents are
  * photographed or picked from the library as images (no document-picker
  * native module is installed), with JPEG conversion for HEIC on iOS.
@@ -146,6 +170,7 @@ export async function pickProviderFiles(
   selectionLimit = 1,
 ): Promise<PickedProviderFile[]> {
   const mediaType = kind === 'video' ? 'video' : 'photo';
+  if (source === 'camera') await ensureCameraPermission();
   const response =
     source === 'camera'
       ? await launchCamera({

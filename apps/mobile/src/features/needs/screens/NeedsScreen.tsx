@@ -16,6 +16,7 @@ import { useSearchScrollRestoration } from '@/shared/hooks/useSearchScrollRestor
 import { fitnessClasses, doctors } from '@/shared/data/mocks';
 import { marketplaceProviders } from '@/shared/data/services';
 import { NeedsShowcaseGrid } from '@/features/needs/components/NeedsShowcaseGrid';
+import { MyActivityHub } from '@/features/needs/components/MyActivityHub';
 import { ServiceCatalogSearchResults } from '@/features/services/components/ServiceCatalogSearchResults';
 import { ProviderCard } from '@/features/services/components/ProviderCard';
 import { RootStackParamList } from '@/shared/navigation/types';
@@ -70,6 +71,10 @@ export function NeedsScreen() {
         ) : (
           <>
             <NeedsShowcaseGrid />
+
+            <View style={styles.padded}>
+              <MyActivityHub />
+            </View>
 
             <View style={styles.padded}>
               <PromoBannerRow

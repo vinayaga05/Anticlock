@@ -69,8 +69,11 @@ const commonFields = [
   {
     key: 'location.map',
     type: 'location' as const,
-    label: 'Map location',
+    label: 'Pin on map',
+    required: true,
     sectionId: 'location',
+    helpText:
+      'Search the address or use your current location, then drag the pin to the entrance.',
   },
   {
     key: 'location.serviceRadiusKm',

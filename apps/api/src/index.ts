@@ -45,6 +45,7 @@ import {
 } from './config/ai-provider.config.js';
 import { logTestLoginWarning } from './lib/otp/testLogin.js';
 import { httpError } from './lib/httpError.js';
+import { mediaService } from './media/MediaService.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -142,6 +143,7 @@ const hostname = process.env.API_HOST ?? '0.0.0.0';
 serve({ fetch: app.fetch, port, hostname }, info => {
   console.log(`Knock API listening on http://${hostname}:${info.port}`);
   startAssistantLifecycleJob();
+  void mediaService.ensureStorageReady();
 });
 
 export default app;

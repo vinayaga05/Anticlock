@@ -57,6 +57,13 @@ export class MediaService {
   private storage = createStorage();
   private repo = mediaRepository;
 
+  /** Creates the private R2 bucket when KYC uploads would otherwise 404. */
+  async ensureStorageReady() {
+    if (this.storage instanceof R2ObjectStorageProvider) {
+      await this.storage.ensurePrivateBucket();
+    }
+  }
+
   private requireSessionOwner(
     auth: AuthClaims,
     session: { createdBy: string | null },

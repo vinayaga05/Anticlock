@@ -96,6 +96,16 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # Backs the live-events Redis fanout suite (content-events-bus.test.ts).
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -145,6 +155,7 @@ jobs:
           NODE_ENV: test
           # Opt-in DB integration suites (two-account publishing scenarios).
           TEST_DATABASE_URL: postgres://anticlock:anticlock@localhost:5432/anticlock_test
+          TEST_REDIS_URL: redis://localhost:6379
         # Note: API tests are unit/integration tests using node:test.
         # They do not require a live Postgres database - they test
         # config loading, contract validation, AI provider setup, and

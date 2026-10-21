@@ -18,6 +18,7 @@ import {
 } from '../content/ContentPublishingService.js';
 import { contentRequiresReview } from '../publishing/publisher.js';
 import { requireAuth, requirePermission, type AppEnv } from '../middleware/auth.js';
+import { postEvent, publishContentEvent } from '../realtime/contentEvents.js';
 import { parseCursorIso } from '../lib/cursor.js';
 
 type ReportStatus = 'open' | 'resolved' | 'dismissed';
@@ -425,6 +426,7 @@ moderationAdminRoutes.post('/reports/:contentType/:id/action', async c => {
     );
   }
 
+  let removedPostId: string | null = null;
   await db.transaction(async tx => {
     if (contentType === 'reel') {
       const [report] = await tx
@@ -516,6 +518,7 @@ moderationAdminRoutes.post('/reports/:contentType/:id/action', async c => {
             status: 'removed',
           })
           .where(eq(contentPosts.id, report.contentPostId));
+        removedPostId = report.contentPostId;
       }
 
       await writeAudit({
@@ -529,6 +532,14 @@ moderationAdminRoutes.post('/reports/:contentType/:id/action', async c => {
     }
   });
 
+  if (removedPostId) {
+    const [removed] = await db
+      .select()
+      .from(contentPosts)
+      .where(eq(contentPosts.id, removedPostId))
+      .limit(1);
+    if (removed) void publishContentEvent(postEvent('post.removed', removed));
+  }
   return c.json({ ok: true });
 });
 

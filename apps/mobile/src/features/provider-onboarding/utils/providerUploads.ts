@@ -25,7 +25,7 @@ export const PROVIDER_UPLOAD_LIMITS: Record<
   document: {
     maxBytes: 20 * 1024 * 1024,
     mimeTypes: ['application/pdf', 'image/jpeg', 'image/png'],
-    label: 'Photo (JPEG or PNG) up to 20 MB',
+    label: 'Photo (JPEG or PNG) or PDF up to 20 MB',
   },
   video: {
     maxBytes: 250 * 1024 * 1024,
@@ -164,11 +164,37 @@ export async function ensureCameraPermission(os: string = Platform.OS) {
  * photographed or picked from the library as images (no document-picker
  * native module is installed), with JPEG conversion for HEIC on iOS.
  */
+export async function pickProviderPdf(): Promise<PickedProviderFile[]> {
+  const picker = await import('@react-native-documents/picker');
+  try {
+    const [file] = await picker.pick({
+      type: [picker.types.pdf],
+      allowMultiSelection: false,
+    });
+    if (!file?.uri) return [];
+    return [
+      {
+        uri: file.uri,
+        filename: file.name ?? 'document.pdf',
+        contentType: file.type || 'application/pdf',
+        byteSize:
+          typeof file.size === 'number' && file.size > 0 ? file.size : undefined,
+      },
+    ];
+  } catch (err) {
+    if (picker.isErrorWithCode(err) && err.code === picker.errorCodes.OPERATION_CANCELED) {
+      return [];
+    }
+    throw err;
+  }
+}
+
 export async function pickProviderFiles(
   kind: ProviderUploadKind,
-  source: 'camera' | 'library',
+  source: 'camera' | 'library' | 'pdf',
   selectionLimit = 1,
 ): Promise<PickedProviderFile[]> {
+  if (source === 'pdf') return pickProviderPdf();
   const mediaType = kind === 'video' ? 'video' : 'photo';
   if (source === 'camera') await ensureCameraPermission();
   const response =

@@ -31,7 +31,7 @@ import {
 } from '../db/schema.js';
 import catalog from './catalog.json' with { type: 'json' };
 import {
-  CATEGORY_PROVIDER_FORM_SCHEMAS,
+  ALL_CATEGORY_PROVIDER_FORM_SCHEMAS,
   GLOBAL_PROVIDER_FORM_SCHEMA,
 } from './providerFormSchemas.js';
 
@@ -215,15 +215,36 @@ async function seed() {
       sections: GLOBAL_PROVIDER_FORM_SCHEMA.sections,
       fields: GLOBAL_PROVIDER_FORM_SCHEMA.fields,
     });
+  } else {
+    await db
+      .update(providerFormSchemas)
+      .set({
+        sections: GLOBAL_PROVIDER_FORM_SCHEMA.sections,
+        fields: GLOBAL_PROVIDER_FORM_SCHEMA.fields,
+        updatedAt: new Date(),
+      })
+      .where(eq(providerFormSchemas.id, existingGlobalSchema.id));
   }
 
-  for (const schema of CATEGORY_PROVIDER_FORM_SCHEMAS) {
+  for (const schema of ALL_CATEGORY_PROVIDER_FORM_SCHEMAS) {
     const [existing] = await db
       .select()
       .from(providerFormSchemas)
       .where(eq(providerFormSchemas.categoryId, schema.categoryId!))
       .limit(1);
-    if (existing) continue;
+    if (existing) {
+      await db
+        .update(providerFormSchemas)
+        .set({
+          providerKinds: schema.providerKinds,
+          sections: schema.sections,
+          fields: schema.fields,
+          status: schema.status,
+          updatedAt: new Date(),
+        })
+        .where(eq(providerFormSchemas.id, existing.id));
+      continue;
+    }
     await db.insert(providerFormSchemas).values({
       scope: schema.scope,
       categoryId: schema.categoryId ?? null,

@@ -137,16 +137,18 @@ export const ProviderLocationSchema = z.object({
   area: z.string().optional(),
   city: z.string().min(1),
   pincode: z.string().min(4),
-  latitude: optionalNumber(z.number().min(-90).max(90)),
-  longitude: optionalNumber(z.number().min(-180).max(180)),
+  latitude: numberish(z.number().min(-90).max(90)),
+  longitude: numberish(z.number().min(-180).max(180)),
   serviceRadiusKm: optionalNumber(z.number().positive()),
 });
 export type ProviderLocation = z.infer<typeof ProviderLocationSchema>;
 
+const clockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+
 export const ProviderAvailabilitySchema = z.object({
   workingDays: z.array(z.string()).min(1),
-  openingTime: z.string().optional(),
-  closingTime: z.string().optional(),
+  openingTime: clockTime,
+  closingTime: clockTime,
   appointmentAvailable: z.boolean().optional(),
   deliveryAvailable: z.boolean().optional(),
 });
@@ -164,26 +166,43 @@ export type ProviderServicesSummary = z.infer<
 >;
 
 export const ProviderProfileSchema = z.object({
-  logoMediaId: z.string().uuid().optional(),
+  logoMediaId: z.string().uuid(),
   coverMediaIds: z.array(z.string().uuid()).max(10).optional(),
   introVideoMediaId: z.string().uuid().optional(),
-  description: z.string().optional(),
+  description: z.string().min(10),
   yearsInOperation: optionalNumber(z.number().int().nonnegative()),
 });
 export type ProviderProfile = z.infer<typeof ProviderProfileSchema>;
 
-export const ProviderApplicationCommonPayloadSchema = z.object({
-  basic: z.object({
-    providerName: z.string().min(1),
-    contactPerson: z.string().min(1),
-    mobile: z.string().min(8),
-    email: z.string().email(),
-  }),
-  location: ProviderLocationSchema,
-  profile: ProviderProfileSchema,
-  availability: ProviderAvailabilitySchema,
-  services: ProviderServicesSummarySchema,
-});
+export const ProviderApplicationCommonPayloadSchema = z
+  .object({
+    basic: z.object({
+      providerName: z.string().min(1),
+      contactPerson: z.string().min(1),
+      mobile: z.string().min(8),
+      email: z.string().email(),
+    }),
+    location: ProviderLocationSchema,
+    profile: ProviderProfileSchema,
+    availability: ProviderAvailabilitySchema,
+    services: ProviderServicesSummarySchema,
+  })
+  .superRefine((value, ctx) => {
+    if (!value.services.atLocation && !value.services.homeVisit && !value.services.online) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['services', 'atLocation'],
+        message: 'Choose at least one way customers can book you',
+      });
+    }
+    if (value.availability.closingTime <= value.availability.openingTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['availability', 'closingTime'],
+        message: 'Closing time must be after opening time',
+      });
+    }
+  });
 export type ProviderApplicationCommonPayload = z.infer<
   typeof ProviderApplicationCommonPayloadSchema
 >;
@@ -210,9 +229,16 @@ export const ProviderApplicationDraftCommonPayloadSchema = z.object({
   })
     .partial()
     .optional(),
-  profile: ProviderProfileSchema.partial().optional(),
+  profile: ProviderProfileSchema.partial()
+    .extend({
+      description: z.string().optional(),
+      logoMediaId: z.string().uuid().optional(),
+    })
+    .optional(),
   availability: ProviderAvailabilitySchema.extend({
     workingDays: z.array(z.string()),
+    openingTime: z.string().optional(),
+    closingTime: z.string().optional(),
   })
     .partial()
     .optional(),

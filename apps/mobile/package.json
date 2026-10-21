@@ -17,6 +17,7 @@
     "@react-native-community/blur": "^4.4.1",
     "@react-native-community/geolocation": "3.4.0",
     "@react-native-community/netinfo": "^12.0.1",
+    "@react-native-documents/picker": "10.1.7",
     "@react-native-firebase/app": "^26.4.0",
     "@react-native-firebase/messaging": "^26.4.0",
     "@react-native-voice/voice": "^3.2.4",

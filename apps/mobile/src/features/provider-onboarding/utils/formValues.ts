@@ -300,16 +300,7 @@ export function validateField(
     return digits.length === 12 ? null : `${field.label} must be 12 digits`;
   }
   if (field.type === 'location') {
-    const hasAny =
-      value &&
-      typeof value === 'object' &&
-      Object.values(value as Record<string, unknown>).some(
-        v => !isEmptyValue(v),
-      );
-    if (!hasAny) return field.required ? `${field.label} is required` : null;
-    return parseLocationValue(value)
-      ? null
-      : 'Choose a point on the map';
+    return parseLocationValue(value) ? null : 'Choose a point on the map';
   }
   if (isEmptyValue(value)) {
     return field.required ? `${field.label} is required` : null;
@@ -381,6 +372,22 @@ export function validateFormValues(
       aadhaarSaved: opts.aadhaarSaved,
     });
     if (error) errors[field.key] = error;
+  }
+  const modeKeys = ['services.atLocation', 'services.homeVisit', 'services.online'];
+  const hasModeField = schema.fields.some(field => modeKeys.includes(field.key));
+  if (hasModeField && !modeKeys.some(key => values[key] === true)) {
+    errors['services.atLocation'] = 'Choose at least one way customers can book you';
+  }
+  const opening = values['availability.openingTime'];
+  const closing = values['availability.closingTime'];
+  if (
+    typeof opening === 'string' &&
+    typeof closing === 'string' &&
+    /^([01]\d|2[0-3]):[0-5]\d$/.test(opening) &&
+    /^([01]\d|2[0-3]):[0-5]\d$/.test(closing) &&
+    closing <= opening
+  ) {
+    errors['availability.closingTime'] = 'Closing time must be after opening time';
   }
   return errors;
 }

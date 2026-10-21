@@ -5,6 +5,10 @@ import { readStoredSession } from '@/shared/services/auth/authService';
 import type { ApiContentPost, ApiContentPostsResponse } from '@/shared/publishing/contentPostMappers';
 import type { PublisherProfileType } from '@/shared/publishing/publisherSelection';
 import type { ReelItem } from '@/shared/types';
+import {
+  mergeClipFeedItems,
+  publishedEditorialReels,
+} from '@/shared/api/clipFeedMerge';
 
 export type ApiServiceTree = {
   id: string;
@@ -337,18 +341,24 @@ export function useCmsBannersQuery() {
 export function useServiceCategoriesQuery(
   treeId: string | undefined,
   fallback: ApiServiceCategory[],
+  providerKind?: 'business' | 'individual',
 ) {
   return useQuery({
     queryKey: [
       'catalog',
       'categories',
       treeId ?? 'all',
+      providerKind ?? 'any',
       isApiEnabled ? 'api' : 'mock',
     ],
     queryFn: async () => {
       if (!isApiEnabled) return fallback;
       await ensureAuthToken();
-      const qs = treeId ? `?treeId=${encodeURIComponent(treeId)}` : '';
+      const params = new URLSearchParams();
+      if (treeId) params.set('treeId', treeId);
+      if (providerKind) params.set('providerKind', providerKind);
+      const query = params.toString();
+      const qs = query ? `?${query}` : '';
       const res = await apiRequest<{ data: ApiServiceCategory[] }>(
         `/v1/catalog/categories${qs}`,
       );
@@ -452,23 +462,46 @@ export function useReelsQuery(
       items: ReelItem[];
       nextCursor: string | null;
     }> => {
-      await ensureAuthToken();
       const cursor = typeof pageParam === 'string' ? pageParam : null;
       const cursorSuffix = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
       const viewerSuffix = viewerProfile
         ? `&viewerProfileType=${encodeURIComponent(viewerProfile.type)}&viewerProfileId=${encodeURIComponent(viewerProfile.id)}`
         : '';
-      const response = await apiRequest<ApiContentClipFeedResponse>(
-        `/v1/content/feeds/clip?limit=20${cursorSuffix}${viewerSuffix}`,
-      );
-      return {
-        items: Array.isArray(response.items)
+      let contentItems: ReelItem[] = [];
+      let nextCursor: string | null = null;
+      let contentError: unknown = null;
+      try {
+        await ensureAuthToken();
+        const response = await apiRequest<ApiContentClipFeedResponse>(
+          `/v1/content/feeds/clip?limit=20${cursorSuffix}${viewerSuffix}`,
+        );
+        contentItems = Array.isArray(response.items)
           ? response.items
               .filter(isPublishedContentClipFeedItem)
               .map(mapApiContentClipToItem)
-          : [],
-        nextCursor: response.nextCursor,
-      };
+          : [];
+        nextCursor = response.nextCursor;
+      } catch (error) {
+        contentError = error;
+      }
+      // The published catalog lives on GET /v1/reels. The profile feed can be
+      // empty, so the first page keeps those clips visible.
+      if (!cursor) {
+        try {
+          const editorial = await apiRequest<{ data?: unknown }>('/v1/reels');
+          const items = mergeClipFeedItems(
+            contentItems,
+            publishedEditorialReels(editorial.data),
+          );
+          if (items.length > 0 || !contentError) {
+            return { items, nextCursor: contentError ? null : nextCursor };
+          }
+        } catch (editorialError) {
+          if (!contentError) throw editorialError;
+        }
+      }
+      if (contentError) throw contentError;
+      return { items: contentItems, nextCursor };
     },
     getNextPageParam: lastPage => lastPage.nextCursor ?? undefined,
     enabled: enabled && isApiEnabled,

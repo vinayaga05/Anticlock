@@ -17,10 +17,13 @@ const schema = mergeFormSchemas(GLOBAL_PROVIDER_FORM_SCHEMA, [], 'business', ['f
 
 const complete = {
   basic: { providerName: 'Lotus', contactPerson: 'Asha', mobile: '9876543210', email: 'a@b.co' },
-  location: { address: '1 Road', city: 'Chennai', pincode: '600020' },
-  availability: { workingDays: ['mon'], openingTime: '09:00' },
-  services: { pricingStartsAt: 500 },
-  profile: {},
+  location: { address: '1 Road', city: 'Chennai', pincode: '600020', latitude: 13.08, longitude: 80.27 },
+  availability: { workingDays: ['mon'], openingTime: '09:00', closingTime: '18:00' },
+  services: { pricingStartsAt: 500, atLocation: true },
+  profile: {
+    description: 'Lotus studio in Chennai',
+    logoMediaId: '9f3f1f3e-5c0f-4f90-9b78-9c95ec2ce994',
+  },
 };
 
 describe('provider contract number parsing', () => {
@@ -89,7 +92,7 @@ describe('computeApplicationReadiness', () => {
       commonPayload: complete,
       dynamicPayload: {},
       categoryIds: ['fitness.gym'],
-      documentFieldKeys: ['identity.aadhaarDocument', 'identity.idDocument'],
+      documentFieldKeys: ['identity.aadhaarDocument', 'identity.idDocument', 'identity.businessRegistration'],
       hasAadhaar: true,
     });
     assert.deepEqual(r.missing, []);
@@ -143,15 +146,23 @@ describe('computeApplicationReadiness', () => {
       documentFieldKeys: ['identity.aadhaarDocument', 'identity.idDocument'],
       hasAadhaar: true,
     };
-    const missing = computeApplicationReadiness({ ...base, commonPayload: complete });
-    assert.deepEqual(missing.missing.map(m => m.key).sort(), ['location.map', 'profile.logo']);
-    const ok = computeApplicationReadiness({
+    const missing = computeApplicationReadiness({
       ...base,
       commonPayload: {
         ...complete,
-        location: { ...complete.location, latitude: 13.08, longitude: 80.27 },
-        profile: { logoMediaId: '9f3f1f3e-5c0f-4f90-9b78-9c95ec2ce994' },
+        location: { address: '1 Road', city: 'Chennai', pincode: '600020' },
+        profile: { description: 'Lotus studio in Chennai' },
       },
+    });
+    assert.deepEqual(missing.missing.map(m => m.key).sort(), [
+      'identity.businessRegistration',
+      'location.map',
+      'profile.logo',
+    ]);
+    const ok = computeApplicationReadiness({
+      ...base,
+      documentFieldKeys: [...base.documentFieldKeys, 'identity.businessRegistration'],
+      commonPayload: complete,
     });
     assert.deepEqual(ok.missing, []);
   });

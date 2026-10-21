@@ -19,6 +19,7 @@ export type MainTabParamList = {
 
 export type RootStackParamList = {
   Login: undefined;
+  NameOnboarding: undefined;
   InterestOnboarding: undefined;
   InterestPreferences: undefined;
   Main: undefined | { screen: keyof MainTabParamList };

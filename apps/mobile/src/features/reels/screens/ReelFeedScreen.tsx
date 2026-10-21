@@ -420,9 +420,9 @@ export function ReelFeedScreen() {
       active = false;
     };
   }, []);
-  // `useReelsQuery` supplies demo data only when the API is deliberately
-  // disabled for local development. Do not use the bundled/R2 demo list as a
-  // production fallback: the public feed endpoint is the publication gate.
+  // Profile clips come from the authenticated feed. Published editorial clips
+  // from GET /v1/reels are merged onto the first page so the catalog stays
+  // visible when nobody has posted a profile clip yet.
   // Keep the empty state referentially stable so a loading/refetch transition
   // cannot make FlatList think its data changed and recalculate its viewport.
   const feedReels = queriedReels ?? EMPTY_REELS;

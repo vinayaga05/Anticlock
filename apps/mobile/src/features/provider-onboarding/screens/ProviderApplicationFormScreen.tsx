@@ -14,8 +14,14 @@ import {
   buildApplicationPayload,
   computeCompletion,
   hydrateFormValues,
+  parseLocationValue,
   statusLabel,
+  validateFormValues,
 } from '@/features/provider-onboarding/utils/formValues';
+import {
+  placeQueryFromValues,
+  searchPlace,
+} from '@/features/provider-onboarding/utils/placeSearch';
 import {
   deleteProviderDocument,
   useAutosaveProviderApplicationMutation,
@@ -167,6 +173,34 @@ export function ProviderApplicationFormScreen() {
   }, [completion.errors, showAllErrors, touched]);
 
   const onContinue = async () => {
+    const query = placeQueryFromValues(latestValues.current, 'location.map');
+    if (!parseLocationValue(latestValues.current['location.map']) && query.length >= 3) {
+      try {
+        const point = await searchPlace(query);
+        if (!point) {
+          Alert.alert(
+            'Could not find that address',
+            'Open the map and drag the pin onto the business.',
+          );
+          return;
+        }
+        latestValues.current = {
+          ...latestValues.current,
+          'location.map': {
+            latitude: point.latitude.toFixed(6),
+            longitude: point.longitude.toFixed(6),
+          },
+        };
+        setValues(latestValues.current);
+        dirty.current = true;
+      } catch {
+        Alert.alert(
+          'Could not find that address',
+          'Open the map and drag the pin onto the business.',
+        );
+        return;
+      }
+    }
     try {
       await saveNow();
     } catch (err) {
@@ -174,6 +208,16 @@ export function ProviderApplicationFormScreen() {
       return;
     }
     setShowAllErrors(true);
+    if (schema) {
+      const errors = validateFormValues(schema, latestValues.current, {
+        documentKeys: uploadedDocs,
+        aadhaarSaved: Boolean(app?.aadhaarMasked),
+      });
+      if (Object.keys(errors).length > 0) {
+        Alert.alert('Finish the required details', Object.values(errors)[0]);
+        return;
+      }
+    }
     navigation.navigate('ProviderApplicationReview', { applicationId });
   };
 

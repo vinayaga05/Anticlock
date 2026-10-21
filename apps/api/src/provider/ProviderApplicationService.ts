@@ -39,6 +39,7 @@ import {
   normalizeAadhaar,
 } from './kycEncryption.js';
 import {
+  categoryAllowsProviderKind,
   mapSchemaRow,
   resolveFormSchema,
 } from './FormSchemaService.js';
@@ -442,6 +443,16 @@ export class ProviderApplicationService {
     const row = await this.requireOwnedApplication(mobileUserId, applicationId);
     if (!editableStatuses.has(row.status)) {
       throw appError('Application cannot be edited in current status', 'invalid_status', 409);
+    }
+
+    for (const categoryId of body.categoryIds) {
+      if (!categoryAllowsProviderKind(categoryId, row.providerKind as 'business' | 'individual')) {
+        throw appError(
+          'This service does not match the profile type you chose',
+          'invalid_category',
+          400,
+        );
+      }
     }
 
     await db.transaction(async tx => {

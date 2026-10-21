@@ -248,6 +248,38 @@ describe('validation', () => {
     ).toBeNull();
   });
 
+  it('requires a booking method and a closing time after opening', () => {
+    const withModes = {
+      ...schema,
+      fields: [
+        ...schema.fields,
+        { key: 'services.atLocation', type: 'boolean', label: 'At location', sectionId: 'services' },
+        { key: 'services.homeVisit', type: 'boolean', label: 'Home visit', sectionId: 'services' },
+        { key: 'services.online', type: 'boolean', label: 'Online', sectionId: 'services' },
+        { key: 'availability.openingTime', type: 'time', label: 'Opening', sectionId: 'availability' },
+        { key: 'availability.closingTime', type: 'time', label: 'Closing', sectionId: 'availability' },
+      ],
+    } as ResolvedProviderFormSchema;
+    const errors = validateFormValues(withModes, {
+      'availability.openingTime': '18:00',
+      'availability.closingTime': '09:00',
+    });
+    expect(errors['services.atLocation']).toBe(
+      'Choose at least one way customers can book you',
+    );
+    expect(errors['availability.closingTime']).toBe(
+      'Closing time must be after opening time',
+    );
+    const ok = validateFormValues(withModes, {
+      'services.online': true,
+      'availability.openingTime': '09:00',
+      'availability.closingTime': '18:00',
+      'location.map': { latitude: '13.08', longitude: '80.27' },
+    });
+    expect(ok['services.atLocation']).toBeUndefined();
+    expect(ok['availability.closingTime']).toBeUndefined();
+  });
+
   it('computes required completion including documents', () => {
     const values = {
       'basic.providerName': 'Lotus',

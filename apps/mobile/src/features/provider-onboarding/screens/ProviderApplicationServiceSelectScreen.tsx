@@ -1,17 +1,43 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { Button } from '@/shared/components/Button';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { RootStackParamList } from '@/shared/navigation/types';
-import { serviceTrees, getCategoriesByTree } from '@/shared/data/services';
+import { getCategoriesByTree, serviceTrees } from '@/shared/data/services';
+import { useServiceCategoriesQuery, type ApiServiceCategory } from '@/shared/api/hooks';
 import {
   useProviderApplicationQuery,
   useSetProviderServicesMutation,
 } from '@/shared/api/providerHooks';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { AppIcon } from '@/shared/components/AppIcon';
+
+/** Local-only ids that are not in the API catalog and fail the category foreign key. */
+const UNSUPPORTED_CATEGORY_IDS = new Set([
+  'health.special_educator',
+  'health.doctors.general_physician',
+  'health.doctors.dentist',
+  'health.doctors.dermatologist',
+  'health.doctors.pediatrician',
+  'fitness.womens',
+]);
+
+function localCategoryFallback(treeId: string): ApiServiceCategory[] {
+  return getCategoriesByTree(treeId as never)
+    .filter(category => !category.parentId && !UNSUPPORTED_CATEGORY_IDS.has(category.id))
+    .map(category => ({
+      id: category.id,
+      treeId: category.treeId,
+      name: category.name,
+      description: category.description,
+      icon: category.icon,
+      actionType: category.actionType,
+      sortOrder: category.order,
+      status: 'published',
+    }));
+}
 
 export function ProviderApplicationServiceSelectScreen() {
   const theme = useTheme();
@@ -31,10 +57,12 @@ export function ProviderApplicationServiceSelectScreen() {
     if (application) setSelectedCategoryId(application.categoryIds[0] ?? null);
   }, [application?.id, application?.categoryIds.join('|')]);
 
-  const categories = useMemo(
-    () => (selectedTree ? getCategoriesByTree(selectedTree as never) : []),
-    [selectedTree],
+  const categoriesQuery = useServiceCategoriesQuery(
+    selectedTree ?? undefined,
+    selectedTree ? localCategoryFallback(selectedTree) : [],
+    application?.providerKind,
   );
+  const categories = categoriesQuery.data ?? [];
 
   const onContinue = async () => {
     if (!selectedCategoryId) return;
@@ -128,6 +156,19 @@ export function ProviderApplicationServiceSelectScreen() {
         </ScrollView>
         {selectedTree ? (
           <View style={styles.list}>
+            {categoriesQuery.isLoading ? (
+              <Text style={{ color: theme.colors.textSecondary }}>Loading services…</Text>
+            ) : categoriesQuery.isError ? (
+              <Text style={{ color: theme.colors.textSecondary }}>
+                {categoriesQuery.error instanceof Error
+                  ? categoriesQuery.error.message
+                  : 'Could not load services.'}
+              </Text>
+            ) : categories.length === 0 ? (
+              <Text style={{ color: theme.colors.textSecondary }}>
+                No services in this group match the profile type you chose.
+              </Text>
+            ) : null}
             {categories.map(cat => {
               const active = selectedCategoryId === cat.id;
               return (

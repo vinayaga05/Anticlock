@@ -21,6 +21,8 @@ import {
   AuthLoadingScreen,
   LoginScreen,
 } from '@/features/auth/screens/LoginScreen';
+import { NameOnboardingScreen } from '@/features/auth/screens/NameOnboardingScreen';
+import { needsDisplayName } from '@/features/auth/utils/needsDisplayName';
 import { isApiEnabled } from '@/shared/api/config';
 import { useMyInterestsQuery } from '@/features/interests/hooks/useInterestPreferences';
 import { InterestSelectionScreen } from '@/features/interests/screens/InterestSelectionScreen';
@@ -153,6 +155,7 @@ export function RootNavigator() {
     return <AuthLoadingScreen />;
   }
 
+  const needsNameOnboarding = needsDisplayName(user);
   const needsInterestOnboarding = interests?.needsOnboarding === true;
 
   return (
@@ -191,6 +194,12 @@ export function RootNavigator() {
             name="Login"
             component={LoginScreen}
             options={{ headerShown: false }}
+          />
+        ) : needsNameOnboarding ? (
+          <Stack.Screen
+            name="NameOnboarding"
+            component={NameOnboardingScreen}
+            options={{ headerShown: false, gestureEnabled: false }}
           />
         ) : needsInterestOnboarding ? (
           <Stack.Screen

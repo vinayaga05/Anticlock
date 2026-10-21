@@ -33,7 +33,7 @@ function AppShell() {
         barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'}
         backgroundColor={theme.colors.background}
       />
-      {user ? <LiveContentSync /> : null}
+      {user && user.id !== 'temporary-guest' ? <LiveContentSync /> : null}
       <RootNavigator />
     </>
   );

@@ -104,10 +104,10 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     return {
       commonPayload: {
         basic: { providerName: name, contactPerson: 'Asha', mobile: '9876543210', email: 'asha@example.com' },
-        location: { address: '12 Lake Road', city: 'Chennai', area: 'Adyar', pincode: '600020' },
+        location: { address: '12 Lake Road', city: 'Chennai', area: 'Adyar', pincode: '600020', latitude: 13.001, longitude: 80.25 },
         availability: { workingDays: ['mon', 'tue'], openingTime: '09:00', closingTime: '18:00' },
         services: { pricingStartsAt: '1,500', atLocation: true, homeVisit: true },
-        profile: { description: `${name} description`, yearsInOperation: '4' },
+        profile: { description: `${name} description for guests`, yearsInOperation: '4' },
       },
       aadhaarNumber: '234567890123',
     };
@@ -120,12 +120,25 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     const id = created.json.application.id as string;
     appIds.push(id);
     assert.equal((await call('OWNER', 'PUT', `/v1/provider/applications/${id}/services`, { categoryIds: [categoryId] })).status, 200);
-    const patched = await call('OWNER', 'PATCH', `/v1/provider/applications/${id}`, completePayload(name));
+    const logo = await upload('OWNER', id, 'profile.logo', 'profile', 'image');
+    const patched = await call('OWNER', 'PATCH', `/v1/provider/applications/${id}`, {
+      ...completePayload(name),
+      commonPayload: {
+        ...completePayload(name).commonPayload,
+        profile: {
+          ...completePayload(name).commonPayload.profile,
+          logoMediaId: logo.mediaId,
+        },
+      },
+    });
     assert.equal(patched.status, 200, JSON.stringify(patched.json));
     // The mobile app sends document fields as kind "document" even when the
     // file is a photo of the document (JPEG/PNG).
     await upload('OWNER', id, 'identity.aadhaarDocument', 'document', 'document');
     await upload('OWNER', id, 'identity.idDocument', 'document', 'document');
+    if (kind === 'business') {
+      await upload('OWNER', id, 'identity.businessRegistration', 'document', 'document');
+    }
     return id;
   }
 

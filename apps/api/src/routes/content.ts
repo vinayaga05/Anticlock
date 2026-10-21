@@ -424,7 +424,8 @@ export async function viewerEventPayload(
     publisherProfileId: event.publisherProfileId,
   };
   if (event.type === "post.removed") {
-    return { type: "post.removed" as const, ...base };
+    // Only the id: the post is gone, so nothing about its publisher is disclosed.
+    return { type: "post.removed" as const, id: event.postId, format: event.format };
   }
   try {
     const post = await getVisiblePost(mobileUserId, event.postId, viewerProfile);

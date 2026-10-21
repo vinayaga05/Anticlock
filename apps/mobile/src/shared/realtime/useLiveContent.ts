@@ -68,7 +68,13 @@ export function useLiveContentSync(
     const stop = startLiveContent();
     const unsubscribe = subscribeLiveContent(event => {
       if (event.type === 'resync') return;
-      if (event.type === 'post.removed') dropRemovedClip(queryClient, event.id);
+      if (event.type === 'post.removed') {
+        dropRemovedClip(queryClient, event.id);
+        // Removal events carry no publisher; refresh profile surfaces broadly.
+        queryClient
+          .invalidateQueries({ queryKey: contentQueryKeys.all })
+          .catch(() => undefined);
+      }
       const type = profileTypeOf(event.publisherProfileType);
       if (type && event.publisherProfileId) {
         queryClient
@@ -106,6 +112,8 @@ export function useLivePendingClips(options: {
   const [pending, setPending] = useState<ReelItem[]>([]);
   const loadedRef = useRef(loadedReels);
   loadedRef.current = loadedReels;
+  // Fallback cursor when no loaded clip carries a publish time.
+  const lastSyncRef = useRef(new Date().toISOString());
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
 
@@ -116,8 +124,10 @@ export function useLivePendingClips(options: {
   }, []);
 
   const catchUp = useCallback(async () => {
-    const since = newestPublishedAt([...loadedRef.current, ...pendingRef.current]);
-    if (!since) return;
+    const since =
+      newestPublishedAt([...loadedRef.current, ...pendingRef.current]) ??
+      lastSyncRef.current;
+    const startedAt = new Date().toISOString();
     try {
       const response = await apiRequest<{ items?: unknown[] }>(
         `/v1/content/feeds/clip?limit=20&since=${encodeURIComponent(since)}${viewerSuffix}`,
@@ -127,6 +137,7 @@ export function useLivePendingClips(options: {
         return item ? [item] : [];
       });
       queue(items);
+      lastSyncRef.current = startedAt;
     } catch {
       // next resync retries
     }

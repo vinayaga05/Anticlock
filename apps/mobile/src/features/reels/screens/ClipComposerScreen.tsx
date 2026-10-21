@@ -390,7 +390,12 @@ export function ClipComposerScreen() {
         identity,
       });
       uploadDraftIdRef.current = draftId;
-      if (signal.aborted) throw new UploadCancelledError();
+      if (signal.aborted) {
+        // Cancelled while the draft was being created: discard it too.
+        uploadDraftIdRef.current = null;
+        void discardContentDraft('clip', draftId);
+        throw new UploadCancelledError();
+      }
       const uploadFile = await createVideoUploadFile(video);
       ifActive(() =>
         setUploadStatus({ phase: 'video', progress: uploadProgressPercent('video') }),

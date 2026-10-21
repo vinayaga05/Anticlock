@@ -490,8 +490,8 @@ export function useReelsQuery(
           if (items.length > 0 || !contentError) {
             return { items, nextCursor: contentError ? null : nextCursor };
           }
-        } catch (editorialError) {
-          if (!contentError) throw editorialError;
+        } catch {
+          // Editorial clips only fill the catalog; never fail the feed for them.
         }
       }
       if (contentError) throw contentError;

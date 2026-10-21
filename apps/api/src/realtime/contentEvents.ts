@@ -38,6 +38,7 @@ local.setMaxListeners(0);
 let publisher: Redis | null = null;
 let subscriber: Redis | null = null;
 let subscribed = false;
+let subscriptionActive = false;
 
 function redisUrl() {
   return process.env.REDIS_URL?.trim() || null;
@@ -74,7 +75,18 @@ function ensureSubscriber() {
   });
   subscriber.on("error", () => undefined);
   subscriber.on("ready", () => {
-    subscriber?.subscribe(CONTENT_EVENTS_CHANNEL).catch(() => undefined);
+    subscriptionActive = false;
+    subscriber
+      ?.subscribe(CONTENT_EVENTS_CHANNEL)
+      .then(() => {
+        subscriptionActive = true;
+      })
+      .catch(() => {
+        subscriptionActive = false;
+      });
+  });
+  subscriber.on("close", () => {
+    subscriptionActive = false;
   });
   subscriber.on("message", (channel, message) => {
     if (channel !== CONTENT_EVENTS_CHANNEL) return;
@@ -84,7 +96,7 @@ function ensureSubscriber() {
 }
 
 function subscriberReady() {
-  return Boolean(subscriber && subscriber.status === "ready");
+  return Boolean(subscriber && subscriber.status === "ready" && subscriptionActive);
 }
 
 /** Fire-and-forget: never fails the request that changed the content. */
@@ -148,4 +160,5 @@ export async function closeContentEvents() {
   publisher = null;
   subscriber = null;
   subscribed = false;
+  subscriptionActive = false;
 }

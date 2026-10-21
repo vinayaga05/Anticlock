@@ -19,8 +19,9 @@ export const PROVIDER_UPLOAD_LIMITS: Record<
 > = {
   image: {
     maxBytes: 10 * 1024 * 1024,
-    mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
-    label: 'JPEG, PNG, WebP or GIF up to 10 MB',
+    // Any image/* (JPEG, PNG, WebP, HEIC, GIF, BMP, AVIF, …).
+    mimeTypes: ['image/*'],
+    label: 'Any image up to 10 MB',
   },
   document: {
     maxBytes: 20 * 1024 * 1024,
@@ -50,7 +51,13 @@ const EXT_MIME: Record<string, string> = {
   jpeg: 'image/jpeg',
   png: 'image/png',
   webp: 'image/webp',
+  gif: 'image/gif',
   heic: 'image/heic',
+  heif: 'image/heif',
+  bmp: 'image/bmp',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+  avif: 'image/avif',
   pdf: 'application/pdf',
   mp4: 'video/mp4',
 };
@@ -98,8 +105,13 @@ function mimeAllowed(
   contentType: string,
   mimeTypes: readonly string[],
 ): boolean {
-  if (mimeTypes.includes('*/*')) return Boolean(contentType.trim());
-  return mimeTypes.includes(contentType);
+  const ct = contentType.trim().toLowerCase();
+  if (!ct) return false;
+  if (mimeTypes.includes('*/*')) return true;
+  if (mimeTypes.includes(ct)) return true;
+  return mimeTypes.some(
+    mime => mime.endsWith('/*') && ct.startsWith(mime.slice(0, -1)),
+  );
 }
 
 /** Client-side MIME/size check; returns a user-facing error or null. */
@@ -109,12 +121,6 @@ export function validatePickedFile(
 ): string | null {
   const limits = PROVIDER_UPLOAD_LIMITS[kind];
   if (!mimeAllowed(file.contentType, limits.mimeTypes)) {
-    if (
-      kind !== 'document' &&
-      (file.contentType === 'image/heic' || file.contentType === 'image/heif')
-    ) {
-      return 'HEIC photos are not supported. Choose a JPEG or PNG.';
-    }
     return `Unsupported file type. Use ${limits.label}.`;
   }
   if (file.byteSize !== undefined && file.byteSize > limits.maxBytes) {
@@ -168,25 +174,25 @@ export async function ensureCameraPermission(os: string = Platform.OS) {
   );
 }
 
-/**
- * Opens the system document picker for any file type (PDF, photos, office…).
- */
-export async function pickProviderDocument(): Promise<PickedProviderFile[]> {
+async function pickFromDocumentPicker(
+  type: 'allFiles' | 'images',
+): Promise<PickedProviderFile[]> {
   const picker = await import('@react-native-documents/picker');
   try {
     const [file] = await picker.pick({
-      type: [picker.types.allFiles],
+      type: [picker.types[type]],
       allowMultiSelection: false,
     });
     if (!file?.uri) return [];
-    const name = file.name?.trim() || 'document.bin';
+    const name =
+      file.name?.trim() || (type === 'images' ? 'photo.jpg' : 'document.bin');
     const ext = name.split('.').pop()?.toLowerCase() ?? '';
     const contentType =
       (file.type && file.type !== 'application/octet-stream'
         ? file.type
         : undefined) ||
       EXT_MIME[ext] ||
-      'application/octet-stream';
+      (type === 'images' ? 'image/jpeg' : 'application/octet-stream');
     return [
       {
         uri: file.uri,
@@ -197,11 +203,24 @@ export async function pickProviderDocument(): Promise<PickedProviderFile[]> {
       },
     ];
   } catch (err) {
-    if (picker.isErrorWithCode(err) && err.code === picker.errorCodes.OPERATION_CANCELED) {
+    if (
+      picker.isErrorWithCode(err) &&
+      err.code === picker.errorCodes.OPERATION_CANCELED
+    ) {
       return [];
     }
     throw err;
   }
+}
+
+/** Opens the system document picker for any file type (PDF, photos, office…). */
+export async function pickProviderDocument(): Promise<PickedProviderFile[]> {
+  return pickFromDocumentPicker('allFiles');
+}
+
+/** Opens the system picker limited to images (logo / cover). */
+export async function pickProviderImageFile(): Promise<PickedProviderFile[]> {
+  return pickFromDocumentPicker('images');
 }
 
 /** @deprecated Use pickProviderDocument — kept for older call sites/tests. */
@@ -214,7 +233,11 @@ export async function pickProviderFiles(
   source: 'camera' | 'library' | 'pdf' | 'file',
   selectionLimit = 1,
 ): Promise<PickedProviderFile[]> {
-  if (source === 'pdf' || source === 'file') return pickProviderDocument();
+  if (source === 'pdf' || source === 'file') {
+    return kind === 'image'
+      ? pickProviderImageFile()
+      : pickProviderDocument();
+  }
   const mediaType = kind === 'video' ? 'video' : 'photo';
   if (source === 'camera') await ensureCameraPermission();
   const response =

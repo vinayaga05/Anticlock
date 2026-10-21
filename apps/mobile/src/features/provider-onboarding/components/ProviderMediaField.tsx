@@ -325,17 +325,33 @@ export function ProviderMediaField({
               },
               { text: 'Cancel', style: 'cancel' as const },
             ]
-          : [
-              {
-                text: kind === 'video' ? 'Record video' : 'Take photo',
-                onPress: () => void startPick('camera', replacing),
-              },
-              {
-                text: `Choose ${what} from library`,
-                onPress: () => void startPick('library', replacing),
-              },
-              { text: 'Cancel', style: 'cancel' as const },
-            ];
+          : kind === 'image'
+            ? [
+                {
+                  text: 'Choose image file',
+                  onPress: () => void startPick('file', replacing),
+                },
+                {
+                  text: 'Take photo',
+                  onPress: () => void startPick('camera', replacing),
+                },
+                {
+                  text: 'Choose photo from library',
+                  onPress: () => void startPick('library', replacing),
+                },
+                { text: 'Cancel', style: 'cancel' as const },
+              ]
+            : [
+                {
+                  text: kind === 'video' ? 'Record video' : 'Take photo',
+                  onPress: () => void startPick('camera', replacing),
+                },
+                {
+                  text: `Choose ${what} from library`,
+                  onPress: () => void startPick('library', replacing),
+                },
+                { text: 'Cancel', style: 'cancel' as const },
+              ];
       Alert.alert(
         replacing ? `Replace ${label.toLowerCase()}` : label,
         PROVIDER_UPLOAD_LIMITS[kind].label,

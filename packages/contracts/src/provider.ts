@@ -166,7 +166,7 @@ export type ProviderServicesSummary = z.infer<
 >;
 
 export const ProviderProfileSchema = z.object({
-  logoMediaId: z.string().uuid(),
+  logoMediaId: z.string().uuid().optional(),
   coverMediaIds: z.array(z.string().uuid()).max(10).optional(),
   introVideoMediaId: z.string().uuid().optional(),
   description: z.string().min(10),
@@ -439,12 +439,12 @@ export type ResolveFormSchemaQuery = z.infer<
 
 /**
  * Upload size limits mirrored from the API's media validation.
- * Document fields accept any MIME (wildcard all); image/video stay type-scoped.
+ * Documents accept any MIME; logo/cover images accept any image MIME.
  */
 export const PROVIDER_UPLOAD_LIMITS = {
   image: {
     maxBytes: 10 * 1024 * 1024,
-    mimes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+    mimes: ['image/*'],
   },
   document: {
     maxBytes: 20 * 1024 * 1024,

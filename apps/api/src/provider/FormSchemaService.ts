@@ -164,13 +164,16 @@ export async function resolveFormSchema(
 
 const ALWAYS_REQUIRED = new Set([
   'location.map',
-  'profile.logo',
   'profile.description',
   'availability.openingTime',
   'availability.closingTime',
 ]);
 
 function applyOnboardingRequirement(field: FormFieldDefinition, providerKind: ProviderKind) {
+  // Logo / cover stay optional even if an older published schema marked them required.
+  if (field.key === 'profile.logo' || field.key === 'profile.coverImages') {
+    return { ...field, required: false };
+  }
   if (field.key === 'profile.description') {
     return {
       ...field,

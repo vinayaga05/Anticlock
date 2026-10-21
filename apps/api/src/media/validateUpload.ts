@@ -5,19 +5,15 @@ import {
   type MediaKind,
 } from '@anticlock/contracts';
 
-const IMAGE_MIMES = new Set([
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-]);
-
 /** KYC / add-business documents accept any non-empty MIME (PDF, photos, office, etc.). */
 const VIDEO_MIMES = new Set(['video/mp4']);
 
 function normalizeMime(mime: string) {
   return mime.trim().toLowerCase().split(';', 1)[0] ?? '';
+}
+
+function isImageMime(mime: string) {
+  return normalizeMime(mime).startsWith('image/');
 }
 
 export function detectMimeFromMagic(buf: Buffer): string | null {
@@ -49,11 +45,37 @@ export function detectMimeFromMagic(buf: Buffer): string | null {
     return 'image/gif';
   if (buf.length >= 6 && buf.toString('ascii', 0, 6) === 'GIF89a')
     return 'image/gif';
+  if (
+    buf.length >= 2 &&
+    buf[0] === 0x42 &&
+    buf[1] === 0x4d
+  ) {
+    return 'image/bmp';
+  }
+  if (
+    buf.length >= 4 &&
+    ((buf[0] === 0x49 && buf[1] === 0x49 && buf[2] === 0x2a && buf[3] === 0x00) ||
+      (buf[0] === 0x4d && buf[1] === 0x4d && buf[2] === 0x00 && buf[3] === 0x2a))
+  ) {
+    return 'image/tiff';
+  }
+  // HEIC/HEIF / AVIF often use ISO BMFF with an ftyp brand.
+  if (buf.length >= 12 && buf.toString('ascii', 4, 8) === 'ftyp') {
+    const brand = buf.toString('ascii', 8, 12);
+    if (
+      brand === 'heic' ||
+      brand === 'heix' ||
+      brand === 'mif1' ||
+      brand === 'msf1' ||
+      brand === 'heif'
+    ) {
+      return 'image/heic';
+    }
+    if (brand === 'avif' || brand === 'avis') return 'image/avif';
+    return 'video/mp4';
+  }
   if (buf.length >= 5 && buf.toString('ascii', 0, 5) === '%PDF-') {
     return 'application/pdf';
-  }
-  if (buf.length >= 12 && buf.toString('ascii', 4, 8) === 'ftyp') {
-    return 'video/mp4';
   }
   return null;
 }
@@ -84,9 +106,15 @@ export function assertAllowedMime(kind: MediaKind, mime: string) {
   }
   // Provider KYC documents may be any file the applicant has (PDF, photo, office…).
   if (kind === 'document') return;
-  const ok =
-    kind === 'image' ? IMAGE_MIMES.has(normalized) : VIDEO_MIMES.has(normalized);
-  if (!ok) {
+  // Logo / cover / profile photos: any image/* (JPEG, PNG, WebP, HEIC, GIF, …).
+  if (kind === 'image') {
+    if (isImageMime(normalized)) return;
+    throw Object.assign(
+      new Error(`MIME type ${mime} not allowed for ${kind}`),
+      { code: 'invalid_mime', status: 400 },
+    );
+  }
+  if (!VIDEO_MIMES.has(normalized)) {
     throw Object.assign(
       new Error(`MIME type ${mime} not allowed for ${kind}`),
       {
@@ -186,6 +214,35 @@ export function validateUploadedBytes(input: {
     };
   }
 
+  // Profile images (logo/cover): accept declared image/* when magic is unknown
+  // (HEIC and some phone formats), and do not hard-fail on dimension probing.
+  if (input.kind === 'image') {
+    const mimeType = detected && isImageMime(detected) ? detected : expected;
+    assertAllowedMime('image', mimeType);
+    if (detected && isImageMime(detected) && expected && !isImageMime(expected)) {
+      throw Object.assign(
+        new Error(`Content-Type mismatch: expected ${expected}, got ${detected}`),
+        { code: 'mime_mismatch', status: 400 },
+      );
+    }
+    let width: number | null = null;
+    let height: number | null = null;
+    try {
+      const dim = imageSize(input.body);
+      width = dim.width ?? null;
+      height = dim.height ?? null;
+    } catch {
+      /* HEIC / uncommon codecs — still store the bytes. */
+    }
+    return {
+      mimeType,
+      byteSize: input.body.length,
+      checksumSha256: sha256(input.body),
+      width,
+      height,
+    };
+  }
+
   if (!detected) {
     throw Object.assign(new Error('Unrecognized file signature'), {
       code: 'invalid_signature',
@@ -201,26 +258,11 @@ export function validateUploadedBytes(input: {
     );
   }
 
-  let width: number | null = null;
-  let height: number | null = null;
-  if (input.kind === 'image') {
-    try {
-      const dim = imageSize(input.body);
-      width = dim.width ?? null;
-      height = dim.height ?? null;
-    } catch {
-      throw Object.assign(new Error('Unable to read image dimensions'), {
-        code: 'invalid_image',
-        status: 400,
-      });
-    }
-  }
-
   return {
     mimeType: detected,
     byteSize: input.body.length,
     checksumSha256: sha256(input.body),
-    width,
-    height,
+    width: null,
+    height: null,
   };
 }

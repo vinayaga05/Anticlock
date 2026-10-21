@@ -86,14 +86,15 @@ const commonFields = [
     key: 'profile.logo',
     type: 'image' as const,
     label: 'Logo / profile image',
-    required: true,
     sectionId: 'profile',
+    helpText: 'Optional. Any image (JPEG, PNG, WebP, HEIC, GIF, …) up to 10 MB.',
   },
   {
     key: 'profile.coverImages',
     type: 'image' as const,
     label: 'Cover images',
     sectionId: 'profile',
+    helpText: 'Optional. Any images up to 10 MB each.',
   },
   {
     key: 'profile.introVideo',

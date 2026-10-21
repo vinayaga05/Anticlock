@@ -76,7 +76,19 @@ describe('provider upload validation', () => {
         { contentType: 'image/heic', byteSize: 1000 },
         'image',
       ),
-    ).toMatch(/HEIC/);
+    ).toBeNull();
+    expect(
+      validatePickedFile(
+        { contentType: 'image/avif', byteSize: 1000 },
+        'image',
+      ),
+    ).toBeNull();
+    expect(
+      validatePickedFile(
+        { contentType: 'application/pdf', byteSize: 1000 },
+        'image',
+      ),
+    ).toMatch(/Unsupported/);
     expect(
       validatePickedFile(
         { contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', byteSize: 1000 },
@@ -342,9 +354,14 @@ describe('ProviderMediaField', () => {
   };
 
   beforeEach(() => {
-    // Choose "library" from the source sheet.
+    // Choose "library" from the source sheet (after Take photo / Choose file).
     jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => {
-      buttons?.[1]?.onPress?.();
+      const library = buttons?.find(b =>
+        String(b.text ?? '')
+          .toLowerCase()
+          .includes('library'),
+      );
+      (library ?? buttons?.[1])?.onPress?.();
     });
   });
   afterEach(() => jest.restoreAllMocks());

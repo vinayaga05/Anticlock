@@ -8,7 +8,12 @@ import type {
 import { eq, inArray, and } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { providerFormSchemas } from '../db/schema.js';
-import { GLOBAL_PROVIDER_FORM_SCHEMA } from '../seed/providerFormSchemas.js';
+import {
+  ALL_CATEGORY_PROVIDER_FORM_SCHEMAS,
+  GLOBAL_PROVIDER_FORM_SCHEMA,
+  categoryFormSchema,
+  providerKindsForCategory,
+} from '../seed/providerFormSchemas.js';
 
 function fieldVisible(field: FormFieldDefinition, providerKind: ProviderKind) {
   if (!field.visibleWhen?.providerKind) return true;
@@ -34,6 +39,7 @@ export function mergeFormSchemas(
   }
 
   for (const schema of categorySchemas) {
+    if (!schema.providerKinds.includes(providerKind)) continue;
     for (const section of schema.sections) {
       if (!sectionMap.has(section.id)) {
         sectionMap.set(section.id, section);
@@ -145,7 +151,48 @@ export async function resolveFormSchema(
       status: 400,
     });
   }
-  return mergeFormSchemas(global, categories, providerKind, categoryIds);
+  const present = new Set(categories.map(schema => schema.categoryId));
+  const builtins = ALL_CATEGORY_PROVIDER_FORM_SCHEMAS.filter(
+    schema => schema.categoryId && categoryIds.includes(schema.categoryId) && !present.has(schema.categoryId),
+  );
+  const merged = mergeFormSchemas(global, [...categories, ...builtins], providerKind, categoryIds);
+  return {
+    ...merged,
+    fields: merged.fields.map(field => applyOnboardingRequirement(field, providerKind)),
+  };
+}
+
+const ALWAYS_REQUIRED = new Set([
+  'location.map',
+  'profile.logo',
+  'profile.description',
+  'availability.openingTime',
+  'availability.closingTime',
+]);
+
+function applyOnboardingRequirement(field: FormFieldDefinition, providerKind: ProviderKind) {
+  if (field.key === 'profile.description') {
+    return {
+      ...field,
+      required: true,
+      validation: { ...field.validation, minLength: field.validation?.minLength ?? 10 },
+    };
+  }
+  if (ALWAYS_REQUIRED.has(field.key)) {
+    return { ...field, required: true };
+  }
+  if (field.key === 'identity.businessRegistration' && providerKind === 'business') {
+    return { ...field, required: true };
+  }
+  return field;
+}
+
+export function categoryAllowsProviderKind(categoryId: string, providerKind: ProviderKind) {
+  return providerKindsForCategory(categoryId).includes(providerKind);
+}
+
+export function publishedCategorySchema(categoryId: string) {
+  return categoryFormSchema(categoryId);
 }
 
 export function validateDynamicPayload(

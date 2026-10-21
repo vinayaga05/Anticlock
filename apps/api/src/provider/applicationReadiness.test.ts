@@ -155,6 +155,7 @@ describe('computeApplicationReadiness', () => {
       },
     });
     assert.deepEqual(missing.missing.map(m => m.key).sort(), [
+      'identity.businessRegistration',
       'location.map',
       'profile.logo',
     ]);

@@ -222,8 +222,10 @@ export function computeApplicationReadiness(
     for (const issue of parsed.error.issues) {
       const key = issue.path.join('.');
       const field =
-        input.schema.fields.find(f => f.key === key) ??
-        input.schema.fields.find(f => PROVIDER_FORM_FIELD_ALIASES[f.key] === key);
+        key === 'location.latitude' || key === 'location.longitude'
+          ? input.schema.fields.find(f => f.type === 'location')
+          : input.schema.fields.find(f => f.key === key) ??
+            input.schema.fields.find(f => PROVIDER_FORM_FIELD_ALIASES[f.key] === key);
       const fieldKey = field?.key ?? key;
       if (seen.has(fieldKey)) continue;
       const label = field?.label ?? humanize(key);
@@ -233,7 +235,12 @@ export function computeApplicationReadiness(
         label,
         sectionId: field?.sectionId ?? String(issue.path[0] ?? 'basic'),
         reason: empty ? 'required' : 'invalid',
-        message: empty ? `${label} is required` : `${label} is not valid`,
+        message:
+          issue.code === 'custom' && issue.message
+            ? issue.message
+            : empty
+              ? `${label} is required`
+              : `${label} is not valid`,
       });
     }
   }

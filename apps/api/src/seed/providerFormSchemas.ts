@@ -1,4 +1,5 @@
-import type { ProviderFormSchemaBody } from '@anticlock/contracts';
+import type { ProviderFormSchemaBody, ProviderKind } from '@anticlock/contracts';
+import catalog from './catalog.json' with { type: 'json' };
 
 const commonSections = [
   { id: 'basic', title: 'Basic details', sortOrder: 1 },
@@ -85,6 +86,7 @@ const commonFields = [
     key: 'profile.logo',
     type: 'image' as const,
     label: 'Logo / profile image',
+    required: true,
     sectionId: 'profile',
   },
   {
@@ -103,7 +105,9 @@ const commonFields = [
     key: 'profile.description',
     type: 'textarea' as const,
     label: 'Description',
+    required: true,
     sectionId: 'profile',
+    validation: { minLength: 10 },
   },
   {
     key: 'profile.yearsInOperation',
@@ -136,6 +140,7 @@ const commonFields = [
     key: 'identity.businessRegistration',
     type: 'document' as const,
     label: 'Business registration',
+    required: true,
     sectionId: 'identity',
     visibleWhen: { providerKind: 'business' as const },
   },
@@ -159,12 +164,14 @@ const commonFields = [
     key: 'availability.openingTime',
     type: 'time' as const,
     label: 'Opening time',
+    required: true,
     sectionId: 'availability',
   },
   {
     key: 'availability.closingTime',
     type: 'time' as const,
     label: 'Closing time',
+    required: true,
     sectionId: 'availability',
   },
   {
@@ -315,3 +322,93 @@ export const CATEGORY_PROVIDER_FORM_SCHEMAS: ProviderFormSchemaBody[] = [
     ]},
   ], ['business', 'individual']),
 ];
+
+const BUSINESS_ONLY = new Set([
+  'health.hospitals',
+  'health.clinic',
+  'health.pharmacy',
+  'health.laboratory',
+  'health.scan',
+  'health.medical_transport',
+  'fitness.gym',
+  'beauty.parlour_female',
+  'beauty.salon_male',
+  'ecom.sports',
+  'ecom.health',
+  'ecom.fitness',
+  'ecom.beauty',
+  'ecom.garments',
+  'ecom.property',
+  'ecom.kitchen',
+  'ecom.games',
+  'ecom.electronics',
+]);
+
+const INDIVIDUAL_ONLY = new Set([
+  'health.doctors',
+  'health.physiotherapist',
+  'health.nursing',
+  'fitness.personal_trainer',
+]);
+
+export function providerKindsForCategory(categoryId: string): ProviderKind[] {
+  const dedicated = CATEGORY_PROVIDER_FORM_SCHEMAS.find(schema => schema.categoryId === categoryId);
+  if (dedicated) return dedicated.providerKinds;
+  if (BUSINESS_ONLY.has(categoryId)) return ['business'];
+  if (INDIVIDUAL_ONLY.has(categoryId)) return ['individual'];
+  return ['business', 'individual'];
+}
+
+function generatedCategorySchema(category: { id: string; treeId: string; name: string }): ProviderFormSchemaBody {
+  const sectionId = 'offering';
+  const kinds = providerKindsForCategory(category.id);
+  const common = {
+    sectionId,
+  };
+  const fields: ProviderFormSchemaBody['fields'] =
+    category.treeId === 'ecommerce'
+      ? [
+          { key: 'offering.products', type: 'textarea', label: 'What you sell', required: true, ...common },
+          { key: 'offering.fulfilment', type: 'text', label: 'Delivery or pickup', ...common },
+        ]
+      : category.treeId === 'home_services'
+        ? [
+            { key: 'offering.serviceAreas', type: 'textarea', label: 'Areas you cover', required: true, ...common },
+            { key: 'offering.minimumCharge', type: 'currency', label: 'Starting charge', ...common },
+          ]
+        : category.treeId === 'course_training'
+          ? [
+              { key: 'offering.subject', type: 'text', label: 'What you teach', required: true, ...common },
+              { key: 'offering.fee', type: 'currency', label: 'Fee from', ...common },
+            ]
+          : category.treeId === 'tours_events'
+            ? [
+                { key: 'offering.experience', type: 'textarea', label: 'What the experience includes', required: true, ...common },
+                { key: 'offering.groupSize', type: 'number', label: 'Typical group size', ...common },
+              ]
+            : [
+                { key: 'offering.summary', type: 'textarea', label: `What you offer as ${category.name}`, required: true, ...common },
+                { key: 'offering.credential', type: 'text', label: 'Licence or certification', ...common },
+              ];
+  return categorySchema(
+    category.id,
+    [{ id: sectionId, title: category.name, sortOrder: 10 }],
+    fields,
+    kinds,
+  );
+}
+
+const dedicatedIds = new Set(
+  CATEGORY_PROVIDER_FORM_SCHEMAS.map(schema => schema.categoryId),
+);
+
+export const ALL_CATEGORY_PROVIDER_FORM_SCHEMAS: ProviderFormSchemaBody[] = [
+  ...CATEGORY_PROVIDER_FORM_SCHEMAS,
+  ...catalog.categories
+    .filter(category => !dedicatedIds.has(category.id))
+    .map(generatedCategorySchema),
+];
+
+export function categoryFormSchema(categoryId: string) {
+  return ALL_CATEGORY_PROVIDER_FORM_SCHEMAS.find(schema => schema.categoryId === categoryId);
+}

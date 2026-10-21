@@ -19,6 +19,7 @@ import {
 import { writeAudit } from "../lib/audit.js";
 import { searchService } from "../assistant/SearchService.js";
 import { interestService } from "../interests/InterestService.js";
+import { categoryAllowsProviderKind } from "../provider/FormSchemaService.js";
 import {
   requireAuth,
   requirePermission,
@@ -51,6 +52,7 @@ catalogRoutes.get("/trees", async (c) => {
 
 catalogRoutes.get("/categories", async (c) => {
   const treeId = c.req.query("treeId");
+  const providerKind = c.req.query("providerKind");
   const rows = treeId
     ? await db
         .select()
@@ -65,6 +67,11 @@ catalogRoutes.get("/categories", async (c) => {
   return c.json({
     data: rows
       .filter((r) => r.status === "published")
+      .filter((r) =>
+        providerKind === "business" || providerKind === "individual"
+          ? categoryAllowsProviderKind(r.id, providerKind)
+          : true,
+      )
       .map((r) => ({
         id: r.id,
         treeId: r.treeId,

@@ -1000,7 +1000,11 @@ export class MediaService {
     body: CreateUploadSessionRequest & { purpose?: "document" | "profile" }
   ) {
     assertAllowedMime(body.kind, body.contentType);
-    const kindMax = maxBytesForKind(body.kind);
+    // Photographed KYC files are stored as images, but they keep the document cap.
+    const kindMax =
+      body.purpose === "document"
+        ? maxBytesForKind("document")
+        : maxBytesForKind(body.kind);
     if (body.byteSize > kindMax) {
       throw Object.assign(new Error("File exceeds max size"), {
         code: "file_too_large",

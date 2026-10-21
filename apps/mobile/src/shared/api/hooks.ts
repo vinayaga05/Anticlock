@@ -341,18 +341,24 @@ export function useCmsBannersQuery() {
 export function useServiceCategoriesQuery(
   treeId: string | undefined,
   fallback: ApiServiceCategory[],
+  providerKind?: 'business' | 'individual',
 ) {
   return useQuery({
     queryKey: [
       'catalog',
       'categories',
       treeId ?? 'all',
+      providerKind ?? 'any',
       isApiEnabled ? 'api' : 'mock',
     ],
     queryFn: async () => {
       if (!isApiEnabled) return fallback;
       await ensureAuthToken();
-      const qs = treeId ? `?treeId=${encodeURIComponent(treeId)}` : '';
+      const params = new URLSearchParams();
+      if (treeId) params.set('treeId', treeId);
+      if (providerKind) params.set('providerKind', providerKind);
+      const query = params.toString();
+      const qs = query ? `?${query}` : '';
       const res = await apiRequest<{ data: ApiServiceCategory[] }>(
         `/v1/catalog/categories${qs}`,
       );

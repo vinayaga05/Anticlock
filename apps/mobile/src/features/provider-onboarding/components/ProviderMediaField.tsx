@@ -262,7 +262,7 @@ export function ProviderMediaField({
   );
 
   const startPick = useCallback(
-    async (source: 'camera' | 'library', replacing?: UploadItem) => {
+    async (source: 'camera' | 'library' | 'pdf', replacing?: UploadItem) => {
       let files: PickedProviderFile[];
       try {
         const room =
@@ -355,6 +355,24 @@ export function ProviderMediaField({
           onReplace={multiple ? undefined : () => choose(item)}
         />
       ))}
+      {canAdd && kind === 'document' ? (
+        <PressableScale
+          accessibilityLabel={`Upload PDF for ${label}`}
+          onPress={() => void startPick('pdf')}
+          style={[
+            styles.addBtn,
+            {
+              borderColor: theme.colors.borderSoft,
+              backgroundColor: theme.colors.surface,
+            },
+          ]}
+        >
+          <AppIcon name="clipboard-list" size={18} color={theme.colors.textSecondary} />
+          <Text style={[styles.addText, { color: theme.colors.textSecondary }]}>
+            Upload a PDF
+          </Text>
+        </PressableScale>
+      ) : null}
       {canAdd ? (
         <PressableScale
           accessibilityLabel={`Upload ${label}`}

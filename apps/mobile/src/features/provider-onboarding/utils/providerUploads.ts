@@ -19,13 +19,14 @@ export const PROVIDER_UPLOAD_LIMITS: Record<
 > = {
   image: {
     maxBytes: 10 * 1024 * 1024,
-    mimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
-    label: 'JPEG, PNG or WebP up to 10 MB',
+    mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+    label: 'JPEG, PNG, WebP or GIF up to 10 MB',
   },
   document: {
     maxBytes: 20 * 1024 * 1024,
-    mimeTypes: ['application/pdf', 'image/jpeg', 'image/png'],
-    label: 'Photo (JPEG or PNG) or PDF up to 20 MB',
+    // `*/*` = any file type (PDF, photos, Word, Excel, ZIP, …).
+    mimeTypes: ['*/*'],
+    label: 'Any file up to 20 MB',
   },
   video: {
     maxBytes: 250 * 1024 * 1024,
@@ -93,16 +94,24 @@ export function fileFromAsset(
   };
 }
 
+function mimeAllowed(
+  contentType: string,
+  mimeTypes: readonly string[],
+): boolean {
+  if (mimeTypes.includes('*/*')) return Boolean(contentType.trim());
+  return mimeTypes.includes(contentType);
+}
+
 /** Client-side MIME/size check; returns a user-facing error or null. */
 export function validatePickedFile(
   file: Pick<PickedProviderFile, 'contentType' | 'byteSize' | 'durationMs'>,
   kind: ProviderUploadKind,
 ): string | null {
   const limits = PROVIDER_UPLOAD_LIMITS[kind];
-  if (!limits.mimeTypes.includes(file.contentType)) {
+  if (!mimeAllowed(file.contentType, limits.mimeTypes)) {
     if (
-      file.contentType === 'image/heic' ||
-      file.contentType === 'image/heif'
+      kind !== 'document' &&
+      (file.contentType === 'image/heic' || file.contentType === 'image/heif')
     ) {
       return 'HEIC photos are not supported. Choose a JPEG or PNG.';
     }
@@ -160,23 +169,29 @@ export async function ensureCameraPermission(os: string = Platform.OS) {
 }
 
 /**
- * Opens the camera or library for the field's media type. Documents are
- * photographed or picked from the library as images (no document-picker
- * native module is installed), with JPEG conversion for HEIC on iOS.
+ * Opens the system document picker for any file type (PDF, photos, office…).
  */
-export async function pickProviderPdf(): Promise<PickedProviderFile[]> {
+export async function pickProviderDocument(): Promise<PickedProviderFile[]> {
   const picker = await import('@react-native-documents/picker');
   try {
     const [file] = await picker.pick({
-      type: [picker.types.pdf],
+      type: [picker.types.allFiles],
       allowMultiSelection: false,
     });
     if (!file?.uri) return [];
+    const name = file.name?.trim() || 'document.bin';
+    const ext = name.split('.').pop()?.toLowerCase() ?? '';
+    const contentType =
+      (file.type && file.type !== 'application/octet-stream'
+        ? file.type
+        : undefined) ||
+      EXT_MIME[ext] ||
+      'application/octet-stream';
     return [
       {
         uri: file.uri,
-        filename: file.name ?? 'document.pdf',
-        contentType: file.type || 'application/pdf',
+        filename: name,
+        contentType,
         byteSize:
           typeof file.size === 'number' && file.size > 0 ? file.size : undefined,
       },
@@ -189,12 +204,17 @@ export async function pickProviderPdf(): Promise<PickedProviderFile[]> {
   }
 }
 
+/** @deprecated Use pickProviderDocument — kept for older call sites/tests. */
+export async function pickProviderPdf(): Promise<PickedProviderFile[]> {
+  return pickProviderDocument();
+}
+
 export async function pickProviderFiles(
   kind: ProviderUploadKind,
-  source: 'camera' | 'library' | 'pdf',
+  source: 'camera' | 'library' | 'pdf' | 'file',
   selectionLimit = 1,
 ): Promise<PickedProviderFile[]> {
-  if (source === 'pdf') return pickProviderPdf();
+  if (source === 'pdf' || source === 'file') return pickProviderDocument();
   const mediaType = kind === 'video' ? 'video' : 'photo';
   if (source === 'camera') await ensureCameraPermission();
   const response =
@@ -223,12 +243,25 @@ export async function pickProviderFiles(
   return selectedAssets(response).map(asset => fileFromAsset(asset, kind));
 }
 
-async function resolveByteSize(file: PickedProviderFile) {
-  if (file.byteSize) return file.byteSize;
+/**
+ * Read the picked file once. Android `content://` grants are often single-use;
+ * opening the URI again for the PUT after a size probe returns 404.
+ */
+async function readPickedFileBytes(file: PickedProviderFile): Promise<{
+  bytes: ArrayBuffer;
+  byteSize: number;
+}> {
   const response = await fetch(file.uri);
-  const blob = await response.blob();
-  if (!blob.size) throw new Error('The selected file could not be read.');
-  return blob.size;
+  if (!response.ok) {
+    throw new Error(
+      'The selected file could not be read. Please choose it again.',
+    );
+  }
+  const bytes = await response.arrayBuffer();
+  if (!bytes.byteLength) {
+    throw new Error('The selected file is empty.');
+  }
+  return { bytes, byteSize: bytes.byteLength };
 }
 
 /**
@@ -247,12 +280,18 @@ export function resolveUploadTarget(uploadUrl: string, apiBaseUrl: string) {
   };
 }
 
-function putFile(
+/**
+ * PUT raw bytes. Presigned R2 URLs must receive the object body (not an RN
+ * `{ uri, type, name }` multipart-shaped payload). Local API routes accept the
+ * same ArrayBuffer through fetch.
+ */
+async function putFileBytes(
   url: string,
   headers: Record<string, string>,
-  file: PickedProviderFile,
+  bytes: ArrayBuffer,
   onProgress?: (fraction: number) => void,
 ) {
+  // XHR exposes upload progress; fetch does not on React Native.
   return new Promise<void>((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open('PUT', url);
@@ -276,12 +315,7 @@ function putFile(
     request.ontimeout = () =>
       reject(new Error('Upload timed out. Please retry.'));
     request.onabort = () => reject(new Error('Upload was cancelled.'));
-    // React Native streams `{ uri }` bodies natively instead of through JS.
-    request.send({
-      uri: file.uri,
-      type: file.contentType,
-      name: file.filename,
-    } as never);
+    request.send(bytes);
   });
 }
 
@@ -296,7 +330,7 @@ export async function uploadProviderFile(opts: {
   onProgress?: (fraction: number) => void;
 }): Promise<ProviderUploadResult> {
   const { applicationId, fieldKey, kind, purpose, file, onProgress } = opts;
-  const byteSize = await resolveByteSize(file);
+  const { bytes, byteSize } = await readPickedFileBytes(file);
   const invalid = validatePickedFile({ ...file, byteSize }, kind);
   if (invalid) throw new Error(invalid);
 
@@ -322,8 +356,8 @@ export async function uploadProviderFile(opts: {
 
   const target = resolveUploadTarget(session.uploadUrl, getApiBaseUrl());
   const headers: Record<string, string> = {
-    'Content-Type': file.contentType,
     ...(session.headers ?? {}),
+    'Content-Type': file.contentType,
   };
   if (target.needsAuth) {
     headers.Authorization = `Bearer ${
@@ -331,7 +365,7 @@ export async function uploadProviderFile(opts: {
     }`;
   }
   onProgress?.(0);
-  await putFile(target.url, headers, file, onProgress);
+  await putFileBytes(target.url, headers, bytes, onProgress);
   onProgress?.(1);
 
   const completed = await apiRequest<ProviderUploadResult>(

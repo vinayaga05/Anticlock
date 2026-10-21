@@ -17,11 +17,21 @@ import type {
   UploadTarget,
 } from './ObjectStorageProvider.js';
 
+/** docker-compose often injects `R2_BUCKET_*=` as "" — `??` does not fall back. */
+function envBucket(value: string | undefined, fallback: string): string {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : fallback;
+}
+
 function bucketName(bucket: StorageBucket): string {
   if (bucket === 'private-documents') {
-    return process.env.R2_BUCKET_PRIVATE ?? 'anticlock-private-documents';
+    return envBucket(
+      process.env.R2_BUCKET_PRIVATE,
+      'anticlock-private-documents',
+    );
   }
-  return process.env.R2_BUCKET_PUBLIC ?? 'anticlock-public-media';
+  // Production media lives in `reels`; anticlock-public-media is not created.
+  return envBucket(process.env.R2_BUCKET_PUBLIC, 'reels');
 }
 
 /** Public delivery URLs are only valid when this bucket has a configured CDN/custom domain. */
@@ -58,15 +68,14 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
         accessKeyId: process.env.R2_ACCESS_KEY_ID,
         secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
       },
+      // Keep checksum query params off presigned PUT URLs (R2 + mobile clients).
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
     });
   }
 
-  /**
-   * KYC photos are signed directly to the private bucket. A missing bucket
-   * makes that PUT return 404, so create it once when the API starts.
-   */
-  async ensurePrivateBucket(): Promise<void> {
-    const Bucket = bucketName('private-documents');
+  private async ensureBucket(bucket: StorageBucket, label: string): Promise<void> {
+    const Bucket = bucketName(bucket);
     try {
       await this.client.send(new HeadBucketCommand({ Bucket }));
       return;
@@ -75,20 +84,33 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
         .$metadata?.httpStatusCode;
       if (status !== 404) {
         console.warn(
-          `[media] private document bucket check failed (${status ?? 'unknown'})`,
+          `[media] ${label} bucket check failed (${status ?? 'unknown'})`,
         );
         return;
       }
     }
     try {
       await this.client.send(new CreateBucketCommand({ Bucket }));
-      console.log(`[media] created private document bucket ${Bucket}`);
+      console.log(`[media] created ${label} bucket ${Bucket}`);
     } catch (err) {
       console.warn(
-        '[media] could not create private document bucket',
+        `[media] could not create ${label} bucket`,
         err instanceof Error ? err.message : err,
       );
     }
+  }
+
+  /**
+   * KYC photos are signed directly to the private bucket. A missing bucket
+   * makes that PUT return 404, so create it once when the API starts.
+   */
+  async ensurePrivateBucket(): Promise<void> {
+    await this.ensureBucket('private-documents', 'private document');
+  }
+
+  /** Profile logos / public media use the public bucket. */
+  async ensurePublicBucket(): Promise<void> {
+    await this.ensureBucket('public-media', 'public media');
   }
 
   async createUploadTarget(input: {

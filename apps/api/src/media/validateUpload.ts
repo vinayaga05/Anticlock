@@ -13,7 +13,7 @@ const IMAGE_MIMES = new Set([
   'image/gif',
 ]);
 
-const DOC_MIMES = new Set(['application/pdf']);
+/** KYC / add-business documents accept any non-empty MIME (PDF, photos, office, etc.). */
 const VIDEO_MIMES = new Set(['video/mp4']);
 
 function normalizeMime(mime: string) {
@@ -76,12 +76,16 @@ export function maxBytesForKind(kind: MediaKind): number {
 
 export function assertAllowedMime(kind: MediaKind, mime: string) {
   const normalized = normalizeMime(mime);
+  if (!normalized || normalized.length > 200) {
+    throw Object.assign(new Error(`MIME type ${mime} not allowed for ${kind}`), {
+      code: 'invalid_mime',
+      status: 400,
+    });
+  }
+  // Provider KYC documents may be any file the applicant has (PDF, photo, office…).
+  if (kind === 'document') return;
   const ok =
-    kind === 'image'
-      ? IMAGE_MIMES.has(normalized)
-      : kind === 'video'
-      ? VIDEO_MIMES.has(normalized)
-      : DOC_MIMES.has(normalized);
+    kind === 'image' ? IMAGE_MIMES.has(normalized) : VIDEO_MIMES.has(normalized);
   if (!ok) {
     throw Object.assign(
       new Error(`MIME type ${mime} not allowed for ${kind}`),
@@ -162,7 +166,26 @@ export function validateUploadedBytes(input: {
     });
   }
 
-  const detected = detectMimeFromMagic(input.body);
+  const expectedRaw = normalizeMime(input.expectedMime);
+  const expected = expectedRaw === 'image/jpg' ? 'image/jpeg' : expectedRaw;
+  const detectedRaw = detectMimeFromMagic(input.body);
+  const detected =
+    detectedRaw === 'image/jpg' ? 'image/jpeg' : detectedRaw;
+
+  // Documents: accept any declared type. Use magic when we recognize it;
+  // otherwise keep the client Content-Type (office docs, scans, etc.).
+  if (input.kind === 'document') {
+    const mimeType = detected ?? expected;
+    assertAllowedMime('document', mimeType);
+    return {
+      mimeType,
+      byteSize: input.body.length,
+      checksumSha256: sha256(input.body),
+      width: null,
+      height: null,
+    };
+  }
+
   if (!detected) {
     throw Object.assign(new Error('Unrecognized file signature'), {
       code: 'invalid_signature',
@@ -171,22 +194,11 @@ export function validateUploadedBytes(input: {
   }
   assertAllowedMime(input.kind, detected);
 
-  // Normalize jpeg aliases
-  const expected =
-    normalizeMime(input.expectedMime) === 'image/jpg'
-      ? 'image/jpeg'
-      : normalizeMime(input.expectedMime);
-  const actual = detected === 'image/jpg' ? 'image/jpeg' : detected;
-  if (
-    expected !== actual &&
-    !(expected === 'image/jpeg' && actual === 'image/jpeg')
-  ) {
-    if (expected !== actual) {
-      throw Object.assign(
-        new Error(`Content-Type mismatch: expected ${expected}, got ${actual}`),
-        { code: 'mime_mismatch', status: 400 },
-      );
-    }
+  if (expected !== detected) {
+    throw Object.assign(
+      new Error(`Content-Type mismatch: expected ${expected}, got ${detected}`),
+      { code: 'mime_mismatch', status: 400 },
+    );
   }
 
   let width: number | null = null;
@@ -205,7 +217,7 @@ export function validateUploadedBytes(input: {
   }
 
   return {
-    mimeType: actual,
+    mimeType: detected,
     byteSize: input.body.length,
     checksumSha256: sha256(input.body),
     width,

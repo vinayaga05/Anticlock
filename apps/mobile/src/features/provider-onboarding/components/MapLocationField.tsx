@@ -1,15 +1,14 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Modal,
-  PanResponder,
   StyleSheet,
   Text,
   TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
+import MapView, { PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppIcon } from '@/shared/components/AppIcon';
 import { Button } from '@/shared/components/Button';
@@ -18,13 +17,11 @@ import { readCurrentPosition } from '@/features/provider-onboarding/utils/device
 import {
   formatCoordinates,
   searchPlace,
-  shiftCenter,
-  visibleTiles,
   type MapPoint,
 } from '@/features/provider-onboarding/utils/placeSearch';
 
 const FALLBACK: MapPoint = { latitude: 13.0827, longitude: 80.2707 };
-const STREET_ZOOM = 16;
+const STREET_DELTA = 0.004;
 
 function pointFromValue(value: unknown): MapPoint | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -38,65 +35,63 @@ function pointFromValue(value: unknown): MapPoint | null {
   return { latitude, longitude };
 }
 
-function TileMap({
+function regionFor(point: MapPoint): Region {
+  return {
+    latitude: point.latitude,
+    longitude: point.longitude,
+    latitudeDelta: STREET_DELTA,
+    longitudeDelta: STREET_DELTA,
+  };
+}
+
+function GoogleMap({
   center,
-  width,
-  height,
   interactive,
   onMove,
+  style,
 }: {
   center: MapPoint;
-  width: number;
-  height: number;
   interactive: boolean;
   onMove?: (next: MapPoint) => void;
+  style?: object;
 }) {
+  const mapRef = useRef<MapView>(null);
   const centerRef = useRef(center);
   centerRef.current = center;
-  const origin = useRef(center);
-  const responder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => interactive,
-      onMoveShouldSetPanResponder: () => interactive,
-      onPanResponderGrant: () => {
-        origin.current = centerRef.current;
-      },
-      onPanResponderMove: (_event, gesture) => {
-        onMove?.(shiftCenter(origin.current, gesture.dx, gesture.dy, STREET_ZOOM));
-      },
-      onPanResponderRelease: (_event, gesture) => {
-        onMove?.(shiftCenter(origin.current, gesture.dx, gesture.dy, STREET_ZOOM));
-      },
-    }),
-  ).current;
 
-  const tiles = useMemo(
-    () => (width > 0 && height > 0 ? visibleTiles(center, STREET_ZOOM, width, height) : []),
-    [center, width, height],
-  );
+  useEffect(() => {
+    mapRef.current?.animateToRegion(regionFor(center), 250);
+  }, [center.latitude, center.longitude]);
 
   return (
-    <View
-      style={{ width, height, overflow: 'hidden', backgroundColor: '#d5dde6' }}
-      {...(interactive ? responder.panHandlers : {})}
-    >
-      {tiles.map(tile => (
-        <Image
-          key={tile.key}
-          source={{ uri: tile.url }}
-          style={{
-            position: 'absolute',
-            width: 256,
-            height: 256,
-            left: tile.left,
-            top: tile.top,
-          }}
-        />
-      ))}
+    <View style={[styles.mapHost, style]}>
+      <MapView
+        ref={mapRef}
+        style={StyleSheet.absoluteFill}
+        provider={PROVIDER_GOOGLE}
+        initialRegion={regionFor(center)}
+        scrollEnabled={interactive}
+        zoomEnabled={interactive}
+        rotateEnabled={false}
+        pitchEnabled={false}
+        onRegionChangeComplete={region => {
+          if (!interactive || !onMove) return;
+          const next = {
+            latitude: region.latitude,
+            longitude: region.longitude,
+          };
+          if (
+            Math.abs(next.latitude - centerRef.current.latitude) < 0.000001 &&
+            Math.abs(next.longitude - centerRef.current.longitude) < 0.000001
+          ) {
+            return;
+          }
+          onMove(next);
+        }}
+      />
       <View pointerEvents="none" style={styles.pinWrap}>
         <AppIcon name="map-pin" size={34} color="#c2410c" />
       </View>
-      <Text style={styles.attribution}>© OpenStreetMap © CARTO</Text>
     </View>
   );
 }
@@ -119,7 +114,6 @@ export function MapLocationField({
   const [query, setQuery] = useState(addressQuery);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [previewWidth, setPreviewWidth] = useState(0);
   const lastSearch = useRef('');
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -224,7 +218,6 @@ export function MapLocationField({
         on the map for the exact entrance.
       </Text>
       <View
-        onLayout={event => setPreviewWidth(event.nativeEvent.layout.width)}
         style={[
           styles.preview,
           {
@@ -233,13 +226,8 @@ export function MapLocationField({
           },
         ]}
       >
-        {saved && previewWidth > 0 ? (
-          <TileMap
-            center={saved}
-            width={previewWidth}
-            height={140}
-            interactive={false}
-          />
+        {saved ? (
+          <GoogleMap center={saved} interactive={false} style={styles.previewMap} />
         ) : (
           <View style={styles.emptyPreview}>
             <AppIcon name="map-pin" size={22} color={theme.colors.textSecondary} />
@@ -288,13 +276,12 @@ export function MapLocationField({
             <Button title="Find address" variant="secondary" onPress={() => void search()} />
             <Button title="Current location" variant="secondary" onPress={() => void useHere()} />
           </View>
-          <View style={styles.mapFrame}>
-            <TileMap
+          <View style={[styles.mapFrame, { width: mapWidth, height: mapHeight }]}>
+            <GoogleMap
               center={draft}
-              width={mapWidth}
-              height={mapHeight}
               interactive
               onMove={setDraft}
+              style={StyleSheet.absoluteFill}
             />
             {busy ? (
               <ActivityIndicator style={styles.busy} color={theme.colors.primary} />
@@ -322,6 +309,7 @@ const styles = StyleSheet.create({
     height: 140,
     overflow: 'hidden',
   },
+  previewMap: { flex: 1 },
   emptyPreview: { alignItems: 'center', flex: 1, gap: 6, justifyContent: 'center' },
   coords: { fontSize: 12, fontWeight: '600' },
   modal: { flex: 1, gap: 10, paddingHorizontal: 16 },
@@ -335,24 +323,15 @@ const styles = StyleSheet.create({
   },
   actions: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end' },
   mapFrame: { borderRadius: 16, overflow: 'hidden' },
+  mapHost: { backgroundColor: '#d5dde6', overflow: 'hidden' },
   busy: { position: 'absolute', right: 12, top: 12 },
   pinWrap: {
     alignItems: 'center',
     bottom: 0,
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
     left: 0,
-    paddingBottom: '50%',
     position: 'absolute',
     right: 0,
     top: 0,
-  },
-  attribution: {
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    bottom: 6,
-    color: '#334155',
-    fontSize: 10,
-    left: 6,
-    paddingHorizontal: 4,
-    position: 'absolute',
   },
 });

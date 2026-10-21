@@ -152,6 +152,43 @@ async function seed() {
       .onConflictDoNothing();
   }
 
+  // Align login with INITIAL_ADMIN_* . In production this is opt-in so a
+  // routine seed cannot silently overwrite a password an operator changed.
+  if (credentials && enabled('SYNC_INITIAL_ADMIN_PASSWORD', !isProduction)) {
+    const passwordHash = await bcrypt.hash(credentials.password, 10);
+    const [byEmail] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, credentials.email));
+    if (byEmail) {
+      await db
+        .update(users)
+        .set({
+          passwordHash,
+          isActive: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, byEmail.id));
+      adminId = byEmail.id;
+      console.log(`[seed] synced admin password for ${credentials.email}`);
+    } else {
+      const [created] = await db
+        .insert(users)
+        .values({
+          email: credentials.email,
+          name: 'Knock Admin',
+          passwordHash,
+        })
+        .returning();
+      adminId = created!.id;
+      console.log(`[seed] created admin ${credentials.email}`);
+    }
+    await db
+      .insert(userRoles)
+      .values({ userId: adminId, roleId: 'super_admin' })
+      .onConflictDoNothing();
+  }
+
   for (const tree of catalog.trees) {
     await db
       .insert(serviceTrees)

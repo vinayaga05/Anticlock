@@ -76,8 +76,17 @@ describe('provider contract number parsing', () => {
 describe('provider review state machine', () => {
   it('only allows review actions from submitted / under_review', () => {
     assert.deepEqual(allowedReviewActions('draft'), []);
-    assert.deepEqual(allowedReviewActions('submitted'), ['mark_under_review', 'request_info', 'reject']);
-    assert.deepEqual(allowedReviewActions('under_review'), ['approve', 'request_info', 'reject']);
+    assert.deepEqual(allowedReviewActions('submitted'), [
+      'mark_under_review',
+      'approve',
+      'request_info',
+      'reject',
+    ]);
+    assert.deepEqual(allowedReviewActions('under_review'), [
+      'approve',
+      'request_info',
+      'reject',
+    ]);
     for (const terminal of ['approved', 'rejected', 'more_info_requested'] as const) {
       assert.deepEqual(PROVIDER_REVIEW_TRANSITIONS[terminal], []);
     }

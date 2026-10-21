@@ -61,6 +61,103 @@ async function issueMobileSession(user: typeof mobileUsers.$inferSelect) {
   };
 }
 
+/**
+ * Emergency admin upsert when the panel password is out of sync with
+ * `.env.production`. Requires the live `JWT_SECRET` as `recoverSecret`.
+ * Disable after use by omitting the secret from clients; the route stays
+ * gated by that shared secret.
+ */
+authRoutes.post('/admin/recover', async c => {
+  const jwtSecret = process.env.JWT_SECRET?.trim();
+  if (!jwtSecret || jwtSecret.length < 16) {
+    return c.json(
+      { error: { code: 'unavailable', message: 'Recover is not configured' } },
+      503,
+    );
+  }
+
+  let body: {
+    recoverSecret?: string;
+    email?: string;
+    password?: string;
+  };
+  try {
+    body = (await c.req.json()) as typeof body;
+  } catch {
+    return c.json(
+      { error: { code: 'validation_error', message: 'Invalid JSON body' } },
+      400,
+    );
+  }
+
+  const provided =
+    c.req.header('x-admin-recover')?.trim() || body.recoverSecret?.trim();
+  if (!provided || provided !== jwtSecret) {
+    return c.json(
+      { error: { code: 'unauthorized', message: 'Invalid recover secret' } },
+      401,
+    );
+  }
+
+  const email = (
+    body.email?.trim() ||
+    process.env.INITIAL_ADMIN_EMAIL?.trim() ||
+    ''
+  ).toLowerCase();
+  const password =
+    body.password || process.env.INITIAL_ADMIN_PASSWORD || '';
+  if (!email || !password || password.length < 8) {
+    return c.json(
+      {
+        error: {
+          code: 'validation_error',
+          message: 'email and password (min 8 chars) are required',
+        },
+      },
+      400,
+    );
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const [existing] = await db.select().from(users).where(eq(users.email, email));
+  let userId = existing?.id;
+  if (existing) {
+    await db
+      .update(users)
+      .set({
+        passwordHash,
+        isActive: true,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, existing.id));
+  } else {
+    const [created] = await db
+      .insert(users)
+      .values({
+        email,
+        name: 'Knock Admin',
+        passwordHash,
+      })
+      .returning();
+    userId = created!.id;
+  }
+
+  await db
+    .insert(userRoles)
+    .values({ userId: userId!, roleId: 'super_admin' })
+    .onConflictDoNothing();
+
+  await writeAudit({
+    actorId: userId!,
+    actorEmail: email,
+    action: 'auth.admin_recover',
+    entityType: 'user',
+    entityId: userId!,
+  });
+
+  return c.json({ ok: true, email });
+});
+
 authRoutes.post('/admin/login', async c => {
   const body = AdminLoginRequestSchema.parse(await c.req.json());
   const [user] = await db.select().from(users).where(eq(users.email, body.email));

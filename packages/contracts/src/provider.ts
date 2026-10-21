@@ -391,7 +391,7 @@ export type ProviderApplicationReviewAction = z.infer<
 
 /**
  * The only valid admin review transitions. Anything else is a 409.
- *   submitted     -> under_review | more_info_requested | rejected
+ *   submitted     -> under_review | approved | more_info_requested | rejected
  *   under_review  -> approved | more_info_requested | rejected
  * Applicant transitions (not admin actions):
  *   draft | more_info_requested -> submitted (submit, when complete)
@@ -402,7 +402,7 @@ export const PROVIDER_REVIEW_TRANSITIONS: Record<
   ProviderApplicationReviewAction[]
 > = {
   draft: [],
-  submitted: ['mark_under_review', 'request_info', 'reject'],
+  submitted: ['mark_under_review', 'approve', 'request_info', 'reject'],
   under_review: ['approve', 'request_info', 'reject'],
   more_info_requested: [],
   approved: [],
@@ -437,12 +437,18 @@ export type ResolveFormSchemaQuery = z.infer<
   typeof ResolveFormSchemaQuerySchema
 >;
 
-/** Upload size limits mirrored from the API's media validation. */
+/**
+ * Upload size limits mirrored from the API's media validation.
+ * Document fields accept any MIME (wildcard all); image/video stay type-scoped.
+ */
 export const PROVIDER_UPLOAD_LIMITS = {
-  image: { maxBytes: 10 * 1024 * 1024, mimes: ['image/jpeg', 'image/png', 'image/webp'] },
+  image: {
+    maxBytes: 10 * 1024 * 1024,
+    mimes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+  },
   document: {
     maxBytes: 20 * 1024 * 1024,
-    mimes: ['application/pdf', 'image/jpeg', 'image/png'],
+    mimes: ['*/*'],
   },
   video: { maxBytes: 250 * 1024 * 1024, mimes: ['video/mp4'] },
 } as const;

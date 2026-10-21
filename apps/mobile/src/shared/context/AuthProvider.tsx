@@ -61,8 +61,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function bootstrap() {
       const session = readStoredSession();
       if (!session) {
-        if (!cancelled) { setUser({ id: "temporary-guest", phone: "", displayName: "Guest" } as any); } // TEMP-LOCAL
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setUser(null);
+          setLoading(false);
+        }
         return;
       }
 

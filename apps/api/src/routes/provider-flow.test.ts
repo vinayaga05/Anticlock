@@ -307,25 +307,41 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     assert.equal((await call('OWNER', 'PATCH', `/v1/provider/applications/${firstId}`, { commonPayload: {} })).status, 409);
     assert.equal((await call('OWNER', 'POST', `/v1/provider/applications/${firstId}/submit`)).status, 409);
 
-    // Approve requires under_review first.
-    const early = await review('approve');
-    assert.equal(early.status, 409);
-    assert.equal(early.json.error.code, 'invalid_transition');
-
     const detail = await call('admin', 'GET', `/admin/provider/applications/${firstId}`);
-    assert.deepEqual(detail.json.application.allowedActions, ['mark_under_review', 'request_info', 'reject']);
+    assert.deepEqual(detail.json.application.allowedActions, [
+      'mark_under_review',
+      'approve',
+      'request_info',
+      'reject',
+    ]);
+
+    // Queue shows the submitted application (drafts are hidden).
+    const queue = await call('admin', 'GET', '/admin/provider/applications');
+    assert.equal(queue.status, 200);
+    assert.ok(
+      (queue.json.data as { id: string; status: string }[]).some(
+        a => a.id === firstId && a.status === 'submitted',
+      ),
+      'submitted application appears in the admin queue',
+    );
 
     const under = await review('mark_under_review');
     assert.equal(under.status, 200);
     assert.equal(under.json.application.status, 'under_review');
-    assert.deepEqual(under.json.application.allowedActions, ['approve', 'request_info', 'reject']);
+    assert.deepEqual(under.json.application.allowedActions, [
+      'approve',
+      'request_info',
+      'reject',
+    ]);
     let notes = await notificationsFor(OWNER);
     assert.equal(notes[0].type, 'status_update');
     assert.equal(notes[0].data.applicationId, firstId);
     assert.equal(notes[0].data.status, 'under_review');
 
     assert.equal((await review('request_info')).status, 400, 'message required');
-    const info = await review('request_info', { infoRequestMessage: 'Please upload a clearer ID' });
+    const info = await review('request_info', {
+      infoRequestMessage: 'Please upload a clearer ID',
+    });
     assert.equal(info.status, 200);
     assert.equal(info.json.application.status, 'more_info_requested');
     notes = await notificationsFor(OWNER);
@@ -334,12 +350,20 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
 
     // Applicant fixes and resubmits.
     await upload('OWNER', firstId, 'identity.idDocument', 'document');
-    const resubmitted = await call('OWNER', 'POST', `/v1/provider/applications/${firstId}/submit`);
+    const resubmitted = await call(
+      'OWNER',
+      'POST',
+      `/v1/provider/applications/${firstId}/submit`,
+    );
     assert.equal(resubmitted.status, 200);
     assert.equal(resubmitted.json.application.status, 'submitted');
-    assert.equal(resubmitted.json.application.infoRequestMessage, null, 'answered info request is cleared');
+    assert.equal(
+      resubmitted.json.application.infoRequestMessage,
+      null,
+      'answered info request is cleared',
+    );
 
-    assert.equal((await review('mark_under_review')).status, 200);
+    // Approve is allowed directly from submitted (no mark_under_review required).
     const approved = await review('approve', { notes: 'Looks good' });
     assert.equal(approved.status, 200, JSON.stringify(approved.json));
     assert.equal(approved.json.application.status, 'approved');

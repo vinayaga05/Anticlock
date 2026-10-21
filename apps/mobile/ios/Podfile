@@ -32,6 +32,10 @@ target 'AnticlockTemp' do
     pod name, :modular_headers => true
   end
 
+  # Google Maps provider for react-native-maps (business location picker).
+  rn_maps_path = File.dirname(`node --print "require.resolve('react-native-maps/package.json')"` .strip)
+  pod 'react-native-maps/Google', :path => rn_maps_path
+
   use_react_native!(
     :path => config[:reactNativePath],
     # An absolute path to your application root.

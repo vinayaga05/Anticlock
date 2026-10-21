@@ -5,10 +5,6 @@ import { readStoredSession } from '@/shared/services/auth/authService';
 import type { ApiContentPost, ApiContentPostsResponse } from '@/shared/publishing/contentPostMappers';
 import type { PublisherProfileType } from '@/shared/publishing/publisherSelection';
 import type { ReelItem } from '@/shared/types';
-import {
-  mergeClipFeedItems,
-  publishedEditorialReels,
-} from '@/shared/api/clipFeedMerge';
 
 export type ApiServiceTree = {
   id: string;
@@ -452,7 +448,7 @@ export function useReelsQuery(
     queryKey: [
       'reels',
       'feed',
-      'complete-published',
+      'content-posts-only',
       viewerProfile?.type ?? 'personal',
       viewerProfile?.id ?? 'default',
       'api',
@@ -462,46 +458,25 @@ export function useReelsQuery(
       items: ReelItem[];
       nextCursor: string | null;
     }> => {
+      await ensureAuthToken();
       const cursor = typeof pageParam === 'string' ? pageParam : null;
       const cursorSuffix = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
       const viewerSuffix = viewerProfile
         ? `&viewerProfileType=${encodeURIComponent(viewerProfile.type)}&viewerProfileId=${encodeURIComponent(viewerProfile.id)}`
         : '';
-      let contentItems: ReelItem[] = [];
-      let nextCursor: string | null = null;
-      let contentError: unknown = null;
-      try {
-        await ensureAuthToken();
-        const response = await apiRequest<ApiContentClipFeedResponse>(
-          `/v1/content/feeds/clip?limit=20${cursorSuffix}${viewerSuffix}`,
-        );
-        contentItems = Array.isArray(response.items)
+      // Clips are only profile-published content posts. Editorial/CMS reels from
+      // GET /v1/reels are not mixed into this consumer feed.
+      const response = await apiRequest<ApiContentClipFeedResponse>(
+        `/v1/content/feeds/clip?limit=20${cursorSuffix}${viewerSuffix}`,
+      );
+      return {
+        items: Array.isArray(response.items)
           ? response.items
               .filter(isPublishedContentClipFeedItem)
               .map(mapApiContentClipToItem)
-          : [];
-        nextCursor = response.nextCursor;
-      } catch (error) {
-        contentError = error;
-      }
-      // The published catalog lives on GET /v1/reels. The profile feed can be
-      // empty, so the first page keeps those clips visible.
-      if (!cursor) {
-        try {
-          const editorial = await apiRequest<{ data?: unknown }>('/v1/reels');
-          const items = mergeClipFeedItems(
-            contentItems,
-            publishedEditorialReels(editorial.data),
-          );
-          if (items.length > 0 || !contentError) {
-            return { items, nextCursor: contentError ? null : nextCursor };
-          }
-        } catch {
-          // Editorial clips only fill the catalog; never fail the feed for them.
-        }
-      }
-      if (contentError) throw contentError;
-      return { items: contentItems, nextCursor };
+          : [],
+        nextCursor: response.nextCursor,
+      };
     },
     getNextPageParam: lastPage => lastPage.nextCursor ?? undefined,
     enabled: enabled && isApiEnabled,

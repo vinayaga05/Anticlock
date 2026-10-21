@@ -40,11 +40,13 @@ jest.mock('@/shared/components/PressableScale', () => {
 
 import { PermissionsAndroid, Platform } from 'react-native';
 import { launchCamera } from 'react-native-image-picker';
+import { apiRequest } from '@/shared/api/client';
 import {
   ensureCameraPermission,
   fileFromAsset,
   pickProviderFiles,
   resolveUploadTarget,
+  uploadProviderFile,
   validatePickedFile,
 } from '@/features/provider-onboarding/utils/providerUploads';
 import {
@@ -68,13 +70,25 @@ describe('provider upload validation', () => {
     ).toBeNull();
     expect(
       validatePickedFile({ contentType: 'image/gif', byteSize: 1000 }, 'image'),
-    ).toMatch(/Unsupported/);
+    ).toBeNull();
+    expect(
+      validatePickedFile(
+        { contentType: 'image/heic', byteSize: 1000 },
+        'image',
+      ),
+    ).toMatch(/HEIC/);
+    expect(
+      validatePickedFile(
+        { contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', byteSize: 1000 },
+        'document',
+      ),
+    ).toBeNull();
     expect(
       validatePickedFile(
         { contentType: 'image/heic', byteSize: 1000 },
         'document',
       ),
-    ).toMatch(/HEIC/);
+    ).toBeNull();
     expect(
       validatePickedFile(
         { contentType: 'image/png', byteSize: 11 * 1024 * 1024 },
@@ -127,6 +141,76 @@ describe('provider upload validation', () => {
       url: r2,
       needsAuth: false,
     });
+  });
+
+  it('PUTs raw file bytes to a presigned R2 URL (not a uri/multipart body)', async () => {
+    const fileBytes = new Uint8Array([1, 2, 3, 4]).buffer;
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: async () => fileBytes,
+    });
+    const previousFetch = global.fetch;
+    global.fetch = fetchMock as typeof fetch;
+
+    (apiRequest as jest.Mock)
+      .mockResolvedValueOnce({
+        sessionId: 's1',
+        mediaId: 'm1',
+        uploadUrl:
+          'https://bucket.r2.cloudflarestorage.com/private/x?X-Amz-Signature=abc',
+        headers: { 'Content-Type': 'image/jpeg' },
+      })
+      .mockResolvedValueOnce({ mediaId: 'm1', url: null });
+
+    const sent: { body?: ArrayBuffer; headers: Record<string, string> } = {
+      headers: {},
+    };
+    class FakeXHR {
+      status = 200;
+      upload = { onprogress: null as null | ((e: ProgressEvent) => void) };
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      ontimeout: (() => void) | null = null;
+      onabort: (() => void) | null = null;
+      open() {}
+      setRequestHeader(name: string, value: string) {
+        sent.headers[name] = value;
+      }
+      send(body: ArrayBuffer) {
+        sent.body = body;
+        this.onload?.();
+      }
+    }
+    const previousXHR = global.XMLHttpRequest;
+    global.XMLHttpRequest = FakeXHR as unknown as typeof XMLHttpRequest;
+
+    try {
+      const result = await uploadProviderFile({
+        applicationId: 'a1',
+        fieldKey: 'identity.aadhaarDocument',
+        kind: 'document',
+        purpose: 'document',
+        file: {
+          uri: 'content://media/external/images/1',
+          filename: 'aadhaar.jpg',
+          contentType: 'image/jpeg',
+          byteSize: 4,
+        },
+      });
+
+      expect(result.mediaId).toBe('m1');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(sent.body).toBe(fileBytes);
+      expect(sent.headers['Content-Type']).toBe('image/jpeg');
+      expect(sent.headers.Authorization).toBeUndefined();
+      expect(apiRequest).toHaveBeenCalledWith(
+        '/v1/provider/applications/a1/kyc-upload-sessions/s1/complete',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    } finally {
+      global.fetch = previousFetch;
+      global.XMLHttpRequest = previousXHR;
+    }
   });
 });
 

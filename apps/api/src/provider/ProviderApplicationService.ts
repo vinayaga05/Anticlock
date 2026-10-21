@@ -47,7 +47,13 @@ import { computeApplicationReadiness } from './applicationReadiness.js';
 
 type ApplicationRow = typeof providerApplications.$inferSelect;
 
-const PHOTO_DOCUMENT_MIMES = new Set(['image/jpeg', 'image/jpg', 'image/png']);
+const PHOTO_DOCUMENT_MIMES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
 const editableStatuses = new Set<string>(['draft', 'more_info_requested']);
 const submittableStatuses = new Set<string>(PROVIDER_APPLICANT_SUBMITTABLE_STATUSES);
 /** Guards against unbounded draft creation by one account. */

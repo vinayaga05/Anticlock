@@ -1,3 +1,5 @@
+import { GOOGLE_MAPS_API_KEY } from '@/shared/config/googleMapsApiKey';
+
 export type MapPoint = { latitude: number; longitude: number };
 
 const TILE_SIZE = 256;
@@ -94,19 +96,20 @@ export function formatCoordinates(point: MapPoint) {
 export async function searchPlace(query: string): Promise<MapPoint | null> {
   const trimmed = query.trim();
   if (trimmed.length < 3) return null;
-  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(trimmed)}`;
-  const response = await fetch(url, {
-    headers: {
-      Accept: 'application/json',
-      'User-Agent': 'Anticlock/1.0 (provider location picker)',
-    },
-  });
+  const url =
+    `https://maps.googleapis.com/maps/api/geocode/json` +
+    `?address=${encodeURIComponent(trimmed)}` +
+    `&key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}`;
+  const response = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!response.ok) return null;
-  const rows = (await response.json()) as Array<{ lat?: string; lon?: string }>;
-  const hit = rows[0];
-  if (!hit?.lat || !hit.lon) return null;
-  const latitude = Number(hit.lat);
-  const longitude = Number(hit.lon);
+  const body = (await response.json()) as {
+    status?: string;
+    results?: Array<{ geometry?: { location?: { lat?: number; lng?: number } } }>;
+  };
+  if (body.status !== 'OK' && body.status !== 'ZERO_RESULTS') return null;
+  const location = body.results?.[0]?.geometry?.location;
+  const latitude = Number(location?.lat);
+  const longitude = Number(location?.lng);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
   return { latitude, longitude };
 }

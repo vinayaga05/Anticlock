@@ -403,9 +403,8 @@ export function ReelFeedScreen() {
     : Boolean(globalReelsQuery.data) &&
       !hasNextPage &&
       !isFetchingNextPage;
-  // Content-feed results are already block-filtered on the server. Hydrate the
-  // same persisted block list for editorial/legacy Reels as well, whose public
-  // endpoint deliberately has no viewer-specific server filter.
+  // Content-feed results are already block-filtered on the server. Also hydrate
+  // the local block list so newly blocked profiles hide immediately.
   useEffect(() => {
     let active = true;
 
@@ -433,12 +432,15 @@ export function ReelFeedScreen() {
       active = false;
     };
   }, []);
-  // Profile clips come from the authenticated feed. Published editorial clips
-  // from GET /v1/reels are merged onto the first page so the catalog stays
-  // visible when nobody has posted a profile clip yet.
   // Keep the empty state referentially stable so a loading/refetch transition
   // cannot make FlatList think its data changed and recalculate its viewport.
   const feedReels = queriedReels ?? EMPTY_REELS;
+  const feedLoading = profilePlayback
+    ? profileReelsQuery.isLoading
+    : globalReelsQuery.isLoading;
+  const feedError = profilePlayback
+    ? profileReelsQuery.error
+    : globalReelsQuery.error;
   const genieQ = route.params?.q?.trim().toLowerCase();
   const reels = useMemo(() => {
     const visibleReels = withoutHiddenClips(feedReels, hiddenIds).filter(
@@ -731,6 +733,11 @@ export function ReelFeedScreen() {
       setCurrentIndex(0);
       setPlaybackCycle(cycle => cycle + 1);
       requestAnimationFrame(() => {
+        // Empty feeds have no rows. scrollToIndex(0) crashes FlatList.
+        if (!loopedFeedRef.current.length) {
+          listRef.current?.scrollToOffset({ offset: 0, animated: false });
+          return;
+        }
         listRef.current?.scrollToIndex({ index: 0, animated: false });
       });
     } finally {
@@ -1139,6 +1146,13 @@ export function ReelFeedScreen() {
     );
   };
 
+  const emptyMessage =
+    feedError instanceof Error
+      ? feedError.message
+      : profilePlayback
+        ? 'No clips from this profile yet.'
+        : 'No clips yet. Be the first to share one.';
+
   return (
     <View style={styles.root}>
       <FlatList
@@ -1160,6 +1174,12 @@ export function ReelFeedScreen() {
         onViewableItemsChanged={onViewableItemsChanged}
         onEndReached={fetchNextServerPage}
         onEndReachedThreshold={0.6}
+        onScrollToIndexFailed={info => {
+          listRef.current?.scrollToOffset({
+            offset: Math.max(0, info.index) * pageHeight,
+            animated: false,
+          });
+        }}
         viewabilityConfig={{ itemVisiblePercentThreshold: 80 }}
         // iOS safe-area inset auto-adjust shrinks the scroll viewport after mount
         // and makes full-screen pages drift downward under the tab bar.
@@ -1170,6 +1190,47 @@ export function ReelFeedScreen() {
         {...(Platform.OS === 'android'
           ? { overScrollMode: 'never' as const }
           : null)}
+        ListEmptyComponent={
+          <View
+            style={[
+              styles.empty,
+              { height: pageHeight, width: pageWidth, paddingTop: insets.top + 80 },
+            ]}>
+            {feedLoading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <>
+                <Text style={styles.emptyTitle}>
+                  {feedError ? 'Could not load clips' : 'No clips yet'}
+                </Text>
+                <Text style={styles.emptyBody}>{emptyMessage}</Text>
+                {!profilePlayback && !feedError ? (
+                  <PressableScale
+                    accessibilityLabel="Create a clip"
+                    onPress={() => navigation.navigate('ClipComposer')}
+                    style={[
+                      styles.emptyCta,
+                      { backgroundColor: theme.colors.primary },
+                    ]}>
+                    <AppIcon name="video" size={18} color="#042F2E" />
+                    <Text style={styles.emptyCtaLabel}>Create a clip</Text>
+                  </PressableScale>
+                ) : null}
+                {feedError ? (
+                  <PressableScale
+                    accessibilityLabel="Try again"
+                    onPress={() => void refetch()}
+                    style={[
+                      styles.emptyCta,
+                      { backgroundColor: theme.colors.primary },
+                    ]}>
+                    <Text style={styles.emptyCtaLabel}>Try again</Text>
+                  </PressableScale>
+                ) : null}
+              </>
+            )}
+          </View>
+        }
         refreshControl={
           <RefreshControl
             refreshing={isPullRefreshing}
@@ -1238,6 +1299,38 @@ export function ReelFeedScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
   list: { flex: 1 },
+  empty: {
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 12,
+    paddingHorizontal: 32,
+  },
+  emptyTitle: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  emptyBody: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  emptyCta: {
+    alignItems: 'center',
+    borderRadius: 999,
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+    minHeight: 48,
+    paddingHorizontal: 20,
+  },
+  emptyCtaLabel: {
+    color: '#042F2E',
+    fontSize: 15,
+    fontWeight: '800',
+  },
   newClipsWrap: {
     position: 'absolute',
     left: 0,

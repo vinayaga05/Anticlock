@@ -88,6 +88,14 @@ export function extensionForMime(mime: string): string {
     'image/gif': 'gif',
     'application/pdf': 'pdf',
     'video/mp4': 'mp4',
+    'application/msword': 'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+      'docx',
+    'application/vnd.ms-excel': 'xls',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+    'text/plain': 'txt',
+    'application/zip': 'zip',
+    'application/octet-stream': 'bin',
   };
   const normalized = mime.trim().toLowerCase().split(';', 1)[0] ?? '';
   return map[normalized] ?? 'bin';

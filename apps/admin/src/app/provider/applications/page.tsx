@@ -2,11 +2,22 @@
 
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
 import type { ProviderApplicationSummary } from '@anticlock/contracts';
 import { AdminShell } from '@/components/AdminShell';
 import { apiFetch } from '@/lib/api';
 
+const STATUS_FILTERS = [
+  { id: 'all', label: 'All in queue' },
+  { id: 'submitted', label: 'Submitted' },
+  { id: 'under_review', label: 'Under review' },
+  { id: 'more_info_requested', label: 'More info' },
+  { id: 'approved', label: 'Approved' },
+  { id: 'rejected', label: 'Rejected' },
+] as const;
+
 export default function ProviderApplicationsPage() {
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const { data, isLoading, error } = useQuery({
     queryKey: ['admin', 'provider', 'applications'],
     queryFn: () =>
@@ -15,17 +26,42 @@ export default function ProviderApplicationsPage() {
       ),
   });
 
+  const rows = useMemo(() => {
+    const list = data?.data ?? [];
+    if (statusFilter === 'all') return list;
+    return list.filter(app => app.status === statusFilter);
+  }, [data?.data, statusFilter]);
+
   return (
     <AdminShell>
       <h1 className="page-title">Provider applications</h1>
       <p className="page-sub">
-        Review onboarding submissions (drafts are private to the applicant). KYC
-        documents and Aadhaar are shown only here.
+        When an applicant taps Send for review, the application appears here as
+        submitted. Approve, reject (with a reason), or request more info. Drafts
+        stay private until they submit.
       </p>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        {STATUS_FILTERS.map(filter => (
+          <button
+            key={filter.id}
+            type="button"
+            className={statusFilter === filter.id ? 'btn' : 'btn secondary'}
+            onClick={() => setStatusFilter(filter.id)}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
       <div className="card">
         {isLoading ? <p className="muted">Loading…</p> : null}
         {error ? <p className="error">{(error as Error).message}</p> : null}
-        {data ? (
+        {data && rows.length === 0 ? (
+          <p className="muted">
+            No applications in this view yet. Submitted businesses from the
+            mobile app show up here automatically.
+          </p>
+        ) : null}
+        {data && rows.length > 0 ? (
           <table className="table">
             <thead>
               <tr>
@@ -38,7 +74,7 @@ export default function ProviderApplicationsPage() {
               </tr>
             </thead>
             <tbody>
-              {data.data.map(app => (
+              {rows.map(app => (
                 <tr key={app.id}>
                   <td>{app.businessName}</td>
                   <td>
@@ -50,9 +86,16 @@ export default function ProviderApplicationsPage() {
                       app.categoryIds.join(', ') ||
                       '—'}
                   </td>
-                  <td>{app.submittedAt ? new Date(app.submittedAt).toLocaleString() : '—'}</td>
                   <td>
-                    <Link href={`/provider/applications/${app.id}`} className="btn secondary">
+                    {app.submittedAt
+                      ? new Date(app.submittedAt).toLocaleString()
+                      : '—'}
+                  </td>
+                  <td>
+                    <Link
+                      href={`/provider/applications/${app.id}`}
+                      className="btn secondary"
+                    >
                       Review
                     </Link>
                   </td>

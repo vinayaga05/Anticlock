@@ -262,7 +262,10 @@ export function ProviderMediaField({
   );
 
   const startPick = useCallback(
-    async (source: 'camera' | 'library' | 'pdf', replacing?: UploadItem) => {
+    async (
+      source: 'camera' | 'library' | 'pdf' | 'file',
+      replacing?: UploadItem,
+    ) => {
       let files: PickedProviderFile[];
       try {
         const room =
@@ -305,20 +308,38 @@ export function ProviderMediaField({
   const choose = useCallback(
     (replacing?: UploadItem) => {
       const what = kind === 'video' ? 'video' : 'photo';
+      const buttons =
+        kind === 'document'
+          ? [
+              {
+                text: 'Choose file',
+                onPress: () => void startPick('file', replacing),
+              },
+              {
+                text: 'Take photo',
+                onPress: () => void startPick('camera', replacing),
+              },
+              {
+                text: 'Choose photo from library',
+                onPress: () => void startPick('library', replacing),
+              },
+              { text: 'Cancel', style: 'cancel' as const },
+            ]
+          : [
+              {
+                text: kind === 'video' ? 'Record video' : 'Take photo',
+                onPress: () => void startPick('camera', replacing),
+              },
+              {
+                text: `Choose ${what} from library`,
+                onPress: () => void startPick('library', replacing),
+              },
+              { text: 'Cancel', style: 'cancel' as const },
+            ];
       Alert.alert(
         replacing ? `Replace ${label.toLowerCase()}` : label,
         PROVIDER_UPLOAD_LIMITS[kind].label,
-        [
-          {
-            text: kind === 'video' ? 'Record video' : 'Take photo',
-            onPress: () => void startPick('camera', replacing),
-          },
-          {
-            text: `Choose ${what} from library`,
-            onPress: () => void startPick('library', replacing),
-          },
-          { text: 'Cancel', style: 'cancel' },
-        ],
+        buttons,
       );
     },
     [kind, label, startPick],
@@ -357,8 +378,8 @@ export function ProviderMediaField({
       ))}
       {canAdd && kind === 'document' ? (
         <PressableScale
-          accessibilityLabel={`Upload PDF for ${label}`}
-          onPress={() => void startPick('pdf')}
+          accessibilityLabel={`Upload file for ${label}`}
+          onPress={() => void startPick('file')}
           style={[
             styles.addBtn,
             {
@@ -369,7 +390,7 @@ export function ProviderMediaField({
         >
           <AppIcon name="clipboard-list" size={18} color={theme.colors.textSecondary} />
           <Text style={[styles.addText, { color: theme.colors.textSecondary }]}>
-            Upload a PDF
+            Upload a file
           </Text>
         </PressableScale>
       ) : null}

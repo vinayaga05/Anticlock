@@ -41,6 +41,8 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Knock uses your camera to record Clips.</string>
+	<key>GMSApiKey</key>
+	<string>AIzaSyClXh2xoeYlmwmndbVUTwqtzyWfcZB24GY</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Knock uses your location so you can drop the business pin where you are.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

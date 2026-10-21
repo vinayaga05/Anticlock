@@ -182,7 +182,7 @@ export default function ProviderApplicationDetailPage() {
                   <textarea
                     className="input"
                     rows={3}
-                    placeholder="Review notes (required to reject)"
+                    placeholder="Reason / notes (required to reject; optional for approve)"
                     value={notes}
                     onChange={e => setNotes(e.target.value)}
                   />

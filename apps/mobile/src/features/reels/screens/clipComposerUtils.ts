@@ -34,3 +34,31 @@ export function displayBytes(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+/**
+ * Overall progress for the publish card: the video transfer is the long
+ * part (10–75%), the cover is short (75–88%), publishing finishes it.
+ */
+export function uploadProgressPercent(
+  phase: 'preparing' | 'video' | 'cover' | 'publishing' | 'complete',
+  fraction = 0,
+): number {
+  const f = Math.min(1, Math.max(0, Number.isFinite(fraction) ? fraction : 0));
+  switch (phase) {
+    case 'preparing':
+      return 5;
+    case 'video':
+      return Math.round(10 + f * 65);
+    case 'cover':
+      return Math.round(75 + f * 13);
+    case 'publishing':
+      return 92;
+    case 'complete':
+      return 100;
+  }
+}
+
+/** Cancelling is only possible before the publish request is sent. */
+export function canCancelUpload(phase: string): boolean {
+  return phase === 'preparing' || phase === 'video' || phase === 'cover';
+}

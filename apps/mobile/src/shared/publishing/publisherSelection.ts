@@ -146,7 +146,19 @@ export function createPublisherSelectionStore(
       kv.set(draftKey(draft.format), JSON.stringify(persisted));
       return persisted;
     },
-    clearDraft(format: PublishFormat) {
+    /**
+     * Clears the persisted draft for a format. With a draft id, only that
+     * draft is cleared, so finishing or cancelling an older upload can never
+     * drop a newer draft the creator started since.
+     */
+    clearDraft(format: PublishFormat, draftId?: string) {
+      if (draftId) {
+        const current = parseJson<PersistedPublishDraft>(
+          kv.getString(draftKey(format)),
+          value => typeof value?.draftId === 'string',
+        );
+        if (current && current.draftId !== draftId) return;
+      }
       kv.remove(draftKey(format));
     },
   };

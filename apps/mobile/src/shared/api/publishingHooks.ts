@@ -68,6 +68,25 @@ export type ContentUploadFile = {
   bytes?: ArrayBuffer;
 };
 
+/** Thrown when the creator cancels an in-flight upload. */
+export class UploadCancelledError extends Error {
+  constructor() {
+    super('Upload cancelled');
+    this.name = 'UploadCancelledError';
+  }
+}
+
+export type UploadOptions = {
+  /** Aborts the byte transfer (and any later step) when signalled. */
+  signal?: AbortSignal;
+  /** 0..1 fraction of the file sent, when the platform reports it. */
+  onProgress?: (fraction: number) => void;
+};
+
+function throwIfCancelled(signal?: AbortSignal) {
+  if (signal?.aborted) throw new UploadCancelledError();
+}
+
 function requireSession() {
   const session = readStoredSession();
   if (!session?.token) throw new Error('Please sign in to publish.');
@@ -108,6 +127,7 @@ function putNativeMediaFile(
   uploadUrl: string,
   headers: Headers,
   file: Pick<ContentUploadFile, 'localUri' | 'contentType' | 'filename'>,
+  options: UploadOptions = {},
 ): Promise<number> {
   if (!isNativeLocalMediaUri(file.localUri)) {
     return Promise.reject(
@@ -115,16 +135,41 @@ function putNativeMediaFile(
     );
   }
 
+  const { signal, onProgress } = options;
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new UploadCancelledError());
+      return;
+    }
     const request = new XMLHttpRequest();
+    const onAbortSignal = () => request.abort();
+    signal?.addEventListener('abort', onAbortSignal);
+    const done = () => signal?.removeEventListener('abort', onAbortSignal);
     request.open('PUT', uploadUrl);
     headers.forEach((value, name) => request.setRequestHeader(name, value));
-    request.onload = () => resolve(request.status);
-    request.onerror = () =>
-      reject(new Error('Media upload could not reach the server.'));
-    request.ontimeout = () =>
-      reject(new Error('Media upload timed out. Please try again.'));
-    request.onabort = () => reject(new Error('Media upload was cancelled.'));
+    if (onProgress && request.upload) {
+      request.upload.onprogress = event => {
+        if (event.lengthComputable && event.total > 0) {
+          onProgress(Math.min(1, event.loaded / event.total));
+        }
+      };
+    }
+    request.onload = () => {
+      done();
+      resolve(request.status);
+    };
+    request.onerror = () => {
+      done();
+      reject(new Error('Upload failed. Check your connection and try again.'));
+    };
+    request.ontimeout = () => {
+      done();
+      reject(new Error('Upload timed out. Please try again.'));
+    };
+    request.onabort = () => {
+      done();
+      reject(new UploadCancelledError());
+    };
     request.send({
       uri: file.localUri,
       type: file.contentType,
@@ -145,8 +190,10 @@ export async function uploadContentMedia(
   visibility: ContentContainerInput['visibility'],
   /** Server draft this upload belongs to (moves it to `uploading`). */
   draftId?: string,
+  options: UploadOptions = {},
 ): Promise<string> {
   const session = requireSession();
+  throwIfCancelled(options.signal);
   if (!isApiEnabled) {
     throw new ApiError(
       0,
@@ -177,6 +224,7 @@ export async function uploadContentMedia(
       ...(draftId ? { draftId } : {}),
     }),
   });
+  throwIfCancelled(options.signal);
   const uploadHeaders = new Headers(created.upload.headers);
   // Local storage uses an authenticated API endpoint; a presigned R2 URL
   // must receive exactly its signed headers, so never attach the JWT there.
@@ -187,7 +235,12 @@ export async function uploadContentMedia(
     );
   }
   const status = isNativeLocalMediaUri(file.localUri)
-    ? await putNativeMediaFile(created.upload.uploadUrl, uploadHeaders, file)
+    ? await putNativeMediaFile(
+        created.upload.uploadUrl,
+        uploadHeaders,
+        file,
+        options,
+      )
     : await (async () => {
         if (!file.bytes) {
           throw new Error(
@@ -198,7 +251,9 @@ export async function uploadContentMedia(
           method: 'PUT',
           headers: uploadHeaders,
           body: file.bytes,
+          signal: options.signal,
         });
+        options.onProgress?.(1);
         return put.status;
       })();
   if (status < 200 || status >= 300) {
@@ -208,6 +263,7 @@ export async function uploadContentMedia(
       'Video upload failed. Please try again.',
     );
   }
+  throwIfCancelled(options.signal);
   await apiRequest(`/v1/content/uploads/${created.upload.sessionId}/complete`, {
     method: 'POST',
     headers,
@@ -321,6 +377,20 @@ export async function ensureContentDraft(seed: DraftSeed): Promise<string> {
   return created.draft.id;
 }
 
+/**
+ * Discards an unpublished draft after the creator cancels. Only this draft's
+ * persisted pointer is cleared, never a newer draft for the same format.
+ */
+export async function discardContentDraft(
+  format: ContentContainerInput['format'],
+  draftId: string,
+): Promise<void> {
+  publisherSelectionStore.clearDraft(format, draftId);
+  await apiRequest(`/v1/content/drafts/${draftId}`, { method: 'DELETE' }).catch(
+    () => undefined,
+  );
+}
+
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export type PublishContentInput = ContentContainerInput & {
@@ -364,7 +434,7 @@ async function publishViaDraft(
           body: JSON.stringify({ publisherProfileId: identity.id }),
         },
       );
-      publisherSelectionStore.clearDraft(input.format);
+      publisherSelectionStore.clearDraft(input.format, draftId);
       return published;
     } catch (error) {
       if (

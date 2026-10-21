@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from '@/shared/context/AuthProvider';
 import { StreamChatProvider } from '@/shared/providers/StreamChatProvider';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { useNotificationSetup } from '@/shared/hooks/useNotificationSetup';
+import { LiveContentSync } from '@/shared/realtime/LiveContentSync';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,7 +22,7 @@ const queryClient = new QueryClient({
 
 function AppShell() {
   const theme = useTheme();
-  const { session } = useAuth();
+  const { session, user } = useAuth();
 
   // Set up push notifications when user is authenticated
   useNotificationSetup(!!session);
@@ -32,6 +33,7 @@ function AppShell() {
         barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'}
         backgroundColor={theme.colors.background}
       />
+      {user ? <LiveContentSync /> : null}
       <RootNavigator />
     </>
   );

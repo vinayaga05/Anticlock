@@ -49,7 +49,7 @@ function editorialItem(item: EditorialReel): ReelItem | null {
           entityType:
             entityType === 'service_category'
               ? undefined
-              : entityType,
+              : (entityType as 'provider' | 'event' | 'course' | 'product'),
           entityId,
           serviceCategoryId:
             entityType === 'service_category' ? entityId : undefined,

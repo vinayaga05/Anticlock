@@ -14,6 +14,7 @@ import {
   Text,
   Alert,
   ActivityIndicator,
+  Share,
   useWindowDimensions,
   View,
   ViewToken,
@@ -51,6 +52,8 @@ import {
   useReelsQuery,
 } from '@/shared/api/hooks';
 import { evictDeletedClipFromCaches } from '@/shared/api/clipCacheEviction';
+import { useLivePendingClips } from '@/shared/realtime/useLiveContent';
+import { clipShareUrl } from '@/features/reels/feed/clipShare';
 import { canDeleteClip, withoutHiddenClips } from './clipOwnership';
 import { useContentProfileQuery } from '@/shared/api/storyHooks';
 import { useProfileFollowMutation } from '@/shared/api/profileFollows';
@@ -378,6 +381,16 @@ export function ReelFeedScreen() {
       ),
     [globalReelsQuery.data?.pages],
   );
+  const viewerSuffix = activeViewerProfile
+    ? `&viewerProfileType=${encodeURIComponent(identityProfileType(activeViewerProfile))}&viewerProfileId=${encodeURIComponent(activeViewerProfile.id)}`
+    : '';
+  const live = useLivePendingClips({
+    enabled: !profilePlayback,
+    loadedReels,
+    viewerSuffix,
+  });
+  const jumpToTopRef = useRef(false);
+  const revealedReelIdRef = useRef<string | null>(null);
   const queriedReels = profilePlayback ? profileReelsQuery.data : loadedReels;
   const refetch = profilePlayback
     ? profileReelsQuery.refetch
@@ -456,7 +469,9 @@ export function ReelFeedScreen() {
     const retainedIndex = activeReelIdRef.current
       ? reels.findIndex(reel => reel.id === activeReelIdRef.current)
       : -1;
-    const nextIndex = retainedIndex >= 0 ? retainedIndex : 0;
+    const jumpToTop = jumpToTopRef.current;
+    jumpToTopRef.current = false;
+    const nextIndex = !jumpToTop && retainedIndex >= 0 ? retainedIndex : 0;
     currentIndexRef.current = nextIndex;
     activeReelIdRef.current = reels[nextIndex]?.id ?? null;
     setCurrentIndex(nextIndex);
@@ -480,6 +495,25 @@ export function ReelFeedScreen() {
     const reelId = route.params?.reelId;
     if (!reelId || !reels.length) return;
     const idx = reels.findIndex(r => r.id === reelId);
+    if (
+      idx < 0 &&
+      !profilePlayback &&
+      revealedReelIdRef.current !== reelId &&
+      globalReelsQuery.isSuccess
+    ) {
+      // A shared link can point at a clip that is not in the loaded pages.
+      revealedReelIdRef.current = reelId;
+      jumpToTopRef.current = true;
+      live.revealClip(reelId).then(
+        found => {
+          if (!found) jumpToTopRef.current = false;
+        },
+        () => {
+          jumpToTopRef.current = false;
+        },
+      );
+      return;
+    }
     if (idx >= 0) {
       currentIndexRef.current = idx;
       setCurrentIndex(idx);
@@ -487,6 +521,7 @@ export function ReelFeedScreen() {
         listRef.current?.scrollToIndex({ index: idx, animated: false });
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.reelId, reels]);
 
   const bottomSafe = useTabBarBottomInset(20);
@@ -702,6 +737,20 @@ export function ReelFeedScreen() {
       setIsPullRefreshing(false);
     }
   }, [refetch]);
+
+  const shareClip = useCallback((item: ReelItem) => {
+    const url = clipShareUrl(item.id);
+    Share.share(
+      Platform.OS === 'ios'
+        ? { url, message: item.caption || item.author }
+        : { message: url, title: item.author },
+    ).catch(() => undefined);
+  }, []);
+
+  const showNewClips = useCallback(() => {
+    if (!live.showPending().length) return;
+    jumpToTopRef.current = true;
+  }, [live]);
 
   const hideReel = useCallback(
     (reelId: string) => {
@@ -991,7 +1040,11 @@ export function ReelFeedScreen() {
               })
             }
           />
-          <SideAction icon="share" accessibilityLabel="Share" />
+          <SideAction
+            icon="share"
+            accessibilityLabel="Share"
+            onPress={() => shareClip(item)}
+          />
           <SideAction
             icon="more"
             accessibilityLabel="More options"
@@ -1127,6 +1180,34 @@ export function ReelFeedScreen() {
           />
         }
       />
+      {live.pending.length > 0 ? (
+        <View
+          pointerEvents="box-none"
+          style={[styles.newClipsWrap, { top: insets.top + 58 }]}
+        >
+          <PressableScale
+            accessibilityLabel={`${live.pending.length} new clips`}
+            onPress={showNewClips}
+            style={[styles.newClipsPill, { backgroundColor: theme.colors.primary }]}
+          >
+            <AppIcon name="arrow-up" size={16} color="#FFFFFF" strokeWidth={2.4} />
+            {live.pending.slice(0, 3).map((clip, index) =>
+              clip.authorAvatarUrl ? (
+                <Image
+                  key={clip.id}
+                  source={{ uri: clip.authorAvatarUrl }}
+                  style={index > 0 ? [styles.newClipsAvatar, styles.newClipsAvatarStacked] : styles.newClipsAvatar}
+                />
+              ) : null,
+            )}
+            <Text style={styles.newClipsText}>
+              {live.pending.length === 1
+                ? 'New clip'
+                : `${live.pending.length > 9 ? '9+' : live.pending.length} new clips`}
+            </Text>
+          </PressableScale>
+        </View>
+      ) : null}
       <ClipMoreSheet
         visible={Boolean(menuReel)}
         saved={menuReel ? Boolean(saved[menuReel.id] ?? menuReel.saved) : false}
@@ -1157,6 +1238,34 @@ export function ReelFeedScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
   list: { flex: 1 },
+  newClipsWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  newClipsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    height: 36,
+    borderRadius: 18,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  newClipsAvatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  newClipsAvatarStacked: { marginLeft: -12 },
+  newClipsText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   reel: { backgroundColor: '#000' },
   topFade: {
     position: 'absolute',

@@ -69,7 +69,11 @@ import {
   publishContainer,
   requireVisiblePost,
   updateDraft,
+  getVisiblePost,
+  viewerCouldSeePost,
 } from "../content/ContentPublishingService.js";
+import { streamSSE } from "hono/streaming";
+import { subscribeContentEvents, type ContentEvent } from "../realtime/contentEvents.js";
 import {
   exceedsClipDuration,
   listActiveMusicTracks,
@@ -368,6 +372,74 @@ async function requireEligiblePublicClipForEngagement(
 }
 
 export const contentMobileRoutes = new Hono<AppEnv>();
+type ClipSourcePost = Awaited<ReturnType<typeof listPosts>>["items"][number];
+
+/** Feed shape for published video Clips; anything else is dropped. */
+function toClipFeedItems(posts: ClipSourcePost[]) {
+  return posts.flatMap((post) => {
+    if (post.format !== "clip") return [];
+    const video = post.media.find((item) => item.kind === "video");
+    if (!video || post.mediaType !== "video") return [];
+    return [{
+      ...post,
+      format: "clip" as const,
+      mediaType: "video" as const,
+      status: "published" as const,
+      playbackUrl: video.url,
+      duplicateClusterId: post.duplicateClusterId ?? post.id,
+      // Canonical ordering is publishedAt DESC. Recommendation scoring is
+      // deliberately out of scope for this complete-feed mode.
+      trendingScore: 0,
+    }];
+  });
+}
+
+function parseSince(value: string | undefined) {
+  if (!value) return null;
+  const at = new Date(value);
+  if (Number.isNaN(at.getTime())) {
+    throw new ZodError([{ code: "custom", path: ["since"], message: "Invalid since" }]);
+  }
+  return at;
+}
+
+async function clipViewerProfile(
+  c: { req: { query: (name: string) => string | undefined } },
+  mobileUserId: string,
+) {
+  const viewerType = normalizePublisherType(c.req.query("viewerProfileType")) ?? "personal";
+  const viewerId = c.req.query("viewerProfileId") ?? mobileUserId;
+  return (await resolveOwnedPublisher(mobileUserId, { id: viewerId, type: viewerType })).ref;
+}
+
+/** What one viewer may learn about a content event, or null for nothing. */
+export async function viewerEventPayload(
+  mobileUserId: string,
+  viewerProfile: Awaited<ReturnType<typeof clipViewerProfile>> | undefined,
+  event: ContentEvent,
+) {
+  const base = {
+    id: event.postId,
+    format: event.format,
+    publisherProfileType: event.publisherProfileType,
+    publisherProfileId: event.publisherProfileId,
+  };
+  if (event.type === "post.removed") {
+    // Only viewers who could have seen the post learn it is gone, and only its id.
+    const couldSee = await viewerCouldSeePost(mobileUserId, event.postId, viewerProfile).catch(() => false);
+    return couldSee
+      ? { type: "post.removed" as const, id: event.postId, format: event.format }
+      : null;
+  }
+  try {
+    const post = await getVisiblePost(mobileUserId, event.postId, viewerProfile);
+    const [clip] = toClipFeedItems([post]);
+    return { type: "post.published" as const, ...base, item: clip ?? post };
+  } catch {
+    return null;
+  }
+}
+
 contentMobileRoutes.use("/identities", requireAuth);
 contentMobileRoutes.use("/uploads", requireAuth);
 contentMobileRoutes.use("/uploads/*", requireAuth);
@@ -798,38 +870,102 @@ contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
       limit: c.req.query("limit") ?? "20",
       cursor: c.req.query("cursor"),
     });
-    const viewerType = normalizePublisherType(c.req.query("viewerProfileType")) ?? "personal";
-    const viewerId = c.req.query("viewerProfileId") ?? mobileUserId;
-    const viewerProfile = (await resolveOwnedPublisher(mobileUserId, {
-      id: viewerId,
-      type: viewerType,
-    })).ref;
+    const since = parseSince(c.req.query("since"));
+    const viewerProfile = await clipViewerProfile(c, mobileUserId);
     const result = await listPosts(mobileUserId, {
       format: "clip",
       viewerProfile,
       limit: query.limit,
-      cursor: query.cursor,
+      // Catch-up reads start at the newest item and stop at `since`.
+      cursor: since ? undefined : query.cursor,
     });
-    const items = result.items.flatMap((post) => {
-      const video = post.media.find((item) => item.kind === "video");
-      if (!video || post.mediaType !== "video") return [];
-      return [{
-        ...post,
-        format: "clip" as const,
-        mediaType: "video" as const,
-        status: "published" as const,
-        playbackUrl: video.url,
-        duplicateClusterId: post.duplicateClusterId ?? post.id,
-        // Canonical ordering is publishedAt DESC. Recommendation scoring is
-        // deliberately out of scope for this temporary complete-feed mode.
-        trendingScore: 0,
-      }];
-    });
-    return c.json({ items, nextCursor: result.nextCursor });
+    let items = toClipFeedItems(result.items);
+    if (since) {
+      items = items.filter((item) => Date.parse(item.publishedAt) > since.getTime());
+    }
+    return c.json({ items, nextCursor: since ? null : result.nextCursor });
   } catch (error) {
     const { status, body } = errorResponse(error);
     return c.json(body, status);
   }
+});
+
+/** One Clip as the viewer's feed would show it (share links, live updates). */
+contentMobileRoutes.get("/posts/:id", async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    const viewerProfile = await clipViewerProfile(c, mobileUserId);
+    const post = await getVisiblePost(mobileUserId, c.req.param("id"), viewerProfile);
+    const [clip] = toClipFeedItems([post]);
+    return c.json({ post: clip ?? post });
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+const STREAM_HEARTBEAT_MS = Number(process.env.CONTENT_STREAM_HEARTBEAT_MS ?? 25_000);
+
+/**
+ * Live content events (Server-Sent Events). Every event is re-checked
+ * against this viewer's visibility before it is written, so private,
+ * blocked, removed or unpublished content never reaches other devices.
+ * Removal events only carry ids. Clients reconnect with backoff and catch
+ * up with `GET /feeds/clip?since=`.
+ */
+contentMobileRoutes.get("/stream", requireAuth, async (c) => {
+  let mobileUserId: string;
+  let viewerProfile: Awaited<ReturnType<typeof clipViewerProfile>>;
+  try {
+    mobileUserId = await requireActiveMobile(c.get("auth"));
+    viewerProfile = await clipViewerProfile(c, mobileUserId);
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+  c.header("Cache-Control", "no-cache, no-transform");
+  c.header("X-Accel-Buffering", "no");
+  return streamSSE(c, async (stream) => {
+    const queue: ContentEvent[] = [];
+    let wake: (() => void) | null = null;
+    const unsubscribe = subscribeContentEvents((event) => {
+      queue.push(event);
+      wake?.();
+    });
+    const heartbeat = setInterval(() => {
+      stream.write(": ping\n\n").catch(() => undefined);
+    }, STREAM_HEARTBEAT_MS);
+    stream.onAbort(() => {
+      wake?.();
+    });
+    try {
+      await stream.writeSSE({
+        event: "ready",
+        data: JSON.stringify({ at: new Date().toISOString() }),
+        retry: 3000,
+      });
+      while (!stream.aborted && !stream.closed) {
+        const event = queue.shift();
+        if (!event) {
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+          });
+          wake = null;
+          continue;
+        }
+        const payload = await viewerEventPayload(mobileUserId, viewerProfile, event);
+        if (!payload) continue;
+        await stream.writeSSE({
+          event: payload.type,
+          id: `${event.at}|${event.postId}`,
+          data: JSON.stringify(payload),
+        });
+      }
+    } finally {
+      clearInterval(heartbeat);
+      unsubscribe();
+    }
+  });
 });
 
 /**

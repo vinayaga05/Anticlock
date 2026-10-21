@@ -16,6 +16,7 @@ import { AppIcon } from '@/shared/components/AppIcon';
 import { FilterPills } from '@/shared/components/FilterPills';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { createOrGetChannel } from '@/shared/api/messagesClient';
+import { discardContentDraft } from '@/shared/api/publishingHooks';
 import { useStreamChat } from '@/shared/providers/StreamChatProvider';
 import { formatProfileCount } from '@/shared/data/flash';
 import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
@@ -37,6 +38,9 @@ import {
 import { UserCallActions } from '@/features/calls/components/UserCallActions';
 
 type Tab = 'flash' | 'clip';
+
+/** Unpublished drafts the owner can still throw away. */
+const DISCARDABLE = new Set(['draft', 'uploading', 'processing', 'failed']);
 
 const STATUS_LABEL: Record<string, string> = {
   draft: 'Draft',
@@ -355,7 +359,7 @@ export function PublisherProfileView({
       {isOwner && inProgress.length > 0 ? (
         <View style={[styles.progressCard, { borderColor: theme.colors.borderSoft }]}>
           <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>
-            In progress (only you can see this)
+            In progress
           </Text>
           {inProgress.slice(0, 5).map(item => (
             <View key={item.id} style={styles.progressRow}>
@@ -368,6 +372,27 @@ export function PublisherProfileView({
               <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
                 {STATUS_LABEL[item.contentStatus] ?? item.contentStatus}
               </Text>
+              {DISCARDABLE.has(item.contentStatus) ? (
+                <PressableScale
+                  accessibilityLabel="Discard"
+                  hitSlop={8}
+                  onPress={() =>
+                    Alert.alert('Discard this draft?', undefined, [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Discard',
+                        style: 'destructive',
+                        onPress: () => {
+                          discardContentDraft(item.contentType, item.draftId).finally(
+                            () => refetchMine(),
+                          );
+                        },
+                      },
+                    ])
+                  }>
+                  <AppIcon name="trash" size={18} color={theme.colors.textSecondary} />
+                </PressableScale>
+              ) : null}
             </View>
           ))}
         </View>

@@ -230,7 +230,7 @@ function contentLocation(
   return { name: location.name, latitude, longitude };
 }
 
-function isPublishedContentClipFeedItem(
+export function isPublishedContentClipFeedItem(
   value: unknown,
 ): value is ApiContentClipFeedItem {
   if (!value || typeof value !== 'object') return false;
@@ -496,8 +496,8 @@ export function useReelsQuery(
           if (items.length > 0 || !contentError) {
             return { items, nextCursor: contentError ? null : nextCursor };
           }
-        } catch (editorialError) {
-          if (!contentError) throw editorialError;
+        } catch {
+          // Editorial clips only fill the catalog; never fail the feed for them.
         }
       }
       if (contentError) throw contentError;

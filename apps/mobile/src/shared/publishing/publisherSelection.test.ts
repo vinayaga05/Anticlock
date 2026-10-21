@@ -130,6 +130,22 @@ describe('persisted publisher selection + draft (scenario 9)', () => {
     expect(store.loadDraft('story')).toBeNull();
   });
 
+  it('clears only the matching draft when an older upload finishes', () => {
+    const store = createPublisherSelectionStore(memoryKv());
+    store.saveDraft({
+      format: 'clip',
+      draftId: 'draft-new',
+      publisherProfileId: business.id,
+      publisherProfileType: 'business',
+      visibility: 'public',
+    });
+    // An earlier upload (draft-old) completing must not drop the newer draft.
+    store.clearDraft('clip', 'draft-old');
+    expect(store.loadDraft('clip')?.draftId).toBe('draft-new');
+    store.clearDraft('clip', 'draft-new');
+    expect(store.loadDraft('clip')).toBeNull();
+  });
+
   it('reuses a draft only for the same publisher and visibility', () => {
     const store = createPublisherSelectionStore(memoryKv());
     const draft = store.saveDraft({

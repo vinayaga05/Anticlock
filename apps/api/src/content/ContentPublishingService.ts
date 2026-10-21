@@ -12,6 +12,7 @@ import {
   sql,
   type SQL,
 } from "drizzle-orm";
+import { postEvent, publishContentEvent } from "../realtime/contentEvents.js";
 import { z } from "zod";
 import {
   ClipEditMetadataSchema,
@@ -504,11 +505,16 @@ export async function publishContainer(
     return created!;
   });
 
+  if (post.status === "published") {
+    void publishContentEvent(postEvent("post.published", post));
+  }
   const refreshed = await requireOwnedContainer(ownerUserId, container.id);
   return { post, draft: serializeDraft(refreshed, owned.publisher, post) };
 }
 
 // ── Viewer-facing reads ───────────────────────────────────────────────────
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function encodeCursor(post: Pick<Post, "publishedAt" | "id">) {
   return Buffer.from(`${post.publishedAt.toISOString()}|${post.id}`).toString(
@@ -834,7 +840,12 @@ export async function listMine(
  * viewer, from an active publisher the viewer has not blocked. Returns 404
  * otherwise so hidden content is not disclosed.
  */
-export async function requireVisiblePost(viewerUserId: string, postId: string) {
+export async function requireVisiblePost(
+  viewerUserId: string,
+  postId: string,
+  viewerProfile?: PublisherRef,
+) {
+  if (!UUID_RE.test(postId)) throw appError("Content not found", "not_found", 404);
   const now = new Date();
   const [viewer, blocked, rows] = await Promise.all([
     loadViewerContext(viewerUserId),
@@ -852,7 +863,7 @@ export async function requireVisiblePost(viewerUserId: string, postId: string) {
       .limit(1),
   ]);
   const post = rows[0];
-  if (!post || !(await viewerCanSeePublishedPost(viewer, post))) {
+  if (!post || !(await viewerCanSeePublishedPost(viewer, post, viewerProfile))) {
     throw appError("Content not found", "not_found", 404);
   }
   const ref = refOf(post);
@@ -864,7 +875,42 @@ export async function requireVisiblePost(viewerUserId: string, postId: string) {
   return { post, viewer, publisher, ref };
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Whether this viewer could see the post before it was removed: same
+ * privacy and block rules as the feed, ignoring the current status. Used
+ * so removal notices only reach viewers who could have had the post.
+ */
+export async function viewerCouldSeePost(
+  viewerUserId: string,
+  postId: string,
+  viewerProfile?: PublisherRef,
+) {
+  if (!UUID_RE.test(postId)) return false;
+  const [viewer, blocked, rows] = await Promise.all([
+    loadViewerContext(viewerUserId),
+    loadBlockedPublisherKeys(viewerUserId),
+    db.select().from(contentPosts).where(eq(contentPosts.id, postId)).limit(1),
+  ]);
+  const post = rows[0];
+  if (!post || blocked.has(publisherKey(refOf(post)))) return false;
+  return viewerCanSeePublishedPost(viewer, post, viewerProfile);
+}
+
+/**
+ * One published post as the viewer's feed would show it, or 404 when the
+ * viewer may not see it (private, blocked, removed, unpublished, expired).
+ */
+export async function getVisiblePost(
+  viewerUserId: string,
+  postId: string,
+  viewerProfile?: PublisherRef,
+) {
+  const { post, viewer } = await requireVisiblePost(viewerUserId, postId, viewerProfile);
+  const [item] = await serializePosts(viewer, [post], viewerProfile);
+  if (!item) throw appError("Content not found", "not_found", 404);
+  return item;
+}
 
 /**
  * Owner delete. The account that created the post, or a member who manages
@@ -887,6 +933,7 @@ export async function deletePost(viewerUserId: string, postId: string) {
       .update(contentPosts)
       .set({ status: "removed" })
       .where(eq(contentPosts.id, post.id));
+    void publishContentEvent(postEvent("post.removed", post));
   }
   return { id: post.id, contentStatus: "removed" as const };
 }
@@ -1007,7 +1054,7 @@ export async function reviewPost(
   note?: string
 ) {
   const now = new Date();
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [current] = await tx
       .select()
       .from(contentPosts)
@@ -1044,6 +1091,14 @@ export async function reviewPost(
         })
         .where(eq(contentContainers.id, updated.containerId));
     }
-    return { id: updated.id, contentStatus: contentStatusOf(null, updated) };
+    return {
+      id: updated.id,
+      contentStatus: contentStatusOf(null, updated),
+      row: updated,
+    };
   });
+  if (result.row.status === "published") {
+    void publishContentEvent(postEvent("post.published", result.row));
+  }
+  return { id: result.id, contentStatus: result.contentStatus };
 }

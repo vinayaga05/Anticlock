@@ -17,6 +17,7 @@ jest.mock('@/shared/api/profileFollows', () => ({
 }));
 jest.mock('@/shared/api/messagesClient', () => ({ createOrGetChannel: (...args: any[]) => mockCreateOrGetChannel(...args) }));
 jest.mock('@/shared/providers/StreamChatProvider', () => ({ useStreamChat: () => ({ isReady: true }) }));
+jest.mock('@/shared/api/publishingHooks', () => ({ discardContentDraft: jest.fn(() => Promise.resolve()) }));
 jest.mock('react-native-safe-area-context', () => require('@/test/componentMocks').safeAreaModule);
 
 const mockNavigate = jest.fn();

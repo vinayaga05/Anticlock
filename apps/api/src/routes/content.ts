@@ -70,6 +70,7 @@ import {
   requireVisiblePost,
   updateDraft,
   getVisiblePost,
+  viewerCouldSeePost,
 } from "../content/ContentPublishingService.js";
 import { streamSSE } from "hono/streaming";
 import { subscribeContentEvents, type ContentEvent } from "../realtime/contentEvents.js";
@@ -424,8 +425,11 @@ export async function viewerEventPayload(
     publisherProfileId: event.publisherProfileId,
   };
   if (event.type === "post.removed") {
-    // Only the id: the post is gone, so nothing about its publisher is disclosed.
-    return { type: "post.removed" as const, id: event.postId, format: event.format };
+    // Only viewers who could have seen the post learn it is gone, and only its id.
+    const couldSee = await viewerCouldSeePost(mobileUserId, event.postId, viewerProfile).catch(() => false);
+    return couldSee
+      ? { type: "post.removed" as const, id: event.postId, format: event.format }
+      : null;
   }
   try {
     const post = await getVisiblePost(mobileUserId, event.postId, viewerProfile);

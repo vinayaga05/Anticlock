@@ -877,6 +877,27 @@ export async function requireVisiblePost(
 
 
 /**
+ * Whether this viewer could see the post before it was removed: same
+ * privacy and block rules as the feed, ignoring the current status. Used
+ * so removal notices only reach viewers who could have had the post.
+ */
+export async function viewerCouldSeePost(
+  viewerUserId: string,
+  postId: string,
+  viewerProfile?: PublisherRef,
+) {
+  if (!UUID_RE.test(postId)) return false;
+  const [viewer, blocked, rows] = await Promise.all([
+    loadViewerContext(viewerUserId),
+    loadBlockedPublisherKeys(viewerUserId),
+    db.select().from(contentPosts).where(eq(contentPosts.id, postId)).limit(1),
+  ]);
+  const post = rows[0];
+  if (!post || blocked.has(publisherKey(refOf(post)))) return false;
+  return viewerCanSeePublishedPost(viewer, post, viewerProfile);
+}
+
+/**
  * One published post as the viewer's feed would show it, or 404 when the
  * viewer may not see it (private, blocked, removed, unpublished, expired).
  */

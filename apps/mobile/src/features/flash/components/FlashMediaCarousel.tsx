@@ -8,6 +8,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { AppIcon } from '@/shared/components/AppIcon';
+import { VideoPlayer } from '@/features/video/components/VideoPlayer';
 import { PostMedia } from '@/shared/data/flash/types';
 import { useTheme } from '@/shared/hooks/useTheme';
 
@@ -20,11 +21,14 @@ type Props = {
 function MediaSlide({
   item,
   width,
+  active,
   ready,
   onLoad,
 }: {
   item: PostMedia;
   width: number;
+  /** Only the visible carousel page owns an actively playing native video. */
+  active: boolean;
   ready: boolean;
   onLoad: () => void;
 }) {
@@ -36,23 +40,27 @@ function MediaSlide({
         styles.slide,
         { width, aspectRatio: ASPECT_RATIO, backgroundColor: theme.colors.surfaceMuted },
       ]}>
-      <Image
-        source={{
-          uri:
-            item.type === 'video'
-              ? item.posterUrl ??
-                (typeof item.url === 'string'
-                  ? item.url
-                  : Image.resolveAssetSource(item.url)?.uri)
-              : typeof item.url === 'string'
+      {item.type === 'video' ? (
+        <VideoPlayer
+          uri={item.url}
+          poster={item.posterUrl}
+          muted={false}
+          paused={!active}
+        />
+      ) : (
+        <Image
+          source={{
+            uri:
+              typeof item.url === 'string'
                 ? item.url
                 : Image.resolveAssetSource(item.url)?.uri,
-        }}
-        style={[styles.mediaImage, { opacity: ready ? 1 : 0 }]}
-        onLoad={onLoad}
-      />
-      {item.type === 'video' ? (
-        <View style={styles.playBadge}>
+          }}
+          style={[styles.mediaImage, { opacity: ready ? 1 : 0 }]}
+          onLoad={onLoad}
+        />
+      )}
+      {item.type === 'video' && !active ? (
+        <View style={styles.playBadge} pointerEvents="none">
           <AppIcon name="play" size={20} color="#fff" strokeWidth={2} fill="#fff" />
         </View>
       ) : null}
@@ -84,6 +92,7 @@ export function FlashMediaCarousel({ media }: Props) {
       <MediaSlide
         item={item}
         width={screenWidth}
+        active
         ready={!!mediaReady[item.id]}
         onLoad={() => setMediaReady(prev => ({ ...prev, [item.id]: true }))}
       />
@@ -109,10 +118,11 @@ export function FlashMediaCarousel({ media }: Props) {
           offset: screenWidth * index,
           index,
         })}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <MediaSlide
             item={item}
             width={screenWidth}
+            active={index === activeIndex}
             ready={!!mediaReady[item.id]}
             onLoad={() => setMediaReady(prev => ({ ...prev, [item.id]: true }))}
           />
@@ -149,7 +159,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   playBadge: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.28)',

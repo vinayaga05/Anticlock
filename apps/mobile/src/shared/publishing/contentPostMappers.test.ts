@@ -68,6 +68,20 @@ describe('mapApiFlashPost', () => {
     expect(mapped.media).toEqual([]);
     expect(mapped.text).toBe('Morning class');
   });
+
+  it('puts a followed publisher into the Following feed only', () => {
+    const following = mapApiFlashPost(
+      post({ relationship: { isFollowing: true } as ApiContentPost['relationship'] }),
+      now,
+    );
+    const notFollowing = mapApiFlashPost(
+      post({ relationship: { isFollowing: false } as ApiContentPost['relationship'] }),
+      now,
+    );
+
+    expect(following.feedTabs).toContain('following');
+    expect(notFollowing.feedTabs).not.toContain('following');
+  });
 });
 
 describe('mapApiStoriesToUserStories', () => {

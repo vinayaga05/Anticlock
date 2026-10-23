@@ -41,14 +41,28 @@ export function useStoriesQuery() {
   });
 }
 
-/** Flash feed: published Flash posts from personal and business profiles. */
-export function useFlashPostsQuery() {
+/**
+ * Flash feed: published posts the active viewer profile is permitted to see.
+ * Passing the active profile is essential because follows can be made as a
+ * personal profile or as an owned business profile.
+ */
+export function useFlashPostsQuery(
+  viewer?: { type: PublisherProfileType; id: string } | null,
+) {
+  const viewerQuery = viewer
+    ? `&viewerProfileType=${encodeURIComponent(viewer.type)}&viewerProfileId=${encodeURIComponent(viewer.id)}`
+    : '';
   return useQuery({
-    queryKey: [...contentQueryKeys.flashFeed, isApiEnabled ? 'api' : 'local'],
+    queryKey: [
+      ...contentQueryKeys.flashFeed,
+      isApiEnabled ? 'api' : 'local',
+      viewer?.type ?? 'personal',
+      viewer?.id ?? '',
+    ],
     queryFn: async (): Promise<FlashPost[]> => {
       if (!isApiEnabled) return [];
       const response = await apiRequest<ApiContentPostsResponse>(
-        '/v1/content/posts?format=flash&limit=50',
+        `/v1/content/posts?format=flash&limit=50${viewerQuery}`,
       );
       const now = Date.now();
       return postsOf(response).map(post => mapApiFlashPost(post, now));

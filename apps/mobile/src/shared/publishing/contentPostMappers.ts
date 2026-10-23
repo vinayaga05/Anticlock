@@ -140,7 +140,10 @@ export function mapApiFlashPost(post: ApiContentPost, now = Date.now()): FlashPo
       : 'public',
     text: post.caption ? post.caption : undefined,
     media: postMedia(post),
-    feedTabs: ['forYou', 'following', 'nearby'],
+    feedTabs:
+      post.relationship?.isFollowing || post.viewerCanManage
+        ? ['forYou', 'following', 'nearby']
+        : ['forYou', 'nearby'],
     reactionCounts: post.likeCount ? { like: post.likeCount } : {},
     commentCount: post.commentCount ?? 0,
     shareCount: post.shareCount ?? 0,

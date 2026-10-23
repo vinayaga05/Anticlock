@@ -22,6 +22,7 @@ import {
 } from '@/shared/api/publishingHooks';
 import { PostingAsCard } from '@/shared/publishing/PostingAsCard';
 import { usePublisherSelection } from '@/shared/publishing/usePublisherSelection';
+import { VideoPlayer } from '@/features/video/components/VideoPlayer';
 import { isApiEnabled } from '@/shared/api/config';
 import {
   pickClipVideo,
@@ -306,11 +307,9 @@ export function FlashComposerScreen() {
               ))}
               {pickedVideos.map((video, idx) => (
                 <View key={`video-${idx}`} style={styles.mediaPreviewItem}>
-                  <Image
-                    source={{ uri: typeof video.previewSource === 'string' ? video.previewSource : undefined }}
-                    style={styles.mediaPreviewThumb}
-                    resizeMode="cover"
-                  />
+                  <View style={styles.mediaPreviewThumb}>
+                    <VideoPlayer uri={video.previewSource} muted paused />
+                  </View>
                   <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
                     {Math.round(video.durationMs / 1000)}s
                   </Text>
@@ -398,6 +397,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 8,
+    overflow: 'hidden',
   },
   footer: {
     borderTopWidth: StyleSheet.hairlineWidth,

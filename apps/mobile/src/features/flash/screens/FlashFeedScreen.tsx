@@ -13,6 +13,8 @@ import { FlashComposerBar } from '@/features/flash/components/FlashComposerBar';
 import { StoryTray } from '@/features/flash/components/StoryTray';
 import { FlashPostCard } from '@/features/flash/components/FlashPostCard';
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
+import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
+import { identityProfileType } from '@/shared/publishing/publisherSelection';
 import { TAB_BAR_VISIBLE_HEIGHT } from '@/shared/navigation/FloatingPillTabBar';
 
 const FEED_PILLS = [
@@ -25,10 +27,17 @@ export function FlashFeedScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<FeedTab>('forYou');
+  const { active: activeViewerProfile } = useActiveProfile();
+  const viewerProfile = activeViewerProfile
+    ? {
+        id: activeViewerProfile.id,
+        type: identityProfileType(activeViewerProfile),
+      }
+    : null;
   const posts = useEngagementStore(s => s.posts);
   const hiddenIds = useEngagementStore(s => s.hiddenIds);
   const upsertApiPosts = useEngagementStore(s => s.upsertApiPosts);
-  const { data: apiPosts, refetch, isRefetching } = useFlashPostsQuery();
+  const { data: apiPosts, refetch, isRefetching } = useFlashPostsQuery(viewerProfile);
 
   // Server-published Flash posts (personal + business publishers) lead the
   // feed; previously this screen only rendered the local mock store.

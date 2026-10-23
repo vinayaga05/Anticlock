@@ -42,6 +42,8 @@ interface VideoPlayerProps {
   onPlaybackProgress?: (currentTime: number, duration: number) => void;
   /** Fired once each time native playback reaches the end. */
   onPlaybackComplete?: (duration: number) => void;
+  /** Reports playback failures so a feed can refresh expiring media URLs. */
+  onPlaybackError?: (message: string) => void;
 }
 
 /** Metro serves assets on the host; emulator localhost ≠ host without adb reverse. */
@@ -56,6 +58,10 @@ function resolvePlaybackUri(uri: VideoSource): string {
     return rewriteMetroHostForAndroid(resolved?.uri ?? '');
   }
   return rewriteMetroHostForAndroid(uri);
+}
+
+function redactPlaybackUri(uri: string): string {
+  return uri.split(/[?#]/, 1)[0];
 }
 
 function toSource(playbackUri: string) {
@@ -82,6 +88,7 @@ export function VideoPlayer({
   onSeekControllerChange,
   onPlaybackProgress,
   onPlaybackComplete,
+  onPlaybackError,
 }: VideoPlayerProps) {
   const ref = useRef<VideoRef>(null);
   const durationRef = useRef(0);
@@ -189,8 +196,14 @@ export function VideoPlayer({
               e?.error?.localizedDescription ||
               'Playback failed';
             if (__DEV__) {
-              console.warn('[VideoPlayer]', msg, playbackUri, e?.error);
+              console.warn(
+                '[VideoPlayer]',
+                msg,
+                redactPlaybackUri(playbackUri),
+                e?.error,
+              );
             }
+            onPlaybackError?.(msg);
             setFailed(true);
             setReady(false);
             setErrorMsg(msg);

@@ -395,6 +395,16 @@ export function ReelFeedScreen() {
   const refetch = profilePlayback
     ? profileReelsQuery.refetch
     : globalReelsQuery.refetch;
+  const refreshingPlaybackUrlsRef = useRef(false);
+  const refreshPlaybackUrls = useCallback(async () => {
+    if (refreshingPlaybackUrlsRef.current) return;
+    refreshingPlaybackUrlsRef.current = true;
+    try {
+      await refetch();
+    } finally {
+      refreshingPlaybackUrlsRef.current = false;
+    }
+  }, [refetch]);
   const hasNextPage = !profilePlayback && Boolean(globalReelsQuery.hasNextPage);
   const isFetchingNextPage =
     !profilePlayback && globalReelsQuery.isFetchingNextPage;
@@ -960,36 +970,42 @@ export function ReelFeedScreen() {
 
     return (
       <View style={[styles.reel, { height: pageHeight, width: pageWidth }]}>
-        <VideoPlayer
-          key={`${entry.key}:playback:${playbackCycle}`}
-          uri={item.videoUrl}
-          muted={false}
-          paused={index !== currentIndex || (commentsOpen && !playbackActive)}
-          seekControllerId={index === currentIndex ? item.id : undefined}
-          onSeekControllerChange={
-            index === currentIndex ? registerClipSeekController : undefined
-          }
-          onPlaybackProgress={(currentTime, _duration) => {
-            if (index !== currentIndex || (commentsOpen && !playbackActive)) {
-              return;
-            }
-            updateClipProgress(item.id, currentTime, _duration);
-            trackPlayback(item, currentTime * 1_000, false);
-          }}
-          onPlaybackComplete={duration => {
-            if (
-              index !== currentIndex ||
-              (commentsOpen && !playbackActive) ||
-              duration <= 0
-            ) {
-              return;
-            }
-            trackPlayback(item, duration * 1_000, true);
-            if (autoScroll) {
-              goToNextReel();
-            }
-          }}
-        />
+        {index === currentIndex ? (
+          <VideoPlayer
+            key={`${entry.key}:playback:${playbackCycle}`}
+            uri={item.videoUrl}
+            muted={false}
+            paused={commentsOpen && !playbackActive}
+            onPlaybackError={message => {
+              // Content Clips use short-lived signed R2 URLs. Refresh the feed
+              // once after an HTTP status error so an expired URL can be
+              // replaced with a newly signed delivery URL.
+              if (
+                message.includes('ERROR_CODE_IO_BAD_HTTP_STATUS') &&
+                typeof item.videoUrl === 'string' &&
+                item.videoUrl.includes('X-Amz-Signature=')
+              ) {
+                refreshPlaybackUrls().catch(() => undefined);
+              }
+            }}
+            seekControllerId={item.id}
+            onSeekControllerChange={registerClipSeekController}
+            onPlaybackProgress={(currentTime, _duration) => {
+              if (commentsOpen && !playbackActive) return;
+              updateClipProgress(item.id, currentTime, _duration);
+              trackPlayback(item, currentTime * 1_000, false);
+            }}
+            onPlaybackComplete={duration => {
+              if ((commentsOpen && !playbackActive) || duration <= 0) {
+                return;
+              }
+              trackPlayback(item, duration * 1_000, true);
+              if (autoScroll) {
+                goToNextReel();
+              }
+            }}
+          />
+        ) : null}
 
         {/* Top fade + chrome */}
         <View
@@ -1161,6 +1177,17 @@ export function ReelFeedScreen() {
         data={loopedReels}
         keyExtractor={entry => entry.key}
         renderItem={renderItem}
+        // Each retained feed row owns a native video player. Keep Android's
+        // render window small so long feeds do not accumulate dozens of
+        // player and view trees in the activity's limited Java heap.
+        {...(Platform.OS === 'android'
+          ? {
+              initialNumToRender: 1,
+              maxToRenderPerBatch: 2,
+              windowSize: 3,
+              removeClippedSubviews: true,
+            }
+          : null)}
         pagingEnabled
         scrollEnabled={!commentsOpen}
         showsVerticalScrollIndicator={false}

@@ -423,12 +423,23 @@ export async function deleteContentClip(id: string): Promise<void> {
 export function useProfileClipReelsQuery(
   profileType: PublisherProfileType | undefined,
   profileId: string | undefined,
+  viewerProfile?: { id: string; type: PublisherProfileType } | null,
 ) {
+  const viewerSuffix = viewerProfile
+    ? `&viewerProfileType=${encodeURIComponent(viewerProfile.type)}&viewerProfileId=${encodeURIComponent(viewerProfile.id)}`
+    : '';
   return useQuery({
-    queryKey: ['reels', 'profile', profileType ?? '', profileId ?? ''],
+    queryKey: [
+      'reels',
+      'profile',
+      profileType ?? '',
+      profileId ?? '',
+      viewerProfile?.type ?? 'personal',
+      viewerProfile?.id ?? '',
+    ],
     queryFn: async (): Promise<ReelItem[]> => {
       const response = await apiRequest<ApiContentPostsResponse>(
-        `/v1/content/profiles/${profileType}/${profileId}/posts?format=clip&limit=30`,
+        `/v1/content/profiles/${profileType}/${profileId}/posts?format=clip&limit=30${viewerSuffix}`,
       );
       return (response.items ?? response.data ?? [])
         .map(mapApiProfileClipToItem)

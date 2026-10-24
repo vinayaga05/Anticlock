@@ -21,17 +21,28 @@ import type {
 export type { ApiContentPost, ApiContentPublisher };
 
 /**
- * Story tray: live (`published`, not expired) stories the viewer may see,
- * grouped per publisher profile. Previously this called a route that did
- * not exist, so published stories never reached other users.
+ * Story tray: live (`published`, not expired) stories the active viewer
+ * profile may see, grouped per publisher profile. The viewer can be a
+ * personal profile or an owned business, so its identity must accompany the
+ * request just like the Flash and Clips feeds.
  */
-export function useStoriesQuery() {
+export function useStoriesQuery(
+  viewer?: { type: PublisherProfileType; id: string } | null,
+) {
+  const viewerQuery = viewer
+    ? `&viewerProfileType=${encodeURIComponent(viewer.type)}&viewerProfileId=${encodeURIComponent(viewer.id)}`
+    : '';
   return useQuery({
-    queryKey: [...contentQueryKeys.storyTray, isApiEnabled ? 'api' : 'local'],
+    queryKey: [
+      ...contentQueryKeys.storyTray,
+      isApiEnabled ? 'api' : 'local',
+      viewer?.type ?? 'personal',
+      viewer?.id ?? '',
+    ],
     queryFn: async (): Promise<UserStory[]> => {
       if (!isApiEnabled) return [];
       const response = await apiRequest<ApiContentPostsResponse>(
-        '/v1/content/posts?format=story&limit=50',
+        `/v1/content/posts?format=story&limit=50${viewerQuery}`,
       );
       return mapApiStoriesToUserStories(postsOf(response));
     },

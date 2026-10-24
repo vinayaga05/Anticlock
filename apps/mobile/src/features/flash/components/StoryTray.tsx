@@ -13,6 +13,8 @@ import { StoryRing } from '@/features/flash/components/StoryRing';
 import { useStoryStore } from '@/shared/data/flash/storyStore';
 import { RootStackParamList } from '@/shared/navigation/types';
 import { useStoriesQuery } from '@/shared/api/storyHooks';
+import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
+import { identityProfileType } from '@/shared/publishing/publisherSelection';
 import { isApiEnabled } from '@/shared/api/config';
 
 const LOAD_THRESHOLD = 56;
@@ -29,7 +31,11 @@ export function StoryTray() {
   const hasMoreTrayStories = useStoryStore(s => s.hasMoreTrayStories);
   const setApiStories = useStoryStore(s => s.setApiStories);
   const loadingMoreRef = useRef(false);
-  const { data: apiStories, refetch } = useStoriesQuery();
+  const { active: activeViewerProfile } = useActiveProfile();
+  const viewerProfile = activeViewerProfile
+    ? { id: activeViewerProfile.id, type: identityProfileType(activeViewerProfile) }
+    : null;
+  const { data: apiStories, refetch } = useStoriesQuery(viewerProfile);
 
   useEffect(() => {
     if (isApiEnabled && apiStories) {

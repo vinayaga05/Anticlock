@@ -370,6 +370,12 @@ export function ReelFeedScreen() {
   const profileReelsQuery = useProfileClipReelsQuery(
     route.params?.profileType,
     route.params?.profileId,
+    activeViewerProfile
+      ? {
+          id: activeViewerProfile.id,
+          type: identityProfileType(activeViewerProfile),
+        }
+      : undefined,
   );
   // `loadedReels` is the one canonical collection used by the global feed.
   // It only contains server-published Clips and preserves page order

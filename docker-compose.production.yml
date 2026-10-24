@@ -78,6 +78,9 @@ services:
       ALGOLIA_API_KEY: ${ALGOLIA_API_KEY:-}
       ALGOLIA_REELS_INDEX: ${ALGOLIA_REELS_INDEX:-anticlock_reels}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.production}
+      # Required for encrypting Aadhaar before it is written to the database.
+      # Keep this stable: changing it makes previously stored KYC data unreadable.
+      KYC_ENCRYPTION_KEY: ${KYC_ENCRYPTION_KEY:?Set KYC_ENCRYPTION_KEY in .env.production}
       ADMIN_ORIGIN: https://${ADMIN_DOMAIN:?Set ADMIN_DOMAIN in .env.production}
       API_PUBLIC_URL: https://${API_DOMAIN:?Set API_DOMAIN in .env.production}
       RUN_MIGRATIONS: 'false'

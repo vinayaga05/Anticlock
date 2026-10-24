@@ -34,6 +34,13 @@ const EDITABLE_STATUSES = new Set(['draft', 'more_info_requested']);
 
 type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
+function saveErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message.trim() : '';
+  return message && message !== 'Unexpected error'
+    ? message
+    : 'We couldn’t save this business. Check the highlighted fields and try again.';
+}
+
 export function ProviderApplicationFormScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
@@ -58,6 +65,7 @@ export function ProviderApplicationFormScreen() {
   );
   const [showAllErrors, setShowAllErrors] = useState(Boolean(focusField));
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
   const dirty = useRef(false);
   const latestValues = useRef(values);
   latestValues.current = values;
@@ -106,10 +114,12 @@ export function ProviderApplicationFormScreen() {
       })
       .then(() => {
         if (aadhaarNumber) lastAadhaarSent.current = aadhaarNumber;
+        setSaveError(null);
         setSaveState(dirty.current ? 'pending' : 'saved');
       })
       .catch(err => {
         dirty.current = true;
+        setSaveError(saveErrorMessage(err));
         setSaveState('error');
         throw err;
       })
@@ -204,7 +214,7 @@ export function ProviderApplicationFormScreen() {
     try {
       await saveNow();
     } catch (err) {
-      Alert.alert('Could not save', (err as Error).message);
+      Alert.alert('Could not save', saveErrorMessage(err));
       return;
     }
     setShowAllErrors(true);
@@ -348,7 +358,7 @@ export function ProviderApplicationFormScreen() {
       : saveState === 'pending'
         ? 'Unsaved changes'
         : saveState === 'error'
-          ? 'Couldn’t save. Check your connection.'
+          ? saveError ?? 'Couldn’t save. Review the required fields and try again.'
           : saveState === 'saved'
             ? 'Draft saved'
             : 'Drafts save automatically';

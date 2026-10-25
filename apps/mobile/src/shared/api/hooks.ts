@@ -109,6 +109,7 @@ export type ApiContentClipFeedItem = {
     isRequested: boolean;
     isBlocked: boolean;
     canViewContent: boolean;
+    canMessage: boolean;
   };
   /** Music the creator mixed in on-device (display/attribution only). */
   music?: {

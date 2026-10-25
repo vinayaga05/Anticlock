@@ -39,6 +39,13 @@ const publisherRefSchema = z.object({
   type: z.enum(['personal', 'business']),
 });
 
+export const reportConversationRequestSchema = z.object({
+  viewerProfile: publisherRefSchema,
+  otherProfile: publisherRefSchema,
+  reason: z.enum(['spam', 'harassment', 'impersonation', 'unsafe', 'other']),
+  details: z.string().trim().max(1000).optional(),
+});
+
 // POST /v1/messages/calls - authorize and create a 1:1 Stream call
 export const createCallRequestSchema = z.object({
   otherProfile: publisherRefSchema,
@@ -67,5 +74,6 @@ export const createCallResponseSchema = z.object({
 export type StreamTokenResponse = z.infer<typeof streamTokenResponseSchema>;
 export type CreateChannelRequest = z.infer<typeof createChannelRequestSchema>;
 export type CreateChannelResponse = z.infer<typeof createChannelResponseSchema>;
+export type ReportConversationRequest = z.infer<typeof reportConversationRequestSchema>;
 export type CreateCallRequest = z.infer<typeof createCallRequestSchema>;
 export type CreateCallResponse = z.infer<typeof createCallResponseSchema>;

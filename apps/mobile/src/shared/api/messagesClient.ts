@@ -50,3 +50,15 @@ export async function createVideoCall(
     mode,
   });
 }
+
+export async function reportConversation(
+  channelId: string,
+  viewerProfile: PublisherRef,
+  otherProfile: PublisherRef,
+  reason: 'spam' | 'harassment' | 'impersonation' | 'unsafe' | 'other',
+) {
+  return apiClient.post<{ data: { id: string; status: string } }>(
+    `/v1/messages/channels/${encodeURIComponent(channelId)}/report`,
+    { viewerProfile, otherProfile, reason },
+  );
+}

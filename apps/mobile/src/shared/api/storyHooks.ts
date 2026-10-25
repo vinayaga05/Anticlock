@@ -91,12 +91,14 @@ export type ContentProfileSummary = {
   socialCounts?: { followers: number; following: number; pendingRequests: number };
   viewerCanManage: boolean;
   isPrivate?: boolean;
+  allowMessages?: boolean;
   relationship?: ProfileRelationship;
   followStatus?: ProfileRelationship['followStatus'];
   isFollowing?: boolean;
   isRequested?: boolean;
   isBlocked?: boolean;
   canViewContent?: boolean;
+  canMessage?: boolean;
   serviceCategoryId?: string | null;
   serviceCategoryIds?: string[];
 };

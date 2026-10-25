@@ -137,6 +137,7 @@ describe('PublisherProfileView', () => {
         isRequested: false,
         isBlocked: false,
         canViewContent: true,
+        canMessage: false,
       },
     };
     let renderer!: ReactTestRenderer.ReactTestRenderer;
@@ -178,6 +179,7 @@ describe('PublisherProfileView', () => {
         isRequested: false,
         isBlocked: false,
         canViewContent: true,
+        canMessage: false,
       },
     };
     let renderer!: ReactTestRenderer.ReactTestRenderer;
@@ -224,6 +226,7 @@ describe('PublisherProfileView', () => {
         isRequested: false,
         isBlocked: false,
         canViewContent: true,
+        canMessage: false,
       },
     };
     let renderer!: ReactTestRenderer.ReactTestRenderer;
@@ -248,7 +251,7 @@ describe('PublisherProfileView', () => {
       publisher: { id: 'business-2', type: 'business', displayName: 'Studio', avatarUrl: 'https://cdn.example/logo.png', verified: true },
       counts: { posts: 0, clips: 0, flash: 0, stories: 0 },
       viewerCanManage: false,
-      relationship: { canFollow: true, followStatus: 'not_following', isFollowing: false, isRequested: false, isBlocked: false, canViewContent: true },
+      relationship: { canFollow: true, followStatus: 'following', isFollowing: true, isRequested: false, isBlocked: false, canViewContent: true, canMessage: true },
     };
     let renderer!: ReactTestRenderer.ReactTestRenderer;
     ReactTestRenderer.act(() => {
@@ -281,6 +284,7 @@ describe('PublisherProfileView', () => {
         isRequested: false,
         isBlocked: false,
         canViewContent: true,
+        canMessage: true,
       },
     };
     let renderer!: ReactTestRenderer.ReactTestRenderer;
@@ -303,6 +307,7 @@ describe('PublisherProfileView', () => {
         isFollowing: false,
         isRequested: true,
         canViewContent: false,
+        canMessage: false,
       },
     };
     ReactTestRenderer.act(() => renderer.update(<PublisherProfileView profileId="person-2" />));
@@ -329,6 +334,7 @@ describe('PublisherProfileView', () => {
         isRequested: false,
         isBlocked: false,
         canViewContent: false,
+        canMessage: false,
       },
     };
     let renderer!: ReactTestRenderer.ReactTestRenderer;
@@ -370,6 +376,7 @@ describe('PublisherProfileView', () => {
         isRequested: false,
         isBlocked: true,
         canViewContent: false,
+        canMessage: false,
       },
     };
     ReactTestRenderer.act(() => renderer.update(<PublisherProfileView profileId="blocked" />));

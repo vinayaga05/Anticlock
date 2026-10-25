@@ -85,6 +85,7 @@ export function AccountSettingsScreen() {
   const followRequestAction = useFollowRequestAction(activeRef);
   const followRequests = followRequestsQuery.data ?? [];
   const profileIsPrivate = activeProfileQuery.data?.isPrivate === true;
+  const profileAllowsMessages = activeProfileQuery.data?.allowMessages !== false;
   const isBusiness = activeType === 'business';
 
   const card: ActiveProfileCardData = active
@@ -147,6 +148,7 @@ export function AccountSettingsScreen() {
           isPrivate: false,
           allowFollowRequests: true,
           showFollowerLists: true,
+          allowMessages: profileAllowsMessages,
         }),
       },
       {
@@ -155,6 +157,7 @@ export function AccountSettingsScreen() {
           isPrivate: true,
           allowFollowRequests: true,
           showFollowerLists: true,
+          allowMessages: profileAllowsMessages,
         }),
       },
       { text: 'Cancel', style: 'cancel' },
@@ -344,6 +347,13 @@ export function AccountSettingsScreen() {
             label="Privacy"
             value={privacyMutation.isPending ? 'Saving…' : profileIsPrivate ? 'Private' : 'Public'}
             onPress={chooseProfilePrivacy}
+          />
+          <SettingsRow
+            testID="row-messaging-privacy"
+            icon="messages"
+            label="Direct messages"
+            value={privacyMutation.isPending ? 'Saving…' : profileAllowsMessages ? 'Connections' : 'Off'}
+            onPress={() => privacyMutation.mutate({ allowMessages: !profileAllowsMessages })}
           />
           <SettingsRow
             testID="row-assistant-privacy"

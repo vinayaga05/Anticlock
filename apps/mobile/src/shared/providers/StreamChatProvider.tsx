@@ -158,7 +158,7 @@ export function StreamChatProvider({ children }: { children: React.ReactNode }) 
   // Stream components); Chat only once the Stream client is connected.
   const chatContent =
     isApiEnabled && client && isReady ? (
-      <Chat client={client}>{children}</Chat>
+      <Chat client={client} enableOfflineSupport>{children}</Chat>
     ) : (
       children
     );

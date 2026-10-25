@@ -31,7 +31,7 @@ export function InboxScreen() {
   }, [route.params?.initialTab]);
 
   return (
-    <ScreenContainer scrollable>
+    <ScreenContainer scrollable={tab !== 'chat'} contentStyle={tab === 'chat' ? styles.chatContent : undefined}>
       <AppHeader
         title="Knock"
         onNotificationsPress={() => setTab('notifications')}
@@ -50,14 +50,14 @@ export function InboxScreen() {
             <PressableScale
               key={item.id}
               onPress={() => setTab(item.id)}
-              style={[
+              style={StyleSheet.flatten([
                 styles.segment,
-                active && {
+                active ? {
                   backgroundColor: theme.colors.surface,
                   borderRadius: theme.radius.md,
                   ...theme.shadows.soft,
-                },
-              ]}>
+                } : {},
+              ])}>
               <Text
                 style={[
                   styles.segmentLabel,
@@ -110,5 +110,7 @@ const styles = StyleSheet.create({
   },
   panel: {
     marginTop: 4,
+    flex: 1,
   },
+  chatContent: { flex: 1 },
 });

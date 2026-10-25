@@ -191,7 +191,7 @@ function ClipCreatorActions({ item }: { item: ReelItem }) {
 
   const status = relationship?.followStatus;
   const label = status === 'following' ? 'Following' : status === 'requested' ? 'Requested' : 'Follow';
-  const canMessage = chatReady && !relationship?.isBlocked && !(profile?.isPrivate && status !== 'following');
+  const canMessage = chatReady && relationship?.canMessage === true;
 
   const updateFollow = (action: 'follow' | 'unfollow') => {
     followMutation.mutate(action, {

@@ -239,8 +239,8 @@ export function PublisherProfileView({
       Alert.alert('Conversation unavailable', 'This profile cannot be messaged.');
       return;
     }
-    if (profile?.isPrivate && !isDisplayedFollowing) {
-      Alert.alert('Private profile', 'Follow this profile and wait for approval before messaging.');
+    if (!relationship?.canMessage) {
+      Alert.alert('Messaging unavailable', 'Follow this profile, or accept their follow, before messaging.');
       return;
     }
     setOpeningChat(true);
@@ -369,10 +369,10 @@ export function PublisherProfileView({
           </PressableScale>
           <PressableScale
             accessibilityLabel="Message profile"
-            accessibilityState={{ disabled: openingChat || !chatReady || !publisher || Boolean(relationship?.isBlocked) || Boolean(profile?.isPrivate && !isDisplayedFollowing) }}
+            accessibilityState={{ disabled: openingChat || !chatReady || !publisher || relationship?.canMessage !== true }}
             onPress={() => void onMessagePress()}
-            disabled={openingChat || !chatReady || !publisher || Boolean(relationship?.isBlocked) || Boolean(profile?.isPrivate && !isDisplayedFollowing)}
-            style={[styles.messageButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, opacity: openingChat || !chatReady || relationship?.isBlocked || (profile?.isPrivate && !isDisplayedFollowing) ? 0.55 : 1 }]}>
+            disabled={openingChat || !chatReady || !publisher || relationship?.canMessage !== true}
+            style={[styles.messageButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, opacity: openingChat || !chatReady || relationship?.canMessage !== true ? 0.55 : 1 }]}>
             {openingChat ? <ActivityIndicator size="small" color={theme.colors.textPrimary} /> : <AppIcon name="message-circle" size={17} color={theme.colors.textPrimary} strokeWidth={2} />}
             <Text style={[styles.messageButtonText, { color: theme.colors.textPrimary }]}>{openingChat ? 'Opening' : 'Message'}</Text>
           </PressableScale>

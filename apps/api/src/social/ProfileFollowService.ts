@@ -15,6 +15,8 @@ import {
   type PublisherRef,
 } from '../publishing/publisher.js';
 import { notificationService } from '../notifications/NotificationService.js';
+import { getStreamClient, isStreamConfigured } from '../lib/stream.js';
+import { StreamChatService } from '../messages/StreamChatService.js';
 
 const appError = (message: string, code: string, status: 400 | 403 | 404 | 409) =>
   Object.assign(new Error(message), { code, status });
@@ -23,6 +25,7 @@ export type ProfilePrivacy = {
   isPrivate: boolean;
   allowFollowRequests: boolean;
   showFollowerLists: boolean;
+  allowMessages: boolean;
   ownerUserId: string;
 };
 
@@ -38,6 +41,7 @@ function relationshipFor(
   privacy: ProfilePrivacy,
   status: ProfileRelationship['followStatus'],
   isOwner: boolean,
+  canMessage: boolean,
 ): ProfileRelationship {
   const blocked = status === 'blocked';
   const following = status === 'following';
@@ -50,6 +54,7 @@ function relationshipFor(
     // A private profile exposes no normal content until accepted. Public
     // profiles still restrict `followers` visibility at the post gate.
     canViewContent: isOwner || (!privacy.isPrivate && !blocked) || following,
+    canMessage: !isOwner && !blocked && canMessage,
   };
 }
 
@@ -61,6 +66,7 @@ export async function getProfilePrivacy(target: PublisherRef): Promise<ProfilePr
         isPrivate: mobileUsers.isPrivate,
         allowFollowRequests: mobileUsers.allowFollowRequests,
         showFollowerLists: mobileUsers.showFollowerLists,
+        allowMessages: mobileUsers.allowMessages,
       })
       .from(mobileUsers)
       .where(and(eq(mobileUsers.id, target.id), eq(mobileUsers.isActive, true)))
@@ -74,6 +80,7 @@ export async function getProfilePrivacy(target: PublisherRef): Promise<ProfilePr
       isPrivate: providers.isPrivate,
       allowFollowRequests: providers.allowFollowRequests,
       showFollowerLists: providers.showFollowerLists,
+      allowMessages: providers.allowMessages,
     })
     .from(providers)
     .where(and(eq(providers.id, target.id), eq(providers.status, 'active')))
@@ -127,6 +134,112 @@ export async function hasAcceptedFollow(follower: PublisherRef, followed: Publis
   return Boolean(row);
 }
 
+export async function hasAcceptedFollowEitherDirection(a: PublisherRef, b: PublisherRef) {
+  const [row] = await db
+    .select({ id: profileFollows.id })
+    .from(profileFollows)
+    .where(
+      and(
+        eq(profileFollows.status, 'accepted'),
+        or(
+          and(
+            eq(profileFollows.followerProfileId, a.id),
+            eq(profileFollows.followerProfileType, a.type),
+            eq(profileFollows.followedProfileId, b.id),
+            eq(profileFollows.followedProfileType, b.type),
+          ),
+          and(
+            eq(profileFollows.followerProfileId, b.id),
+            eq(profileFollows.followerProfileType, b.type),
+            eq(profileFollows.followedProfileId, a.id),
+            eq(profileFollows.followedProfileType, a.type),
+          ),
+        ),
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
+}
+
+export async function canProfilesMessage(a: PublisherRef, b: PublisherRef) {
+  if (same(a, b) || await profilesAreBlocked(a, b)) return false;
+  const [aPrivacy, bPrivacy] = await Promise.all([getProfilePrivacy(a), getProfilePrivacy(b)]);
+  if (aPrivacy.ownerUserId === bPrivacy.ownerUserId) return false;
+  if (!aPrivacy.allowMessages || !bPrivacy.allowMessages) return false;
+  return hasAcceptedFollowEitherDirection(a, b);
+}
+
+async function syncProfileConversation(a: PublisherRef, b: PublisherRef) {
+  if (!isStreamConfigured()) return;
+  const [aPrivacy, bPrivacy, aProfile, bProfile, eligible] = await Promise.all([
+    getProfilePrivacy(a),
+    getProfilePrivacy(b),
+    loadPublisher(a),
+    loadPublisher(b),
+    canProfilesMessage(a, b),
+  ]);
+  if (!aProfile || !bProfile || aPrivacy.ownerUserId === bPrivacy.ownerUserId) return;
+  const service = new StreamChatService(getStreamClient());
+  if (eligible) {
+    await service.createOrGetProfileChannel({
+      viewerUserId: aPrivacy.ownerUserId,
+      targetUserId: bPrivacy.ownerUserId,
+      viewerProfile: { id: a.id, type: a.type, name: aProfile.displayName, image: aProfile.avatarUrl },
+      targetProfile: { id: b.id, type: b.type, name: bProfile.displayName, image: bProfile.avatarUrl },
+    });
+  } else {
+    await service.suspendProfileChannel({
+      firstUserId: aPrivacy.ownerUserId,
+      secondUserId: bPrivacy.ownerUserId,
+      firstProfile: a,
+      secondProfile: b,
+    });
+  }
+}
+
+async function syncProfileConversationQuietly(a: PublisherRef, b: PublisherRef) {
+  try {
+    await syncProfileConversation(a, b);
+  } catch (error) {
+    console.error('Failed to sync direct conversation:', error);
+  }
+}
+
+/** Backfill or repair every eligible direct channel when an account connects. */
+export async function syncAcceptedConversationsForUser(userId: string) {
+  if (!isStreamConfigured()) return;
+  const businesses = await db.select({ id: providers.id }).from(providers).where(and(
+    eq(providers.mobileUserId, userId),
+    eq(providers.status, 'active'),
+  ));
+  const owned: PublisherRef[] = [
+    { id: userId, type: 'personal' },
+    ...businesses.map(row => ({ id: row.id, type: 'business' as const })),
+  ];
+  const pairs = new Map<string, [PublisherRef, PublisherRef]>();
+  for (const profile of owned) {
+    const rows = await db.select({
+      followerProfileId: profileFollows.followerProfileId,
+      followerProfileType: profileFollows.followerProfileType,
+      followedProfileId: profileFollows.followedProfileId,
+      followedProfileType: profileFollows.followedProfileType,
+    }).from(profileFollows).where(and(
+      eq(profileFollows.status, 'accepted'),
+      or(
+        and(eq(profileFollows.followerProfileId, profile.id), eq(profileFollows.followerProfileType, profile.type)),
+        and(eq(profileFollows.followedProfileId, profile.id), eq(profileFollows.followedProfileType, profile.type)),
+      ),
+    ));
+    for (const row of rows) {
+      const follower = { id: row.followerProfileId, type: row.followerProfileType as PublisherRef['type'] };
+      const followed = { id: row.followedProfileId, type: row.followedProfileType as PublisherRef['type'] };
+      const key = [publisherKey(follower), publisherKey(followed)].sort().join('|');
+      pairs.set(key, [follower, followed]);
+    }
+  }
+  await Promise.all([...pairs.values()].map(([a, b]) => syncProfileConversation(a, b)));
+}
+
 /** The content gate shared by feeds, direct post reads, comments and lists. */
 export async function canProfileViewContent(viewer: PublisherRef, followed: PublisherRef) {
   if (same(viewer, followed)) return true;
@@ -157,8 +270,8 @@ export async function profileConnectionCounts(profile: PublisherRef) {
 export class ProfileFollowService {
   async relationship(viewer: PublisherRef, followed: PublisherRef): Promise<ProfileRelationship> {
     const privacy = await getProfilePrivacy(followed);
-    if (same(viewer, followed)) return relationshipFor(privacy, 'not_following', true);
-    if (await profilesAreBlocked(viewer, followed)) return relationshipFor(privacy, 'blocked', false);
+    if (same(viewer, followed)) return relationshipFor(privacy, 'not_following', true, false);
+    if (await profilesAreBlocked(viewer, followed)) return relationshipFor(privacy, 'blocked', false, false);
     const [row] = await db
       .select({ status: profileFollows.status })
       .from(profileFollows)
@@ -171,10 +284,12 @@ export class ProfileFollowService {
         ),
       )
       .limit(1);
+    const canMessage = await canProfilesMessage(viewer, followed);
     return relationshipFor(
       privacy,
       row?.status === 'accepted' ? 'following' : row?.status === 'pending' ? 'requested' : 'not_following',
       false,
+      canMessage,
     );
   }
 
@@ -217,6 +332,7 @@ export class ProfileFollowService {
       body: `${followerPublisher?.displayName ?? 'Someone'} ${status === 'pending' ? 'requested to follow' : 'followed'} your ${followed.type === 'business' ? 'business' : 'profile'}`,
       data: { followerProfile: follower, followedProfile: followed },
     }).catch(() => undefined);
+    if (status === 'accepted') await syncProfileConversationQuietly(follower, followed);
     const [relationship, followedCounts, followerCounts] = await Promise.all([
       this.relationship(follower, followed),
       profileConnectionCounts(followed),
@@ -235,6 +351,7 @@ export class ProfileFollowService {
         eq(profileFollows.followedProfileId, followed.id), eq(profileFollows.followedProfileType, followed.type),
       ))
       .returning({ id: profileFollows.id });
+    if (removed) await syncProfileConversationQuietly(follower, followed);
     const [relationship, followedCounts, followerCounts] = await Promise.all([
       this.relationship(follower, followed),
       profileConnectionCounts(followed),
@@ -299,6 +416,7 @@ export class ProfileFollowService {
       type: 'follow_accepted', title: 'Follow request accepted', body: 'Your follow request was accepted.',
       data: { followerProfile: follower, followedProfile: followed },
     }).catch(() => undefined);
+    await syncProfileConversationQuietly(follower, followed);
     return accepted;
   }
 
@@ -323,6 +441,7 @@ export class ProfileFollowService {
         and(eq(profileFollows.followerProfileId, blocked.id), eq(profileFollows.followerProfileType, blocked.type), eq(profileFollows.followedProfileId, blocker.id), eq(profileFollows.followedProfileType, blocker.type)),
       ));
     });
+    await syncProfileConversationQuietly(blocker, blocked);
   }
 
   async unblock(userId: string, blocker: PublisherRef, blocked: PublisherRef) {
@@ -343,12 +462,36 @@ export class ProfileFollowService {
       await db.update(providers).set(values).where(eq(providers.id, profile.id));
     }
     // Social convention: publishing a private profile auto-accepts its existing requests.
-    if (!update.isPrivate) {
-      const now = new Date();
-      await db.update(profileFollows).set({ status: 'accepted', acceptedAt: now, updatedAt: now }).where(and(
-        eq(profileFollows.followedProfileId, profile.id), eq(profileFollows.followedProfileType, profile.type), eq(profileFollows.status, 'pending'),
-      ));
-    }
+    const newlyAccepted = update.isPrivate === false
+      ? await db.update(profileFollows).set({ status: 'accepted', acceptedAt: new Date(), updatedAt: new Date() }).where(and(
+          eq(profileFollows.followedProfileId, profile.id), eq(profileFollows.followedProfileType, profile.type), eq(profileFollows.status, 'pending'),
+        )).returning({
+          followerProfileId: profileFollows.followerProfileId,
+          followerProfileType: profileFollows.followerProfileType,
+        })
+      : [];
+    const connections = update.allowMessages !== undefined
+      ? await db.select({
+          followerProfileId: profileFollows.followerProfileId,
+          followerProfileType: profileFollows.followerProfileType,
+          followedProfileId: profileFollows.followedProfileId,
+          followedProfileType: profileFollows.followedProfileType,
+        }).from(profileFollows).where(and(
+          eq(profileFollows.status, 'accepted'),
+          or(
+            and(eq(profileFollows.followerProfileId, profile.id), eq(profileFollows.followerProfileType, profile.type)),
+            and(eq(profileFollows.followedProfileId, profile.id), eq(profileFollows.followedProfileType, profile.type)),
+          ),
+        ))
+      : [];
+    const peers = [
+      ...newlyAccepted.map(row => ({ id: row.followerProfileId, type: row.followerProfileType as PublisherRef['type'] })),
+      ...connections.map(row => row.followerProfileId === profile.id && row.followerProfileType === profile.type
+        ? { id: row.followedProfileId, type: row.followedProfileType as PublisherRef['type'] }
+        : { id: row.followerProfileId, type: row.followerProfileType as PublisherRef['type'] }),
+    ];
+    await Promise.all([...new Map(peers.map(peer => [publisherKey(peer), peer])).values()]
+      .map(peer => syncProfileConversationQuietly(profile, peer)));
     return getProfilePrivacy(profile);
   }
 }

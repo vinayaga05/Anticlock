@@ -11,12 +11,14 @@ export type ProfileRelationship = {
   isRequested: boolean;
   isBlocked: boolean;
   canViewContent: boolean;
+  canMessage: boolean;
 };
 
 export type ProfilePrivacy = {
   isPrivate: boolean;
   allowFollowRequests: boolean;
   showFollowerLists: boolean;
+  allowMessages: boolean;
 };
 
 function followPayload(follower: ProfileRef, followed: ProfileRef) {
@@ -26,6 +28,13 @@ function followPayload(follower: ProfileRef, followed: ProfileRef) {
     followedProfileId: followed.id,
     followedProfileType: followed.type,
   };
+}
+
+export async function blockProfile(blocker: ProfileRef, blocked: ProfileRef) {
+  return apiRequest<{ data: { blocked: true } }>('/v1/profile-follows/blocks', {
+    method: 'POST',
+    body: JSON.stringify(followPayload(blocker, blocked)),
+  });
 }
 
 export type ProfileSocialCounts = {
@@ -105,7 +114,7 @@ export function useFollowRequestAction(profile: ProfileRef | null) {
   });
 }
 
-export async function updateProfilePrivacy(profile: ProfileRef, privacy: ProfilePrivacy) {
+export async function updateProfilePrivacy(profile: ProfileRef, privacy: Partial<ProfilePrivacy>) {
   return apiRequest<{ data: ProfilePrivacy }>(
     `/v1/profile-follows/privacy/${profile.type}/${profile.id}`,
     { method: 'PATCH', body: JSON.stringify(privacy) },
@@ -115,7 +124,7 @@ export async function updateProfilePrivacy(profile: ProfileRef, privacy: Profile
 export function useProfilePrivacyMutation(profile: ProfileRef | null) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async (privacy: ProfilePrivacy) => {
+    mutationFn: async (privacy: Partial<ProfilePrivacy>) => {
       if (!profile) throw new Error('Profile identity unavailable');
       return updateProfilePrivacy(profile, privacy);
     },

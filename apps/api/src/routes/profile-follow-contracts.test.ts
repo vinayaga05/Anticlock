@@ -30,6 +30,8 @@ describe('profile follow contracts', () => {
 
   it('accepts explicit privacy controls and rejects unknown fields', () => {
     assert.deepEqual(ProfilePrivacyUpdateSchema.parse({ isPrivate: true }), { isPrivate: true });
+    assert.deepEqual(ProfilePrivacyUpdateSchema.parse({ allowMessages: false }), { allowMessages: false });
+    assert.equal(ProfilePrivacyUpdateSchema.safeParse({}).success, false);
     assert.equal(
       ProfilePrivacyUpdateSchema.safeParse({ isPrivate: false, unexpected: true }).success,
       false,

@@ -921,6 +921,7 @@ export async function getProfileSummary(
     relationship,
     ...relationship,
     isPrivate: privacy.isPrivate,
+    allowMessages: privacy.allowMessages,
     socialCounts,
     counts: {
       posts: clips + flash,

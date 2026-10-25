@@ -2,20 +2,25 @@ import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
 import { requireAuth, type AppEnv } from '../middleware/auth.js';
 import { getStreamClient, getStreamServerClient, isStreamConfigured } from '../lib/stream.js';
-import { StreamChatService } from '../messages/StreamChatService.js';
+import { profileChannelId, StreamChatService } from '../messages/StreamChatService.js';
 import {
   createChannelRequestSchema,
   createChannelResponseSchema,
   createCallRequestSchema,
   createCallResponseSchema,
+  reportConversationRequestSchema,
   streamTokenResponseSchema,
 } from '@anticlock/contracts';
 import {
+  canProfilesMessage,
   getProfilePrivacy,
   hasAcceptedFollow,
   profilesAreBlocked,
+  syncAcceptedConversationsForUser,
 } from '../social/ProfileFollowService.js';
-import { loadPublisher, resolveOwnedPublisher } from '../publishing/publisher.js';
+import { loadPublisher, resolveOwnedPublisher, type PublisherRef } from '../publishing/publisher.js';
+import { db } from '../db/client.js';
+import { directMessageReports } from '../db/schema.js';
 
 const messagesRoutes = new Hono<AppEnv>();
 
@@ -29,6 +34,40 @@ function requireMobileAuth(c: { get: (k: 'auth') => { kind: string; sub: string 
     });
   }
   return auth.sub;
+}
+
+/** Revoke stale pre-policy channels before issuing a fresh client token. */
+async function reconcileDirectChannels(userId: string, service: StreamChatService) {
+  const channels = await getStreamClient().queryChannels(
+    { type: 'messaging', members: { $in: [userId] } },
+    [{ last_message_at: -1 }],
+    { limit: 100, state: true, watch: false },
+  );
+  for (const channel of channels) {
+    if (!channel.id?.startsWith('profile-')) continue;
+    const profiles = ((channel.data as any)?.profile_members ?? []) as Array<{
+      user_id?: string;
+      profile_id?: string;
+      profile_type?: string;
+    }>;
+    if (profiles.length !== 2) {
+      await service.suspendChannel(channel, Object.keys(channel.state.members));
+      continue;
+    }
+    const refs = profiles.map(item => item.profile_id && (item.profile_type === 'personal' || item.profile_type === 'business')
+      ? { id: item.profile_id, type: item.profile_type } as PublisherRef
+      : null);
+    let eligible = false;
+    if (refs[0] && refs[1]) {
+      eligible = await canProfilesMessage(refs[0], refs[1]).catch(() => false);
+    }
+    if (!eligible) {
+      await service.suspendChannel(
+        channel,
+        profiles.map(item => item.user_id).filter((id): id is string => Boolean(id)),
+      );
+    }
+  }
 }
 
 // POST /v1/messages/token - Get Stream Chat token
@@ -47,6 +86,8 @@ messagesRoutes.post('/token', requireAuth, async (c) => {
 
   try {
     const user = await service.syncUser(userId);
+    await syncAcceptedConversationsForUser(userId);
+    await reconcileDirectChannels(userId, service);
     const serverClient = getStreamServerClient();
     await serverClient.upsertUsers([{
       id: user.id,
@@ -211,11 +252,11 @@ messagesRoutes.post('/channels', requireAuth, async (c) => {
         403,
       );
     }
-    // Messaging policy: public profiles may be messaged; private profiles
-    // require an accepted follow. A pending request does not grant access.
-    if (targetPrivacy.isPrivate && !(await hasAcceptedFollow(viewer.ref, target))) {
+    // Direct messages require an accepted follow in either direction. Public
+    // visibility alone never grants messaging access.
+    if (!(await canProfilesMessage(viewer.ref, target))) {
       return c.json(
-        { error: { code: 'private_profile', message: 'Follow this private profile before messaging' } },
+        { error: { code: 'messaging_not_allowed', message: 'Follow this profile, or accept their follow, before messaging' } },
         403,
       );
     }
@@ -270,6 +311,68 @@ messagesRoutes.post('/channels', requireAuth, async (c) => {
       { error: { code: 'channel_creation_failed', message: 'Failed to create channel' } },
       500
     );
+  }
+});
+
+// POST /v1/messages/channels/:channelId/report - persist a conversation safety report
+messagesRoutes.post('/channels/:channelId/report', requireAuth, async (c) => {
+  const userId = requireMobileAuth(c);
+  const parsed = reportConversationRequestSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    return c.json(
+      { error: { code: 'validation_error', message: 'Invalid report', details: parsed.error } },
+      400,
+    );
+  }
+  try {
+    const viewer = await resolveOwnedPublisher(userId, parsed.data.viewerProfile);
+    const target = { id: parsed.data.otherProfile.id, type: parsed.data.otherProfile.type } as const;
+    if (!(await loadPublisher(target))) {
+      return c.json({ error: { code: 'not_found', message: 'Conversation unavailable' } }, 404);
+    }
+    const channelId = c.req.param('channelId');
+    if (channelId !== profileChannelId(viewer.ref, target)) {
+      return c.json({ error: { code: 'forbidden', message: 'Conversation unavailable' } }, 403);
+    }
+    if (isStreamConfigured()) {
+      const channels = await getStreamClient().queryChannels(
+        { type: 'messaging', id: channelId, members: { $in: [userId] } },
+        [],
+        { limit: 1, state: false, watch: false },
+      );
+      if (channels.length === 0) {
+        return c.json({ error: { code: 'not_found', message: 'Conversation unavailable' } }, 404);
+      }
+    }
+    const now = new Date();
+    const [report] = await db.insert(directMessageReports).values({
+      channelId,
+      reporterUserId: userId,
+      reporterProfileId: viewer.ref.id,
+      reporterProfileType: viewer.ref.type,
+      reportedProfileId: target.id,
+      reportedProfileType: target.type,
+      reason: parsed.data.reason,
+      details: parsed.data.details,
+      updatedAt: now,
+    }).onConflictDoUpdate({
+      target: [
+        directMessageReports.reporterProfileId,
+        directMessageReports.reporterProfileType,
+        directMessageReports.channelId,
+      ],
+      set: { reason: parsed.data.reason, details: parsed.data.details, status: 'open', updatedAt: now },
+    }).returning({ id: directMessageReports.id, status: directMessageReports.status });
+    return c.json({ data: report }, 201);
+  } catch (error: any) {
+    if (typeof error?.status === 'number' && error.status >= 400 && error.status < 500) {
+      return c.json(
+        { error: { code: error.code ?? 'report_failed', message: error.message ?? 'Could not report conversation' } },
+        error.status as 400 | 401 | 403 | 404 | 409 | 422,
+      );
+    }
+    console.error('Conversation report error:', error);
+    return c.json({ error: { code: 'report_failed', message: 'Could not report conversation' } }, 500);
   }
 });
 

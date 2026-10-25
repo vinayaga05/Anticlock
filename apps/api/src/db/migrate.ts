@@ -1704,13 +1704,15 @@ async function migrate() {
     ALTER TABLE mobile_users
       ADD COLUMN IF NOT EXISTS is_private boolean NOT NULL DEFAULT false,
       ADD COLUMN IF NOT EXISTS allow_follow_requests boolean NOT NULL DEFAULT true,
-      ADD COLUMN IF NOT EXISTS show_follower_lists boolean NOT NULL DEFAULT true
+      ADD COLUMN IF NOT EXISTS show_follower_lists boolean NOT NULL DEFAULT true,
+      ADD COLUMN IF NOT EXISTS allow_messages boolean NOT NULL DEFAULT true
   `;
   await sql`
     ALTER TABLE providers
       ADD COLUMN IF NOT EXISTS is_private boolean NOT NULL DEFAULT false,
       ADD COLUMN IF NOT EXISTS allow_follow_requests boolean NOT NULL DEFAULT true,
-      ADD COLUMN IF NOT EXISTS show_follower_lists boolean NOT NULL DEFAULT true
+      ADD COLUMN IF NOT EXISTS show_follower_lists boolean NOT NULL DEFAULT true,
+      ADD COLUMN IF NOT EXISTS allow_messages boolean NOT NULL DEFAULT true
   `;
   await sql`
     CREATE TABLE IF NOT EXISTS profile_follows (
@@ -1754,6 +1756,28 @@ async function migrate() {
   await sql`
     CREATE INDEX IF NOT EXISTS profile_blocks_blocked_idx
       ON profile_blocks (blocked_profile_id, blocked_profile_type)
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS direct_message_reports (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      channel_id text NOT NULL,
+      reporter_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      reporter_profile_id uuid NOT NULL,
+      reporter_profile_type text NOT NULL CHECK (reporter_profile_type IN ('personal', 'business')),
+      reported_profile_id uuid NOT NULL,
+      reported_profile_type text NOT NULL CHECK (reported_profile_type IN ('personal', 'business')),
+      reason text NOT NULL,
+      details text,
+      status text NOT NULL DEFAULT 'open',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      CONSTRAINT direct_message_reports_reporter_channel_uidx UNIQUE
+        (reporter_profile_id, reporter_profile_type, channel_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS direct_message_reports_status_created_idx
+      ON direct_message_reports (status, created_at)
   `;
 
   console.log("Migrations applied.");

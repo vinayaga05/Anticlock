@@ -1,9 +1,25 @@
 import { createHash } from 'node:crypto';
-import { StreamChat } from 'stream-chat';
+import { StreamChat, type Channel } from 'stream-chat';
 import { db } from '../db/client.js';
 import { mobileUsers } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import type { PublisherProfileType } from '@anticlock/contracts';
+
+type ChatProfile = {
+  id: string;
+  type: PublisherProfileType;
+  name: string;
+  image: string | null;
+};
+
+export function profileChannelId(a: Pick<ChatProfile, 'id' | 'type'>, b: Pick<ChatProfile, 'id' | 'type'>) {
+  const profilePair = [`${a.type}:${a.id}`, `${b.type}:${b.id}`].sort();
+  return `profile-${createHash('sha256').update(profilePair.join('|')).digest('hex').slice(0, 48)}`;
+}
+
+function welcomeMessageId(channelId: string) {
+  return `welcome-${createHash('sha256').update(channelId).digest('hex').slice(0, 40)}`;
+}
 
 export class StreamChatService {
   constructor(private client: StreamChat) {}
@@ -86,40 +102,91 @@ export class StreamChatService {
   async createOrGetProfileChannel(input: {
     viewerUserId: string;
     targetUserId: string;
-    viewerProfile: { id: string; type: PublisherProfileType; name: string; image: string | null };
-    targetProfile: { id: string; type: PublisherProfileType; name: string; image: string | null };
+    viewerProfile: ChatProfile;
+    targetProfile: ChatProfile;
   }): Promise<string> {
     if (input.viewerUserId === input.targetUserId) {
       throw new Error('Cannot create conversation with yourself');
     }
     const members = [input.viewerUserId, input.targetUserId].sort();
-    const profilePair = [
-      `${input.viewerProfile.type}:${input.viewerProfile.id}`,
-      `${input.targetProfile.type}:${input.targetProfile.id}`,
-    ].sort();
-    const channelId = `profile-${createHash('sha256').update(profilePair.join('|')).digest('hex').slice(0, 48)}`;
+    const channelId = profileChannelId(input.viewerProfile, input.targetProfile);
+    const profileMembers = [
+      {
+        user_id: input.viewerUserId,
+        profile_id: input.viewerProfile.id,
+        profile_type: input.viewerProfile.type,
+        name: input.viewerProfile.name,
+        image: input.viewerProfile.image,
+      },
+      {
+        user_id: input.targetUserId,
+        profile_id: input.targetProfile.id,
+        profile_type: input.targetProfile.type,
+        name: input.targetProfile.name,
+        image: input.targetProfile.image,
+      },
+    ];
+    await this.client.upsertUsers([
+      { id: input.viewerUserId, name: input.viewerProfile.name, image: input.viewerProfile.image || undefined },
+      { id: input.targetUserId, name: input.targetProfile.name, image: input.targetProfile.image || undefined },
+    ]);
     const channel = this.client.channel('messaging', channelId, {
       members,
       created_by_id: input.viewerUserId,
-      profile_members: [
-        {
-          user_id: input.viewerUserId,
-          profile_id: input.viewerProfile.id,
-          profile_type: input.viewerProfile.type,
-          name: input.viewerProfile.name,
-          image: input.viewerProfile.image,
-        },
-        {
-          user_id: input.targetUserId,
-          profile_id: input.targetProfile.id,
-          profile_type: input.targetProfile.type,
-          name: input.targetProfile.name,
-          image: input.targetProfile.image,
-        },
-      ],
+      profile_members: profileMembers,
     } as any);
     await channel.create();
+    await channel.addMembers(members);
+    await channel.updatePartial({ set: { frozen: false, profile_members: profileMembers } as any });
+    await Promise.all(members.map(userId => channel.show(userId).catch(() => undefined)));
+
+    if (!(channel.data as any)?.welcome_message_sent) {
+      try {
+        await channel.sendMessage({
+          id: welcomeMessageId(channelId),
+          type: 'system',
+          text: `${input.viewerProfile.name} and ${input.targetProfile.name} are now connected. Say hello 👋`,
+          user_id: input.viewerUserId,
+          automatic_welcome: true,
+        } as any, { skip_push: true });
+      } catch (error: any) {
+        // The deterministic message id is the final idempotency guard when two
+        // reciprocal follows arrive at nearly the same time.
+        const duplicate = error?.status === 409
+          || error?.response?.status === 409
+          || /already exists|duplicate message/i.test(String(error?.message ?? error?.response?.data?.message ?? ''));
+        if (!duplicate) throw error;
+      }
+      await channel.updatePartial({ set: { welcome_message_sent: true } as any });
+    }
     return channel.id as string;
+  }
+
+  /** Hide and freeze a direct channel without deleting its durable history. */
+  async suspendChannel(channel: Channel, expectedUserIds: string[]) {
+    await channel.updatePartial({ set: { frozen: true } });
+    const memberIds = new Set(Object.keys(channel.state.members));
+    const membersToRemove = expectedUserIds.filter(userId => memberIds.has(userId));
+    await Promise.all(membersToRemove.map(userId => channel.hide(userId, false)));
+    if (membersToRemove.length > 0) await channel.removeMembers(membersToRemove);
+    return true;
+  }
+
+  async suspendProfileChannel(input: {
+    firstUserId: string;
+    secondUserId: string;
+    firstProfile: Pick<ChatProfile, 'id' | 'type'>;
+    secondProfile: Pick<ChatProfile, 'id' | 'type'>;
+  }) {
+    const channelId = profileChannelId(input.firstProfile, input.secondProfile);
+    const channels = await this.client.queryChannels(
+      { type: 'messaging', id: channelId },
+      [],
+      { limit: 1, state: true, watch: false },
+    );
+    const channel = channels[0];
+    if (!channel) return false;
+    return this.suspendChannel(channel, [input.firstUserId, input.secondUserId]);
   }
 
   /**

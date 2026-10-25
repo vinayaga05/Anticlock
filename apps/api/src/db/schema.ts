@@ -136,6 +136,7 @@ export const mobileUsers = pgTable("mobile_users", {
   isPrivate: boolean("is_private").notNull().default(false),
   allowFollowRequests: boolean("allow_follow_requests").notNull().default(true),
   showFollowerLists: boolean("show_follower_lists").notNull().default(true),
+  allowMessages: boolean("allow_messages").notNull().default(true),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -417,6 +418,7 @@ export const providers = pgTable("providers", {
   isPrivate: boolean("is_private").notNull().default(false),
   allowFollowRequests: boolean("allow_follow_requests").notNull().default(true),
   showFollowerLists: boolean("show_follower_lists").notNull().default(true),
+  allowMessages: boolean("allow_messages").notNull().default(true),
   /** The approved application that created this business profile. */
   sourceApplicationId: uuid("source_application_id"),
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -518,6 +520,35 @@ export const profileBlocks = pgTable(
     ),
     index("profile_blocks_blocker_idx").on(table.blockerProfileId, table.blockerProfileType),
     index("profile_blocks_blocked_idx").on(table.blockedProfileId, table.blockedProfileType),
+  ],
+);
+
+/** User reports for durable Stream direct conversations. */
+export const directMessageReports = pgTable(
+  "direct_message_reports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    channelId: text("channel_id").notNull(),
+    reporterUserId: uuid("reporter_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    reporterProfileId: uuid("reporter_profile_id").notNull(),
+    reporterProfileType: text("reporter_profile_type").notNull(),
+    reportedProfileId: uuid("reported_profile_id").notNull(),
+    reportedProfileType: text("reported_profile_type").notNull(),
+    reason: text("reason").notNull(),
+    details: text("details"),
+    status: text("status").notNull().default("open"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("direct_message_reports_reporter_channel_uidx").on(
+      table.reporterProfileId,
+      table.reporterProfileType,
+      table.channelId,
+    ),
+    index("direct_message_reports_status_created_idx").on(table.status, table.createdAt),
   ],
 );
 

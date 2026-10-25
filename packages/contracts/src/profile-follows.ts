@@ -34,11 +34,15 @@ export type ProfileFollowTarget = z.infer<typeof ProfileFollowTargetSchema>;
 
 export const ProfilePrivacyUpdateSchema = z
   .object({
-    isPrivate: z.boolean(),
+    isPrivate: z.boolean().optional(),
     allowFollowRequests: z.boolean().optional(),
     showFollowerLists: z.boolean().optional(),
+    allowMessages: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .refine(value => Object.values(value).some(item => item !== undefined), {
+    message: 'Choose at least one privacy setting to update',
+  });
 export type ProfilePrivacyUpdate = z.infer<typeof ProfilePrivacyUpdateSchema>;
 
 export const ProfileRelationshipSchema = z.object({
@@ -48,6 +52,7 @@ export const ProfileRelationshipSchema = z.object({
   isRequested: z.boolean(),
   isBlocked: z.boolean(),
   canViewContent: z.boolean(),
+  canMessage: z.boolean(),
 });
 export type ProfileRelationship = z.infer<typeof ProfileRelationshipSchema>;
 

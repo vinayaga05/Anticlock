@@ -34,7 +34,9 @@ export type BookingStatus =
   | 'on_the_way'
   | 'completed'
   | 'cancelled'
-  | 'pending';
+  | 'pending'
+  | 'rejected'
+  | 'reschedule_requested';
 
 export type BookingCategory =
   | 'appointment'
@@ -105,6 +107,8 @@ function statusLabel(status: BookingStatus): string {
     completed: 'Completed',
     cancelled: 'Cancelled',
     pending: 'Pending',
+    rejected: 'Rejected',
+    reschedule_requested: 'New time proposed',
   };
   return labels[status];
 }
@@ -320,7 +324,9 @@ export function getUpcomingBookings(
   now = new Date(),
 ): ConsolidatedBooking[] {
   return getBookedItems(items).filter(
-    b => !isPastBooking(b.startsAt, now) && b.status !== 'completed' && b.status !== 'cancelled',
+    b =>
+      !isPastBooking(b.startsAt, now) &&
+      !['completed', 'cancelled', 'rejected'].includes(b.status),
   );
 }
 
@@ -329,7 +335,9 @@ export function getPastBookings(
   now = new Date(),
 ): ConsolidatedBooking[] {
   return getBookedItems(items).filter(
-    b => isPastBooking(b.startsAt, now) || b.status === 'completed' || b.status === 'cancelled',
+    b =>
+      isPastBooking(b.startsAt, now) ||
+      ['completed', 'cancelled', 'rejected'].includes(b.status),
   );
 }
 
@@ -390,6 +398,15 @@ export function resolveBookingActions(
   }
   if (booking.status === 'cancelled') {
     return { primary: 'book_again' };
+  }
+  if (booking.status === 'rejected') {
+    return { primary: 'book_again' };
+  }
+  if (booking.status === 'pending' || booking.status === 'reschedule_requested') {
+    return { primary: 'view_details', secondary: 'cancel' };
+  }
+  if (booking.status === 'confirmed') {
+    return { primary: 'view_details', secondary: 'cancel' };
   }
   if (booking.status === 'on_the_way') {
     return { primary: 'track', secondary: 'contact' };

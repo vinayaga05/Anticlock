@@ -1,9 +1,17 @@
 import { z } from 'zod';
 
 export const NotificationTypeSchema = z.enum([
+  'provider_application_submitted',
+  'provider_application_approved',
+  'provider_application_rejected',
+  'provider_application_changes_requested',
+  'booking_created',
   'booking_confirmed',
+  'booking_rejected',
+  'booking_rescheduled',
   'booking_cancelled',
   'booking_reminder',
+  'booking_completed',
   'provider_assigned',
   'status_update',
   'new_message',

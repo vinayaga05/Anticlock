@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   Booking,
   CreateBookingRequest,
-  UpdateBookingRequest,
+  CustomerUpdateBookingRequest,
   CancelBookingRequest,
 } from '@anticlock/contracts';
 import { apiRequest } from './client';
@@ -75,7 +75,7 @@ export function useCreateBookingMutation() {
 export function useUpdateBookingMutation(bookingId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (request: UpdateBookingRequest) => {
+    mutationFn: async (request: CustomerUpdateBookingRequest) => {
       if (!isApiEnabled) {
         throw new Error('API not enabled');
       }
@@ -113,6 +113,29 @@ export function useCancelBookingMutation(bookingId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['bookings'] });
       qc.invalidateQueries({ queryKey: ['bookings', bookingId] });
+    },
+  });
+}
+
+export function useCancelAnyBookingMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      bookingId,
+      ...request
+    }: CancelBookingRequest & { bookingId: string }) => {
+      if (!isApiEnabled) throw new Error('API not enabled');
+      await ensureAuthToken();
+      const res = await apiRequest<{ booking: Booking }>(
+        `/v1/bookings/${bookingId}/cancel`,
+        { method: 'POST', body: JSON.stringify(request) },
+      );
+      return res.booking;
+    },
+    onSuccess: booking => {
+      qc.invalidateQueries({ queryKey: ['bookings'] });
+      qc.invalidateQueries({ queryKey: ['bookings', booking.id] });
+      qc.invalidateQueries({ queryKey: ['notifications'] });
     },
   });
 }

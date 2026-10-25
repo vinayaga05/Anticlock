@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, StyleSheet, Text } from 'react-native';
+import { Alert, StyleSheet, Text, TextInput } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { HealthScreenShell } from '@/shared/components/HealthScreenShell';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
@@ -31,12 +31,18 @@ export function ScheduleScreen() {
   const createBooking = useCreateBookingMutation();
   const isHealth = HEALTH_KINDS.has(kind);
   const [mode, setMode] = React.useState<ServiceMode>('center');
+  const [notes, setNotes] = React.useState('');
+  const [address, setAddress] = React.useState('');
   const { selectedDate, selectedTime, setSelectedDate, setSelectedTime } =
     useScheduleState();
 
   const confirm = async () => {
     if (!selectedDate || !selectedTime) {
       Alert.alert('Select schedule', 'Please choose a date and time slot.');
+      return;
+    }
+    if (mode === 'home' && !address.trim()) {
+      Alert.alert('Add an address', 'Enter the address for this home visit.');
       return;
     }
     const place =
@@ -48,6 +54,10 @@ export function ScheduleScreen() {
             ? title
             : 'Knock Clinic';
     if (providerId && isApiEnabled) {
+      if (!categoryId) {
+        Alert.alert('Service unavailable', 'Choose this service again from the provider profile.');
+        return;
+      }
       const startsAt = scheduleToIso(selectedDate, selectedTime);
       if (!startsAt) {
         Alert.alert('Select schedule', 'Please choose a valid date and time.');
@@ -56,7 +66,7 @@ export function ScheduleScreen() {
       try {
         await createBooking.mutateAsync({
           providerId,
-          categoryId: categoryId ?? null,
+          categoryId,
           category: kind === 'class' ? 'class' : 'appointment',
           serviceMode: mode,
           startsAt,
@@ -65,7 +75,8 @@ export function ScheduleScreen() {
           detail: {
             providerName: title,
             serviceTitle: title,
-            locationLabel: place,
+            locationLabel: mode === 'home' ? address.trim() : place,
+            ...(notes.trim() ? { notes: notes.trim() } : {}),
           },
         });
       } catch (err) {
@@ -120,6 +131,30 @@ export function ScheduleScreen() {
         onSelectDate={setSelectedDate}
         onSelectTime={setSelectedTime}
       />
+      {mode === 'home' ? (
+        <TextInput
+          value={address}
+          onChangeText={setAddress}
+          placeholder="Service address"
+          placeholderTextColor={theme.colors.textTertiary}
+          multiline
+          style={[
+            styles.input,
+            { color: theme.colors.textPrimary, borderColor: theme.colors.borderSoft },
+          ]}
+        />
+      ) : null}
+      <TextInput
+        value={notes}
+        onChangeText={setNotes}
+        placeholder="Notes for the provider (optional)"
+        placeholderTextColor={theme.colors.textTertiary}
+        multiline
+        style={[
+          styles.input,
+          { color: theme.colors.textPrimary, borderColor: theme.colors.borderSoft },
+        ]}
+      />
       <Button
         title="Confirm booking"
         variant={isHealth ? 'health' : 'primary'}
@@ -131,4 +166,13 @@ export function ScheduleScreen() {
   );
 }
 
-const styles = StyleSheet.create({});
+const styles = StyleSheet.create({
+  input: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: 52,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    textAlignVertical: 'top',
+  },
+});

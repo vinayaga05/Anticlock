@@ -23,6 +23,7 @@ import { useTheme } from '@/shared/hooks/useTheme';
 import { RootStackParamList } from '@/shared/navigation/types';
 import {
   useMyBusinessQuery,
+  useProviderBookingActionMutation,
   useUpdateMyBusinessMutation,
 } from '@/shared/api/providerHooks';
 import type {
@@ -30,6 +31,7 @@ import type {
   UpdateProviderBusinessRequest,
 } from '@/features/provider-onboarding/types';
 import {
+  DateField,
   TimeField,
   formatTimeLabel,
 } from '@/features/provider-onboarding/components/DateTimeFields';
@@ -82,8 +84,49 @@ function BusinessDashboard({ providerId }: { providerId: string }) {
   const insets = useSafeAreaInsets();
   const query = useMyBusinessQuery(providerId);
   const update = useUpdateMyBusinessMutation(providerId);
+  const bookingAction = useProviderBookingActionMutation(providerId);
   const business = query.data;
   const [editing, setEditing] = useState<EditDraft | null>(null);
+  const [rescheduling, setRescheduling] = useState<{
+    bookingId: string;
+    date: string | null;
+    time: string | null;
+  } | null>(null);
+
+  const actOnBooking = async (
+    bookingId: string,
+    action: 'accept' | 'reject' | 'complete' | 'no_show',
+  ) => {
+    try {
+      await bookingAction.mutateAsync({ bookingId, action });
+    } catch (err) {
+      Alert.alert('Could not update booking', (err as Error).message);
+    }
+  };
+
+  const submitReschedule = async () => {
+    if (!rescheduling?.date || !rescheduling.time) {
+      Alert.alert('Choose a new time', 'Select both a date and time.');
+      return;
+    }
+    const startsAt = new Date(
+      `${rescheduling.date}T${rescheduling.time}:00`,
+    );
+    if (Number.isNaN(startsAt.getTime()) || startsAt.getTime() <= Date.now()) {
+      Alert.alert('Choose a future time', 'The new booking time must be in the future.');
+      return;
+    }
+    try {
+      await bookingAction.mutateAsync({
+        bookingId: rescheduling.bookingId,
+        action: 'reschedule',
+        startsAt: startsAt.toISOString(),
+      });
+      setRescheduling(null);
+    } catch (err) {
+      Alert.alert('Could not reschedule', (err as Error).message);
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -515,8 +558,9 @@ function BusinessDashboard({ providerId }: { providerId: string }) {
               </Text>
               {business.upcomingBookings.length ? (
                 business.upcomingBookings.map(booking => (
-                  <View key={booking.id} style={styles.kvRow}>
-                    <View style={styles.flex1}>
+                  <View key={booking.id} style={styles.bookingRow}>
+                    <View style={styles.kvRow}>
+                      <View style={styles.flex1}>
                       <Text
                         style={{
                           color: theme.colors.textPrimary,
@@ -533,8 +577,8 @@ function BusinessDashboard({ providerId }: { providerId: string }) {
                       >
                         {booking.serviceTitle} · {booking.serviceMode}
                       </Text>
-                    </View>
-                    <Text
+                      </View>
+                      <Text
                       style={{
                         color: theme.colors.textSecondary,
                         fontSize: 12,
@@ -549,7 +593,76 @@ function BusinessDashboard({ providerId }: { providerId: string }) {
                       })}
                       {'\n'}
                       {statusLabel(booking.status)}
-                    </Text>
+                      </Text>
+                    </View>
+                    <View style={styles.bookingActions}>
+                      {booking.status === 'pending' ||
+                      booking.status === 'reschedule_requested' ? (
+                        <>
+                          <Button
+                            title="Accept"
+                            onPress={() => void actOnBooking(booking.id, 'accept')}
+                            disabled={bookingAction.isPending}
+                          />
+                          <Button
+                            title="Reject"
+                            variant="secondary"
+                            onPress={() => void actOnBooking(booking.id, 'reject')}
+                            disabled={bookingAction.isPending}
+                          />
+                        </>
+                      ) : null}
+                      {booking.status === 'confirmed' ? (
+                        <>
+                          <Button
+                            title="Complete"
+                            onPress={() => void actOnBooking(booking.id, 'complete')}
+                            disabled={bookingAction.isPending}
+                          />
+                          <Button
+                            title="No show"
+                            variant="secondary"
+                            onPress={() => void actOnBooking(booking.id, 'no_show')}
+                            disabled={bookingAction.isPending}
+                          />
+                        </>
+                      ) : null}
+                      {['pending', 'confirmed', 'reschedule_requested'].includes(
+                        booking.status,
+                      ) ? (
+                        <Button
+                          title="Reschedule"
+                          variant="secondary"
+                          onPress={() =>
+                            setRescheduling({
+                              bookingId: booking.id,
+                              date: booking.startsAt.slice(0, 10),
+                              time: booking.startsAt.slice(11, 16),
+                            })
+                          }
+                          disabled={bookingAction.isPending}
+                        />
+                      ) : null}
+                    </View>
+                    {rescheduling?.bookingId === booking.id ? (
+                      <View style={styles.rescheduleForm}>
+                        <Text style={[styles.label, { color: theme.colors.textSecondary }]}>New date and time</Text>
+                        <DateField
+                          value={rescheduling.date}
+                          label="New booking date"
+                          onChange={date => setRescheduling(value => value ? { ...value, date } : value)}
+                        />
+                        <TimeField
+                          value={rescheduling.time}
+                          label="New booking time"
+                          onChange={time => setRescheduling(value => value ? { ...value, time } : value)}
+                        />
+                        <View style={styles.bookingActions}>
+                          <Button title="Send new time" onPress={() => void submitReschedule()} loading={bookingAction.isPending} />
+                          <Button title="Cancel" variant="secondary" onPress={() => setRescheduling(null)} />
+                        </View>
+                      </View>
+                    ) : null}
                   </View>
                 ))
               ) : (
@@ -626,4 +739,7 @@ const styles = StyleSheet.create({
   textarea: { minHeight: 90, paddingTop: 10, textAlignVertical: 'top' },
   kv: { gap: 2 },
   kvRow: { alignItems: 'center', flexDirection: 'row', gap: 10 },
+  bookingRow: { gap: 10, paddingVertical: 4 },
+  bookingActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  rescheduleForm: { gap: 8 },
 });

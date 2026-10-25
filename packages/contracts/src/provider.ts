@@ -5,11 +5,12 @@ export type ProviderKind = z.infer<typeof ProviderKindSchema>;
 
 export const ProviderApplicationStatusSchema = z.enum([
   'draft',
-  'submitted',
-  'under_review',
+  'pending_review',
+  'changes_requested',
   'approved',
   'rejected',
-  'more_info_requested',
+  'suspended',
+  'inactive',
 ]);
 export type ProviderApplicationStatus = z.infer<
   typeof ProviderApplicationStatusSchema
@@ -382,8 +383,7 @@ export type ProviderApplicationAdminDetail = z.infer<
 export const ProviderApplicationReviewActionSchema = z.enum([
   'approve',
   'reject',
-  'request_info',
-  'mark_under_review',
+  'request_changes',
 ]);
 export type ProviderApplicationReviewAction = z.infer<
   typeof ProviderApplicationReviewActionSchema
@@ -391,10 +391,9 @@ export type ProviderApplicationReviewAction = z.infer<
 
 /**
  * The only valid admin review transitions. Anything else is a 409.
- *   submitted     -> under_review | approved | more_info_requested | rejected
- *   under_review  -> approved | more_info_requested | rejected
+ *   pending_review -> approved | changes_requested | rejected
  * Applicant transitions (not admin actions):
- *   draft | more_info_requested -> submitted (submit, when complete)
+ *   draft | changes_requested -> pending_review (submit, when complete)
  *   rejected -> draft (reopen to fix and resubmit)
  */
 export const PROVIDER_REVIEW_TRANSITIONS: Record<
@@ -402,23 +401,36 @@ export const PROVIDER_REVIEW_TRANSITIONS: Record<
   ProviderApplicationReviewAction[]
 > = {
   draft: [],
-  submitted: ['mark_under_review', 'approve', 'request_info', 'reject'],
-  under_review: ['approve', 'request_info', 'reject'],
-  more_info_requested: [],
+  pending_review: ['approve', 'request_changes', 'reject'],
+  changes_requested: [],
   approved: [],
   rejected: [],
+  suspended: [],
+  inactive: [],
 };
 
 export function allowedReviewActions(
   status: string,
 ): ProviderApplicationReviewAction[] {
-  return (
-    PROVIDER_REVIEW_TRANSITIONS[status as ProviderApplicationStatus] ?? []
-  );
+  try {
+    const normalized = normalizeProviderApplicationStatus(status);
+    return PROVIDER_REVIEW_TRANSITIONS[normalized] ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** Maps rows written by older releases onto the canonical public lifecycle. */
+export function normalizeProviderApplicationStatus(
+  status: string,
+): ProviderApplicationStatus {
+  if (status === 'submitted' || status === 'under_review') return 'pending_review';
+  if (status === 'more_info_requested') return 'changes_requested';
+  return ProviderApplicationStatusSchema.parse(status);
 }
 
 export const PROVIDER_APPLICANT_SUBMITTABLE_STATUSES: ProviderApplicationStatus[] =
-  ['draft', 'more_info_requested'];
+  ['draft', 'changes_requested'];
 
 export const ProviderApplicationReviewRequestSchema = z.object({
   action: ProviderApplicationReviewActionSchema,

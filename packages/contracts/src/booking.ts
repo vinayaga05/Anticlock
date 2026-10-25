@@ -4,9 +4,8 @@ import { PaymentStatusSchema, type PaymentStatus } from './payment.js';
 export const BookingStatusSchema = z.enum([
   'pending',
   'confirmed',
-  'provider_assigned',
-  'on_the_way',
-  'in_progress',
+  'rejected',
+  'reschedule_requested',
   'completed',
   'cancelled',
   'no_show',
@@ -62,8 +61,8 @@ export const BookingSchema = z.object({
 export type Booking = z.infer<typeof BookingSchema>;
 
 export const CreateBookingRequestSchema = z.object({
-  providerId: z.string().uuid().nullable().optional(),
-  categoryId: z.string().nullable().optional(),
+  providerId: z.string().uuid(),
+  categoryId: z.string().min(1),
   category: BookingCategorySchema,
   serviceMode: ServiceModeSchema,
   startsAt: z.string().datetime(),
@@ -84,7 +83,45 @@ export const UpdateBookingRequestSchema = z.object({
   detail: BookingDetailSchema.partial().optional(),
   metadata: z.record(z.unknown()).optional(),
 });
+
+export const ProviderBookingActionSchema = z.enum([
+  'accept',
+  'reject',
+  'reschedule',
+  'complete',
+  'no_show',
+]);
+export type ProviderBookingAction = z.infer<typeof ProviderBookingActionSchema>;
+
+export const ProviderBookingActionRequestSchema = z.object({
+  action: ProviderBookingActionSchema,
+  startsAt: z.string().datetime().optional(),
+  endsAt: z.string().datetime().nullable().optional(),
+  reason: z.string().max(500).optional(),
+}).superRefine((value, ctx) => {
+  if (value.action === 'reschedule' && !value.startsAt) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['startsAt'],
+      message: 'Choose a new date and time',
+    });
+  }
+});
+export type ProviderBookingActionRequest = z.infer<
+  typeof ProviderBookingActionRequestSchema
+>;
 export type UpdateBookingRequest = z.infer<typeof UpdateBookingRequestSchema>;
+
+/** Customer edits never include lifecycle, price, payment, or schedule. */
+export const CustomerUpdateBookingRequestSchema = z.object({
+  detail: z.object({
+    notes: z.string().max(1000).optional(),
+    locationLabel: z.string().max(500).optional(),
+  }).strict(),
+}).strict();
+export type CustomerUpdateBookingRequest = z.infer<
+  typeof CustomerUpdateBookingRequestSchema
+>;
 
 export const CancelBookingRequestSchema = z.object({
   reason: z.string().max(500).optional(),

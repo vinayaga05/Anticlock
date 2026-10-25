@@ -157,7 +157,7 @@ export function submitLocalApplication(applicationId: string) {
   }
   return saveLocalApplication({
     ...existing,
-    status: 'submitted',
+    status: 'pending_review',
     submittedAt: nowIso(),
     updatedAt: nowIso(),
   });

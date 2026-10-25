@@ -15,8 +15,6 @@ import { useTheme } from '@/shared/hooks/useTheme';
 import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { Button } from '@/shared/components/Button';
 import { PressableScale } from '@/shared/components/PressableScale';
-import { isApiEnabled } from '@/shared/api/config';
-import { addLocalDocument } from '@/features/provider-onboarding/localApplicationStore';
 import {
   ProviderMediaField,
   type UploadItem,
@@ -95,19 +93,6 @@ function hasValue(value: unknown) {
   if (Array.isArray(value)) return value.length > 0;
   if (typeof value === 'string') return value.trim().length > 0;
   return value !== undefined && value !== null;
-}
-
-async function localUpload(opts: {
-  applicationId: string;
-  fieldKey: string;
-  purpose: 'document' | 'profile';
-  file: { uri: string };
-  onProgress?: (fraction: number) => void;
-}) {
-  // API disabled (offline demo): keep the picked file locally.
-  opts.onProgress?.(1);
-  if (opts.purpose === 'document') addLocalDocument(opts.applicationId, opts.fieldKey);
-  return { mediaId: `local-${Date.now()}`, url: opts.file.uri };
 }
 
 function mediaIds(value: unknown): string[] {
@@ -209,7 +194,6 @@ function FieldInput({
         purpose={isDocument ? 'document' : 'profile'}
         multiple={multiple}
         initialItems={initialItems}
-        upload={isApiEnabled ? undefined : (localUpload as never)}
         onUploaded={(mediaId, previewUri) => {
           if (isDocument) {
             onDocumentUploaded?.(field.key);

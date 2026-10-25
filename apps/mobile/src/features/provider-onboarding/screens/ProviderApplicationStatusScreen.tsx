@@ -20,19 +20,15 @@ import {
 
 const STATUS_COPY: Record<string, string> = {
   draft: 'Finish your details and submit when you’re ready.',
-  submitted: 'Submitted. Our team will start reviewing it shortly.',
-  under_review: 'Our team is reviewing your details and documents.',
-  more_info_requested: 'The reviewer needs a few changes before approving.',
+  pending_review: 'Submitted. Our team is reviewing your details and documents.',
+  changes_requested: 'The reviewer needs a few changes before approving.',
   approved: 'Approved! Your business is live in the marketplace.',
   rejected: 'This application was not approved. You can fix it and resubmit.',
+  suspended: 'This business is currently suspended.',
+  inactive: 'This business is currently inactive.',
 };
 
-const STEPS = [
-  'draft',
-  'submitted',
-  'under_review',
-  'approved',
-] as const;
+const STEPS = ['draft', 'pending_review', 'approved'] as const;
 
 export function ProviderApplicationStatusScreen() {
   const theme = useTheme();
@@ -60,7 +56,7 @@ export function ProviderApplicationStatusScreen() {
     );
   }
 
-  const canEdit = app.status === 'draft' || app.status === 'more_info_requested';
+  const canEdit = app.status === 'draft' || app.status === 'changes_requested';
   const canDelete = app.status !== 'approved' && !app.providerId;
   const onReopen = () => {
     reopen.mutate(undefined, {
@@ -109,9 +105,9 @@ export function ProviderApplicationStatusScreen() {
   };
 
   const reviewerMessage =
-    app.status === 'more_info_requested' ? app.infoRequestMessage : null;
+    app.status === 'changes_requested' ? app.infoRequestMessage : null;
   const reviewerNotes =
-    app.status === 'rejected' || app.status === 'more_info_requested'
+    app.status === 'rejected' || app.status === 'changes_requested'
       ? app.reviewNotes && app.reviewNotes !== reviewerMessage
         ? app.reviewNotes
         : null
@@ -134,7 +130,7 @@ export function ProviderApplicationStatusScreen() {
               color:
                 app.status === 'rejected'
                   ? theme.colors.error
-                  : app.status === 'more_info_requested'
+                  : app.status === 'changes_requested'
                     ? theme.colors.warning
                     : theme.colors.primary,
             },
@@ -173,8 +169,7 @@ export function ProviderApplicationStatusScreen() {
           {STEPS.map(step => {
             const active =
               app.status === step ||
-              (step === 'under_review' &&
-                (app.status === 'under_review' || app.status === 'more_info_requested'));
+              (step === 'pending_review' && app.status === 'changes_requested');
             return (
               <Text
                 key={step}
@@ -187,7 +182,7 @@ export function ProviderApplicationStatusScreen() {
             );
           })}
         </View>
-        {app.status === 'more_info_requested' ? (
+        {app.status === 'changes_requested' ? (
           <Button title="Edit & resubmit" onPress={resumeEditing} />
         ) : canEdit ? (
           <Button

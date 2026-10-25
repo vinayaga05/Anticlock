@@ -61,9 +61,10 @@ export default function BookingsPage() {
       case 'completed':
         return 'badge-success';
       case 'pending':
-      case 'provider_assigned':
+      case 'reschedule_requested':
         return 'badge-warning';
       case 'cancelled':
+      case 'rejected':
       case 'no_show':
         return 'badge-error';
       default:
@@ -169,9 +170,8 @@ export default function BookingsPage() {
               >
                 <option value="pending">Pending</option>
                 <option value="confirmed">Confirmed</option>
-                <option value="provider_assigned">Provider Assigned</option>
-                <option value="on_the_way">On the Way</option>
-                <option value="in_progress">In Progress</option>
+                <option value="rejected">Rejected</option>
+                <option value="reschedule_requested">Reschedule Requested</option>
                 <option value="completed">Completed</option>
                 <option value="cancelled">Cancelled</option>
                 <option value="no_show">No Show</option>

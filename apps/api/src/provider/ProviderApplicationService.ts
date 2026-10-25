@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import {
-  PROVIDER_APPLICANT_SUBMITTABLE_STATUSES,
   allowedReviewActions,
+  normalizeProviderApplicationStatus,
   type CreateProviderApplicationRequest,
   type ProviderApplicationAdminDetail,
   type ProviderApplicationDetail,
@@ -54,8 +54,12 @@ const PHOTO_DOCUMENT_MIMES = new Set([
   'image/webp',
   'image/gif',
 ]);
-const editableStatuses = new Set<string>(['draft', 'more_info_requested']);
-const submittableStatuses = new Set<string>(PROVIDER_APPLICANT_SUBMITTABLE_STATUSES);
+const editableStatuses = new Set<string>([
+  'draft',
+  'changes_requested',
+  'more_info_requested', // rolling-upgrade compatibility
+]);
+const submittableStatuses = new Set(editableStatuses);
 /** Guards against unbounded draft creation by one account. */
 const MAX_OPEN_DRAFTS = 10;
 const AADHAAR_KEY = 'identity.aadhaarNumber';
@@ -83,7 +87,7 @@ function toSummary(
     id: row.id,
     businessName: businessNameOf(row),
     providerKind: row.providerKind as ProviderApplicationSummary['providerKind'],
-    status: row.status as ProviderApplicationSummary['status'],
+    status: normalizeProviderApplicationStatus(row.status),
     categoryIds,
     ...(categories ? { categories } : {}),
     submittedAt: row.submittedAt?.toISOString() ?? null,
@@ -202,11 +206,7 @@ async function buildReadiness(row: ApplicationRow, categoryIds: string[]) {
 const NOTIFICATION_COPY: Partial<
   Record<ProviderApplicationStatus, (name: string, row: ApplicationRow) => { title: string; body: string }>
 > = {
-  under_review: name => ({
-    title: 'Your application is under review',
-    body: `Our team has started reviewing ${name}.`,
-  }),
-  more_info_requested: (name, row) => ({
+  changes_requested: (name, row) => ({
     title: 'More information needed',
     body: row.infoRequestMessage
       ? `${name}: ${row.infoRequestMessage}`
@@ -504,7 +504,7 @@ export class ProviderApplicationService {
     return this.getApplication(mobileUserId, applicationId);
   }
 
-  /** draft | more_info_requested -> submitted, only when complete. */
+  /** draft | changes_requested -> pending_review, only when complete. */
   async submitApplication(mobileUserId: string, applicationId: string) {
     const row = await this.requireOwnedApplication(mobileUserId, applicationId);
     if (!submittableStatuses.has(row.status)) {
@@ -531,7 +531,7 @@ export class ProviderApplicationService {
       // The previous review cycle's feedback is answered by this resubmission;
       // clearing it keeps stale banners off the admin page (audit log keeps it).
       .set({
-        status: 'submitted',
+        status: 'pending_review',
         submittedAt: new Date(),
         updatedAt: new Date(),
         infoRequestMessage: null,
@@ -547,6 +547,8 @@ export class ProviderApplicationService {
     if (!updated.length) {
       throw appError('Application status changed; refresh and try again', 'invalid_transition', 409);
     }
+
+    await this.notifyApplicationSubmitted(row);
 
     return this.getApplication(mobileUserId, applicationId);
   }
@@ -687,12 +689,20 @@ export class ProviderApplicationService {
 
   /** Admin queue. Drafts are the applicant's private work and are hidden. */
   async listApplicationsAdmin(status?: string): Promise<ProviderApplicationSummary[]> {
+    const internalStatuses =
+      status === 'pending_review'
+        ? ['pending_review', 'submitted', 'under_review']
+        : status === 'changes_requested'
+          ? ['changes_requested', 'more_info_requested']
+          : status
+            ? [status]
+            : null;
     const rows = await db
       .select()
       .from(providerApplications)
       .where(
-        status
-          ? eq(providerApplications.status, status)
+        internalStatuses
+          ? inArray(providerApplications.status, internalStatuses)
           : ne(providerApplications.status, 'draft'),
       )
       .orderBy(desc(providerApplications.submittedAt), desc(providerApplications.updatedAt));
@@ -748,6 +758,7 @@ export class ProviderApplicationService {
     body: ProviderApplicationReviewRequest,
   ) {
     const now = new Date();
+    let previousStatus: ProviderApplicationStatus = 'pending_review';
     const updatedRow = await db.transaction(async tx => {
       const [row] = await tx
         .select()
@@ -755,6 +766,7 @@ export class ProviderApplicationService {
         .where(eq(providerApplications.id, applicationId))
         .for('update');
       if (!row) throw appError('Application not found', 'not_found', 404);
+      previousStatus = normalizeProviderApplicationStatus(row.status);
 
       if (!allowedReviewActions(row.status).includes(body.action)) {
         throw appError(
@@ -764,15 +776,7 @@ export class ProviderApplicationService {
         );
       }
 
-      if (body.action === 'mark_under_review') {
-        const [u] = await tx
-          .update(providerApplications)
-          .set({ status: 'under_review', updatedAt: now })
-          .where(eq(providerApplications.id, applicationId))
-          .returning();
-        return u!;
-      }
-      if (body.action === 'request_info') {
+      if (body.action === 'request_changes') {
         const message = (body.infoRequestMessage ?? body.notes ?? '').trim();
         if (!message) {
           throw appError('Tell the applicant what information is needed', 'validation_error', 400);
@@ -780,7 +784,7 @@ export class ProviderApplicationService {
         const [u] = await tx
           .update(providerApplications)
           .set({
-            status: 'more_info_requested',
+            status: 'changes_requested',
             infoRequestMessage: message,
             reviewedAt: now,
             reviewedBy: auth.sub,
@@ -842,7 +846,12 @@ export class ProviderApplicationService {
       action: `provider_application.${body.action}`,
       entityType: 'provider_application',
       entityId: applicationId,
-      metadata: { notes: body.notes, infoRequestMessage: body.infoRequestMessage },
+      metadata: {
+        notes: body.notes,
+        infoRequestMessage: body.infoRequestMessage,
+        previousStatus,
+        newStatus: normalizeProviderApplicationStatus(updatedRow.status),
+      },
     });
 
     await this.notifyStatusChange(updatedRow);
@@ -851,25 +860,49 @@ export class ProviderApplicationService {
 
   /** In-app notification (+ push when Firebase is configured). Never throws. */
   private async notifyStatusChange(row: ApplicationRow) {
-    const copy = NOTIFICATION_COPY[row.status as ProviderApplicationStatus];
+    const status = normalizeProviderApplicationStatus(row.status);
+    const copy = NOTIFICATION_COPY[status];
     if (!copy) return;
     const name = businessNameOf(row);
     const { title, body } = copy(name, row);
     try {
       await notificationService.notifyUser(row.mobileUserId, {
-        type: 'status_update',
+        type:
+          status === 'approved'
+            ? 'provider_application_approved'
+            : status === 'rejected'
+              ? 'provider_application_rejected'
+              : 'provider_application_changes_requested',
         title,
         body,
         data: {
           kind: 'provider_application',
           applicationId: row.id,
-          status: row.status,
+          status,
           ...(row.providerId ? { providerId: row.providerId } : {}),
           screen: 'ProviderApplicationStatus',
         },
       });
     } catch (err) {
       console.error('[ProviderApplicationService] status notification failed', err);
+    }
+  }
+
+  private async notifyApplicationSubmitted(row: ApplicationRow) {
+    try {
+      await notificationService.notifyUser(row.mobileUserId, {
+        type: 'provider_application_submitted',
+        title: 'Business submitted for review',
+        body: `${businessNameOf(row)} was submitted successfully. We will notify you after review.`,
+        data: {
+          kind: 'provider_application',
+          applicationId: row.id,
+          status: 'pending_review',
+          screen: 'ProviderApplicationStatus',
+        },
+      });
+    } catch (err) {
+      console.error('[ProviderApplicationService] submission notification failed', err);
     }
   }
 

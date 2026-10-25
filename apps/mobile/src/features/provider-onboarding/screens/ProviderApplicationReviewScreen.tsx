@@ -26,7 +26,7 @@ import {
   formatFieldValue,
 } from '@/features/provider-onboarding/utils/reviewModel';
 
-const SUBMITTABLE = new Set(['draft', 'more_info_requested']);
+const SUBMITTABLE = new Set(['draft', 'changes_requested']);
 
 export function ProviderApplicationReviewScreen() {
   const theme = useTheme();
@@ -324,7 +324,7 @@ export function ProviderApplicationReviewScreen() {
             />
             <Button
               title={
-                app.status === 'more_info_requested'
+                app.status === 'changes_requested'
                   ? 'Resubmit application'
                   : 'Submit application'
               }

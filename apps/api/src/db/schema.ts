@@ -1236,6 +1236,7 @@ export const bookings = pgTable(
       .defaultNow(),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
   },
   (table) => [
     index("bookings_user_starts_idx").on(table.mobileUserId, table.startsAt),

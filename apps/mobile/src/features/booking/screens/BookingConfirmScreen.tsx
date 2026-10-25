@@ -46,10 +46,10 @@ export function BookingConfirmScreen() {
           <SoftIllustration variant="confirm" accent={accent} width={180} height={130} />
         </Animated.View>
         <Text style={[theme.typography.title, { color: titleColor }]}>
-          Booking confirmed
+          Booking request sent
         </Text>
         <Text style={[theme.typography.body, { color: mutedColor, textAlign: 'center' }]}>
-          Your appointment is scheduled for {when}.
+          The provider will confirm your appointment for {when}.
         </Text>
       </View>
 
@@ -103,7 +103,7 @@ export function BookingConfirmScreen() {
                 fontWeight: '700',
               },
             ]}>
-            Amount paid Rs {fee}
+            Amount due Rs {fee}
           </Text>
         </View>
       </Glass>

@@ -30,7 +30,7 @@ import {
 } from '@/shared/api/providerHooks';
 
 const AUTOSAVE_DELAY_MS = 1200;
-const EDITABLE_STATUSES = new Set(['draft', 'more_info_requested']);
+const EDITABLE_STATUSES = new Set(['draft', 'changes_requested']);
 
 type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
@@ -365,7 +365,7 @@ export function ProviderApplicationFormScreen() {
 
   return (
     <View style={styles.root}>
-      {app.status === 'more_info_requested' && app.infoRequestMessage ? (
+      {app.status === 'changes_requested' && app.infoRequestMessage ? (
         <View style={[styles.banner, { backgroundColor: `${theme.colors.warning}1F` }]}>
           <AppIcon name="alert" size={16} color={theme.colors.warning} />
           <Text style={[styles.bannerText, { color: theme.colors.textPrimary }]}>

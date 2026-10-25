@@ -186,7 +186,7 @@ export default function ProviderApplicationDetailPage() {
                     value={notes}
                     onChange={e => setNotes(e.target.value)}
                   />
-                  {allowed.has('request_info') ? (
+                  {allowed.has('request_changes') ? (
                     <textarea
                       className="input"
                       rows={3}
@@ -197,30 +197,20 @@ export default function ProviderApplicationDetailPage() {
                     />
                   ) : null}
                   <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-                    {allowed.has('mark_under_review') ? (
-                      <button
-                        type="button"
-                        className="btn secondary"
-                        disabled={review.isPending}
-                        onClick={() => review.mutate({ action: 'mark_under_review', notes })}
-                      >
-                        Mark under review
-                      </button>
-                    ) : null}
-                    {allowed.has('request_info') ? (
+                    {allowed.has('request_changes') ? (
                       <button
                         type="button"
                         className="btn secondary"
                         disabled={review.isPending || !(infoMessage || notes).trim()}
                         onClick={() =>
                           review.mutate({
-                            action: 'request_info',
+                            action: 'request_changes',
                             notes,
                             infoRequestMessage: infoMessage || notes,
                           })
                         }
                       >
-                        Request more info
+                        Request changes
                       </button>
                     ) : null}
                     {allowed.has('reject') ? (

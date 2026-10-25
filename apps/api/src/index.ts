@@ -22,6 +22,7 @@ import {
 import { shopAdminRoutes, shopMobileRoutes } from './routes/shop.js';
 import { tripsAdminRoutes, tripsMobileRoutes } from './routes/trips.js';
 import { bookingAdminRoutes, bookingMobileRoutes } from './routes/bookings.js';
+import { startBookingReminderJob } from './booking/BookingService.js';
 import { assistantRoutes } from './routes/assistant.js';
 import { interestRoutes } from './routes/interests.js';
 import { contentMobileRoutes, contentPublicRoutes } from './routes/content.js';
@@ -143,6 +144,7 @@ const hostname = process.env.API_HOST ?? '0.0.0.0';
 serve({ fetch: app.fetch, port, hostname }, info => {
   console.log(`Knock API listening on http://${hostname}:${info.port}`);
   startAssistantLifecycleJob();
+  startBookingReminderJob();
   void mediaService.ensureStorageReady();
 });
 

@@ -113,6 +113,28 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     };
   }
 
+  function nextAvailableTime(weeks = 0, hour = 10, minute = 0) {
+    const now = new Date();
+    for (let offset = 1 + weeks * 7; offset <= 21 + weeks * 7; offset += 1) {
+      const cursor = new Date(now.getTime() + offset * 86_400_000);
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        weekday: 'short',
+      }).formatToParts(cursor);
+      const part = (type: Intl.DateTimeFormatPartTypes) =>
+        parts.find(item => item.type === type)?.value ?? '';
+      if (!['Mon', 'Tue'].includes(part('weekday'))) continue;
+      const candidate = new Date(
+        `${part('year')}-${part('month')}-${part('day')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+05:30`,
+      );
+      if (candidate > now) return candidate.toISOString();
+    }
+    throw new Error('Could not find an available provider time');
+  }
+
   /** Creates a complete application (services, payload, docs) as a draft. */
   async function completeDraft(name: string, kind: 'business' | 'individual' = 'business') {
     const created = await call('OWNER', 'POST', '/v1/provider/applications', { providerKind: kind });
@@ -297,21 +319,29 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
       call('admin', 'POST', `/admin/provider/applications/${firstId}/review`, { action, ...extra });
 
     // Draft: no admin action is valid.
-    assert.equal((await review('mark_under_review')).status, 409);
     assert.equal((await review('approve')).status, 409);
 
     const submitted = await call('OWNER', 'POST', `/v1/provider/applications/${firstId}/submit`);
     assert.equal(submitted.status, 200, JSON.stringify(submitted.json));
-    assert.equal(submitted.json.application.status, 'submitted');
+    assert.equal(submitted.json.application.status, 'pending_review');
+    {
+      const { eq } = await import('drizzle-orm');
+      const [persisted] = await db.select({ status: schema.providerApplications.status })
+        .from(schema.providerApplications)
+        .where(eq(schema.providerApplications.id, firstId));
+      assert.equal(persisted.status, 'pending_review');
+    }
+    let notes = await notificationsFor(OWNER);
+    assert.equal(notes[0].type, 'provider_application_submitted');
+    assert.equal(notes[0].data.status, 'pending_review');
     // Applicant cannot edit or re-submit while in review.
     assert.equal((await call('OWNER', 'PATCH', `/v1/provider/applications/${firstId}`, { commonPayload: {} })).status, 409);
     assert.equal((await call('OWNER', 'POST', `/v1/provider/applications/${firstId}/submit`)).status, 409);
 
     const detail = await call('admin', 'GET', `/admin/provider/applications/${firstId}`);
     assert.deepEqual(detail.json.application.allowedActions, [
-      'mark_under_review',
       'approve',
-      'request_info',
+      'request_changes',
       'reject',
     ]);
 
@@ -320,32 +350,24 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     assert.equal(queue.status, 200);
     assert.ok(
       (queue.json.data as { id: string; status: string }[]).some(
-        a => a.id === firstId && a.status === 'submitted',
+        a => a.id === firstId && a.status === 'pending_review',
       ),
       'submitted application appears in the admin queue',
     );
 
-    const under = await review('mark_under_review');
-    assert.equal(under.status, 200);
-    assert.equal(under.json.application.status, 'under_review');
-    assert.deepEqual(under.json.application.allowedActions, [
-      'approve',
-      'request_info',
-      'reject',
-    ]);
-    let notes = await notificationsFor(OWNER);
-    assert.equal(notes[0].type, 'status_update');
-    assert.equal(notes[0].data.applicationId, firstId);
-    assert.equal(notes[0].data.status, 'under_review');
+    // Pending businesses do not have a public profile or search result.
+    const hidden = await call('OTHER', 'GET', `/v1/marketplace/providers?q=${encodeURIComponent(`Lotus Pilates ${runId}`)}`);
+    assert.deepEqual(hidden.json.data, []);
 
-    assert.equal((await review('request_info')).status, 400, 'message required');
-    const info = await review('request_info', {
+    assert.equal((await review('request_changes')).status, 400, 'message required');
+    const info = await review('request_changes', {
       infoRequestMessage: 'Please upload a clearer ID',
     });
     assert.equal(info.status, 200);
-    assert.equal(info.json.application.status, 'more_info_requested');
+    assert.equal(info.json.application.status, 'changes_requested');
     notes = await notificationsFor(OWNER);
-    assert.equal(notes[0].data.status, 'more_info_requested');
+    assert.equal(notes[0].type, 'provider_application_changes_requested');
+    assert.equal(notes[0].data.status, 'changes_requested');
     assert.match(notes[0].body, /clearer ID/);
 
     // Applicant fixes and resubmits.
@@ -356,22 +378,32 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
       `/v1/provider/applications/${firstId}/submit`,
     );
     assert.equal(resubmitted.status, 200);
-    assert.equal(resubmitted.json.application.status, 'submitted');
+    assert.equal(resubmitted.json.application.status, 'pending_review');
     assert.equal(
       resubmitted.json.application.infoRequestMessage,
       null,
       'answered info request is cleared',
     );
 
-    // Approve is allowed directly from submitted (no mark_under_review required).
+    // Approval is allowed directly from pending review.
     const approved = await review('approve', { notes: 'Looks good' });
     assert.equal(approved.status, 200, JSON.stringify(approved.json));
     assert.equal(approved.json.application.status, 'approved');
     firstProviderId = approved.json.application.providerId;
     assert.ok(firstProviderId);
     notes = await notificationsFor(OWNER);
+    assert.equal(notes[0].type, 'provider_application_approved');
     assert.equal(notes[0].data.status, 'approved');
     assert.equal(notes[0].data.providerId, firstProviderId);
+
+    const { and, eq } = await import('drizzle-orm');
+    const audit = await db.select().from(schema.auditLogs).where(and(
+      eq(schema.auditLogs.entityId, firstId),
+      eq(schema.auditLogs.action, 'provider_application.approve'),
+    ));
+    assert.equal(audit[0].actorId, ADMIN);
+    assert.equal(audit[0].metadata.previousStatus, 'pending_review');
+    assert.equal(audit[0].metadata.newStatus, 'approved');
 
     // Terminal: nothing else is allowed, and approving twice is a 409.
     assert.equal((await review('approve')).status, 409);
@@ -381,7 +413,6 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
   it('approves a second business for the same user as a NEW business profile', async () => {
     secondId = await completeDraft(`Lotus Physio ${runId}`, 'individual');
     assert.equal((await call('OWNER', 'POST', `/v1/provider/applications/${secondId}/submit`)).status, 200);
-    assert.equal((await call('admin', 'POST', `/admin/provider/applications/${secondId}/review`, { action: 'mark_under_review' })).status, 200);
     const approved = await call('admin', 'POST', `/admin/provider/applications/${secondId}/review`, { action: 'approve' });
     assert.equal(approved.status, 200, JSON.stringify(approved.json));
     secondProviderId = approved.json.application.providerId;
@@ -437,7 +468,7 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     assert.equal(reopened.json.application.reviewNotes, 'Registration certificate is unreadable');
     const again = await call('OWNER', 'POST', `/v1/provider/applications/${rejectedId}/submit`);
     assert.equal(again.status, 200, JSON.stringify(again.json));
-    assert.equal(again.json.application.status, 'submitted');
+    assert.equal(again.json.application.status, 'pending_review');
     assert.equal(again.json.application.reviewNotes, null, 'old rejection reason is cleared on resubmit');
   });
 
@@ -480,26 +511,136 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     assert.equal(booking.status, 400);
     assert.equal(booking.json.error.code, 'provider_unavailable');
     await db.update(schema.providers).set({ status: 'active' }).where(eq(schema.providers.id, secondProviderId));
+
+    // Viewer-controlled blocks also remove a business from discovery/detail.
+    await db.insert(schema.mobileUserBlocks).values({
+      blockerMobileUserId: OTHER,
+      blockedProviderId: firstProviderId,
+    });
+    const blocked = await call('OTHER', 'GET', `/v1/marketplace/providers?categoryId=${categoryId}`);
+    assert.deepEqual((blocked.json.data as Json[]).map(p => p.id), [secondProviderId]);
+    assert.equal((await call('OTHER', 'GET', `/v1/marketplace/providers/${firstProviderId}`)).status, 404);
+    await db.delete(schema.mobileUserBlocks).where(eq(schema.mobileUserBlocks.blockerMobileUserId, OTHER));
   });
 
-  it('books a real approved provider and shows it on the owner dashboard', async () => {
-    const booking = await call('OTHER', 'POST', '/v1/bookings', {
+  it('runs booking lifecycle, permissions, conflicts and notifications end to end', async () => {
+    const create = (startsAt: string, title: string) => call('OTHER', 'POST', '/v1/bookings', {
       providerId: firstProviderId,
       categoryId,
       category: 'appointment',
       serviceMode: 'center',
-      startsAt: new Date(Date.now() + 2 * 86_400_000).toISOString(),
-      amount: 1500,
-      detail: { serviceTitle: 'Reformer class', providerName: `Lotus Pilates ${runId}` },
+      startsAt,
+      durationMinutes: 60,
+      amount: 1, // The server must use the approved offering price instead.
+      detail: { serviceTitle: title, providerName: 'Untrusted client name' },
     });
-    assert.equal(booking.status, 201, JSON.stringify(booking.json));
+    const act = (bookingId: string, action: string, extra: Json = {}) =>
+      call('OWNER', 'POST', `/v1/provider/businesses/${firstProviderId}/bookings/${bookingId}/action`, { action, ...extra });
+
+    const firstStart = nextAvailableTime(0, 10);
+    const created = await create(firstStart, 'Reformer class');
+    assert.equal(created.status, 201, JSON.stringify(created.json));
+    const bookingId = created.json.booking.id as string;
+    assert.equal(created.json.booking.status, 'pending');
+    assert.equal(created.json.booking.amount, 1500);
+    assert.equal(created.json.booking.paymentStatus, 'pending');
+    assert.equal(created.json.booking.detail.providerName, `Lotus Pilates ${runId}`);
+    {
+      const { eq } = await import('drizzle-orm');
+      const [persisted] = await db.select().from(schema.bookings)
+        .where(eq(schema.bookings.id, bookingId));
+      assert.equal(persisted.status, 'pending');
+      assert.equal(persisted.amount, 1500);
+    }
+
+    let ownerNotes = await notificationsFor(OWNER);
+    assert.equal(ownerNotes[0].type, 'booking_created');
+    assert.equal(ownerNotes[0].data.bookingId, bookingId);
+    assert.equal(ownerNotes[0].data.screen, 'ProviderDashboard');
+
+    const overlapping = await create(
+      new Date(new Date(firstStart).getTime() + 30 * 60_000).toISOString(),
+      'Overlapping class',
+    );
+    assert.equal(overlapping.status, 409);
+    assert.equal(overlapping.json.error.code, 'duplicate_booking');
 
     const dash = await call('OWNER', 'GET', `/v1/provider/businesses/${firstProviderId}`);
     assert.equal(dash.status, 200);
     assert.equal(dash.json.business.counts.upcomingBookings, 1);
     assert.equal(dash.json.business.upcomingBookings[0].customerName, 'Bala Customer');
     assert.equal(dash.json.business.services[0].categoryId, categoryId);
-    assert.equal(dash.json.business.profile.pricingStartsAt, 1500);
+
+    // Neither a random user nor the customer lifecycle endpoint can accept it.
+    assert.equal((await call('OTHER', 'POST', `/v1/provider/businesses/${firstProviderId}/bookings/${bookingId}/action`, { action: 'accept' })).status, 404);
+    assert.equal((await call('OTHER', 'PATCH', `/v1/bookings/${bookingId}`, { status: 'confirmed' })).status, 400);
+    assert.equal((await call('OWNER', 'PATCH', `/v1/bookings/${bookingId}`, { detail: { notes: 'tamper' } })).status, 404);
+    assert.equal((await call('OTHER', 'POST', `/admin/provider/applications/${rejectedId}/review`, { action: 'approve' })).status, 403);
+
+    const accepted = await act(bookingId, 'accept');
+    assert.equal(accepted.status, 200, JSON.stringify(accepted.json));
+    assert.equal(accepted.json.booking.status, 'confirmed');
+    let customerNotes = await notificationsFor(OTHER);
+    assert.equal(customerNotes[0].type, 'booking_confirmed');
+    assert.equal(customerNotes[0].data.screen, 'MyBookings');
+
+    const movedStart = new Date(new Date(firstStart).getTime() + 90 * 60_000).toISOString();
+    const moved = await act(bookingId, 'reschedule', { startsAt: movedStart, reason: 'Trainer availability changed' });
+    assert.equal(moved.status, 200, JSON.stringify(moved.json));
+    assert.equal(moved.json.booking.status, 'reschedule_requested');
+    assert.equal(moved.json.booking.startsAt, movedStart);
+    customerNotes = await notificationsFor(OTHER);
+    assert.equal(customerNotes[0].type, 'booking_rescheduled');
+
+    const customerView = await call('OTHER', 'GET', `/v1/bookings/${bookingId}`);
+    assert.equal(customerView.json.booking.status, 'reschedule_requested');
+    const cancelled = await call('OTHER', 'POST', `/v1/bookings/${bookingId}/cancel`, { reason: 'Cannot attend the new time' });
+    assert.equal(cancelled.status, 200, JSON.stringify(cancelled.json));
+    assert.equal(cancelled.json.booking.status, 'cancelled');
+    ownerNotes = await notificationsFor(OWNER);
+    assert.equal(ownerNotes[0].type, 'booking_cancelled');
+
+    const raceStart = nextAvailableTime(2, 10);
+    const raced = await Promise.all([
+      create(raceStart, 'Concurrent request A'),
+      create(raceStart, 'Concurrent request B'),
+    ]);
+    assert.deepEqual(raced.map(result => result.status).sort(), [201, 409]);
+    const raceWinner = raced.find(result => result.status === 201)!;
+    assert.equal((await act(raceWinner.json.booking.id, 'reject', { reason: 'Concurrency test cleanup' })).status, 200);
+
+    const rejectedBooking = await create(nextAvailableTime(0, 13), 'Private session');
+    assert.equal(rejectedBooking.status, 201, JSON.stringify(rejectedBooking.json));
+    const rejectedAction = await act(rejectedBooking.json.booking.id, 'reject', { reason: 'Slot unavailable' });
+    assert.equal(rejectedAction.json.booking.status, 'rejected');
+    customerNotes = await notificationsFor(OTHER);
+    assert.equal(customerNotes[0].type, 'booking_rejected');
+
+    const completedBooking = await create(nextAvailableTime(1, 10), 'Assessment');
+    assert.equal(completedBooking.status, 201, JSON.stringify(completedBooking.json));
+    assert.equal((await act(completedBooking.json.booking.id, 'accept')).json.booking.status, 'confirmed');
+    const completed = await act(completedBooking.json.booking.id, 'complete');
+    assert.equal(completed.json.booking.status, 'completed');
+    customerNotes = await notificationsFor(OTHER);
+    assert.equal(customerNotes[0].type, 'booking_completed');
+
+    const reminderBooking = await create(nextAvailableTime(1, 13), 'Reminder session');
+    assert.equal(reminderBooking.status, 201, JSON.stringify(reminderBooking.json));
+    assert.equal((await act(reminderBooking.json.booking.id, 'accept')).status, 200);
+    const { eq } = await import('drizzle-orm');
+    const reminderStart = new Date(Date.now() + 60 * 60_000);
+    await db.update(schema.bookings).set({
+      startsAt: reminderStart,
+      endsAt: new Date(reminderStart.getTime() + 60 * 60_000),
+      reminderSentAt: null,
+    }).where(eq(schema.bookings.id, reminderBooking.json.booking.id));
+    const { bookingService } = await import('../booking/BookingService.js');
+    assert.ok(await bookingService.sendDueReminders(new Date()));
+    customerNotes = await notificationsFor(OTHER);
+    ownerNotes = await notificationsFor(OWNER);
+    assert.equal(customerNotes[0].type, 'booking_reminder');
+    assert.equal(ownerNotes[0].type, 'booking_reminder');
+    assert.equal(ownerNotes[0].data.screen, 'ProviderDashboard');
 
     const edited = await call('OWNER', 'PATCH', `/v1/provider/businesses/${firstProviderId}`, {
       description: 'Small-group reformer Pilates',

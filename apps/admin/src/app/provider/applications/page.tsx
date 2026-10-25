@@ -9,9 +9,8 @@ import { apiFetch } from '@/lib/api';
 
 const STATUS_FILTERS = [
   { id: 'all', label: 'All in queue' },
-  { id: 'submitted', label: 'Submitted' },
-  { id: 'under_review', label: 'Under review' },
-  { id: 'more_info_requested', label: 'More info' },
+  { id: 'pending_review', label: 'Pending review' },
+  { id: 'changes_requested', label: 'Changes requested' },
   { id: 'approved', label: 'Approved' },
   { id: 'rejected', label: 'Rejected' },
 ] as const;
@@ -37,7 +36,7 @@ export default function ProviderApplicationsPage() {
       <h1 className="page-title">Provider applications</h1>
       <p className="page-sub">
         When an applicant taps Send for review, the application appears here as
-        submitted. Approve, reject (with a reason), or request more info. Drafts
+        pending review. Approve, reject (with a reason), or request changes. Drafts
         stay private until they submit.
       </p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>

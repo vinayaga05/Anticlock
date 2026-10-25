@@ -15,7 +15,7 @@ import { statusLabel } from '@/features/provider-onboarding/utils/formValues';
 function statusStyle(status: string, theme: ReturnType<typeof useTheme>) {
   if (status === 'approved') return { bg: 'rgba(34, 197, 94, 0.14)', color: theme.colors.success };
   if (status === 'rejected') return { bg: 'rgba(239, 68, 68, 0.12)', color: theme.colors.error };
-  if (status === 'more_info_requested') return { bg: 'rgba(245, 158, 11, 0.14)', color: theme.colors.warning };
+  if (status === 'changes_requested') return { bg: 'rgba(245, 158, 11, 0.14)', color: theme.colors.warning };
   if (status === 'draft') return { bg: theme.colors.surfaceMuted, color: theme.colors.textSecondary };
   return { bg: theme.colors.primarySoft, color: theme.colors.primaryMuted };
 }
@@ -41,9 +41,9 @@ export function ProviderBusinessesScreen() {
       {
         id: 'attention',
         title: 'Needs your attention',
-        items: byStatus(['more_info_requested', 'rejected']),
+        items: byStatus(['changes_requested', 'rejected']),
       },
-      { id: 'review', title: 'In review', items: byStatus(['submitted', 'under_review']) },
+      { id: 'review', title: 'In review', items: byStatus(['pending_review']) },
       { id: 'drafts', title: 'Drafts', items: byStatus(['draft']) },
     ].filter(group => group.items.length > 0);
   }, [applications]);
@@ -133,7 +133,7 @@ export function ProviderBusinessesScreen() {
             </View>
             {group.items.map(application => {
               const badge = statusStyle(application.status, theme);
-              const editable = application.status === 'draft' || application.status === 'more_info_requested';
+              const editable = application.status === 'draft' || application.status === 'changes_requested';
               const deletable = application.status !== 'approved' && !application.providerId;
               const categoryText = (application.categories ?? []).map(c => c.name).join(', ');
               return (

@@ -9,6 +9,7 @@ import type {
 import { db } from '../db/client.js';
 import {
   bookings,
+  mobileUserBlocks,
   mobileUsers,
   providerMemberships,
   providerServiceOfferings,
@@ -21,9 +22,7 @@ type ProviderRow = typeof providers.$inferSelect;
 const ACTIVE_BOOKING_STATUSES = [
   'pending',
   'confirmed',
-  'provider_assigned',
-  'on_the_way',
-  'in_progress',
+  'reschedule_requested',
 ];
 const MANAGE_ROLES = new Set(['owner', 'admin']);
 
@@ -147,6 +146,7 @@ export class ProviderBusinessService {
    */
   async listMarketplaceProviders(
     query: MarketplaceProviderListQuery,
+    viewerUserId?: string,
   ): Promise<{ data: MarketplaceProviderCard[]; nextOffset: number | null }> {
     const limit = query.limit ?? 20;
     const offset = query.offset ?? 0;
@@ -155,6 +155,14 @@ export class ProviderBusinessService {
       eq(mobileUsers.isActive, true),
       sql`EXISTS (SELECT 1 FROM provider_service_offerings o WHERE o.provider_id = ${providers.id})`,
     ];
+    if (viewerUserId) {
+      conditions.push(sql`NOT EXISTS (
+        SELECT 1 FROM mobile_user_blocks b
+        WHERE b.blocker_mobile_user_id = ${viewerUserId}
+          AND (b.blocked_provider_id = ${providers.id}
+            OR b.blocked_mobile_user_id = ${providers.mobileUserId})
+      )`);
+    }
     if (query.categoryId) {
       const prefix = `${query.categoryId}.%`;
       conditions.push(sql`EXISTS (
@@ -208,7 +216,10 @@ export class ProviderBusinessService {
     };
   }
 
-  async getMarketplaceProvider(providerId: string): Promise<MarketplaceProviderCard> {
+  async getMarketplaceProvider(
+    providerId: string,
+    viewerUserId?: string,
+  ): Promise<MarketplaceProviderCard> {
     if (!/^[0-9a-f-]{36}$/i.test(providerId)) {
       throw appError('Provider not found', 'not_found', 404);
     }
@@ -221,6 +232,14 @@ export class ProviderBusinessService {
           eq(providers.id, providerId),
           eq(providers.status, 'active'),
           eq(mobileUsers.isActive, true),
+          viewerUserId
+            ? sql`NOT EXISTS (
+                SELECT 1 FROM ${mobileUserBlocks} b
+                WHERE b.blocker_mobile_user_id = ${viewerUserId}
+                  AND (b.blocked_provider_id = ${providers.id}
+                    OR b.blocked_mobile_user_id = ${providers.mobileUserId})
+              )`
+            : undefined,
         ),
       )
       .limit(1);
@@ -257,7 +276,7 @@ export class ProviderBusinessService {
       .select({
         providerId: bookings.providerId,
         total: sql<number>`count(*)::int`,
-        upcoming: sql<number>`count(*) FILTER (WHERE ${bookings.startsAt} >= now() AND ${bookings.status} IN ('pending','confirmed','provider_assigned','on_the_way','in_progress'))::int`,
+        upcoming: sql<number>`count(*) FILTER (WHERE ${bookings.startsAt} >= now() AND ${bookings.status} IN ('pending','confirmed','reschedule_requested'))::int`,
       })
       .from(bookings)
       .where(inArray(bookings.providerId, providerIds))

@@ -35,6 +35,23 @@ export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   }
 });
 
+/** Public routes may use viewer safety filters when a valid session is sent. */
+export const optionalAuth = createMiddleware<AppEnv>(async (c, next) => {
+  const header = c.req.header('authorization');
+  const bearer = header?.startsWith('Bearer ') ? header.slice(7) : null;
+  const token = bearer ?? readSessionCookie(c.req.header('cookie'));
+  if (!token) {
+    await next();
+    return;
+  }
+  try {
+    c.set('auth', await verifyToken(token));
+    await next();
+  } catch {
+    return c.json({ error: { code: 'unauthorized', message: 'Invalid token' } }, 401);
+  }
+});
+
 export function requirePermission(...needed: Permission[]) {
   return createMiddleware<AppEnv>(async (c, next) => {
     const auth = c.get('auth');

@@ -3,7 +3,6 @@ import { StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { AppIcon } from '@/shared/components/AppIcon';
-import { knockNotifications } from '@/shared/data/mocks';
 import {
   useNotifications,
   useMarkNotificationRead,
@@ -17,9 +16,18 @@ function getIconForType(type: string): string {
   switch (type) {
     case 'booking_confirmed':
     case 'booking_reminder':
+    case 'booking_created':
+    case 'booking_rescheduled':
+    case 'booking_completed':
       return 'calendar';
     case 'booking_cancelled':
+    case 'booking_rejected':
       return 'calendar-x';
+    case 'provider_application_submitted':
+    case 'provider_application_approved':
+    case 'provider_application_rejected':
+    case 'provider_application_changes_requested':
+      return 'badge-check';
     case 'provider_assigned':
       return 'home';
     case 'status_update':
@@ -73,47 +81,15 @@ export function KnockNotificationsList() {
     if (route) navigation.navigate(route.screen, route.params);
   };
 
-  // Use mock data when API is disabled
+  // This inbox represents persisted API notifications only. Showing fixtures
+  // here can make an unsubmitted business or booking look real.
   if (!apiEnabled) {
     return (
-      <View style={styles.wrap}>
-        {knockNotifications.map(item => (
-          <PressableScale key={item.id} style={styles.row}>
-            <View
-              style={[
-                styles.iconWrap,
-                { backgroundColor: theme.colors.surfaceMuted },
-              ]}>
-              <AppIcon name={item.icon} size={20} color={theme.colors.textPrimary} strokeWidth={1.75} />
-            </View>
-            <View style={styles.body}>
-              <View style={styles.top}>
-                <Text
-                  style={[
-                    styles.title,
-                    {
-                      color: theme.colors.textPrimary,
-                      fontWeight: item.read ? '500' : '700',
-                    },
-                  ]}
-                  numberOfLines={1}>
-                  {item.title}
-                </Text>
-                <Text style={[styles.time, { color: theme.colors.textTertiary }]}>
-                  {item.time}
-                </Text>
-              </View>
-              <Text
-                style={[styles.bodyText, { color: theme.colors.textSecondary }]}
-                numberOfLines={2}>
-                {item.body}
-              </Text>
-            </View>
-            {!item.read ? (
-              <View style={[styles.unreadDot, { backgroundColor: theme.colors.primary }]} />
-            ) : null}
-          </PressableScale>
-        ))}
+      <View style={[styles.wrap, styles.centerContent]}>
+        <AppIcon name="bell-off" size={48} color={theme.colors.textTertiary} />
+        <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
+          Connect to the Anticlock API to view notifications
+        </Text>
       </View>
     );
   }

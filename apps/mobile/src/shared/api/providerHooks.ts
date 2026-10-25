@@ -11,23 +11,15 @@ import type {
   SetProviderApplicationServicesRequest,
   UpdateProviderApplicationRequest,
 } from '@/features/provider-onboarding/types';
-import {
-  createLocalApplication,
-  deleteLocalApplication,
-  getLocalApplication,
-  getLocalApplications,
-  reopenLocalApplication,
-  removeLocalDocument,
-  setLocalServices,
-  submitLocalApplication,
-  updateLocalApplication,
-} from '@/features/provider-onboarding/localApplicationStore';
-import { resolveLocalFormSchema } from '@/features/provider-onboarding/localFormSchemas';
 import { apiRequest } from './client';
 import { isApiEnabled } from './config';
 import { readStoredSession } from '@/shared/services/auth/authService';
+import type { Booking, ProviderBookingActionRequest } from '@anticlock/contracts';
 
 function ensureAuthToken() {
+  if (!isApiEnabled) {
+    throw new Error('Service provider features require a connection to Anticlock.');
+  }
   const session = readStoredSession();
   if (!session?.token) {
     throw new Error('Not authenticated');
@@ -36,9 +28,8 @@ function ensureAuthToken() {
 
 export function useMyProviderApplicationQuery() {
   return useQuery({
-    queryKey: ['provider', 'application', 'me', isApiEnabled ? 'api' : 'local'],
+    queryKey: ['provider', 'application', 'me', 'api'],
     queryFn: async () => {
-      if (!isApiEnabled) return getLocalApplication();
       ensureAuthToken();
       const res = await apiRequest<{ application: ProviderApplicationDetail | null }>(
         '/v1/provider/applications/me',
@@ -50,10 +41,9 @@ export function useMyProviderApplicationQuery() {
 
 export function useProviderApplicationsQuery() {
   return useQuery({
-    queryKey: ['provider', 'applications', isApiEnabled ? 'api' : 'local'],
+    queryKey: ['provider', 'applications', 'api'],
     queryFn: async () => {
       // Every application is a business in progress, drafts included.
-      if (!isApiEnabled) return getLocalApplications();
       ensureAuthToken();
       const res = await apiRequest<{ applications: ProviderApplicationSummary[] }>(
         '/v1/provider/applications',
@@ -65,12 +55,9 @@ export function useProviderApplicationsQuery() {
 
 export function useProviderApplicationQuery(applicationId: string) {
   return useQuery({
-    queryKey: ['provider', 'application', applicationId, isApiEnabled ? 'api' : 'local'],
+    queryKey: ['provider', 'application', applicationId, 'api'],
     enabled: Boolean(applicationId),
     queryFn: async () => {
-      if (!isApiEnabled) {
-        return getLocalApplication(applicationId);
-      }
       ensureAuthToken();
       const res = await apiRequest<{ application: ProviderApplicationDetail }>(
         `/v1/provider/applications/${applicationId}`,
@@ -90,13 +77,10 @@ export function useResolvedFormSchemaQuery(
       'form-schema',
       providerKind,
       categoryIds.join(','),
-      isApiEnabled ? 'api' : 'local',
+      'api',
     ],
     queryFn: async () => {
       if (!providerKind || !categoryIds.length) return null;
-      if (!isApiEnabled) {
-        return resolveLocalFormSchema(providerKind, categoryIds);
-      }
       ensureAuthToken();
       const qs = new URLSearchParams({
         providerKind,
@@ -115,7 +99,6 @@ export function useCreateProviderApplicationMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: CreateProviderApplicationRequest) => {
-      if (!isApiEnabled) return createLocalApplication(body.providerKind);
       ensureAuthToken();
       const res = await apiRequest<{ application: ProviderApplicationDetail }>(
         '/v1/provider/applications',
@@ -133,7 +116,6 @@ export function useUpdateProviderApplicationMutation(applicationId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: UpdateProviderApplicationRequest) => {
-      if (!isApiEnabled) return updateLocalApplication(applicationId, body);
       ensureAuthToken();
       const res = await apiRequest<{ application: ProviderApplicationDetail }>(
         `/v1/provider/applications/${applicationId}`,
@@ -155,7 +137,6 @@ export function useAutosaveProviderApplicationMutation(applicationId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: UpdateProviderApplicationRequest) => {
-      if (!isApiEnabled) return updateLocalApplication(applicationId, body);
       ensureAuthToken();
       const res = await apiRequest<{ application: ProviderApplicationDetail }>(
         `/v1/provider/applications/${applicationId}`,
@@ -166,7 +147,7 @@ export function useAutosaveProviderApplicationMutation(applicationId: string) {
     onSuccess: application => {
       if (application) {
         qc.setQueryData(
-          ['provider', 'application', applicationId, isApiEnabled ? 'api' : 'local'],
+          ['provider', 'application', applicationId, 'api'],
           application,
         );
       }
@@ -176,10 +157,6 @@ export function useAutosaveProviderApplicationMutation(applicationId: string) {
 }
 
 export async function deleteProviderDocument(applicationId: string, fieldKey: string) {
-  if (!isApiEnabled) {
-    removeLocalDocument(applicationId, fieldKey);
-    return;
-  }
   ensureAuthToken();
   await apiRequest<{ ok: true }>(
     `/v1/provider/applications/${applicationId}/documents/${encodeURIComponent(fieldKey)}`,
@@ -192,7 +169,6 @@ export function useReopenProviderApplicationMutation(applicationId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      if (!isApiEnabled) return reopenLocalApplication(applicationId);
       ensureAuthToken();
       const res = await apiRequest<{ application: ProviderApplicationDetail }>(
         `/v1/provider/applications/${applicationId}/reopen`,
@@ -209,9 +185,8 @@ export function useReopenProviderApplicationMutation(applicationId: string) {
 /** Approved businesses the user owns or manages. */
 export function useMyBusinessesQuery() {
   return useQuery({
-    queryKey: ['provider', 'businesses', isApiEnabled ? 'api' : 'local'],
+    queryKey: ['provider', 'businesses', 'api'],
     queryFn: async (): Promise<ProviderBusinessSummary[]> => {
-      if (!isApiEnabled) return [];
       ensureAuthToken();
       const res = await apiRequest<{ businesses: ProviderBusinessSummary[] }>(
         '/v1/provider/businesses',
@@ -223,7 +198,7 @@ export function useMyBusinessesQuery() {
 
 export function useMyBusinessQuery(providerId: string | undefined) {
   return useQuery({
-    queryKey: ['provider', 'business', providerId, isApiEnabled ? 'api' : 'local'],
+    queryKey: ['provider', 'business', providerId, 'api'],
     enabled: Boolean(providerId) && isApiEnabled,
     queryFn: async () => {
       ensureAuthToken();
@@ -254,14 +229,32 @@ export function useUpdateMyBusinessMutation(providerId: string) {
   });
 }
 
+export function useProviderBookingActionMutation(providerId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      bookingId,
+      ...body
+    }: ProviderBookingActionRequest & { bookingId: string }) => {
+      ensureAuthToken();
+      const res = await apiRequest<{ booking: Booking }>(
+        `/v1/provider/businesses/${providerId}/bookings/${bookingId}/action`,
+        { method: 'POST', body: JSON.stringify(body) },
+      );
+      return res.booking;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['provider', 'business', providerId] });
+      qc.invalidateQueries({ queryKey: ['bookings'] });
+      qc.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
 export function useDeleteProviderApplicationMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (applicationId: string) => {
-      if (!isApiEnabled) {
-        deleteLocalApplication(applicationId);
-        return;
-      }
       ensureAuthToken();
       await apiRequest<{ ok: true }>(`/v1/provider/applications/${applicationId}`, {
         method: 'DELETE',
@@ -277,7 +270,6 @@ export function useSetProviderServicesMutation(applicationId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: SetProviderApplicationServicesRequest) => {
-      if (!isApiEnabled) return setLocalServices(applicationId, body.categoryIds);
       ensureAuthToken();
       const res = await apiRequest<{ application: ProviderApplicationDetail }>(
         `/v1/provider/applications/${applicationId}/services`,
@@ -295,7 +287,6 @@ export function useSubmitProviderApplicationMutation(applicationId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      if (!isApiEnabled) return submitLocalApplication(applicationId);
       ensureAuthToken();
       const res = await apiRequest<{ application: ProviderApplicationDetail }>(
         `/v1/provider/applications/${applicationId}/submit`,

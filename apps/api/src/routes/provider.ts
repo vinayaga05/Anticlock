@@ -8,6 +8,7 @@ import {
   ProviderApplicationReviewRequestSchema,
   ProviderFormSchemaBodySchema,
   ProviderKycUploadRequestSchema,
+  ProviderBookingActionRequestSchema,
   ResolveFormSchemaQuerySchema,
   SetProviderApplicationServicesRequestSchema,
   UpdateProviderApplicationRequestSchema,
@@ -20,8 +21,10 @@ import {
 } from '../provider/FormSchemaService.js';
 import { providerApplicationService } from '../provider/ProviderApplicationService.js';
 import { providerBusinessService } from '../provider/ProviderBusinessService.js';
+import { bookingService } from '../booking/BookingService.js';
 import {
   requireAuth,
+  optionalAuth,
   requirePermission,
   type AppEnv,
 } from '../middleware/auth.js';
@@ -235,6 +238,23 @@ providerMobileRoutes.patch('/businesses/:providerId', async c => {
       body,
     );
     return c.json({ business });
+  } catch (err) {
+    const { status, body } = httpError(err);
+    return c.json(body, status);
+  }
+});
+
+providerMobileRoutes.post('/businesses/:providerId/bookings/:bookingId/action', async c => {
+  try {
+    const auth = requireMobileAuth(c);
+    const body = ProviderBookingActionRequestSchema.parse(await c.req.json());
+    const booking = await bookingService.actOnProviderBooking(
+      auth.sub,
+      c.req.param('providerId'),
+      c.req.param('bookingId'),
+      body,
+    );
+    return c.json({ booking });
   } catch (err) {
     const { status, body } = httpError(err);
     return c.json(body, status);
@@ -464,6 +484,7 @@ providerAdminRoutes.post(
 
 /** Public marketplace: approved, active businesses only. */
 export const marketplaceRoutes = new Hono<AppEnv>();
+marketplaceRoutes.use('*', optionalAuth);
 
 marketplaceRoutes.get('/providers', async c => {
   try {
@@ -475,7 +496,11 @@ marketplaceRoutes.get('/providers', async c => {
       limit: c.req.query('limit') || undefined,
       offset: c.req.query('offset') || undefined,
     });
-    const result = await providerBusinessService.listMarketplaceProviders(query);
+    const auth = c.get('auth');
+    const result = await providerBusinessService.listMarketplaceProviders(
+      query,
+      auth?.kind === 'mobile' ? auth.sub : undefined,
+    );
     return c.json({ data: result.data, meta: { nextOffset: result.nextOffset } });
   } catch (err) {
     const { status, body } = httpError(err);
@@ -485,7 +510,11 @@ marketplaceRoutes.get('/providers', async c => {
 
 marketplaceRoutes.get('/providers/:id', async c => {
   try {
-    const provider = await providerBusinessService.getMarketplaceProvider(c.req.param('id'));
+    const auth = c.get('auth');
+    const provider = await providerBusinessService.getMarketplaceProvider(
+      c.req.param('id'),
+      auth?.kind === 'mobile' ? auth.sub : undefined,
+    );
     return c.json({ provider });
   } catch (err) {
     const { status, body } = httpError(err);

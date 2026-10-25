@@ -4,6 +4,7 @@ import {
   BookingListQuerySchema,
   CancelBookingRequestSchema,
   CreateBookingRequestSchema,
+  CustomerUpdateBookingRequestSchema,
   UpdateBookingRequestSchema,
 } from '@anticlock/contracts';
 import { bookingService } from '../booking/BookingService.js';
@@ -78,8 +79,8 @@ bookingMobileRoutes.get('/:id', async c => {
 bookingMobileRoutes.patch('/:id', async c => {
   try {
     const auth = requireMobileAuth(c);
-    const body = UpdateBookingRequestSchema.parse(await c.req.json());
-    const booking = await bookingService.updateBooking(
+    const body = CustomerUpdateBookingRequestSchema.parse(await c.req.json());
+    const booking = await bookingService.updateCustomerDetails(
       c.req.param('id'),
       auth.sub,
       body,

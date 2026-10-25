@@ -10,6 +10,7 @@ import { BookingTimelineSection } from '@/features/booking/components/BookingTim
 import { NextUpBookingCard } from '@/features/booking/components/NextUpBookingCard';
 import { UnifiedBookingCard } from '@/features/booking/components/UnifiedBookingCard';
 import { useBookingsQuery } from '@/shared/api';
+import { useCancelAnyBookingMutation } from '@/shared/api/bookingHooks';
 import { isApiEnabled } from '@/shared/api/config';
 import { mapApiBookingToConsolidated } from '@/shared/utils/bookingMappers';
 import {
@@ -42,6 +43,7 @@ export function BookingsTimeline({
   const [advanced, setAdvanced] = useState<BookingAdvancedFilters>(DEFAULT_ADVANCED_FILTERS);
   const [internalSheetOpen, setInternalSheetOpen] = useState(false);
   const [pastExpanded, setPastExpanded] = useState(false);
+  const cancelBooking = useCancelAnyBookingMutation();
 
   const sheetOpen = filterSheetOpen ?? internalSheetOpen;
   const setSheetOpen = onFilterSheetOpenChange ?? setInternalSheetOpen;
@@ -83,6 +85,31 @@ export function BookingsTimeline({
     }
     if (action === 'book_again') {
       navigation.navigate('Needs');
+      return;
+    }
+    if (action === 'cancel') {
+      Alert.alert(
+        'Cancel booking?',
+        'The provider will be notified immediately.',
+        [
+          { text: 'Keep booking', style: 'cancel' },
+          {
+            text: 'Cancel booking',
+            style: 'destructive',
+            onPress: () =>
+              cancelBooking.mutate(
+                { bookingId: booking.id, reason: 'Cancelled by customer' },
+                {
+                  onError: (err: unknown) =>
+                    Alert.alert(
+                      'Could not cancel',
+                      err instanceof Error ? err.message : 'Please try again.',
+                    ),
+                },
+              ),
+          },
+        ],
+      );
       return;
     }
     Alert.alert(action.replace('_', ' '), 'Coming soon.');

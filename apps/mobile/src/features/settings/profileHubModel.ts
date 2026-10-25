@@ -8,10 +8,9 @@ export function applicationStatusChip(
   switch (status) {
     case 'approved':
       return { label: 'Approved', tone: 'success' };
-    case 'submitted':
-    case 'under_review':
+    case 'pending_review':
       return { label: 'Under review', tone: 'info' };
-    case 'more_info_requested':
+    case 'changes_requested':
       return { label: 'Action required', tone: 'warning' };
     case 'rejected':
       return { label: 'Not approved', tone: 'danger' };
@@ -23,9 +22,8 @@ export function applicationStatusChip(
 }
 
 const PENDING_STATUSES = new Set([
-  'submitted',
-  'under_review',
-  'more_info_requested',
+  'pending_review',
+  'changes_requested',
 ]);
 
 /** The application that created this business profile, if any. */

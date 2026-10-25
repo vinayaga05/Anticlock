@@ -69,4 +69,18 @@ describe('marketplace mapping', () => {
     });
     expect(routeForNotification({ kind: 'other' })).toBeNull();
   });
+
+  it('routes booking notifications to the correct customer or provider screen', () => {
+    expect(
+      routeForNotification({
+        kind: 'booking',
+        bookingId: 'b1',
+        providerId: 'p1',
+        screen: 'ProviderDashboard',
+      }),
+    ).toEqual({ screen: 'ProviderDashboard', params: { providerId: 'p1' } });
+    expect(
+      routeForNotification({ kind: 'booking', bookingId: 'b1', screen: 'MyBookings' }),
+    ).toEqual({ screen: 'MyBookings' });
+  });
 });

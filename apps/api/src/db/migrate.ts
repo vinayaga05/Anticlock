@@ -690,6 +690,15 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS provider_applications_status_idx
       ON provider_applications (status, submitted_at DESC)
   `;
+  await sql`
+    UPDATE provider_applications
+    SET status = CASE
+      WHEN status IN ('submitted', 'under_review') THEN 'pending_review'
+      WHEN status = 'more_info_requested' THEN 'changes_requested'
+      ELSE status
+    END
+    WHERE status IN ('submitted', 'under_review', 'more_info_requested')
+  `;
 
   await sql`
     CREATE TABLE IF NOT EXISTS provider_application_services (
@@ -1019,6 +1028,12 @@ async function migrate() {
   await sql`
     CREATE INDEX IF NOT EXISTS bookings_status_starts_idx
       ON bookings (status, starts_at DESC)
+  `;
+  await sql`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS reminder_sent_at timestamptz`;
+  await sql`
+    UPDATE bookings
+    SET status = 'confirmed'
+    WHERE status IN ('provider_assigned', 'on_the_way', 'in_progress')
   `;
 
   /** Shop tables migration - append-only block to minimize merge conflicts */

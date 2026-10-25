@@ -1,5 +1,9 @@
 import type { Booking } from '@anticlock/contracts';
-import type { ConsolidatedBooking, BookingStatus, BookingCategory } from './bookings';
+import type {
+  ConsolidatedBooking,
+  BookingStatus,
+  BookingCategory,
+} from '@/shared/data/bookings';
 
 export function mapApiBookingToConsolidated(booking: Booking): ConsolidatedBooking {
   const detail = booking.detail;
@@ -31,6 +35,8 @@ function mapBookingStatus(status: string): BookingStatus {
   const statusMap: Record<string, BookingStatus> = {
     pending: 'pending',
     confirmed: 'confirmed',
+    rejected: 'rejected',
+    reschedule_requested: 'reschedule_requested',
     provider_assigned: 'provider_assigned',
     on_the_way: 'on_the_way',
     in_progress: 'upcoming',
@@ -45,6 +51,8 @@ function getStatusLabel(status: string): string {
   const labels: Record<string, string> = {
     pending: 'Pending',
     confirmed: 'Confirmed',
+    rejected: 'Rejected',
+    reschedule_requested: 'New time proposed',
     provider_assigned: 'Provider Assigned',
     on_the_way: 'On the Way',
     in_progress: 'In Progress',

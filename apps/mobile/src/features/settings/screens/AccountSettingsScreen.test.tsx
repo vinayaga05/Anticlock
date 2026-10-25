@@ -67,7 +67,7 @@ const application = (over: Record<string, unknown>) => ({
 });
 const mockApplications = [
   application({ id: 'app-1', businessName: 'Lotus Yoga Studio', status: 'approved', providerId: 'b1' }),
-  application({ id: 'app-2', businessName: 'Urban Fade Barbers', status: 'under_review', providerId: null }),
+  application({ id: 'app-2', businessName: 'Urban Fade Barbers', status: 'pending_review', providerId: null }),
 ];
 
 let mockActive: typeof personal | typeof lotus = personal;

@@ -21,6 +21,13 @@ export function routeForNotification(
   if (data.kind === 'provider_application' && applicationId) {
     return { screen: 'ProviderApplicationStatus', params: { applicationId } };
   }
+  const bookingId = typeof data.bookingId === 'string' ? data.bookingId : null;
+  const providerId = typeof data.providerId === 'string' ? data.providerId : null;
+  if (data.kind === 'booking' && bookingId) {
+    return data.screen === 'ProviderDashboard' && providerId
+      ? { screen: 'ProviderDashboard', params: { providerId } }
+      : { screen: 'MyBookings' };
+  }
   return null;
 }
 

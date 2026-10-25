@@ -2,11 +2,12 @@ export type ProviderKind = 'business' | 'individual';
 
 export type ProviderApplicationStatus =
   | 'draft'
-  | 'submitted'
-  | 'under_review'
+  | 'pending_review'
+  | 'changes_requested'
   | 'approved'
   | 'rejected'
-  | 'more_info_requested';
+  | 'suspended'
+  | 'inactive';
 
 export type FormFieldType =
   | 'text'

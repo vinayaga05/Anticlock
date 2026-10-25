@@ -3,6 +3,8 @@ import { Dimensions, StyleSheet, View } from 'react-native';
 import { CommentsBottomSheet } from '@/shared/components/CommentsBottomSheet';
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
 import { useEngagementStore } from '@/shared/services/engagementRepository';
+import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
+import { identityProfileType } from '@/shared/publishing/publisherSelection';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -20,13 +22,32 @@ export function CommentsBottomSheetHost() {
   const completeClose = useCommentsSheetStore(s => s.completeClose);
   const setPlaybackActive = useCommentsSheetStore(s => s.setPlaybackActive);
   const syncApiComments = useEngagementStore(s => s.syncApiComments);
+  const setKnownCommentCount = useEngagementStore(s => s.setKnownCommentCount);
+  const { active } = useActiveProfile();
+  const viewer = React.useMemo(
+    () =>
+      active
+        ? { id: active.id, type: identityProfileType(active) }
+        : undefined,
+    [active],
+  );
 
-  // Server-published Flash posts load their real comments when opened.
+  // Clips are all server-published content posts. Flash posts synchronize
+  // when their store row is API-backed; local demo posts stay local.
   React.useEffect(() => {
-    if (open && sourceType === 'flashPost' && contentId) {
-      syncApiComments(contentId);
+    if (open && contentId) {
+      setKnownCommentCount(contentId, commentCount);
+      syncApiComments(contentId, viewer, sourceType === 'clip');
     }
-  }, [open, sourceType, contentId, syncApiComments]);
+  }, [
+    open,
+    sourceType,
+    contentId,
+    commentCount,
+    setKnownCommentCount,
+    syncApiComments,
+    viewer,
+  ]);
 
   if ((!open && !closing) || !sourceType || !contentId) {
     return null;

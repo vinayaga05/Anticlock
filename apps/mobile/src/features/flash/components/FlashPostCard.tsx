@@ -21,6 +21,8 @@ import { FlashShareSheet } from '@/features/flash/components/FlashShareSheet';
 import { conversations } from '@/shared/data/mocks';
 import { UserCallActions } from '@/features/calls/components/UserCallActions';
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
+import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
+import { identityProfileType } from '@/shared/publishing/publisherSelection';
 
 const CONTENT_PAD = 12;
 
@@ -49,6 +51,10 @@ export function FlashPostCard({ post }: Props) {
   const pinPost = useEngagementStore(s => s.pinPost);
   const followAuthor = useEngagementStore(s => s.followAuthor);
   const openComments = useCommentsSheetStore(s => s.openComments);
+  const { active } = useActiveProfile();
+  const viewer = active
+    ? { id: active.id, type: identityProfileType(active) }
+    : undefined;
 
   const [expanded, setExpanded] = useState(false);
   const [reactionsOpen, setReactionsOpen] = useState(false);
@@ -266,7 +272,7 @@ export function FlashPostCard({ post }: Props) {
         likeCount={total}
         commentCount={post.commentCount}
         shareCount={post.shareCount}
-        onLikePress={() => toggleLike(post.id)}
+        onLikePress={() => toggleLike(post.id, viewer)}
         onLikeLongPress={() => setReactionsOpen(true)}
         onComment={() =>
           openComments({
@@ -286,7 +292,7 @@ export function FlashPostCard({ post }: Props) {
         visible={reactionsOpen}
         onClose={() => setReactionsOpen(false)}
         selected={post.viewerReaction}
-        onSelect={r => setReaction(post.id, r)}
+        onSelect={r => setReaction(post.id, r, viewer)}
       />
       <FlashShareSheet
         postId={post.id}

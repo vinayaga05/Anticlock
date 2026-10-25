@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Dimensions,
   Image,
   Keyboard,
@@ -33,6 +34,8 @@ import {
   CommentsSourceType,
   getSheetBottomInset,
 } from '@/shared/store/commentsSheetStore';
+import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
+import { identityProfileType } from '@/shared/publishing/publisherSelection';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CORNER_RADIUS = 27;
@@ -94,6 +97,19 @@ export function CommentsBottomSheet({
   const createComment = useEngagementStore(s => s.createComment);
   const createReply = useEngagementStore(s => s.createReply);
   const toggleCommentLike = useEngagementStore(s => s.toggleCommentLike);
+  const { active } = useActiveProfile();
+  const activePublisher = useMemo(
+    () =>
+      active
+        ? {
+            id: active.id,
+            type: identityProfileType(active),
+            name: active.name,
+            avatarUrl: active.avatarUrl,
+          }
+        : undefined,
+    [active],
+  );
 
   const expandedY = insets.top + TOP_GAP;
   const closedY = SCREEN_HEIGHT;
@@ -335,7 +351,7 @@ export function CommentsBottomSheet({
     paddingBottom: bottomInset + keyboard.height.value,
   }));
 
-  const submit = () => {
+  const submit = async () => {
     if (!commentsEnabled) return;
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -343,10 +359,22 @@ export function CommentsBottomSheet({
       createReply(contentId, replyTo.id, trimmed);
       setExpandedReplies(prev => ({ ...prev, [replyTo.id]: true }));
       setReplyTo(null);
+      setText('');
     } else {
-      createComment(contentId, trimmed);
+      setText('');
+      const saved = await createComment(
+        contentId,
+        trimmed,
+        activePublisher,
+        _sourceType === 'clip',
+      );
+      if (!saved) {
+        Alert.alert(
+          'Comment not posted',
+          'Check your connection and try again.',
+        );
+      }
     }
-    setText('');
   };
 
   if (!sheetMounted) return null;
@@ -516,7 +544,10 @@ export function CommentsBottomSheet({
               </View>
             ) : null}
             <View style={styles.composerRow}>
-              <Image source={{ uri: CURRENT_USER.avatarUrl }} style={styles.composerAvatar} />
+              <Image
+                source={{ uri: activePublisher?.avatarUrl ?? CURRENT_USER.avatarUrl }}
+                style={styles.composerAvatar}
+              />
               <TextInput
                 value={text}
                 onChangeText={setText}

@@ -836,7 +836,10 @@ contentMobileRoutes.get("/profiles/:type/:id/posts", async (c) => {
 contentMobileRoutes.get("/posts/:id/comments", async (c) => {
   try {
     const mobileUserId = await requireActiveMobile(c.get("auth"));
-    return c.json(await listComments(mobileUserId, c.req.param("id")));
+    const viewerProfile = await clipViewerProfile(c, mobileUserId);
+    return c.json(
+      await listComments(mobileUserId, c.req.param("id"), viewerProfile)
+    );
   } catch (error) {
     const { status, body } = errorResponse(error);
     return c.json(body, status);
@@ -1315,7 +1318,8 @@ contentMobileRoutes.post("/posts/:id/view-events", async (c) => {
 async function requireLikeablePost(
   mobileUserId: string,
   contentPostId: string,
-  now: Date
+  now: Date,
+  viewerProfile: Awaited<ReturnType<typeof clipViewerProfile>>,
 ) {
   const [row] = await db
     .select({ format: contentPosts.format, visibility: contentPosts.visibility })
@@ -1334,7 +1338,11 @@ async function requireLikeablePost(
       updateCondition: publishedPublicClipCondition(post.id, now),
     };
   }
-  const { post, publisher } = await requireVisiblePost(mobileUserId, contentPostId);
+  const { post, publisher } = await requireVisiblePost(
+    mobileUserId,
+    contentPostId,
+    viewerProfile,
+  );
   return {
     post,
     author: legacyAuthor(publisher) as ClipFeedAuthor,
@@ -1350,10 +1358,12 @@ contentMobileRoutes.put("/posts/:id/like", async (c) => {
     const mobileUserId = await requireActiveMobile(c.get("auth"));
     const body = SetContentClipLikeRequestSchema.parse(await c.req.json());
     const now = new Date();
+    const viewerProfile = await clipViewerProfile(c, mobileUserId);
     const { post, author, updateCondition } = await requireLikeablePost(
       mobileUserId,
       c.req.param("id"),
-      now
+      now,
+      viewerProfile,
     );
     const data = await db.transaction(async (tx) => {
       const [block] = await tx

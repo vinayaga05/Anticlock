@@ -21,9 +21,19 @@ import {
   fetchContentComments,
   setContentPostLike,
   type ApiContentComment,
+  type ContentViewerProfile,
 } from '@/shared/api/contentEngagement';
 
-function apiCommentToFlash(comment: ApiContentComment, ownIds: Set<string>): FlashComment {
+export type ActiveCommentPublisher = ContentViewerProfile & {
+  name: string;
+  avatarUrl: string | null;
+};
+
+function apiCommentToFlash(
+  comment: ApiContentComment,
+  ownIds: Set<string>,
+  viewer?: ContentViewerProfile,
+): FlashComment {
   return {
     id: comment.id,
     postId: comment.postId,
@@ -39,13 +49,20 @@ function apiCommentToFlash(comment: ApiContentComment, ownIds: Set<string>): Fla
     text: comment.body,
     createdAt: comment.createdAt,
     likeCount: 0,
-    isOwn: ownIds.has(comment.id),
+    isOwn:
+      ownIds.has(comment.id) ||
+      Boolean(
+        viewer &&
+          comment.publisher.id === viewer.id &&
+          comment.publisher.type === viewer.type,
+      ),
   };
 }
 
 type EngagementState = {
   posts: FlashPost[];
   comments: FlashComment[];
+  commentCounts: Record<string, number>;
   saved: SavedContent[];
   hiddenIds: string[];
 
@@ -53,11 +70,21 @@ type EngagementState = {
   getPost: (postId: string) => FlashPost | undefined;
   getPostsByAuthor: (authorId: string) => FlashPost[];
   getComments: (postId: string) => FlashComment[];
+  setKnownCommentCount: (postId: string, count: number) => void;
 
-  setReaction: (postId: string, reaction: ReactionType | null) => void;
-  toggleLike: (postId: string) => void;
+  setReaction: (
+    postId: string,
+    reaction: ReactionType | null,
+    viewer?: ContentViewerProfile,
+  ) => void;
+  toggleLike: (postId: string, viewer?: ContentViewerProfile) => void;
 
-  createComment: (postId: string, text: string) => void;
+  createComment: (
+    postId: string,
+    text: string,
+    publisher?: ActiveCommentPublisher,
+    forceApi?: boolean,
+  ) => Promise<boolean>;
   createReply: (postId: string, parentId: string, text: string) => void;
   deleteComment: (commentId: string) => void;
   toggleCommentLike: (commentId: string) => void;
@@ -82,7 +109,11 @@ type EngagementState = {
    */
   upsertApiPosts: (posts: FlashPost[]) => void;
   /** Load server comments for an API post into the shared comments sheet. */
-  syncApiComments: (postId: string) => Promise<void>;
+  syncApiComments: (
+    postId: string,
+    viewer?: ContentViewerProfile,
+    forceApi?: boolean,
+  ) => Promise<void>;
 
   publishPost: (input: {
     text: string;
@@ -119,6 +150,7 @@ function attachmentToSaved(post: FlashPost): SavedContent | null {
 export const useEngagementStore = create<EngagementState>((set, get) => ({
   posts: seedFlashPosts,
   comments: [...seedFlashComments, ...seedClipComments],
+  commentCounts: {},
   saved: [],
   hiddenIds: [],
 
@@ -135,6 +167,14 @@ export const useEngagementStore = create<EngagementState>((set, get) => ({
     get().posts.filter(p => p.author.id === authorId && !p.hidden),
 
   getComments: postId => get().comments.filter(c => c.postId === postId),
+
+  setKnownCommentCount: (postId, count) =>
+    set(state => ({
+      commentCounts: {
+        ...state.commentCounts,
+        [postId]: Math.max(state.commentCounts[postId] ?? 0, count),
+      },
+    })),
 
   upsertApiPosts: apiPosts => {
     set(state => {
@@ -165,11 +205,11 @@ export const useEngagementStore = create<EngagementState>((set, get) => ({
     });
   },
 
-  syncApiComments: async postId => {
+  syncApiComments: async (postId, viewer, forceApi = false) => {
     const post = get().getPost(postId);
-    if (post?.source !== 'api') return;
+    if (!forceApi && post?.source !== 'api') return;
     try {
-      const comments = await fetchContentComments(postId);
+      const comments = await fetchContentComments(postId, viewer);
       const ownIds = new Set(
         get()
           .comments.filter(c => c.postId === postId && c.isOwn)
@@ -181,26 +221,33 @@ export const useEngagementStore = create<EngagementState>((set, get) => ({
           ...state.comments.filter(
             c => c.postId !== postId || (c.isOwn && !serverIds.has(c.id) && c.id.startsWith('c-')),
           ),
-          ...comments.map(c => apiCommentToFlash(c, ownIds)),
+          ...comments.map(c => apiCommentToFlash(c, ownIds, viewer)),
         ],
         posts: state.posts.map(p =>
           p.id === postId
             ? { ...p, commentCount: Math.max(p.commentCount, comments.length) }
             : p,
         ),
+        commentCounts: {
+          ...state.commentCounts,
+          [postId]: Math.max(
+            state.commentCounts[postId] ?? 0,
+            comments.length,
+          ),
+        },
       }));
     } catch {
       // Comments stay as they were; the sheet keeps working offline.
     }
   },
 
-  setReaction: (postId, reaction) => {
+  setReaction: (postId, reaction, viewer) => {
     const before = get().getPost(postId);
     if (before?.source === 'api') {
       const wasLiked = Boolean(before.viewerReaction);
       if (wasLiked !== Boolean(reaction)) {
         // The API stores a per-account like; reaction kinds stay local.
-        setContentPostLike(postId, Boolean(reaction)).catch(() => {
+        setContentPostLike(postId, Boolean(reaction), viewer).catch(() => {
           const current = get().getPost(postId);
           if (!current) return;
           const counts = { ...current.reactionCounts };
@@ -244,23 +291,31 @@ export const useEngagementStore = create<EngagementState>((set, get) => ({
     }));
   },
 
-  toggleLike: postId => {
+  toggleLike: (postId, viewer) => {
     const post = get().getPost(postId);
     if (!post) return;
     if (post.viewerReaction === 'like') {
-      get().setReaction(postId, null);
+      get().setReaction(postId, null, viewer);
     } else {
-      get().setReaction(postId, 'like');
+      get().setReaction(postId, 'like', viewer);
     }
   },
 
-  createComment: (postId, text) => {
+  createComment: async (postId, text, publisher, forceApi = false) => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed) return false;
     const comment: FlashComment = {
       id: `c-${Date.now()}`,
       postId,
-      author: CURRENT_USER,
+      author: publisher
+        ? {
+            id: publisher.id,
+            name: publisher.name,
+            avatarUrl: publisher.avatarUrl ?? '',
+            isProvider: publisher.type === 'business',
+            profileType: publisher.type,
+          }
+        : CURRENT_USER,
       text: trimmed,
       createdAt: new Date().toISOString(),
       likeCount: 0,
@@ -268,33 +323,51 @@ export const useEngagementStore = create<EngagementState>((set, get) => ({
     };
     set(state => ({
       comments: [...state.comments, comment],
+      commentCounts: {
+        ...state.commentCounts,
+        [postId]: (state.commentCounts[postId] ?? 0) + 1,
+      },
       posts: state.posts.map(p =>
         p.id === postId ? { ...p, commentCount: p.commentCount + 1 } : p,
       ),
     }));
-    if (get().getPost(postId)?.source === 'api') {
-      createContentComment(postId, trimmed)
-        .then(created => {
-          if (!created) return;
-          set(state => ({
-            comments: state.comments.map(c =>
-              c.id === comment.id
-                ? { ...apiCommentToFlash(created, new Set([created.id])) }
-                : c,
+    if (forceApi || get().getPost(postId)?.source === 'api') {
+      try {
+        const created = await createContentComment(postId, trimmed, publisher);
+        if (!created) throw new Error('Comment was not saved');
+        set(state => ({
+          comments: state.comments.map(c =>
+            c.id === comment.id
+              ? {
+                  ...apiCommentToFlash(
+                    created,
+                    new Set([created.id]),
+                    publisher,
+                  ),
+                }
+              : c,
+          ),
+        }));
+      } catch {
+        set(state => ({
+          comments: state.comments.filter(c => c.id !== comment.id),
+          commentCounts: {
+            ...state.commentCounts,
+            [postId]: Math.max(
+              0,
+              (state.commentCounts[postId] ?? 1) - 1,
             ),
-          }));
-        })
-        .catch(() => {
-          set(state => ({
-            comments: state.comments.filter(c => c.id !== comment.id),
-            posts: state.posts.map(p =>
-              p.id === postId
-                ? { ...p, commentCount: Math.max(0, p.commentCount - 1) }
-                : p,
-            ),
-          }));
-        });
+          },
+          posts: state.posts.map(p =>
+            p.id === postId
+              ? { ...p, commentCount: Math.max(0, p.commentCount - 1) }
+              : p,
+          ),
+        }));
+        return false;
+      }
     }
+    return true;
   },
 
   createReply: (postId, parentId, text) => {

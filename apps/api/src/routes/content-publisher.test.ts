@@ -825,5 +825,48 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
       `/v1/content/feeds/clip?limit=50&viewerProfileType=business&viewerProfileId=${BIZ1}`,
     );
     assert.ok(ids(acceptedBusinessFeed.json.items).includes(businessPost.postId));
+
+    // Engagement must use the same active business identity as the feed.
+    // Otherwise this followers-only post is returned by the feed but its
+    // like/comment controls fail the visibility gate.
+    const businessLike = await call(
+      "A",
+      "PUT",
+      `/v1/content/posts/${businessPost.postId}/like?viewerProfileType=business&viewerProfileId=${BIZ1}`,
+      { liked: true },
+    );
+    assert.equal(businessLike.status, 200, JSON.stringify(businessLike.json));
+    assert.equal(businessLike.json.data.liked, true);
+    const businessComment = await call(
+      "A",
+      "POST",
+      `/v1/content/posts/${businessPost.postId}/comments`,
+      {
+        body: "Commenting as Asha Yoga Studio",
+        publisherProfileId: BIZ1,
+        publisherProfileType: "business",
+      },
+    );
+    assert.equal(
+      businessComment.status,
+      201,
+      JSON.stringify(businessComment.json),
+    );
+    assert.equal(businessComment.json.comment.publisher.id, BIZ1);
+    const businessComments = await call(
+      "A",
+      "GET",
+      `/v1/content/posts/${businessPost.postId}/comments?viewerProfileType=business&viewerProfileId=${BIZ1}`,
+    );
+    assert.equal(
+      businessComments.status,
+      200,
+      JSON.stringify(businessComments.json),
+    );
+    assert.ok(
+      businessComments.json.items.some(
+        (comment: Json) => comment.id === businessComment.json.comment.id,
+      ),
+    );
   });
 });

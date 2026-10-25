@@ -44,6 +44,7 @@ import { useTheme } from '@/shared/hooks/useTheme';
 import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
+import { useEngagementStore } from '@/shared/services/engagementRepository';
 import { useClipPlaybackStore } from '@/shared/store/clipPlaybackStore';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -348,6 +349,7 @@ export function ReelFeedScreen() {
   );
   const playbackActive = useCommentsSheetStore(s => s.playbackActive);
   const openComments = useCommentsSheetStore(s => s.openComments);
+  const commentCounts = useEngagementStore(s => s.commentCounts);
   const setActiveClip = useClipPlaybackStore(s => s.setActiveClip);
   const updateClipProgress = useClipPlaybackStore(s => s.updateProgress);
   const registerClipSeekController = useClipPlaybackStore(
@@ -358,24 +360,24 @@ export function ReelFeedScreen() {
     route.params?.profileType && route.params?.profileId,
   );
   const { active: activeViewerProfile } = useActiveProfile();
+  const activeViewer = useMemo(
+    () =>
+      activeViewerProfile
+        ? {
+            id: activeViewerProfile.id,
+            type: identityProfileType(activeViewerProfile),
+          }
+        : undefined,
+    [activeViewerProfile],
+  );
   const globalReelsQuery = useReelsQuery(
     !profilePlayback,
-    activeViewerProfile
-      ? {
-          id: activeViewerProfile.id,
-          type: identityProfileType(activeViewerProfile),
-        }
-      : undefined,
+    activeViewer,
   );
   const profileReelsQuery = useProfileClipReelsQuery(
     route.params?.profileType,
     route.params?.profileId,
-    activeViewerProfile
-      ? {
-          id: activeViewerProfile.id,
-          type: identityProfileType(activeViewerProfile),
-        }
-      : undefined,
+    activeViewer,
   );
   // `loadedReels` is the one canonical collection used by the global feed.
   // It only contains server-published Clips and preserves page order
@@ -637,7 +639,7 @@ export function ReelFeedScreen() {
 
     if (!contentPostId) return;
 
-    setContentClipLike(contentPostId, nextLiked)
+    setContentClipLike(contentPostId, nextLiked, activeViewer)
       .then(result => {
         // A quick double-tap can cause responses to arrive out of order.
         // Only the latest set-state response may reconcile the UI.
@@ -680,7 +682,7 @@ export function ReelFeedScreen() {
           [item.id]: previousLikeCount,
         }));
       });
-  }, []);
+  }, [activeViewer]);
 
   const fetchNextServerPage = useCallback(() => {
     if (
@@ -1059,13 +1061,18 @@ export function ReelFeedScreen() {
           />
           <SideAction
             icon="comment"
-            label={formatCount(item.commentCount)}
+            label={formatCount(
+              Math.max(item.commentCount, commentCounts[item.id] ?? 0),
+            )}
             accessibilityLabel="Comments"
             onPress={() =>
               openComments({
                 sourceType: 'clip',
                 contentId: item.id,
-                commentCount: item.commentCount,
+                commentCount: Math.max(
+                  item.commentCount,
+                  commentCounts[item.id] ?? 0,
+                ),
               })
             }
           />

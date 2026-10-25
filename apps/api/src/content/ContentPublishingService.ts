@@ -961,8 +961,12 @@ async function serializeComments(rows: CommentRow[]) {
     .filter((item): item is NonNullable<typeof item> => item !== null);
 }
 
-export async function listComments(viewerUserId: string, postId: string) {
-  await requireVisiblePost(viewerUserId, postId);
+export async function listComments(
+  viewerUserId: string,
+  postId: string,
+  viewerProfile?: PublisherRef,
+) {
+  await requireVisiblePost(viewerUserId, postId, viewerProfile);
   const blocked = await loadBlockedPublisherKeys(viewerUserId);
   const rows = await db
     .select()
@@ -988,11 +992,15 @@ export async function createComment(
   postId: string,
   body: CreateContentCommentRequest
 ) {
-  const { post } = await requireVisiblePost(viewerUserId, postId);
   const owned = await resolveOwnedPublisher(viewerUserId, {
     id: body.publisherProfileId,
     type: body.publisherProfileType,
   });
+  // The selected publisher is also the viewer identity. This matters when a
+  // business follows a private profile: the business can see and comment on
+  // the same post the feed already returned, even if the owner's personal
+  // profile does not follow it.
+  const { post } = await requireVisiblePost(viewerUserId, postId, owned.ref);
   if (await profilesAreBlocked(owned.ref, refOf(post))) {
     throw appError("Content not found", "not_found", 404);
   }

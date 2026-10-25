@@ -1,6 +1,18 @@
 import { apiRequest, getApiToken } from './client';
 import { isApiEnabled } from './config';
 
+export type ContentViewerProfile = {
+  id: string;
+  type: 'personal' | 'business';
+};
+
+function withViewerProfile(path: string, viewer?: ContentViewerProfile) {
+  if (!viewer) return path;
+  return `${path}?viewerProfileId=${encodeURIComponent(
+    viewer.id,
+  )}&viewerProfileType=${encodeURIComponent(viewer.type)}`;
+}
+
 type ContentClipViewResult = {
   data: {
     recorded: boolean;
@@ -48,10 +60,14 @@ export async function recordContentClipView(
 export async function setContentClipLike(
   postId: string,
   liked: boolean,
+  viewer?: ContentViewerProfile,
 ): Promise<ContentClipLikeResult['data'] | null> {
   if (!isApiEnabled || !getApiToken()) return null;
   const response = await apiRequest<ContentClipLikeResult>(
-    `/v1/content/posts/${encodeURIComponent(postId)}/like`,
+    withViewerProfile(
+      `/v1/content/posts/${encodeURIComponent(postId)}/like`,
+      viewer,
+    ),
     {
       method: 'PUT',
       body: JSON.stringify({ liked }),
@@ -83,10 +99,14 @@ export type ApiContentComment = {
 /** Published comments for a visible post, oldest first. */
 export async function fetchContentComments(
   postId: string,
+  viewer?: ContentViewerProfile,
 ): Promise<ApiContentComment[]> {
   if (!isApiEnabled || !getApiToken()) return [];
   const response = await apiRequest<{ items: ApiContentComment[] }>(
-    `/v1/content/posts/${encodeURIComponent(postId)}/comments`,
+    withViewerProfile(
+      `/v1/content/posts/${encodeURIComponent(postId)}/comments`,
+      viewer,
+    ),
   );
   return response.items;
 }
@@ -98,7 +118,7 @@ export async function fetchContentComments(
 export async function createContentComment(
   postId: string,
   body: string,
-  publisher?: { id: string; type: 'personal' | 'business' },
+  publisher?: ContentViewerProfile,
 ): Promise<ApiContentComment | null> {
   if (!isApiEnabled || !getApiToken()) return null;
   const response = await apiRequest<{ comment: ApiContentComment }>(

@@ -158,15 +158,7 @@ export function VideoPlayer({
   }, [duration, onSeekControllerChange, seekControllerId, seekToTime]);
 
   return (
-    <Pressable
-      style={styles.container}
-      onPress={() => {
-        if (failed) return;
-        setLocalPaused(p => !p);
-      }}
-      accessibilityRole="button"
-      accessibilityLabel={isPaused ? 'Play video' : 'Pause video'}
-    >
+    <View style={styles.container}>
       {source ? (
         <Video
           key={playbackUri}
@@ -211,6 +203,16 @@ export function VideoPlayer({
           onReadyForDisplay={() => setReady(true)}
         />
       ) : null}
+      <Pressable
+        testID="video-playback-toggle"
+        style={styles.playbackToggle}
+        onPress={() => {
+          if (failed) return;
+          setLocalPaused(value => !value);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={isPaused ? 'Play video' : 'Pause video'}
+      />
       {!ready && !failed ? (
         <View style={styles.loading} pointerEvents="none">
           <ActivityIndicator color="#fff" />
@@ -258,7 +260,7 @@ export function VideoPlayer({
           </View>
         </View>
       ) : null}
-    </Pressable>
+    </View>
   );
 }
 
@@ -278,6 +280,9 @@ const styles = StyleSheet.create({
     left: 0,
     width: '100%',
     height: '100%',
+  },
+  playbackToggle: {
+    ...StyleSheet.absoluteFill,
   },
   pauseOverlay: {
     ...StyleSheet.absoluteFill,

@@ -27,6 +27,7 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 const mockRefetch = jest.fn();
+let mockProfilePosts: any[] = [];
 let mockProfileSummary: any = {
   publisher: { id: 'profile-1', type: 'personal', displayName: 'Me', handle: 'me' },
   counts: { posts: 0, clips: 1, flash: 0, stories: 0 },
@@ -45,19 +46,7 @@ jest.mock('@/shared/api/storyHooks', () => ({
     refetch: mockRefetch,
   }),
   useContentProfilePostsQuery: (_type: string, _id: string, format: string) => ({
-    data:
-      format === 'clip'
-        ? [
-            {
-              id: 'clip-42',
-              format: 'clip',
-              mediaType: 'video',
-              caption: 'My clip',
-              posterUrl: 'https://cdn.example/clip.jpg',
-              media: [],
-            },
-          ]
-        : [],
+    data: format === 'clip' ? mockProfilePosts : [],
     isLoading: false,
     isRefetching: false,
     refetch: mockRefetch,
@@ -76,6 +65,16 @@ describe('PublisherProfileView', () => {
       profile: { id: 'business-2', type: 'business', displayName: 'Studio', avatarUrl: 'https://cdn.example/logo.png', verified: true },
     });
     mockFollowRefs = [];
+    mockProfilePosts = [
+      {
+        id: 'clip-42',
+        format: 'clip',
+        mediaType: 'video',
+        caption: 'My clip',
+        posterUrl: 'https://cdn.example/clip.jpg',
+        media: [],
+      },
+    ];
     mockProfileSummary = {
       publisher: { id: 'profile-1', type: 'personal', displayName: 'Me', handle: 'me' },
       counts: { posts: 0, clips: 1, flash: 0, stories: 0 },
@@ -116,6 +115,96 @@ describe('PublisherProfileView', () => {
         profileType: 'personal',
         profileId: 'profile-1',
       },
+    });
+  });
+
+  it('opens business Clips in the provider-first category viewer', () => {
+    mockProfileSummary = {
+      publisher: {
+        id: 'business-2',
+        type: 'business',
+        displayName: 'Studio',
+        handle: 'studio',
+      },
+      serviceCategoryId: 'fitness-trainers',
+      counts: { posts: 1, clips: 1, flash: 0, stories: 0 },
+      socialCounts: { followers: 0, following: 0, pendingRequests: 0 },
+      viewerCanManage: false,
+      relationship: {
+        canFollow: true,
+        followStatus: 'not_following',
+        isFollowing: false,
+        isRequested: false,
+        isBlocked: false,
+        canViewContent: true,
+      },
+    };
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(
+        <PublisherProfileView profileType="business" profileId="business-2" />,
+      );
+    });
+
+    ReactTestRenderer.act(() =>
+      renderer.root.find(node => node.props.accessibilityLabel === 'Open clip').props.onPress(),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith('ProviderClips', {
+      providerId: 'business-2',
+      serviceCategoryId: 'fitness-trainers',
+      providerName: 'Studio',
+      reelId: 'clip-42',
+      providerHasClips: true,
+    });
+  });
+
+  it('shows the provider empty state and can explore same-category Clips', () => {
+    mockProfilePosts = [];
+    mockProfileSummary = {
+      publisher: {
+        id: 'business-2',
+        type: 'business',
+        displayName: 'Studio',
+        handle: 'studio',
+      },
+      serviceCategoryId: 'fitness-trainers',
+      counts: { posts: 0, clips: 0, flash: 0, stories: 0 },
+      socialCounts: { followers: 0, following: 0, pendingRequests: 0 },
+      viewerCanManage: false,
+      relationship: {
+        canFollow: true,
+        followStatus: 'not_following',
+        isFollowing: false,
+        isRequested: false,
+        isBlocked: false,
+        canViewContent: true,
+      },
+    };
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(
+        <PublisherProfileView profileType="business" profileId="business-2" />,
+      );
+    });
+
+    expect(
+      renderer.root.findAll(node =>
+        node.children.some(
+          child => child === 'No clips from this provider yet.',
+        ),
+      ).length,
+    ).toBeGreaterThan(0);
+    ReactTestRenderer.act(() =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Explore clips from similar providers')
+        .props.onPress(),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith('ProviderClips', {
+      providerId: 'business-2',
+      serviceCategoryId: 'fitness-trainers',
+      providerName: 'Studio',
+      exploreSimilar: true,
+      providerHasClips: false,
     });
   });
 

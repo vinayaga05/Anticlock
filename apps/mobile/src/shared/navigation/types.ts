@@ -106,6 +106,16 @@ export type RootStackParamList = {
   ComingSoon: { title: string };
   FlashComposer: undefined;
   ClipComposer: undefined;
+  ProviderClips: {
+    providerId: string;
+    serviceCategoryId: string;
+    providerName: string;
+    reelId?: string;
+    /** True when the provider has no own Clips and the user chose peers. */
+    exploreSimilar?: boolean;
+    /** Lets the viewer show an explicit provider-empty step before peer Clips. */
+    providerHasClips?: boolean;
+  };
   FlashComments: { postId: string };
   StoryViewer: { authorId: string };
   StoryCreator: undefined;

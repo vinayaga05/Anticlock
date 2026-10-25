@@ -644,6 +644,17 @@ export const contentPosts = pgTable(
         onDelete: "cascade",
       }
     ),
+    /** Provider/category discovery metadata fixed when a Clip is published. */
+    providerId: uuid("provider_id").references(() => providers.id, {
+      onDelete: "cascade",
+    }),
+    businessId: uuid("business_id").references(() => providers.id, {
+      onDelete: "cascade",
+    }),
+    serviceCategoryId: text("service_category_id").references(
+      () => serviceCategories.id,
+      { onDelete: "set null" }
+    ),
     format: text("format").notNull(),
     mediaType: text("media_type").notNull(),
     caption: text("caption").notNull().default(""),
@@ -713,6 +724,11 @@ export const contentPosts = pgTable(
     index("content_posts_story_expiry_status_idx").on(
       table.expiresAt,
       table.status
+    ),
+    index("content_posts_category_provider_published_idx").on(
+      table.serviceCategoryId,
+      table.providerId,
+      table.publishedAt
     ),
   ]
 );

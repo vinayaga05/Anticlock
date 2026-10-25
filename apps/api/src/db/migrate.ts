@@ -1648,6 +1648,42 @@ async function migrate() {
     `;
   });
 
+  // Provider-category Clip discovery. Existing provider Clips are backfilled
+  // from their earliest approved offering so the feed works immediately.
+  await sql`
+    ALTER TABLE content_posts
+      ADD COLUMN IF NOT EXISTS provider_id uuid REFERENCES providers(id) ON DELETE CASCADE,
+      ADD COLUMN IF NOT EXISTS business_id uuid REFERENCES providers(id) ON DELETE CASCADE,
+      ADD COLUMN IF NOT EXISTS service_category_id text REFERENCES service_categories(id) ON DELETE SET NULL
+  `;
+  await sql`
+    UPDATE content_posts p
+    SET provider_id = p.author_provider_id,
+        business_id = CASE WHEN pr.provider_kind = 'business' THEN p.author_provider_id END,
+        service_category_id = COALESCE(
+          p.service_category_id,
+          (
+            SELECT offering.category_id
+            FROM provider_service_offerings offering
+            WHERE offering.provider_id = p.author_provider_id
+            ORDER BY offering.created_at, offering.id
+            LIMIT 1
+          )
+        )
+    FROM providers pr
+    WHERE p.author_provider_id = pr.id
+      AND (
+        p.provider_id IS DISTINCT FROM p.author_provider_id
+        OR p.business_id IS DISTINCT FROM CASE WHEN pr.provider_kind = 'business' THEN p.author_provider_id END
+        OR p.service_category_id IS NULL
+      )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS content_posts_category_provider_published_idx
+      ON content_posts (service_category_id, provider_id, published_at DESC)
+      WHERE format = 'clip' AND status = 'published'
+  `;
+
   /** Profile-scoped follow graph and privacy. */
   await sql`
     ALTER TABLE mobile_users

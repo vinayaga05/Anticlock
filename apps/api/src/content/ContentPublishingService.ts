@@ -33,6 +33,7 @@ import {
   contentPostLikes,
   contentPosts,
   mobileUsers,
+  providerServiceOfferings,
   providers,
 } from "../db/schema.js";
 import { mediaService } from "../media/MediaService.js";
@@ -196,6 +197,35 @@ async function publisherFor(ref: PublisherRef) {
     throw appError("Publishing profile is not active", "forbidden", 403);
   }
   return publisher;
+}
+
+/** Immutable discovery metadata copied onto a provider Clip at publish time. */
+async function providerClipMetadata(ref: PublisherRef, format: ContentFormat) {
+  if (format !== "clip" || ref.type !== "business") {
+    return { providerId: null, businessId: null, serviceCategoryId: null };
+  }
+  const [row] = await db
+    .select({
+      providerKind: providers.providerKind,
+      serviceCategoryId: providerServiceOfferings.categoryId,
+    })
+    .from(providers)
+    .leftJoin(
+      providerServiceOfferings,
+      eq(providerServiceOfferings.providerId, providers.id)
+    )
+    .where(and(eq(providers.id, ref.id), eq(providers.status, "active")))
+    .orderBy(
+      asc(providerServiceOfferings.createdAt),
+      asc(providerServiceOfferings.id)
+    )
+    .limit(1);
+  if (!row) throw appError("Publishing profile is not active", "forbidden", 403);
+  return {
+    providerId: ref.id,
+    businessId: row.providerKind === "business" ? ref.id : null,
+    serviceCategoryId: row.serviceCategoryId ?? null,
+  };
 }
 
 export async function getDraft(ownerUserId: string, id: string) {
@@ -453,6 +483,7 @@ export async function publishContainer(
   const firstVideo = assets.find((asset) => asset?.kind === "video");
   const duplicateClusterId =
     firstVideo?.checksumSha256 ?? firstVideo?.id ?? container.id;
+  const clipProvider = await providerClipMetadata(ref, container.format as ContentFormat);
 
   // Claim the draft and create its post atomically: two taps or two devices
   // must never turn one draft into duplicate posts.
@@ -482,6 +513,7 @@ export async function publishContainer(
         containerId: container.id,
         createdByMobileUserId: ownerUserId,
         ...authorColumnsFor(owned.ref),
+        ...clipProvider,
         format: container.format,
         mediaType: container.mediaType,
         caption: container.caption,
@@ -533,6 +565,40 @@ function decodeCursor(cursor: string | undefined): SQL | undefined {
     lt(contentPosts.publishedAt, at),
     and(eq(contentPosts.publishedAt, at), lt(contentPosts.id, id))
   );
+}
+
+type ProviderClipCursor = {
+  priority: 0 | 1;
+  publishedAt: Date;
+  id: string;
+};
+
+function encodeProviderClipCursor(row: {
+  priority: number;
+  post: Pick<Post, "publishedAt" | "id">;
+}) {
+  return Buffer.from(
+    `${row.priority}|${row.post.publishedAt.toISOString()}|${row.post.id}`
+  ).toString("base64url");
+}
+
+function decodeProviderClipCursor(cursor: string | undefined): ProviderClipCursor | null {
+  if (!cursor) return null;
+  const [rawPriority, iso, id] = Buffer.from(cursor, "base64url")
+    .toString("utf8")
+    .split("|");
+  const priority = Number(rawPriority);
+  const publishedAt = iso ? new Date(iso) : null;
+  if (
+    (priority !== 0 && priority !== 1) ||
+    !publishedAt ||
+    Number.isNaN(publishedAt.getTime()) ||
+    !id ||
+    !UUID_RE.test(id)
+  ) {
+    throw appError("Invalid cursor", "validation_error", 400);
+  }
+  return { priority, publishedAt, id };
 }
 
 function liveCondition(now: Date) {
@@ -606,6 +672,9 @@ export async function serializePosts(
         visibility: row.visibility,
         duplicateClusterId: row.duplicateClusterId,
         music: musicAttributionFromEdit(row.edit),
+        providerId: row.providerId,
+        businessId: row.businessId,
+        serviceCategoryId: row.serviceCategoryId,
         publisherProfileId: ref.id,
         publisherProfileType: ref.type,
         publisher,
@@ -684,6 +753,105 @@ export async function listPosts(
   };
 }
 
+/**
+ * Provider-first Clip feed: the selected provider's newest approved Clips,
+ * then other active providers in exactly the same service category. The
+ * cursor includes the provider-priority bucket so pagination cannot reorder
+ * or skip rows when it crosses from the selected provider to its peers.
+ */
+export async function listProviderCategoryClips(
+  viewerUserId: string,
+  query: {
+    providerId: string;
+    serviceCategoryId: string;
+    viewerProfile?: PublisherRef;
+    limit: number;
+    cursor?: string;
+  }
+) {
+  if (!UUID_RE.test(query.providerId) || !query.serviceCategoryId.trim()) {
+    throw appError("Provider Clip feed not found", "not_found", 404);
+  }
+  const [offering] = await db
+    .select({ id: providerServiceOfferings.id })
+    .from(providerServiceOfferings)
+    .innerJoin(
+      providers,
+      and(
+        eq(providers.id, providerServiceOfferings.providerId),
+        eq(providers.status, "active")
+      )
+    )
+    .where(
+      and(
+        eq(providerServiceOfferings.providerId, query.providerId),
+        eq(providerServiceOfferings.categoryId, query.serviceCategoryId)
+      )
+    )
+    .limit(1);
+  if (!offering) {
+    throw appError("Provider Clip feed not found", "not_found", 404);
+  }
+
+  const now = new Date();
+  const cursor = decodeProviderClipCursor(query.cursor);
+  const priority = sql<number>`CASE WHEN ${contentPosts.providerId} = ${query.providerId} THEN 0 ELSE 1 END`;
+  const cursorCondition = cursor
+    ? or(
+        gt(priority, cursor.priority),
+        and(
+          sql`${priority} = ${cursor.priority}`,
+          or(
+            lt(contentPosts.publishedAt, cursor.publishedAt),
+            and(
+              eq(contentPosts.publishedAt, cursor.publishedAt),
+              lt(contentPosts.id, cursor.id)
+            )
+          )
+        )
+      )
+    : undefined;
+  const [viewer, blocked] = await Promise.all([
+    loadViewerContext(viewerUserId),
+    loadBlockedPublisherKeys(viewerUserId),
+  ]);
+  const rows = await db
+    .select({ post: contentPosts, priority })
+    .from(contentPosts)
+    .innerJoin(providers, eq(providers.id, contentPosts.providerId))
+    .where(
+      and(
+        eq(contentPosts.format, "clip"),
+        eq(contentPosts.status, "published"),
+        inArray(contentPosts.visibility, ["public", "followers"]),
+        eq(contentPosts.serviceCategoryId, query.serviceCategoryId),
+        eq(providers.status, "active"),
+        liveCondition(now),
+        cursorCondition
+      )
+    )
+    .orderBy(asc(priority), desc(contentPosts.publishedAt), desc(contentPosts.id))
+    .limit(query.limit + 1);
+  const page = rows.slice(0, query.limit);
+  const visible = (
+    await Promise.all(
+      page.map(async (row) =>
+        !blocked.has(publisherKey(refOf(row.post))) &&
+        (await viewerCanSeePublishedPost(viewer, row.post, query.viewerProfile))
+          ? row.post
+          : null
+      )
+    )
+  ).filter((row): row is Post => row !== null);
+  return {
+    items: await serializePosts(viewer, visible, query.viewerProfile),
+    nextCursor:
+      rows.length > query.limit && page.length
+        ? encodeProviderClipCursor(page[page.length - 1]!)
+        : null,
+  };
+}
+
 export async function getProfileSummary(
   viewerUserId: string,
   ref: PublisherRef,
@@ -714,6 +882,16 @@ export async function getProfileSummary(
             website: null,
           };
         });
+  const categoryRows = ref.type === "business"
+    ? await db
+        .select({ id: providerServiceOfferings.categoryId })
+        .from(providerServiceOfferings)
+        .where(eq(providerServiceOfferings.providerId, ref.id))
+        .orderBy(
+          asc(providerServiceOfferings.createdAt),
+          asc(providerServiceOfferings.id)
+        )
+    : [];
   const relationship = await profileFollowService.relationship(viewerProfile, ref);
   const privacy = await getProfilePrivacy(ref);
   const maySeeProfileContent = relationship.canViewContent;
@@ -738,6 +916,8 @@ export async function getProfileSummary(
   return {
     publisher,
     details,
+    serviceCategoryId: categoryRows[0]?.id ?? null,
+    serviceCategoryIds: categoryRows.map((row) => row.id),
     relationship,
     ...relationship,
     isPrivate: privacy.isPrivate,

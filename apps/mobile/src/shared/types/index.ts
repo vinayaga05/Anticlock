@@ -106,6 +106,9 @@ export interface ReelItem {
     publishedAt: string | null;
     viewCount: number;
     shareCount: number;
+    providerId?: string | null;
+    businessId?: string | null;
+    serviceCategoryId?: string | null;
   };
   caption: string;
   /** Remote HTTPS URL or local `require(...mp4)` asset id */

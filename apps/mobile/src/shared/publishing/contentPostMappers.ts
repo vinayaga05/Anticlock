@@ -33,6 +33,9 @@ export type ApiContentPost = {
   visibility: string;
   publisherProfileId?: string;
   publisherProfileType?: PublisherProfileType;
+  providerId?: string | null;
+  businessId?: string | null;
+  serviceCategoryId?: string | null;
   publisher?: ApiContentPublisher;
   relationship?: ProfileRelationship;
   author: {

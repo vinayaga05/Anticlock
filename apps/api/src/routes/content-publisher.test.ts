@@ -55,6 +55,7 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
   const BIZ_C = randomUUID();
   const treeId = `test-tree-${runId}`;
   const categoryId = `test-cat-${runId}`;
+  const otherCategoryId = `test-other-cat-${runId}`;
   const tokens: Record<string, string> = {};
   let adminToken = "";
 
@@ -178,7 +179,10 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
     await db.insert(schema.serviceTrees).values({ id: treeId, slug: treeId, name: "Test tree" }).onConflictDoNothing();
     await db
       .insert(schema.serviceCategories)
-      .values({ id: categoryId, treeId, name: "Yoga Studio" })
+      .values([
+        { id: categoryId, treeId, name: "Yoga Studio" },
+        { id: otherCategoryId, treeId, name: "Bakery" },
+      ])
       .onConflictDoNothing();
     await db.insert(schema.providers).values([
       {
@@ -196,7 +200,11 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
       { providerId: BIZ2, mobileUserId: A, role: "owner" },
       { providerId: BIZ_C, mobileUserId: C, role: "owner" },
     ]);
-    await db.insert(schema.providerServiceOfferings).values({ providerId: BIZ1, categoryId });
+    await db.insert(schema.providerServiceOfferings).values([
+      { providerId: BIZ1, categoryId },
+      { providerId: BIZ_C, categoryId },
+      { providerId: BIZ2, categoryId: otherCategoryId },
+    ]);
 
     for (const [name, id] of Object.entries({ A, B, C })) {
       tokens[name] = await signToken({ sub: id, email: "", name, roles: [], kind: "mobile" });
@@ -216,7 +224,9 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
     const { like, inArray } = await import("drizzle-orm");
     await db.delete(schema.mobileUsers).where(inArray(schema.mobileUsers.id, [A, B, C, D]));
     await db.delete(schema.mediaAssets).where(like(schema.mediaAssets.checksumSha256, `${runId}-%`));
-    await db.delete(schema.serviceCategories).where(inArray(schema.serviceCategories.id, [categoryId]));
+    await db
+      .delete(schema.serviceCategories)
+      .where(inArray(schema.serviceCategories.id, [categoryId, otherCategoryId]));
     await db.delete(schema.serviceTrees).where(inArray(schema.serviceTrees.id, [treeId]));
     await sqlClient.end({ timeout: 5 });
   });
@@ -279,6 +289,9 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
     assert.equal(item.publisher.id, BIZ1);
     assert.equal(item.publisher.displayName, "Asha Yoga Studio");
     assert.equal(item.publisherProfileType, "business");
+    assert.equal(item.providerId, BIZ1);
+    assert.equal(item.businessId, BIZ1);
+    assert.equal(item.serviceCategoryId, categoryId);
 
     const biz = await call("B", "GET", `/v1/content/profiles/business/${BIZ1}/posts?format=clip`);
     assert.deepEqual(ids(biz.json.items), [postId]);
@@ -286,6 +299,8 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
     assert.ok(!ids(personal.json.items).includes(postId), "never mixed into personal");
     const summary = await call("B", "GET", `/v1/content/profiles/business/${BIZ1}`);
     assert.equal(summary.json.profile.counts.clips, 1);
+    assert.equal(summary.json.profile.serviceCategoryId, categoryId);
+    assert.deepEqual(summary.json.profile.serviceCategoryIds, [categoryId]);
   });
 
   it("3) Business 1 and Business 2 content never mix", async () => {
@@ -659,6 +674,109 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
       page1.json.items.map((item: Json) => [item.publisherProfileType, item.publisher.displayName]),
       [["business", "Chitra Clinic"], ["personal", "Bala Viewer"]],
     );
+  });
+
+  it("returns provider Clips first, then only approved peers in the same service category", async () => {
+    const selectedOlder = await publish("A", {
+      contentType: "clip",
+      publisherProfileId: BIZ1,
+      publisherProfileType: "business",
+      media: ["video"],
+      mediaType: "video",
+    });
+    const selectedNewer = await publish("A", {
+      contentType: "clip",
+      publisherProfileId: BIZ1,
+      publisherProfileType: "business",
+      media: ["video"],
+      mediaType: "video",
+    });
+    const categoryPeer = await publish("C", {
+      contentType: "clip",
+      publisherProfileId: BIZ_C,
+      publisherProfileType: "business",
+      media: ["video"],
+      mediaType: "video",
+    });
+    const unrelated = await publish("A", {
+      contentType: "clip",
+      publisherProfileId: BIZ2,
+      publisherProfileType: "business",
+      media: ["video"],
+      mediaType: "video",
+    });
+    const privateClip = await publish("A", {
+      contentType: "clip",
+      publisherProfileId: BIZ1,
+      publisherProfileType: "business",
+      visibility: "private",
+      media: ["video"],
+      mediaType: "video",
+    });
+
+    process.env.CONTENT_REQUIRE_REVIEW = "true";
+    let pending: Awaited<ReturnType<typeof publish>>;
+    try {
+      pending = await publish("A", {
+        contentType: "clip",
+        publisherProfileId: BIZ1,
+        publisherProfileType: "business",
+        media: ["video"],
+        mediaType: "video",
+      });
+    } finally {
+      delete process.env.CONTENT_REQUIRE_REVIEW;
+    }
+    assert.equal(pending.response.post.contentStatus, "pending_review");
+
+    const all: Json[] = [];
+    let cursor: string | null = null;
+    do {
+      const qs = new URLSearchParams({
+        providerId: BIZ1,
+        serviceCategoryId: categoryId,
+        limit: "2",
+      });
+      if (cursor) qs.set("cursor", cursor);
+      const page = await call(
+        "B",
+        "GET",
+        `/v1/content/feeds/provider-clips?${qs.toString()}`,
+      );
+      assert.equal(page.status, 200, JSON.stringify(page.json));
+      all.push(...page.json.items);
+      cursor = page.json.nextCursor;
+    } while (cursor);
+
+    assert.equal(new Set(ids(all)).size, all.length, "cursor pages never duplicate Clips");
+    assert.ok(ids(all).includes(selectedOlder.postId));
+    assert.ok(ids(all).includes(selectedNewer.postId));
+    assert.ok(ids(all).includes(categoryPeer.postId));
+    assert.ok(!ids(all).includes(unrelated.postId), "another category never leaks in");
+    assert.ok(!ids(all).includes(privateClip.postId), "private Clips stay out");
+    assert.ok(!ids(all).includes(pending.postId), "unapproved Clips stay out");
+    assert.ok(all.every((item) => item.serviceCategoryId === categoryId));
+    const firstPeer = all.findIndex((item) => item.providerId !== BIZ1);
+    assert.ok(firstPeer > 0, "same-category peers follow the selected provider");
+    assert.ok(
+      all.slice(0, firstPeer).every((item) => item.providerId === BIZ1) &&
+        all.slice(firstPeer).every((item) => item.providerId === BIZ_C),
+      "provider-priority ordering survives cursor boundaries",
+    );
+
+    const approved = await call(
+      "admin",
+      "POST",
+      `/admin/moderation/content/${pending.postId}/review`,
+      { decision: "approve" },
+    );
+    assert.equal(approved.status, 200, JSON.stringify(approved.json));
+    const afterApproval = await call(
+      "B",
+      "GET",
+      `/v1/content/feeds/provider-clips?providerId=${BIZ1}&serviceCategoryId=${categoryId}&limit=50`,
+    );
+    assert.ok(ids(afterApproval.json.items).includes(pending.postId));
   });
 
   it("enforces profile-scoped follows, private requests, rejection, blocking, and business privacy", async () => {

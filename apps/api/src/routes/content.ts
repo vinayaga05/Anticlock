@@ -65,6 +65,7 @@ import {
   listComments,
   listMine,
   listPosts,
+  listProviderCategoryClips,
   markDraftUploading,
   publishContainer,
   requireVisiblePost,
@@ -887,6 +888,39 @@ contentMobileRoutes.get("/feeds/clip", requireAuth, async (c) => {
       items = items.filter((item) => Date.parse(item.publishedAt) > since.getTime());
     }
     return c.json({ items, nextCursor: since ? null : result.nextCursor });
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+/**
+ * Full-screen provider Clips: selected provider first, then only active
+ * providers in the same service category. The service owns ordering/cursors;
+ * this route only adds playable delivery URLs to the canonical content rows.
+ */
+contentMobileRoutes.get("/feeds/provider-clips", requireAuth, async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    const providerId = c.req.query("providerId") ?? "";
+    const serviceCategoryId = c.req.query("serviceCategoryId") ?? "";
+    const query = ContentPostsQuerySchema.parse({
+      format: "clip",
+      limit: c.req.query("limit") ?? "20",
+      cursor: c.req.query("cursor"),
+    });
+    const viewerProfile = await clipViewerProfile(c, mobileUserId);
+    const result = await listProviderCategoryClips(mobileUserId, {
+      providerId,
+      serviceCategoryId,
+      viewerProfile,
+      limit: query.limit,
+      cursor: query.cursor,
+    });
+    return c.json({
+      items: toClipFeedItems(result.items),
+      nextCursor: result.nextCursor,
+    });
   } catch (error) {
     const { status, body } = errorResponse(error);
     return c.json(body, status);

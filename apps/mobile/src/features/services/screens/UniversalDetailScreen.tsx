@@ -5,6 +5,7 @@ import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { Card } from '@/shared/components/Card';
 import { AppIcon } from '@/shared/components/AppIcon';
+import { PressableScale } from '@/shared/components/PressableScale';
 import { useTheme } from '@/shared/hooks/useTheme';
 import {
   getCategory,
@@ -20,6 +21,7 @@ import {
 import { PrimaryActionBar } from '@/features/services/components/PrimaryActionBar';
 import { RootStackParamList } from '@/shared/navigation/types';
 import { useCartStore } from '@/shared/store/cartStore';
+import { useContentProfileQuery } from '@/shared/api/storyHooks';
 
 export function UniversalDetailScreen() {
   const theme = useTheme();
@@ -32,6 +34,10 @@ export function UniversalDetailScreen() {
     entityType === 'provider' ? entityId : undefined,
   );
   const provider = providerQuery.data ?? undefined;
+  const providerProfileQuery = useContentProfileQuery(
+    provider && isMarketplaceProviderId(provider.id) ? 'business' : undefined,
+    provider && isMarketplaceProviderId(provider.id) ? provider.id : undefined,
+  );
   const category =
     getCategory(categoryId) ??
     (provider ? provider.categoryIds.map(id => getCategory(id)).find(Boolean) : undefined);
@@ -64,6 +70,7 @@ export function UniversalDetailScreen() {
     product?.description;
   const price =
     provider?.priceFrom ?? event?.price ?? course?.price ?? product?.price ?? 0;
+  const providerClipCategoryId = provider?.categoryIds[0];
 
   if (entityType === 'provider' && providerQuery.isLoading) {
     return (
@@ -169,6 +176,41 @@ export function UniversalDetailScreen() {
           </View>
         ) : null}
 
+        {isRealProvider && providerClipCategoryId ? (
+          <PressableScale
+            accessibilityLabel={`Open ${title} clips`}
+            onPress={() =>
+              navigation.navigate('ProviderClips', {
+                providerId: provider.id,
+                serviceCategoryId: providerClipCategoryId,
+                providerName: title,
+                ...(providerProfileQuery.data
+                  ? {
+                      providerHasClips:
+                        providerProfileQuery.data.counts.clips > 0,
+                    }
+                  : {}),
+              })
+            }
+            style={[
+              styles.clipsButton,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                borderRadius: theme.radius.pill,
+              },
+            ]}>
+            <AppIcon name="reels" size={18} color={theme.colors.primary} />
+            <Text
+              style={[
+                theme.typography.body,
+                { color: theme.colors.textPrimary, fontWeight: '700' },
+              ]}>
+              Clips
+            </Text>
+          </PressableScale>
+        ) : null}
+
         {price ? (
           <Text style={[theme.typography.title, { color: theme.colors.primary, marginTop: 8 }]}>
             {product?.isProperty
@@ -231,6 +273,16 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  clipsButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   tag: {
     paddingHorizontal: 10,

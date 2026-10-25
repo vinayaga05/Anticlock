@@ -50,6 +50,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   deleteContentClip,
   useProfileClipReelsQuery,
+  useProviderCategoryClipsQuery,
   useReelsQuery,
 } from '@/shared/api/hooks';
 import { evictDeletedClipFromCaches } from '@/shared/api/clipCacheEviction';
@@ -69,7 +70,11 @@ import {
   setContentClipLike,
 } from '@/shared/api/contentEngagement';
 import { useTabBarBottomInset } from '@/shared/navigation/tabBarInset';
-import type { MainTabParamList } from '@/shared/navigation/types';
+import type {
+  MainTabParamList,
+  RootStackParamList,
+} from '@/shared/navigation/types';
+import { CommentsBottomSheetHost } from '@/shared/navigation/CommentsBottomSheetHost';
 import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
 import { identityProfileType } from '@/shared/publishing/publisherSelection';
 import {
@@ -298,7 +303,23 @@ function VerticalFade({
 export function ReelFeedScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
-  const route = useRoute<RouteProp<MainTabParamList, 'PlayFeed'>>();
+  const route = useRoute<
+    | RouteProp<MainTabParamList, 'PlayFeed'>
+    | RouteProp<RootStackParamList, 'ProviderClips'>
+  >();
+  const params = route.params as
+    | {
+        reelId?: string;
+        q?: string;
+        profileType?: 'personal' | 'business';
+        profileId?: string;
+        providerId?: string;
+        serviceCategoryId?: string;
+        providerName?: string;
+        exploreSimilar?: boolean;
+        providerHasClips?: boolean;
+      }
+    | undefined;
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   // Keep each page tied to the window, not to a descendant `onLayout` event.
@@ -326,6 +347,12 @@ export function ReelFeedScreen() {
     () => new Set(),
   );
   const [autoScroll, setAutoScroll] = useState(false);
+  const [showSimilarProviders, setShowSimilarProviders] = useState(
+    params?.exploreSimilar === true,
+  );
+  useEffect(() => {
+    setShowSimilarProviders(params?.exploreSimilar === true);
+  }, [params?.exploreSimilar, params?.providerId]);
   const [isPullRefreshing, setIsPullRefreshing] = useState(false);
   const [coins] = useState(120);
   const viewedReelIds = useRef(new Set<string>());
@@ -356,8 +383,9 @@ export function ReelFeedScreen() {
     s => s.registerSeekController,
   );
   const clearClipPlayback = useClipPlaybackStore(s => s.clear);
+  const providerPlayback = route.name === 'ProviderClips';
   const profilePlayback = Boolean(
-    route.params?.profileType && route.params?.profileId,
+    !providerPlayback && params?.profileType && params?.profileId,
   );
   const { active: activeViewerProfile } = useActiveProfile();
   const activeViewer = useMemo(
@@ -371,12 +399,17 @@ export function ReelFeedScreen() {
     [activeViewerProfile],
   );
   const globalReelsQuery = useReelsQuery(
-    !profilePlayback,
+    !profilePlayback && !providerPlayback,
     activeViewer,
   );
   const profileReelsQuery = useProfileClipReelsQuery(
-    route.params?.profileType,
-    route.params?.profileId,
+    profilePlayback ? params?.profileType : undefined,
+    profilePlayback ? params?.profileId : undefined,
+    activeViewer,
+  );
+  const providerReelsQuery = useProviderCategoryClipsQuery(
+    providerPlayback ? params?.providerId : undefined,
+    providerPlayback ? params?.serviceCategoryId : undefined,
     activeViewer,
   );
   // `loadedReels` is the one canonical collection used by the global feed.
@@ -389,20 +422,35 @@ export function ReelFeedScreen() {
       ),
     [globalReelsQuery.data?.pages],
   );
+  const loadedProviderReels = useMemo(
+    () =>
+      mergeLoadedReelPages(
+        (providerReelsQuery.data?.pages ?? []).map(page => page.items),
+      ),
+    [providerReelsQuery.data?.pages],
+  );
   const viewerSuffix = activeViewerProfile
     ? `&viewerProfileType=${encodeURIComponent(identityProfileType(activeViewerProfile))}&viewerProfileId=${encodeURIComponent(activeViewerProfile.id)}`
     : '';
   const live = useLivePendingClips({
-    enabled: !profilePlayback,
+    enabled: !profilePlayback && !providerPlayback,
     loadedReels,
     viewerSuffix,
   });
   const jumpToTopRef = useRef(false);
   const revealedReelIdRef = useRef<string | null>(null);
-  const queriedReels = profilePlayback ? profileReelsQuery.data : loadedReels;
-  const refetch = profilePlayback
-    ? profileReelsQuery.refetch
-    : globalReelsQuery.refetch;
+  const queriedReels = providerPlayback
+    ? params?.providerHasClips === false && !showSimilarProviders
+      ? EMPTY_REELS
+      : loadedProviderReels
+    : profilePlayback
+      ? profileReelsQuery.data
+      : loadedReels;
+  const refetch = providerPlayback
+    ? providerReelsQuery.refetch
+    : profilePlayback
+      ? profileReelsQuery.refetch
+      : globalReelsQuery.refetch;
   const refreshingPlaybackUrlsRef = useRef(false);
   const refreshPlaybackUrls = useCallback(async () => {
     if (refreshingPlaybackUrlsRef.current) return;
@@ -413,12 +461,12 @@ export function ReelFeedScreen() {
       refreshingPlaybackUrlsRef.current = false;
     }
   }, [refetch]);
-  const hasNextPage = !profilePlayback && Boolean(globalReelsQuery.hasNextPage);
-  const isFetchingNextPage =
-    !profilePlayback && globalReelsQuery.isFetchingNextPage;
+  const pagedQuery = providerPlayback ? providerReelsQuery : globalReelsQuery;
+  const hasNextPage = !profilePlayback && Boolean(pagedQuery.hasNextPage);
+  const isFetchingNextPage = !profilePlayback && pagedQuery.isFetchingNextPage;
   const hasReachedEndOfServerFeed = profilePlayback
     ? true
-    : Boolean(globalReelsQuery.data) &&
+    : Boolean(pagedQuery.data) &&
       !hasNextPage &&
       !isFetchingNextPage;
   // Content-feed results are already block-filtered on the server. Also hydrate
@@ -453,13 +501,21 @@ export function ReelFeedScreen() {
   // Keep the empty state referentially stable so a loading/refetch transition
   // cannot make FlatList think its data changed and recalculate its viewport.
   const feedReels = queriedReels ?? EMPTY_REELS;
-  const feedLoading = profilePlayback
-    ? profileReelsQuery.isLoading
-    : globalReelsQuery.isLoading;
-  const feedError = profilePlayback
-    ? profileReelsQuery.error
-    : globalReelsQuery.error;
-  const genieQ = route.params?.q?.trim().toLowerCase();
+  const feedLoading = providerPlayback
+    ? params?.providerHasClips === false && !showSimilarProviders
+      ? false
+      : providerReelsQuery.isLoading
+    : profilePlayback
+      ? profileReelsQuery.isLoading
+      : globalReelsQuery.isLoading;
+  const feedError = providerPlayback
+    ? params?.providerHasClips === false && !showSimilarProviders
+      ? null
+      : providerReelsQuery.error
+    : profilePlayback
+      ? profileReelsQuery.error
+      : globalReelsQuery.error;
+  const genieQ = params?.q?.trim().toLowerCase();
   const reels = useMemo(() => {
     const visibleReels = withoutHiddenClips(feedReels, hiddenIds).filter(
       reel =>
@@ -512,12 +568,13 @@ export function ReelFeedScreen() {
   useEffect(() => clearClipPlayback, [clearClipPlayback]);
 
   useEffect(() => {
-    const reelId = route.params?.reelId;
+    const reelId = params?.reelId;
     if (!reelId || !reels.length) return;
     const idx = reels.findIndex(r => r.id === reelId);
     if (
       idx < 0 &&
       !profilePlayback &&
+      !providerPlayback &&
       revealedReelIdRef.current !== reelId &&
       globalReelsQuery.isSuccess
     ) {
@@ -542,9 +599,12 @@ export function ReelFeedScreen() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route.params?.reelId, reels]);
+  }, [params?.reelId, providerPlayback, reels]);
 
-  const bottomSafe = useTabBarBottomInset(20);
+  const tabBarBottomSafe = useTabBarBottomInset(20);
+  const bottomSafe = providerPlayback
+    ? Math.max(insets.bottom, 8) + 20
+    : tabBarBottomSafe;
   const topFadeH = insets.top + 96;
   const bottomFadeH = bottomSafe + 160;
 
@@ -689,15 +749,15 @@ export function ReelFeedScreen() {
       profilePlayback ||
       !hasNextPage ||
       isFetchingNextPage ||
-      globalReelsQuery.isFetching
+      pagedQuery.isFetching
     ) {
       return;
     }
-    globalReelsQuery.fetchNextPage().catch(() => undefined);
+    pagedQuery.fetchNextPage().catch(() => undefined);
   }, [
-    globalReelsQuery,
     hasNextPage,
     isFetchingNextPage,
+    pagedQuery,
     profilePlayback,
   ]);
   const fetchNextServerPageRef = useRef(fetchNextServerPage);
@@ -1024,30 +1084,38 @@ export function ReelFeedScreen() {
         </View>
         <View style={[styles.topBar, { paddingTop: insets.top + 6 }]}>
           <TopChromeButton
-            icon="search"
-            accessibilityLabel="Search"
-            onPress={() => navigation.navigate('Search')}
+            icon={providerPlayback ? 'back' : 'search'}
+            accessibilityLabel={providerPlayback ? 'Back to provider profile' : 'Search'}
+            onPress={() =>
+              providerPlayback ? navigation.goBack() : navigation.navigate('Search')
+            }
           />
-          <View style={styles.topRightCluster}>
-            <PressableScale
-              accessibilityLabel="Coins"
-              onPress={() => {}}
-              style={styles.coinsChip}
-            >
-              <AppIcon name="coins" size={16} color="#FBBF24" strokeWidth={2} />
-              <Text style={styles.coinsText}>{coins}</Text>
-            </PressableScale>
-            <TopChromeButton
-              icon="circle-plus"
-              accessibilityLabel="Create"
-              onPress={() => navigation.navigate('ClipComposer')}
-            />
-            <TopChromeButton
-              icon="profile"
-              accessibilityLabel="Profile"
-              onPress={() => navigation.navigate('Profile')}
-            />
-          </View>
+          {providerPlayback ? (
+            <Text numberOfLines={1} style={styles.providerFeedTitle}>
+              {params?.providerName ?? 'Provider Clips'}
+            </Text>
+          ) : (
+            <View style={styles.topRightCluster}>
+              <PressableScale
+                accessibilityLabel="Coins"
+                onPress={() => {}}
+                style={styles.coinsChip}
+              >
+                <AppIcon name="coins" size={16} color="#FBBF24" strokeWidth={2} />
+                <Text style={styles.coinsText}>{coins}</Text>
+              </PressableScale>
+              <TopChromeButton
+                icon="circle-plus"
+                accessibilityLabel="Create"
+                onPress={() => navigation.navigate('ClipComposer')}
+              />
+              <TopChromeButton
+                icon="profile"
+                accessibilityLabel="Profile"
+                onPress={() => navigation.navigate('Profile')}
+              />
+            </View>
+          )}
         </View>
 
         {/* Right engagement */}
@@ -1178,7 +1246,9 @@ export function ReelFeedScreen() {
   const emptyMessage =
     feedError instanceof Error
       ? feedError.message
-      : profilePlayback
+      : providerPlayback
+        ? 'No clips from this provider yet.'
+        : profilePlayback
         ? 'No clips from this profile yet.'
         : 'No clips yet. Be the first to share one.';
 
@@ -1241,10 +1311,14 @@ export function ReelFeedScreen() {
             ) : (
               <>
                 <Text style={styles.emptyTitle}>
-                  {feedError ? 'Could not load clips' : 'No clips yet'}
+                  {feedError
+                    ? 'Could not load clips'
+                    : providerPlayback
+                      ? 'No provider clips yet'
+                      : 'No clips yet'}
                 </Text>
                 <Text style={styles.emptyBody}>{emptyMessage}</Text>
-                {!profilePlayback && !feedError ? (
+                {!profilePlayback && !providerPlayback && !feedError ? (
                   <PressableScale
                     accessibilityLabel="Create a clip"
                     onPress={() => navigation.navigate('ClipComposer')}
@@ -1254,6 +1328,23 @@ export function ReelFeedScreen() {
                     ]}>
                     <AppIcon name="video" size={18} color="#042F2E" />
                     <Text style={styles.emptyCtaLabel}>Create a clip</Text>
+                  </PressableScale>
+                ) : null}
+                {providerPlayback &&
+                params?.providerHasClips === false &&
+                !showSimilarProviders &&
+                !feedError ? (
+                  <PressableScale
+                    accessibilityLabel="Explore clips from similar providers"
+                    onPress={() => setShowSimilarProviders(true)}
+                    style={[
+                      styles.emptyCta,
+                      { backgroundColor: theme.colors.primary },
+                    ]}>
+                    <AppIcon name="reels" size={18} color="#042F2E" />
+                    <Text style={styles.emptyCtaLabel}>
+                      Explore similar providers
+                    </Text>
                   </PressableScale>
                 ) : null}
                 {feedError ? (
@@ -1281,6 +1372,18 @@ export function ReelFeedScreen() {
           />
         }
       />
+      {providerPlayback && loopedReels.length === 0 ? (
+        <View style={[styles.topBar, { paddingTop: insets.top + 6 }]}>
+          <TopChromeButton
+            icon="back"
+            accessibilityLabel="Back to provider profile"
+            onPress={() => navigation.goBack()}
+          />
+          <Text numberOfLines={1} style={styles.providerFeedTitle}>
+            {params?.providerName ?? 'Provider Clips'}
+          </Text>
+        </View>
+      ) : null}
       {live.pending.length > 0 ? (
         <View
           pointerEvents="box-none"
@@ -1332,6 +1435,7 @@ export function ReelFeedScreen() {
             : reportReel(reportTarget.id, reason);
         }}
       />
+      {providerPlayback ? <CommentsBottomSheetHost /> : null}
     </View>
   );
 }
@@ -1414,6 +1518,7 @@ const styles = StyleSheet.create({
   },
   topBar: {
     position: 'absolute',
+    top: 0,
     left: 12,
     right: 12,
     flexDirection: 'row',
@@ -1424,6 +1529,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  providerFeedTitle: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingRight: 40,
   },
   topBtn: {
     width: 40,

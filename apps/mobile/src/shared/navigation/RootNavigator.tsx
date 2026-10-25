@@ -73,6 +73,7 @@ import { MyOrdersScreen } from '@/features/services/screens/MyOrdersScreen';
 import { ComingSoonScreen } from '@/features/services/screens/ComingSoonScreen';
 import { FlashComposerScreen } from '@/features/flash/screens/FlashComposerScreen';
 import { ClipComposerScreen } from '@/features/reels/screens/ClipComposerScreen';
+import { ReelFeedScreen } from '@/features/reels/screens/ReelFeedScreen';
 import { FlashCommentsScreen } from '@/features/flash/screens/FlashCommentsScreen';
 import { StoryViewerScreen } from '@/features/flash/screens/StoryViewerScreen';
 import { StoryCreatorScreen } from '@/features/flash/screens/StoryCreatorScreen';
@@ -398,6 +399,11 @@ export function RootNavigator() {
                 gestureDirection: 'horizontal',
                 fullScreenGestureEnabled: true,
               }}
+            />
+            <Stack.Screen
+              name="ProviderClips"
+              component={ReelFeedScreen}
+              options={{ headerShown: false, animation: 'slide_from_right' }}
             />
             <Stack.Screen
               name="FlashComments"

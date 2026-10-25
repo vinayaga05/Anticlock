@@ -163,6 +163,34 @@ export function PublisherProfileView({
     : false;
   const isOwnProfile = profile?.viewerCanManage ?? ownedTarget;
   const showSocialActions = Boolean(activeRef) && !isOwnProfile;
+  const providerCategoryId =
+    activeRef?.type === 'business' ? profile?.serviceCategoryId ?? null : null;
+
+  const openClips = (reelId?: string, exploreSimilar = false) => {
+    if (
+      activeRef?.type === 'business' &&
+      providerCategoryId &&
+      publisher
+    ) {
+      navigation.navigate('ProviderClips', {
+        providerId: activeRef.id,
+        serviceCategoryId: providerCategoryId,
+        providerName: publisher.displayName,
+        ...(reelId ? { reelId } : {}),
+        ...(exploreSimilar ? { exploreSimilar: true } : {}),
+        providerHasClips: Boolean(reelId || profile?.counts.clips),
+      });
+      return;
+    }
+    navigation.navigate('Main', {
+      screen: 'PlayFeed',
+      params: {
+        ...(reelId ? { reelId } : {}),
+        profileType: activeRef?.type,
+        profileId: activeRef?.id,
+      },
+    });
+  };
 
   const runFollowMutation = (
     action: 'follow' | 'unfollow',
@@ -462,9 +490,28 @@ export function PublisherProfileView({
                 : relationship && !relationship.canViewContent
                   ? 'Private profile · follow to view'
                   : tab === 'clip'
-                  ? 'No clips yet'
+                  ? activeRef?.type === 'business'
+                    ? 'No clips from this provider yet.'
+                    : 'No clips yet'
                   : 'No posts yet'}
             </Text>
+            {!postsQuery.isLoading &&
+            tab === 'clip' &&
+            activeRef?.type === 'business' &&
+            providerCategoryId ? (
+              <PressableScale
+                accessibilityLabel="Explore clips from similar providers"
+                onPress={() => openClips(undefined, true)}
+                style={[
+                  styles.exploreClipsButton,
+                  { backgroundColor: theme.colors.primary },
+                ]}>
+                <AppIcon name="reels" size={17} color="#FFFFFF" />
+                <Text style={styles.exploreClipsLabel}>
+                  Explore similar providers
+                </Text>
+              </PressableScale>
+            ) : null}
           </View>
         }
         renderItem={({ item }) => {
@@ -474,16 +521,7 @@ export function PublisherProfileView({
             <PressableScale
               disabled={!isClip}
               accessibilityLabel={isClip ? 'Open clip' : undefined}
-              onPress={() =>
-                navigation.navigate('Main', {
-                  screen: 'PlayFeed',
-                  params: {
-                    reelId: item.id,
-                    profileType: activeRef?.type,
-                    profileId: activeRef?.id,
-                  },
-                })
-              }
+              onPress={() => openClips(item.id)}
               style={[
                 styles.cell,
                 { width: cellSize, height: cellSize, backgroundColor: theme.colors.surfaceMuted },
@@ -562,4 +600,14 @@ const styles = StyleSheet.create({
   cellText: { padding: 8 },
   videoBadge: { position: 'absolute', top: 8, right: 8 },
   empty: { alignItems: 'center', paddingVertical: 48 },
+  exploreClipsButton: {
+    marginTop: 16,
+    minHeight: 42,
+    paddingHorizontal: 18,
+    borderRadius: 21,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  exploreClipsLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
 });

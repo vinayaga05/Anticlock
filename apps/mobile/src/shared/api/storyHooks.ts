@@ -97,6 +97,8 @@ export type ContentProfileSummary = {
   isRequested?: boolean;
   isBlocked?: boolean;
   canViewContent?: boolean;
+  serviceCategoryId?: string | null;
+  serviceCategoryIds?: string[];
 };
 
 /** Profile header + counts for a personal or business publisher profile. */

@@ -91,6 +91,9 @@ export type ApiContentClipFeedItem = {
   publishedAt: string;
   publisherProfileId: string;
   publisherProfileType: PublisherProfileType;
+  providerId?: string | null;
+  businessId?: string | null;
+  serviceCategoryId?: string | null;
   publisher: {
     id: string;
     type: PublisherProfileType;
@@ -293,6 +296,9 @@ export function mapApiContentClipToItem(
         : null,
       viewCount: nonNegativeNumber(item.viewCount),
       shareCount: nonNegativeNumber(item.shareCount),
+      providerId: item.providerId ?? null,
+      businessId: item.businessId ?? null,
+      serviceCategoryId: item.serviceCategoryId ?? null,
     },
     caption: typeof item.caption === 'string' ? item.caption : '',
     videoUrl: item.playbackUrl,
@@ -400,6 +406,9 @@ export function mapApiProfileClipToItem(item: ApiContentPost): ReelItem | null {
       publishedAt: item.publishedAt ?? item.createdAt,
       viewCount: item.viewCount ?? 0,
       shareCount: item.shareCount ?? 0,
+      providerId: item.providerId ?? null,
+      businessId: item.businessId ?? null,
+      serviceCategoryId: item.serviceCategoryId ?? null,
     },
     caption: item.caption,
     videoUrl: playbackUrl,
@@ -447,6 +456,57 @@ export function useProfileClipReelsQuery(
     },
     enabled: isApiEnabled && Boolean(profileType && profileId),
     staleTime: 15_000,
+  });
+}
+
+/** Selected provider first, then approved peers in exactly one category. */
+export function useProviderCategoryClipsQuery(
+  providerId: string | undefined,
+  serviceCategoryId: string | undefined,
+  viewerProfile?: { id: string; type: PublisherProfileType } | null,
+) {
+  return useInfiniteQuery({
+    queryKey: [
+      'reels',
+      'provider-category',
+      providerId ?? '',
+      serviceCategoryId ?? '',
+      viewerProfile?.type ?? 'personal',
+      viewerProfile?.id ?? 'default',
+    ],
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam }): Promise<{
+      items: ReelItem[];
+      nextCursor: string | null;
+    }> => {
+      await ensureAuthToken();
+      const params = new URLSearchParams({
+        providerId: providerId!,
+        serviceCategoryId: serviceCategoryId!,
+        limit: '20',
+      });
+      if (typeof pageParam === 'string') params.set('cursor', pageParam);
+      if (viewerProfile) {
+        params.set('viewerProfileType', viewerProfile.type);
+        params.set('viewerProfileId', viewerProfile.id);
+      }
+      const response = await apiRequest<ApiContentClipFeedResponse>(
+        `/v1/content/feeds/provider-clips?${params.toString()}`,
+      );
+      return {
+        items: Array.isArray(response.items)
+          ? response.items
+              .filter(isPublishedContentClipFeedItem)
+              .map(mapApiContentClipToItem)
+          : [],
+        nextCursor: response.nextCursor,
+      };
+    },
+    getNextPageParam: lastPage => lastPage.nextCursor ?? undefined,
+    enabled: isApiEnabled && Boolean(providerId && serviceCategoryId),
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnReconnect: true,
   });
 }
 

@@ -16,6 +16,16 @@ export interface CreateChannelResponse {
   };
 }
 
+export type PublisherRef = { id: string; type: 'personal' | 'business' };
+
+export interface CreateCallResponse {
+  callId: string;
+  callType: 'default';
+  mode: 'audio' | 'video';
+  targetUserId: string;
+  profile: CreateChannelResponse['profile'];
+}
+
 /**
  * Create or get a 1:1 messaging channel with another user
  */
@@ -26,5 +36,17 @@ export async function createOrGetChannel(
   return apiClient.post<CreateChannelResponse>('/v1/messages/channels', {
     otherProfile,
     viewerProfile,
+  });
+}
+
+export async function createVideoCall(
+  otherProfile: PublisherRef,
+  viewerProfile: PublisherRef,
+  mode: 'audio' | 'video',
+): Promise<CreateCallResponse> {
+  return apiClient.post<CreateCallResponse>('/v1/messages/calls', {
+    otherProfile,
+    viewerProfile,
+    mode,
   });
 }

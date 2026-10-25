@@ -66,8 +66,12 @@ export type RootStackParamList = {
   Call: {
     mode: 'audio' | 'video';
     name: string;
-    userId?: string;
     avatarUrl?: string | null;
+    targetProfile?: { id: string; type: 'personal' | 'business' };
+    viewerProfile?: { id: string; type: 'personal' | 'business' };
+    callId?: string;
+    callType?: 'default';
+    incoming?: boolean;
   };
   Thread: {
     conversationId: string;

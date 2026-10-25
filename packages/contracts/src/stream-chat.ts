@@ -34,6 +34,32 @@ export const createChannelResponseSchema = z.object({
   }),
 });
 
+const publisherRefSchema = z.object({
+  id: z.string().uuid(),
+  type: z.enum(['personal', 'business']),
+});
+
+// POST /v1/messages/calls - authorize and create a 1:1 Stream call
+export const createCallRequestSchema = z.object({
+  otherProfile: publisherRefSchema,
+  viewerProfile: publisherRefSchema,
+  mode: z.enum(['audio', 'video']),
+});
+
+export const createCallResponseSchema = z.object({
+  callId: z.string().uuid(),
+  callType: z.literal('default'),
+  mode: z.enum(['audio', 'video']),
+  targetUserId: z.string().uuid(),
+  profile: z.object({
+    id: z.string().uuid(),
+    type: z.enum(['personal', 'business']),
+    displayName: z.string(),
+    avatarUrl: z.string().nullable(),
+    verified: z.boolean(),
+  }),
+});
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -41,3 +67,5 @@ export const createChannelResponseSchema = z.object({
 export type StreamTokenResponse = z.infer<typeof streamTokenResponseSchema>;
 export type CreateChannelRequest = z.infer<typeof createChannelRequestSchema>;
 export type CreateChannelResponse = z.infer<typeof createChannelResponseSchema>;
+export type CreateCallRequest = z.infer<typeof createCallRequestSchema>;
+export type CreateCallResponse = z.infer<typeof createCallResponseSchema>;

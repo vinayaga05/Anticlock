@@ -1,98 +1,158 @@
-import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  PermissionsAndroid,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AppIcon } from '@/shared/components/AppIcon';
+import {
+  CallContent,
+  CallingState,
+  RingingCallContent,
+  StreamCall,
+  type Call,
+  type CallContentProps,
+} from '@stream-io/video-react-native-sdk';
 import { PressableScale } from '@/shared/components/PressableScale';
+import { createVideoCall } from '@/shared/api/messagesClient';
+import { useStreamChat } from '@/shared/providers/StreamChatProvider';
 import { RootStackParamList } from '@/shared/navigation/types';
+
+function AudioCallContent(props: CallContentProps) {
+  return <CallContent {...props} initialInCallManagerAudioMode="audio" />;
+}
+
+async function requestOutgoingPermissions(mode: 'audio' | 'video') {
+  if (Platform.OS !== 'android') return;
+  const permissions = [PermissionsAndroid.PERMISSIONS.RECORD_AUDIO];
+  if (mode === 'video') permissions.push(PermissionsAndroid.PERMISSIONS.CAMERA);
+  const result = await PermissionsAndroid.requestMultiple(permissions);
+  const denied = permissions.some(
+    permission => result[permission] !== PermissionsAndroid.RESULTS.GRANTED,
+  );
+  if (denied) {
+    throw new Error(
+      `${mode === 'video' ? 'Camera and microphone' : 'Microphone'} access is required for this call.`,
+    );
+  }
+}
 
 export function CallScreen() {
   const navigation = useNavigation();
-  const insets = useSafeAreaInsets();
   const route = useRoute<RouteProp<RootStackParamList, 'Call'>>();
-  const { mode, name, avatarUrl } = route.params;
-  const title = mode === 'video' ? 'Video call' : 'Audio call';
+  const { videoClient, isVideoReady, error: streamError } = useStreamChat();
+  const [call, setCall] = useState<Call | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const { mode, incoming, callId, callType, targetProfile, viewerProfile } = route.params;
+  const AcceptedCallContent = useMemo(
+    () => (mode === 'audio' ? AudioCallContent : CallContent),
+    [mode],
+  );
+
+  useEffect(() => {
+    if (!videoClient || !isVideoReady) return;
+    let cancelled = false;
+    let activeCall: Call | null = null;
+
+    async function prepare() {
+      try {
+        setError(null);
+        if (incoming) {
+          if (!callId || !callType) throw new Error('This incoming call is unavailable.');
+          activeCall = videoClient!.call(callType, callId, { reuseInstance: true });
+        } else {
+          if (!targetProfile || !viewerProfile) {
+            throw new Error('The profile for this call is unavailable.');
+          }
+          await requestOutgoingPermissions(mode);
+          const created = await createVideoCall(targetProfile, viewerProfile, mode);
+          activeCall = videoClient!.call(created.callType, created.callId, { reuseInstance: true });
+          if (mode === 'audio') await activeCall.camera.disable();
+          await activeCall.get({ ring: true, video: mode === 'video' });
+        }
+        if (!cancelled) setCall(activeCall);
+      } catch (err: any) {
+        if (!cancelled) setError(err?.message || 'Could not start this call.');
+      }
+    }
+
+    void prepare();
+    return () => {
+      cancelled = true;
+      if (activeCall && activeCall.state.callingState !== CallingState.LEFT) {
+        activeCall.leave().catch(() => undefined);
+      }
+    };
+  }, [
+    videoClient,
+    isVideoReady,
+    incoming,
+    callId,
+    callType,
+    targetProfile?.id,
+    targetProfile?.type,
+    viewerProfile?.id,
+    viewerProfile?.type,
+    mode,
+  ]);
+
+  if (error || streamError) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorTitle}>Call unavailable</Text>
+        <Text style={styles.errorText}>{error ?? streamError}</Text>
+        <PressableScale style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Text style={styles.backLabel}>Back</Text>
+        </PressableScale>
+      </View>
+    );
+  }
+
+  if (!call) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#fff" />
+        <Text style={styles.loading}>{isVideoReady ? 'Starting call…' : 'Connecting calls…'}</Text>
+      </View>
+    );
+  }
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 28 }]}>
-      <Text style={styles.mode}>{title}</Text>
-      {avatarUrl ? (
-        <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-      ) : (
-        <View style={[styles.avatar, styles.fallback]}>
-          <Text style={styles.initial}>{name.charAt(0).toUpperCase()}</Text>
-        </View>
-      )}
-      <Text style={styles.name}>{name}</Text>
-      <Text style={styles.status}>Calling…</Text>
-      <View style={styles.spacer} />
-      <PressableScale
-        accessibilityLabel="End call"
-        onPress={() => navigation.goBack()}
-        style={styles.end}
-      >
-        <AppIcon name="phone" size={22} color="#fff" strokeWidth={2.2} />
-        <Text style={styles.endLabel}>End</Text>
-      </PressableScale>
+    <View style={styles.root}>
+      <StreamCall call={call}>
+        <RingingCallContent
+          CallContent={AcceptedCallContent}
+          onBackPress={() => navigation.goBack()}
+        />
+      </StreamCall>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  root: { flex: 1, backgroundColor: '#0B1220' },
+  center: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 28,
     backgroundColor: '#0B1220',
-    alignItems: 'center',
-    paddingHorizontal: 24,
   },
-  mode: {
-    color: 'rgba(255,255,255,0.72)',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  avatar: {
-    width: 112,
-    height: 112,
-    borderRadius: 56,
-    marginTop: 36,
-  },
-  fallback: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1F2937',
-  },
-  initial: {
-    color: '#fff',
-    fontSize: 40,
-    fontWeight: '700',
-  },
-  name: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: '800',
-    marginTop: 18,
-    textAlign: 'center',
-  },
-  status: {
-    color: 'rgba(255,255,255,0.72)',
-    fontSize: 16,
+  loading: { color: 'rgba(255,255,255,0.78)', fontSize: 16 },
+  errorTitle: { color: '#fff', fontSize: 23, fontWeight: '800' },
+  errorText: { color: 'rgba(255,255,255,0.72)', fontSize: 15, textAlign: 'center' },
+  backButton: {
     marginTop: 8,
-  },
-  spacer: { flex: 1 },
-  end: {
-    minWidth: 120,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#E11D48',
-    flexDirection: 'row',
+    minWidth: 112,
+    height: 46,
+    borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
+    backgroundColor: '#2563EB',
   },
-  endLabel: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  backLabel: { color: '#fff', fontSize: 15, fontWeight: '700' },
 });

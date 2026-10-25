@@ -85,4 +85,50 @@ describe('Messages Routes', () => {
     const body = await res.json() as any;
     assert.ok(res.status === 503 || (res.status === 400 && body.error.code === 'validation_error'));
   });
+
+  it('POST /calls - requires mobile auth', async () => {
+    const app = new Hono<AppEnv>();
+    const auth = await authHeader('admin', 'admin-id');
+    app.route('/v1/messages', messagesRoutes);
+
+    const res = await app.request('/v1/messages/calls', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...auth },
+      body: JSON.stringify({}),
+    });
+
+    assert.ok(res.status >= 400);
+  });
+
+  it('POST /calls - validates profiles and call mode before database access', async () => {
+    const originalApiKey = process.env.STREAM_API_KEY;
+    const originalApiSecret = process.env.STREAM_API_SECRET;
+    process.env.STREAM_API_KEY = 'test-key';
+    process.env.STREAM_API_SECRET = 'test-secret';
+
+    try {
+      const app = new Hono<AppEnv>();
+      const auth = await authHeader('mobile', 'user-id');
+      app.route('/v1/messages', messagesRoutes);
+
+      const res = await app.request('/v1/messages/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...auth },
+        body: JSON.stringify({
+          mode: 'carrier-pigeon',
+          otherProfile: { id: 'not-a-uuid', type: 'business' },
+          viewerProfile: { id: 'not-a-uuid', type: 'personal' },
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const body = await res.json() as any;
+      assert.strictEqual(body.error.code, 'validation_error');
+    } finally {
+      if (originalApiKey === undefined) delete process.env.STREAM_API_KEY;
+      else process.env.STREAM_API_KEY = originalApiKey;
+      if (originalApiSecret === undefined) delete process.env.STREAM_API_SECRET;
+      else process.env.STREAM_API_SECRET = originalApiSecret;
+    }
+  });
 });

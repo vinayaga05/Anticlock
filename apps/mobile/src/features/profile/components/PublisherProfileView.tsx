@@ -378,7 +378,8 @@ export function PublisherProfileView({
           </PressableScale>
           <UserCallActions
             name={publisher?.displayName ?? 'User'}
-            userId={publisher?.id}
+            profileId={publisher?.id}
+            profileType={publisher?.type}
             avatarUrl={publisher?.avatarUrl}
           />
         </View>

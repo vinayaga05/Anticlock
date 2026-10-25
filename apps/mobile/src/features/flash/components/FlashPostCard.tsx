@@ -196,7 +196,8 @@ export function FlashPostCard({ post }: Props) {
           {post.isOwn ? null : (
             <UserCallActions
               name={post.author.name}
-              userId={post.author.id}
+              profileId={post.publisherProfileId ?? post.author.id}
+              profileType={post.publisherProfileType ?? post.author.profileType}
               avatarUrl={post.author.avatarUrl}
             />
           )}

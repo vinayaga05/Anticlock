@@ -8,10 +8,8 @@ import type { PublisherProfileType } from '@anticlock/contracts';
 export class StreamChatService {
   constructor(private client: StreamChat) {}
 
-  /**
-   * Upsert user in Stream and generate token
-   */
-  async createUserToken(userId: string): Promise<string> {
+  /** Upsert the current account user in Stream Chat. */
+  async syncUser(userId: string) {
     // Fetch user from our DB
     const [user] = await db
       .select({
@@ -33,6 +31,12 @@ export class StreamChatService {
       name: user.displayName,
       image: user.avatarUrl || undefined,
     });
+
+    return user;
+  }
+
+  async createUserToken(userId: string): Promise<string> {
+    const user = await this.syncUser(userId);
 
     // Generate token
     const token = this.client.createToken(user.id);
@@ -66,6 +70,7 @@ export class StreamChatService {
     // Create or get channel
     const channel = this.client.channel('messaging', channelId, {
       members: [userId, otherUserId],
+      created_by_id: userId,
     });
 
     await channel.create();
@@ -95,6 +100,7 @@ export class StreamChatService {
     const channelId = `profile-${createHash('sha256').update(profilePair.join('|')).digest('hex').slice(0, 48)}`;
     const channel = this.client.channel('messaging', channelId, {
       members,
+      created_by_id: input.viewerUserId,
       profile_members: [
         {
           user_id: input.viewerUserId,

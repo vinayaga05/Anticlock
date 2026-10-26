@@ -51,6 +51,7 @@ export const createCallRequestSchema = z.object({
   otherProfile: publisherRefSchema,
   viewerProfile: publisherRefSchema,
   mode: z.enum(['audio', 'video']),
+  bookingId: z.string().uuid().optional(),
 });
 
 export const createCallResponseSchema = z.object({

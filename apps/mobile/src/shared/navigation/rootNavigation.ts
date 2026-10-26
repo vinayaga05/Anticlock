@@ -24,9 +24,12 @@ export function routeForNotification(
   const bookingId = typeof data.bookingId === 'string' ? data.bookingId : null;
   const providerId = typeof data.providerId === 'string' ? data.providerId : null;
   if (data.kind === 'booking' && bookingId) {
-    return data.screen === 'ProviderDashboard' && providerId
-      ? { screen: 'ProviderDashboard', params: { providerId } }
-      : { screen: 'MyBookings' };
+    if (data.screen === 'ProviderDashboard' && providerId) {
+      return { screen: 'ProviderDashboard', params: { providerId } };
+    }
+    return data.screen === 'MyBookings'
+      ? { screen: 'MyBookings' }
+      : { screen: 'BookingDetail', params: { bookingId } };
   }
   return null;
 }

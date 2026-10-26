@@ -51,8 +51,8 @@ export function NextUpBookingCard({ booking, onPress: _onPress, onAction }: Prop
         <View style={styles.metaRow}>
           <Text style={[styles.whenTop, { color: theme.colors.textPrimary }]}>{when}</Text>
           <BookingStatusPill
-            status={booking.isOnline ? 'online_live' : booking.status}
-            label={booking.isOnline ? 'ONLINE' : booking.statusLabel}
+            status={booking.status}
+            label={booking.statusLabel}
           />
         </View>
 
@@ -79,6 +79,11 @@ export function NextUpBookingCard({ booking, onPress: _onPress, onAction }: Prop
             ) : null}
             <Text style={[styles.service, { color: theme.colors.textSecondary }]}>
               {booking.serviceTitle}
+            </Text>
+            <Text style={[styles.service, { color: theme.colors.textSecondary }]}>
+              {booking.isOnline ? 'Online' : 'On-site'}
+              {booking.amount != null ? ` · ₹${booking.amount}` : ''}
+              {booking.paymentStatus ? ` · ${booking.paymentStatus}` : ''}
             </Text>
           </View>
         </View>

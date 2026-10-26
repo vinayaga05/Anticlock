@@ -1,29 +1,29 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiRequest, ApiError } from './client';
+import {
+  useInfiniteQuery,
+  useQuery,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { apiRequest } from './client';
 import { isApiEnabled } from './config';
 import type {
   Notification,
   NotificationListResponse,
   Platform,
 } from '@anticlock/contracts';
+import { readStoredSession } from '@/shared/services/auth/authService';
 
 export type { Notification };
 
 export function useNotifications(options?: { unreadOnly?: boolean }) {
-  return useQuery({
+  const canFetch = isApiEnabled && Boolean(readStoredSession()?.token);
+  return useInfiniteQuery({
     queryKey: ['notifications', options?.unreadOnly ? 'unread' : 'all'],
-    queryFn: async () => {
-      if (!isApiEnabled) {
-        // Return mock data when API is disabled
-        return {
-          notifications: [],
-          nextCursor: null,
-          unreadCount: 0,
-        };
-      }
-
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) => {
       const params = new URLSearchParams();
-      params.set('limit', '50');
+      params.set('limit', '30');
+      if (pageParam) params.set('cursor', pageParam);
       if (options?.unreadOnly) {
         params.set('unreadOnly', 'true');
       }
@@ -33,12 +33,14 @@ export function useNotifications(options?: { unreadOnly?: boolean }) {
       );
       return response;
     },
-    enabled: isApiEnabled,
-    staleTime: 30000, // 30 seconds
+    getNextPageParam: lastPage => lastPage.nextCursor ?? undefined,
+    enabled: canFetch,
+    staleTime: 30_000,
   });
 }
 
 export function useUnreadCount() {
+  const canFetch = isApiEnabled && Boolean(readStoredSession()?.token);
   return useQuery({
     queryKey: ['notifications', 'unread-count'],
     queryFn: async () => {
@@ -51,9 +53,8 @@ export function useUnreadCount() {
       );
       return response;
     },
-    enabled: isApiEnabled,
+    enabled: canFetch,
     staleTime: 30000,
-    refetchInterval: 60000, // Poll every minute for unread count
   });
 }
 

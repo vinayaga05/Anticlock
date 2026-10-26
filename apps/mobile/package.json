@@ -13,6 +13,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@anticlock/contracts": "workspace:*",
     "@anticlock/react-native-clip-editor": "workspace:*",
     "@op-engineering/op-sqlite": "18.2.5",
     "@react-native-community/blur": "^4.4.1",

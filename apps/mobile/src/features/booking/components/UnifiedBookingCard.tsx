@@ -149,6 +149,11 @@ export function UnifiedBookingCard({ booking, onPress, onAction, compact }: Prop
               {when}
               {booking.durationMinutes ? ` · ${booking.durationMinutes} min` : ''}
             </Text>
+            <Text style={[styles.meta, { color: theme.colors.textSecondary }]}>
+              {booking.isOnline ? 'Online' : 'On-site'}
+              {booking.amount != null ? ` · ₹${booking.amount}` : ''}
+              {booking.paymentStatus ? ` · ${booking.paymentStatus}` : ''}
+            </Text>
             {booking.locationLabel ? (
               <Text
                 style={[styles.location, { color: theme.colors.textSecondary }]}
@@ -231,6 +236,7 @@ const styles = StyleSheet.create({
     gap: 3,
     minWidth: 0,
   },
+  meta: { fontSize: 12, fontWeight: '600', textTransform: 'capitalize' },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',

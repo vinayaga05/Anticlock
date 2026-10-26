@@ -4,6 +4,7 @@ import {
   BookingListQuerySchema,
   CancelBookingRequestSchema,
   CreateBookingRequestSchema,
+  CustomerRescheduleBookingRequestSchema,
   CustomerUpdateBookingRequestSchema,
   UpdateBookingRequestSchema,
 } from '@anticlock/contracts';
@@ -47,6 +48,7 @@ bookingMobileRoutes.get('/', async c => {
     const query = {
       status: c.req.query('status'),
       category: c.req.query('category'),
+      filter: c.req.query('filter'),
       limit: c.req.query('limit') ? Number(c.req.query('limit')) : undefined,
       cursor: c.req.query('cursor'),
     };
@@ -110,6 +112,48 @@ bookingMobileRoutes.post('/:id/cancel', async c => {
     if (!booking) {
       return c.json(
         { error: { code: 'not_found', message: 'Booking not found or cannot be cancelled' } },
+        404,
+      );
+    }
+    return c.json({ booking });
+  } catch (err) {
+    const { status, body } = httpError(err, 'bookings');
+    return c.json(body, status);
+  }
+});
+
+bookingMobileRoutes.post('/:id/reschedule', async c => {
+  try {
+    const auth = requireMobileAuth(c);
+    const body = CustomerRescheduleBookingRequestSchema.parse(await c.req.json());
+    const booking = await bookingService.requestCustomerReschedule(
+      c.req.param('id'),
+      auth.sub,
+      body,
+    );
+    if (!booking) {
+      return c.json(
+        { error: { code: 'not_found', message: 'Booking not found' } },
+        404,
+      );
+    }
+    return c.json({ booking });
+  } catch (err) {
+    const { status, body } = httpError(err, 'bookings');
+    return c.json(body, status);
+  }
+});
+
+bookingMobileRoutes.post('/:id/confirm-reschedule', async c => {
+  try {
+    const auth = requireMobileAuth(c);
+    const booking = await bookingService.confirmCustomerReschedule(
+      c.req.param('id'),
+      auth.sub,
+    );
+    if (!booking) {
+      return c.json(
+        { error: { code: 'not_found', message: 'Booking not found' } },
         404,
       );
     }

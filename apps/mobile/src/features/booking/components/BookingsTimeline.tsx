@@ -12,6 +12,7 @@ import { UnifiedBookingCard } from '@/features/booking/components/UnifiedBooking
 import { useBookingsQuery } from '@/shared/api';
 import { useCancelAnyBookingMutation } from '@/shared/api/bookingHooks';
 import { isApiEnabled } from '@/shared/api/config';
+import { readStoredSession } from '@/shared/services/auth/authService';
 import { mapApiBookingToConsolidated } from '@/shared/utils/bookingMappers';
 import {
   applyAdvancedFilters,
@@ -20,7 +21,6 @@ import {
   BookingFilter,
   ConsolidatedBooking,
   DEFAULT_ADVANCED_FILTERS,
-  filterBookings,
   getPastBookings,
   groupBookingsByTimeline,
   navigateBookingTarget,
@@ -30,12 +30,14 @@ type BookingsTimelineProps = {
   filterSheetOpen?: boolean;
   onFilterSheetOpenChange?: (open: boolean) => void;
   showFilterButton?: boolean;
+  searchQuery?: string;
 };
 
 export function BookingsTimeline({
   filterSheetOpen,
   onFilterSheetOpenChange,
   showFilterButton = true,
+  searchQuery = '',
 }: BookingsTimelineProps) {
   const theme = useTheme();
   const navigation = useNavigation<any>();
@@ -49,18 +51,38 @@ export function BookingsTimeline({
   const setSheetOpen = onFilterSheetOpenChange ?? setInternalSheetOpen;
 
   // Bookings are server-owned; never show fixture bookings to signed-in users.
-  const { data: apiData, isLoading, error, refetch } = useBookingsQuery('all');
+  const authenticated = Boolean(readStoredSession()?.token);
+  const {
+    data: apiData,
+    isLoading,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useBookingsQuery(filter);
 
   const allBookings = useMemo(() => {
     return isApiEnabled
-      ? (apiData?.bookings ?? []).map(mapApiBookingToConsolidated)
+      ? (apiData?.pages.flatMap(page => page.bookings) ?? []).map(
+          mapApiBookingToConsolidated,
+        )
       : [];
   }, [apiData]);
 
+  const counts = apiData?.pages[0]?.counts;
+
   const filtered = useMemo(() => {
-    const tabbed = filterBookings(allBookings, filter);
-    return applyAdvancedFilters(tabbed, advanced);
-  }, [allBookings, filter, advanced]);
+    const needle = searchQuery.trim().toLowerCase();
+    const searched = needle
+      ? allBookings.filter(booking =>
+          [booking.providerName, booking.serviceTitle, booking.customerName]
+            .filter(Boolean)
+            .some(value => value!.toLowerCase().includes(needle)),
+        )
+      : allBookings;
+    return applyAdvancedFilters(searched, advanced);
+  }, [allBookings, searchQuery, advanced]);
 
   const { nextUp, sections } = useMemo(
     () => groupBookingsByTimeline(filtered),
@@ -117,11 +139,26 @@ export function BookingsTimeline({
 
   const hasUpcoming = nextUp || sections.some(s => s.items.length > 0);
 
+  if (!isApiEnabled || !authenticated) {
+    return (
+      <EmptyState
+        icon="calendar"
+        title="Bookings unavailable"
+        description={
+          authenticated
+            ? 'Connect to the Anticlock API to load your bookings.'
+            : 'Sign in to view your bookings.'
+        }
+      />
+    );
+  }
+
   if (isLoading) {
     return (
       <View style={styles.wrap}>
         <BookingFilterBar
           active={filter}
+          counts={counts}
           onChange={setFilter}
           onOpenFilters={showFilterButton ? () => setSheetOpen(true) : undefined}
         />
@@ -139,11 +176,12 @@ export function BookingsTimeline({
       <View style={styles.wrap}>
         <BookingFilterBar
           active={filter}
+          counts={counts}
           onChange={setFilter}
           onOpenFilters={showFilterButton ? () => setSheetOpen(true) : undefined}
         />
         <EmptyState
-          icon="alert-circle"
+          icon="calendar"
           title="Failed to load bookings"
           description="Please check your connection and try again."
           actionLabel="Retry"
@@ -157,6 +195,7 @@ export function BookingsTimeline({
     <View style={styles.wrap}>
       <BookingFilterBar
         active={filter}
+        counts={counts}
         onChange={setFilter}
         onOpenFilters={showFilterButton ? () => setSheetOpen(true) : undefined}
       />
@@ -211,6 +250,17 @@ export function BookingsTimeline({
               </View>
             </View>
           ) : null}
+
+          {hasNextPage ? (
+            <PressableScale
+              onPress={() => void fetchNextPage()}
+              disabled={isFetchingNextPage}
+              style={[styles.loadMore, { borderColor: theme.colors.borderSoft }]}>
+              <Text style={[styles.loadMoreText, { color: theme.colors.primary }]}>
+                {isFetchingNextPage ? 'Loading…' : 'Load more bookings'}
+              </Text>
+            </PressableScale>
+          ) : null}
         </View>
       )}
 
@@ -249,4 +299,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 20,
   },
+  loadMore: {
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 12,
+  },
+  loadMoreText: { fontSize: 13, fontWeight: '800' },
 });

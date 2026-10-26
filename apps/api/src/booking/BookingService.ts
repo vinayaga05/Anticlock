@@ -16,8 +16,10 @@ import {
 import type {
   Booking,
   BookingAdminListItem,
+  BookingListFilter,
   BookingStatus,
   CreateBookingRequest,
+  CustomerRescheduleBookingRequest,
   CustomerUpdateBookingRequest,
   ProviderBookingActionRequest,
   UpdateBookingRequest,
@@ -33,6 +35,10 @@ import {
 } from '../db/schema.js';
 import { parseCursorDate } from '../lib/cursor.js';
 import { notificationService } from '../notifications/NotificationService.js';
+import {
+  bookingChangedEvent,
+  publishBookingEvent,
+} from '../realtime/bookingEvents.js';
 
 const ACTIVE_STATUSES = ['pending', 'confirmed', 'reschedule_requested'];
 const PROVIDER_ROLES = ['owner', 'admin'];
@@ -99,6 +105,17 @@ function assertWithinProviderHours(
 }
 
 export class BookingService {
+  private async providerIdsForUser(mobileUserId: string) {
+    const rows = await db
+      .select({ providerId: providerMemberships.providerId })
+      .from(providerMemberships)
+      .where(and(
+        eq(providerMemberships.mobileUserId, mobileUserId),
+        inArray(providerMemberships.role, PROVIDER_ROLES),
+      ));
+    return [...new Set(rows.map(row => row.providerId))];
+  }
+
   private async providerOwnerIds(providerId: string) {
     const rows = await db
       .select({ mobileUserId: providerMemberships.mobileUserId })
@@ -116,6 +133,19 @@ export class BookingService {
   ) {
     const owners = await this.providerOwnerIds(providerId);
     await Promise.allSettled(owners.map(userId => notificationService.notifyUser(userId, payload)));
+    return owners;
+  }
+
+  private async publishChange(
+    row: typeof bookings.$inferSelect,
+    additionalUserIds: string[] = [],
+  ) {
+    const owners = row.providerId ? await this.providerOwnerIds(row.providerId) : [];
+    await publishBookingEvent(bookingChangedEvent({
+      id: row.id,
+      status: (this.mapBookingRow(row).status),
+      userIds: [row.mobileUserId, ...owners, ...additionalUserIds],
+    }));
   }
 
   private async assertProviderCanBook(
@@ -224,6 +254,7 @@ export class BookingService {
           },
           metadata: {
             ...(request.metadata ?? {}),
+            bookingType: request.bookingType ?? request.category,
             // This will become provider-configurable; clients cannot weaken it.
             cancellationWindowHours: 2,
           },
@@ -231,7 +262,7 @@ export class BookingService {
         .returning();
     });
 
-    const booking = this.mapBookingRow(row!);
+    const booking = this.mapBookingRow(row!, 'customer');
     await this.notifyProviderOwners(request.providerId, {
       type: 'booking_created',
       title: 'New booking request',
@@ -240,28 +271,51 @@ export class BookingService {
         kind: 'booking',
         bookingId: booking.id,
         providerId: request.providerId,
-        screen: 'ProviderDashboard',
+        screen: 'BookingDetail',
       },
     });
+    await this.publishChange(row!);
     return booking;
   }
 
   async getBooking(bookingId: string, mobileUserId: string): Promise<Booking | null> {
-    const [row] = await db.select().from(bookings).where(and(
-      eq(bookings.id, bookingId),
-      eq(bookings.mobileUserId, mobileUserId),
-    ));
-    return row ? this.mapBookingRow(row) : null;
+    const providerIds = await this.providerIdsForUser(mobileUserId);
+    const access = providerIds.length
+      ? or(eq(bookings.mobileUserId, mobileUserId), inArray(bookings.providerId, providerIds))
+      : eq(bookings.mobileUserId, mobileUserId);
+    const [row] = await db
+      .select({ booking: bookings, customerName: mobileUsers.displayName })
+      .from(bookings)
+      .innerJoin(mobileUsers, eq(bookings.mobileUserId, mobileUsers.id))
+      .where(and(eq(bookings.id, bookingId), access));
+    return row
+      ? this.mapBookingRow(
+          row.booking,
+          row.booking.mobileUserId === mobileUserId ? 'customer' : 'provider',
+          row.customerName,
+        )
+      : null;
   }
 
   async listBookings(
     mobileUserId: string,
-    options: { status?: BookingStatus | 'upcoming' | 'past'; limit?: number; cursor?: string } = {},
-  ): Promise<{ bookings: Booking[]; nextCursor: string | null }> {
+    options: {
+      status?: BookingStatus | 'upcoming' | 'past';
+      category?: Booking['category'];
+      filter?: BookingListFilter;
+      limit?: number;
+      cursor?: string;
+    } = {},
+  ) {
     const limit = Math.min(options.limit ?? 20, 100);
     const now = new Date();
-    const conditions = [eq(bookings.mobileUserId, mobileUserId)];
+    const providerIds = await this.providerIdsForUser(mobileUserId);
+    const access = providerIds.length
+      ? or(eq(bookings.mobileUserId, mobileUserId), inArray(bookings.providerId, providerIds))!
+      : eq(bookings.mobileUserId, mobileUserId);
+    const conditions = [access];
     if (options.cursor) conditions.push(lt(bookings.startsAt, parseCursorDate(options.cursor)));
+    if (options.category) conditions.push(eq(bookings.category, options.category));
     if (options.status === 'upcoming') {
       conditions.push(and(gte(bookings.startsAt, now), inArray(bookings.status, ACTIVE_STATUSES))!);
     } else if (options.status === 'past') {
@@ -271,13 +325,39 @@ export class BookingService {
       )!);
     } else if (options.status) conditions.push(eq(bookings.status, options.status));
 
-    const rows = await db.select().from(bookings).where(and(...conditions))
+    if (options.filter === 'online') {
+      conditions.push(eq(bookings.serviceMode, 'online'));
+    } else if (options.filter === 'on_site') {
+      conditions.push(inArray(bookings.serviceMode, ['center', 'home']));
+    } else if (options.filter === 'classes') {
+      conditions.push(or(
+        eq(bookings.category, 'class'),
+        sql`${bookings.metadata}->>'bookingType' IN ('class', 'group_session', 'course', 'workshop')`,
+      )!);
+    }
+
+    const rows = await db
+      .select({ booking: bookings, customerName: mobileUsers.displayName })
+      .from(bookings)
+      .innerJoin(mobileUsers, eq(bookings.mobileUserId, mobileUsers.id))
+      .where(and(...conditions))
       .orderBy(desc(bookings.startsAt)).limit(limit + 1);
     const hasMore = rows.length > limit;
     const items = rows.slice(0, limit);
+    const [counts] = await db.select({
+      all: sql<number>`count(*)::int`,
+      onSite: sql<number>`count(*) filter (where ${bookings.serviceMode} in ('center', 'home'))::int`,
+      online: sql<number>`count(*) filter (where ${bookings.serviceMode} = 'online')::int`,
+      classes: sql<number>`count(*) filter (where ${bookings.category} = 'class' or ${bookings.metadata}->>'bookingType' in ('class', 'group_session', 'course', 'workshop'))::int`,
+    }).from(bookings).where(access);
     return {
-      bookings: items.map(row => this.mapBookingRow(row)),
-      nextCursor: hasMore ? items.at(-1)!.startsAt.toISOString() : null,
+      bookings: items.map(({ booking, customerName }) => this.mapBookingRow(
+        booking,
+        booking.mobileUserId === mobileUserId ? 'customer' : 'provider',
+        customerName,
+      )),
+      nextCursor: hasMore ? items.at(-1)!.booking.startsAt.toISOString() : null,
+      counts: counts ?? { all: 0, onSite: 0, online: 0, classes: 0 },
     };
   }
 
@@ -298,7 +378,8 @@ export class BookingService {
       detail: { ...existing.detail, ...update.detail },
       updatedAt: new Date(),
     }).where(eq(bookings.id, bookingId)).returning();
-    return this.mapBookingRow(row!);
+    await this.publishChange(row!);
+    return this.mapBookingRow(row!, 'customer');
   }
 
   async cancelBooking(bookingId: string, mobileUserId: string, reason?: string) {
@@ -325,10 +406,84 @@ export class BookingService {
         type: 'booking_cancelled',
         title: 'Booking cancelled',
         body: `${object(row.detail).serviceTitle ?? 'A booking'} was cancelled by the customer.`,
-        data: { kind: 'booking', bookingId: row.id, providerId: row.providerId, screen: 'ProviderDashboard' },
+        data: { kind: 'booking', bookingId: row.id, providerId: row.providerId, screen: 'BookingDetail' },
       });
     }
-    return row ? this.mapBookingRow(row) : null;
+    if (row) await this.publishChange(row);
+    return row ? this.mapBookingRow(row, 'customer') : null;
+  }
+
+  async requestCustomerReschedule(
+    bookingId: string,
+    mobileUserId: string,
+    request: CustomerRescheduleBookingRequest,
+  ): Promise<Booking | null> {
+    const result = await db.transaction(async tx => {
+      const [existing] = await tx.select().from(bookings).where(and(
+        eq(bookings.id, bookingId),
+        eq(bookings.mobileUserId, mobileUserId),
+      )).for('update');
+      if (!existing) return null;
+      if (!['pending', 'confirmed', 'reschedule_requested'].includes(existing.status)) {
+        throw appError('This booking cannot be rescheduled', 'invalid_transition', 409);
+      }
+      if (!existing.providerId) {
+        throw appError('This provider is unavailable', 'provider_unavailable', 409);
+      }
+      const startsAt = new Date(request.startsAt);
+      const endsAt = request.endsAt !== undefined
+        ? request.endsAt ? new Date(request.endsAt) : null
+        : new Date(startsAt.getTime() + (existing.durationMinutes ?? 60) * 60_000);
+      if (startsAt <= new Date() || (endsAt && endsAt <= startsAt)) {
+        throw appError('Choose a valid future date and time', 'invalid_schedule', 400);
+      }
+      const [provider] = await tx.select().from(providers).where(and(
+        eq(providers.id, existing.providerId),
+        eq(providers.status, 'active'),
+      ));
+      if (!provider) throw appError('This provider is unavailable', 'provider_unavailable', 409);
+      assertWithinProviderHours(
+        provider,
+        startsAt,
+        endsAt ?? new Date(startsAt.getTime() + 60 * 60_000),
+      );
+      await this.assertNoConflict(
+        tx,
+        existing.providerId,
+        mobileUserId,
+        startsAt,
+        endsAt ?? new Date(startsAt.getTime() + 60 * 60_000),
+        existing.id,
+      );
+      const [row] = await tx.update(bookings).set({
+        status: 'reschedule_requested',
+        startsAt,
+        endsAt,
+        updatedAt: new Date(),
+        metadata: {
+          ...object(existing.metadata),
+          rescheduleRequestedBy: 'customer',
+          ...(request.reason ? { customerRescheduleReason: request.reason } : {}),
+        },
+      }).where(eq(bookings.id, bookingId)).returning();
+      return row!;
+    });
+    if (!result) return null;
+    if (result.providerId) {
+      await this.notifyProviderOwners(result.providerId, {
+        type: 'booking_rescheduled',
+        title: 'Customer requested a new time',
+        body: `${object(result.detail).serviceTitle ?? 'A booking'} was moved to ${result.startsAt.toLocaleString('en-IN')}.`,
+        data: {
+          kind: 'booking',
+          bookingId: result.id,
+          providerId: result.providerId,
+          screen: 'BookingDetail',
+        },
+      });
+    }
+    await this.publishChange(result);
+    return this.mapBookingRow(result, 'customer');
   }
 
   async actOnProviderBooking(
@@ -399,7 +554,11 @@ export class BookingService {
         endsAt,
         updatedAt: new Date(),
         completedAt: nextStatus === 'completed' ? new Date() : existing.completedAt,
-        metadata: { ...object(existing.metadata), ...(request.reason ? { providerReason: request.reason } : {}) },
+        metadata: {
+          ...object(existing.metadata),
+          ...(request.action === 'reschedule' ? { rescheduleRequestedBy: 'provider' } : {}),
+          ...(request.reason ? { providerReason: request.reason } : {}),
+        },
       }).where(and(eq(bookings.id, bookingId), eq(bookings.providerId, providerId))).returning();
       return { existing, row: row!, startsAt };
     });
@@ -416,9 +575,44 @@ export class BookingService {
               : { type: 'status_update' as const, title: 'Booking update', body: 'The provider marked this booking as no-show.' };
     await notificationService.notifyUser(result.existing.mobileUserId, {
       ...notification,
-      data: { kind: 'booking', bookingId, providerId, screen: 'MyBookings' },
+      data: { kind: 'booking', bookingId, providerId, screen: 'BookingDetail' },
     });
-    return this.mapBookingRow(result.row);
+    await this.publishChange(result.row, [mobileUserId]);
+    return this.mapBookingRow(result.row, 'provider');
+  }
+
+  async confirmCustomerReschedule(bookingId: string, mobileUserId: string) {
+    const [existing] = await db.select().from(bookings).where(and(
+      eq(bookings.id, bookingId),
+      eq(bookings.mobileUserId, mobileUserId),
+    ));
+    if (!existing) return null;
+    if (
+      existing.status !== 'reschedule_requested' ||
+      object(existing.metadata).rescheduleRequestedBy !== 'provider'
+    ) {
+      throw appError('There is no provider time proposal to accept', 'invalid_transition', 409);
+    }
+    const [row] = await db.update(bookings).set({
+      status: 'confirmed',
+      updatedAt: new Date(),
+      metadata: { ...object(existing.metadata), rescheduleAcceptedAt: new Date().toISOString() },
+    }).where(and(
+      eq(bookings.id, bookingId),
+      eq(bookings.mobileUserId, mobileUserId),
+      eq(bookings.status, 'reschedule_requested'),
+    )).returning();
+    if (!row) throw appError('Booking changed. Refresh and try again.', 'booking_changed', 409);
+    if (row.providerId) {
+      await this.notifyProviderOwners(row.providerId, {
+        type: 'booking_confirmed',
+        title: 'New booking time accepted',
+        body: `The customer accepted the new time for ${object(row.detail).serviceTitle ?? 'the booking'}.`,
+        data: { kind: 'booking', bookingId: row.id, providerId: row.providerId, screen: 'BookingDetail' },
+      });
+    }
+    await this.publishChange(row);
+    return this.mapBookingRow(row, 'customer');
   }
 
   async sendDueReminders(now = new Date()) {
@@ -440,7 +634,7 @@ export class BookingService {
         type: 'booking_reminder' as const,
         title: 'Booking reminder',
         body: `${object(row.detail).serviceTitle ?? 'Your booking'} starts ${row.startsAt.toLocaleString('en-IN')}.`,
-        data: { kind: 'booking', bookingId: row.id, providerId: row.providerId, screen: 'MyBookings' },
+        data: { kind: 'booking', bookingId: row.id, providerId: row.providerId, screen: 'BookingDetail' },
       };
       await notificationService.notifyUser(row.mobileUserId, payload);
       if (row.providerId) {
@@ -448,10 +642,11 @@ export class BookingService {
           ...payload,
           data: {
             ...payload.data,
-            screen: 'ProviderDashboard',
+            screen: 'BookingDetail',
           },
         });
       }
+      await this.publishChange(row);
       sent += 1;
     }
     return sent;
@@ -518,21 +713,41 @@ export class BookingService {
     }
     if (update.metadata) values.metadata = update.metadata;
     const [row] = await db.update(bookings).set(values).where(eq(bookings.id, bookingId)).returning();
+    if (row) await this.publishChange(row);
     return row ? this.mapBookingRow(row) : null;
   }
 
-  private mapBookingRow(row: typeof bookings.$inferSelect): Booking {
+  private mapBookingRow(
+    row: typeof bookings.$inferSelect,
+    viewerRole: Booking['viewerRole'] = 'customer',
+    customerName?: string,
+  ): Booking {
     const legacyStatus: Record<string, BookingStatus> = {
       provider_assigned: 'confirmed',
       on_the_way: 'confirmed',
       in_progress: 'confirmed',
     };
+    const metadata = object(row.metadata);
+    const rawType = typeof metadata.bookingType === 'string'
+      ? metadata.bookingType
+      : row.category;
+    const supportedTypes: Booking['bookingType'][] = [
+      'appointment', 'class', 'group_session', 'course', 'workshop',
+      'home_service', 'lab', 'event', 'hospital', 'other',
+    ];
+    const bookingType = supportedTypes.includes(rawType as Booking['bookingType'])
+      ? rawType as Booking['bookingType']
+      : 'other';
     return {
       id: row.id,
       mobileUserId: row.mobileUserId,
       providerId: row.providerId,
       categoryId: row.categoryId,
       category: row.category as Booking['category'],
+      bookingMode: row.serviceMode === 'online' ? 'online' : 'on_site',
+      bookingType,
+      viewerRole,
+      ...(customerName ? { customerName } : {}),
       status: legacyStatus[row.status] ?? row.status as Booking['status'],
       serviceMode: row.serviceMode as Booking['serviceMode'],
       startsAt: row.startsAt.toISOString(),

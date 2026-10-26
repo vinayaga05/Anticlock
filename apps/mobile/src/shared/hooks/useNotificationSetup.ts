@@ -41,6 +41,11 @@ export function useNotificationSetup(isAuthenticated: boolean) {
     // User is authenticated, set up notifications
     let unsubscribeForeground: (() => void) | undefined;
     let unsubscribeTokenRefresh: (() => void) | undefined;
+    const appStateSubscription = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      }
+    });
 
     const setupNotifications = async () => {
       // Request permission if not already requested
@@ -71,6 +76,10 @@ export function useNotificationSetup(isAuthenticated: boolean) {
         void queryClient.invalidateQueries({ queryKey: ['notifications'] });
         if ((data as Record<string, unknown>)?.kind === 'provider_application') {
           void queryClient.invalidateQueries({ queryKey: ['provider'] });
+        }
+        if ((data as Record<string, unknown>)?.kind === 'booking') {
+          void queryClient.invalidateQueries({ queryKey: ['bookings'] });
+          void queryClient.invalidateQueries({ queryKey: ['provider', 'business'] });
         }
         // TODO: Show in-app notification banner or update badge
       });
@@ -103,6 +112,7 @@ export function useNotificationSetup(isAuthenticated: boolean) {
     return () => {
       unsubscribeForeground?.();
       unsubscribeTokenRefresh?.();
+      appStateSubscription.remove();
     };
   }, [isAuthenticated, queryClient, registerToken, unregisterToken]);
 

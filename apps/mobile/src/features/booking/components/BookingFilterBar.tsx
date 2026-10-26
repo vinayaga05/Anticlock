@@ -16,10 +16,16 @@ type Props = {
   active: BookingFilter;
   onChange: (filter: BookingFilter) => void;
   onOpenFilters?: () => void;
+  counts?: { all: number; onSite: number; online: number; classes: number };
 };
 
-export function BookingFilterBar({ active, onChange, onOpenFilters }: Props) {
+export function BookingFilterBar({ active, onChange, onOpenFilters, counts }: Props) {
   const theme = useTheme();
+  const countFor = (filter: BookingFilter) => {
+    if (!counts) return null;
+    if (filter === 'on_site') return counts.onSite;
+    return counts[filter];
+  };
 
   return (
     <View style={styles.wrap}>
@@ -50,6 +56,25 @@ export function BookingFilterBar({ active, onChange, onOpenFilters }: Props) {
                 ]}>
                 {item.label}
               </Text>
+              {countFor(item.id) !== null ? (
+                <View
+                  style={[
+                    styles.count,
+                    {
+                      backgroundColor: isActive
+                        ? 'rgba(255,255,255,0.22)'
+                        : theme.colors.surface,
+                    },
+                  ]}>
+                  <Text
+                    style={[
+                      styles.countText,
+                      { color: isActive ? '#FFFFFF' : theme.colors.textSecondary },
+                    ]}>
+                    {countFor(item.id)}
+                  </Text>
+                </View>
+              ) : null}
             </PressableScale>
           );
         })}
@@ -79,6 +104,9 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   pill: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
@@ -88,6 +116,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  count: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  countText: { fontSize: 10, fontWeight: '800' },
   filterIcon: {
     width: 38,
     height: 38,

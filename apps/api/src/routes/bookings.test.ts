@@ -25,6 +25,8 @@ describe('Booking Routes', () => {
     ['GET', '/v1/bookings/b1'],
     ['PATCH', '/v1/bookings/b1'],
     ['POST', '/v1/bookings/b1/cancel'],
+    ['POST', '/v1/bookings/b1/reschedule'],
+    ['POST', '/v1/bookings/b1/confirm-reschedule'],
     ['GET', '/admin/bookings'],
   ] as const) {
     it(`${method} ${path} - requires authentication`, async () => {
@@ -46,6 +48,13 @@ describe('Booking Routes', () => {
 
   it('GET /v1/bookings - rejects invalid status filter with 400', async () => {
     const res = await buildApp().request('/v1/bookings?status=bogus', {
+      headers: await authHeader('mobile', 'user-1'),
+    });
+    assert.strictEqual(res.status, 400);
+  });
+
+  it('GET /v1/bookings - rejects an unknown Knock filter with 400', async () => {
+    const res = await buildApp().request('/v1/bookings?filter=nearby', {
       headers: await authHeader('mobile', 'user-1'),
     });
     assert.strictEqual(res.status, 400);

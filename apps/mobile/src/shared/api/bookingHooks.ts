@@ -1,9 +1,17 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import type {
   Booking,
+  BookingListFilter,
+  BookingListResponse,
   CreateBookingRequest,
   CustomerUpdateBookingRequest,
   CancelBookingRequest,
+  CustomerRescheduleBookingRequest,
 } from '@anticlock/contracts';
 import { apiRequest } from './client';
 import { isApiEnabled } from './config';
@@ -16,39 +24,38 @@ function ensureAuthToken() {
   }
 }
 
-export function useBookingsQuery(status?: 'upcoming' | 'past' | 'all') {
+export function useBookingsQuery(filter: BookingListFilter = 'all') {
   const session = readStoredSession();
   const canFetch = isApiEnabled && Boolean(session?.token);
 
-  return useQuery({
-    queryKey: ['bookings', status ?? 'all', canFetch ? 'api' : 'mock'],
-    queryFn: async () => {
-      // No bearer token: do not call the API (BookingsTimeline falls back to mocks).
-      if (!canFetch) {
-        return { bookings: [], nextCursor: null };
-      }
-      const qs = status && status !== 'all' ? `?status=${status}` : '';
-      const res = await apiRequest<{ bookings: Booking[]; nextCursor: string | null }>(
-        `/v1/bookings${qs}`,
+  return useInfiniteQuery({
+    queryKey: ['bookings', 'list', filter],
+    enabled: canFetch,
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) => {
+      ensureAuthToken();
+      const params = new URLSearchParams({ filter, limit: '20' });
+      if (pageParam) params.set('cursor', pageParam);
+      return apiRequest<BookingListResponse>(
+        `/v1/bookings?${params.toString()}`,
       );
-      return res;
     },
-    staleTime: canFetch ? 30_000 : Infinity,
+    getNextPageParam: lastPage => lastPage.nextCursor ?? undefined,
+    staleTime: 30_000,
   });
 }
 
 export function useBookingQuery(bookingId: string) {
+  const canFetch = isApiEnabled && Boolean(readStoredSession()?.token);
   return useQuery({
-    queryKey: ['bookings', bookingId, isApiEnabled ? 'api' : 'mock'],
+    queryKey: ['bookings', 'detail', bookingId],
+    enabled: canFetch && Boolean(bookingId),
     queryFn: async () => {
-      if (!isApiEnabled) {
-        return null;
-      }
       await ensureAuthToken();
       const res = await apiRequest<{ booking: Booking }>(`/v1/bookings/${bookingId}`);
       return res.booking;
     },
-    staleTime: isApiEnabled ? 30_000 : Infinity,
+    staleTime: 30_000,
   });
 }
 
@@ -135,6 +142,46 @@ export function useCancelAnyBookingMutation() {
     onSuccess: booking => {
       qc.invalidateQueries({ queryKey: ['bookings'] });
       qc.invalidateQueries({ queryKey: ['bookings', booking.id] });
+      qc.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
+export function useCustomerRescheduleBookingMutation(bookingId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (request: CustomerRescheduleBookingRequest) => {
+      if (!isApiEnabled) throw new Error('API not enabled');
+      await ensureAuthToken();
+      const res = await apiRequest<{ booking: Booking }>(
+        `/v1/bookings/${bookingId}/reschedule`,
+        { method: 'POST', body: JSON.stringify(request) },
+      );
+      return res.booking;
+    },
+    onSuccess: booking => {
+      qc.setQueryData(['bookings', 'detail', booking.id], booking);
+      qc.invalidateQueries({ queryKey: ['bookings'] });
+      qc.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
+export function useConfirmCustomerRescheduleMutation(bookingId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      if (!isApiEnabled) throw new Error('API not enabled');
+      await ensureAuthToken();
+      const res = await apiRequest<{ booking: Booking }>(
+        `/v1/bookings/${bookingId}/confirm-reschedule`,
+        { method: 'POST' },
+      );
+      return res.booking;
+    },
+    onSuccess: booking => {
+      qc.setQueryData(['bookings', 'detail', booking.id], booking);
+      qc.invalidateQueries({ queryKey: ['bookings'] });
       qc.invalidateQueries({ queryKey: ['notifications'] });
     },
   });

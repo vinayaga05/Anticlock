@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { AppHeader } from '@/shared/components/AppHeader';
@@ -10,6 +10,8 @@ import { KnockBookingsList } from '@/features/messages/components/KnockBookingsL
 import { KnockChatList } from '@/features/messages/components/KnockChatList';
 import { KnockNotificationsList } from '@/features/messages/components/KnockNotificationsList';
 import type { KnockTab, MainTabParamList } from '@/shared/navigation/types';
+import { useUnreadCount } from '@/shared/api/notificationHooks';
+import { useStreamChat } from '@/shared/providers/StreamChatProvider';
 
 const TABS: { id: KnockTab; label: string }[] = [
   { id: 'notifications', label: 'Notifications' },
@@ -22,6 +24,31 @@ export function InboxScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<MainTabParamList, 'Knock'>>();
   const [tab, setTab] = useState<KnockTab>('bookings');
+  const [bookingSearch, setBookingSearch] = useState('');
+  const { data: unreadData } = useUnreadCount();
+  const { client, isReady } = useStreamChat();
+  const [chatUnread, setChatUnread] = useState(0);
+
+  useEffect(() => {
+    if (!client || !isReady) {
+      setChatUnread(0);
+      return;
+    }
+    const refresh = (event?: { total_unread_count?: number }) => {
+      const fromEvent = event?.total_unread_count;
+      const fromUser = (client.user as { total_unread_count?: number } | undefined)
+        ?.total_unread_count;
+      setChatUnread(fromEvent ?? fromUser ?? 0);
+    };
+    refresh();
+    const listeners = [
+      client.on('message.new', refresh),
+      client.on('message.read', refresh),
+      client.on('notification.mark_read', refresh),
+      client.on('connection.recovered', refresh),
+    ];
+    return () => listeners.forEach(listener => listener.unsubscribe());
+  }, [client, isReady]);
 
   useEffect(() => {
     const initialTab = route.params?.initialTab;
@@ -31,7 +58,7 @@ export function InboxScreen() {
   }, [route.params?.initialTab]);
 
   return (
-    <ScreenContainer scrollable={tab !== 'chat'} contentStyle={tab === 'chat' ? styles.chatContent : undefined}>
+    <ScreenContainer contentStyle={styles.content}>
       <AppHeader
         title="Knock"
         onNotificationsPress={() => setTab('notifications')}
@@ -68,26 +95,51 @@ export function InboxScreen() {
                 ]}>
                 {item.label}
               </Text>
+              {item.id === 'notifications' && (unreadData?.unreadCount ?? 0) > 0 ? (
+                <TabBadge count={unreadData!.unreadCount} />
+              ) : null}
+              {item.id === 'chat' && chatUnread > 0 ? <TabBadge count={chatUnread} /> : null}
             </PressableScale>
           );
         })}
       </View>
 
-      {tab === 'bookings' ? (
-        <SearchBar
-          placeholder="Search doctors, technicians, or classes..."
-          emphasized
-          showVoiceControls
-          compact
-        />
-      ) : null}
-
       <View style={styles.panel}>
-        {tab === 'notifications' ? <KnockNotificationsList /> : null}
-        {tab === 'bookings' ? <KnockBookingsList /> : null}
-        {tab === 'chat' ? <KnockChatList /> : null}
+        <ScrollView
+          style={tab === 'notifications' ? styles.visiblePanel : styles.hidden}
+          contentContainerStyle={styles.scrollPanel}
+          showsVerticalScrollIndicator={false}>
+          <KnockNotificationsList />
+        </ScrollView>
+        <ScrollView
+          style={tab === 'bookings' ? styles.visiblePanel : styles.hidden}
+          contentContainerStyle={styles.scrollPanel}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+          <SearchBar
+            value={bookingSearch}
+            onChangeText={setBookingSearch}
+            placeholder="Search providers, services, or classes..."
+            emphasized
+            showVoiceControls
+            compact
+          />
+          <KnockBookingsList searchQuery={bookingSearch} />
+        </ScrollView>
+        <View style={tab === 'chat' ? styles.chatContent : styles.hidden}>
+          <KnockChatList />
+        </View>
       </View>
     </ScreenContainer>
+  );
+}
+
+function TabBadge({ count }: { count: number }) {
+  const theme = useTheme();
+  return (
+    <View style={[styles.tabBadge, { backgroundColor: theme.colors.primary }]}>
+      <Text style={styles.tabBadgeText}>{count > 99 ? '99+' : count}</Text>
+    </View>
   );
 }
 
@@ -103,6 +155,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 40,
     paddingHorizontal: 6,
+    flexDirection: 'row',
+    gap: 5,
   },
   segmentLabel: {
     fontSize: 13,
@@ -112,5 +166,18 @@ const styles = StyleSheet.create({
     marginTop: 4,
     flex: 1,
   },
+  content: { flex: 1 },
+  visiblePanel: { flex: 1 },
+  scrollPanel: { gap: 16, paddingBottom: 24 },
+  hidden: { display: 'none' },
   chatContent: { flex: 1 },
+  tabBadge: {
+    minWidth: 19,
+    height: 19,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
 });

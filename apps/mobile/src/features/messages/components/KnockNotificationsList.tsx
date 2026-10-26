@@ -11,6 +11,7 @@ import { isApiEnabled } from '@/shared/api/config';
 import type { Notification } from '@/shared/api/notificationHooks';
 import { useNavigation } from '@react-navigation/native';
 import { routeForNotification } from '@/shared/navigation/rootNavigation';
+import { readStoredSession } from '@/shared/services/auth/authService';
 
 function getIconForType(type: string): string {
   switch (type) {
@@ -32,6 +33,13 @@ function getIconForType(type: string): string {
       return 'home';
     case 'status_update':
       return 'bell';
+    case 'explore_submission_received':
+    case 'explore_changes_requested':
+    case 'explore_approved':
+    case 'explore_rejected':
+    case 'explore_suspended':
+    case 'event_registration':
+      return 'calendar';
     case 'new_message':
       return 'message-circle';
     case 'community_post_comment':
@@ -67,7 +75,15 @@ function formatTimestamp(timestamp: string): string {
 export function KnockNotificationsList() {
   const theme = useTheme();
   const apiEnabled = isApiEnabled;
-  const { data, isLoading, error } = useNotifications();
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useNotifications();
   const markRead = useMarkNotificationRead();
   const navigation = useNavigation<any>();
 
@@ -83,12 +99,12 @@ export function KnockNotificationsList() {
 
   // This inbox represents persisted API notifications only. Showing fixtures
   // here can make an unsubmitted business or booking look real.
-  if (!apiEnabled) {
+  if (!apiEnabled || !readStoredSession()?.token) {
     return (
       <View style={[styles.wrap, styles.centerContent]}>
         <AppIcon name="bell-off" size={48} color={theme.colors.textTertiary} />
         <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-          Connect to the Anticlock API to view notifications
+          {apiEnabled ? 'Sign in to view notifications' : 'Connect to the Anticlock API to view notifications'}
         </Text>
       </View>
     );
@@ -108,11 +124,18 @@ export function KnockNotificationsList() {
         <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
           Failed to load notifications
         </Text>
+        <PressableScale
+          onPress={() => void refetch()}
+          style={[styles.retry, { borderColor: theme.colors.borderSoft }]}>
+          <Text style={{ color: theme.colors.primary, fontWeight: '800' }}>Retry</Text>
+        </PressableScale>
       </View>
     );
   }
 
-  if (!data || data.notifications.length === 0) {
+  const notifications = data?.pages.flatMap(page => page.notifications) ?? [];
+
+  if (notifications.length === 0) {
     return (
       <View style={[styles.wrap, styles.centerContent]}>
         <AppIcon
@@ -130,7 +153,7 @@ export function KnockNotificationsList() {
 
   return (
     <View style={styles.wrap}>
-      {data.notifications.map(notification => (
+      {notifications.map(notification => (
         <PressableScale
           key={notification.id}
           style={styles.row}
@@ -175,6 +198,16 @@ export function KnockNotificationsList() {
           ) : null}
         </PressableScale>
       ))}
+      {hasNextPage ? (
+        <PressableScale
+          onPress={() => void fetchNextPage()}
+          disabled={isFetchingNextPage}
+          style={[styles.retry, { borderColor: theme.colors.borderSoft }]}>
+          <Text style={{ color: theme.colors.primary, fontWeight: '800' }}>
+            {isFetchingNextPage ? 'Loading…' : 'Load more'}
+          </Text>
+        </PressableScale>
+      ) : null}
     </View>
   );
 }
@@ -231,5 +264,13 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     marginTop: 6,
+  },
+  retry: {
+    alignSelf: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    marginTop: 8,
   },
 });

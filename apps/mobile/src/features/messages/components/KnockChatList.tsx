@@ -50,7 +50,7 @@ function deliveryState(channel: Channel, message: LocalMessage | MessageResponse
 export function KnockChatList() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
-  const { client, isReady, isConnecting, error } = useStreamChat();
+  const { client, isReady, isConnecting, error, retry } = useStreamChat();
   const { user } = useAuth();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
@@ -138,6 +138,8 @@ export function KnockChatList() {
         icon="messages"
         title="Chat unavailable"
         description={error ? 'We could not connect to your conversations. Please try again.' : 'Sign in to load your conversations.'}
+        actionLabel={error ? 'Retry' : undefined}
+        onAction={error ? retry : undefined}
       />
     );
   }

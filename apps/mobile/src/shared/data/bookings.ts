@@ -1,5 +1,4 @@
 import { ServiceMode, FitnessClass } from '@/shared/types';
-import { doctors, fitnessClasses, labs } from '@/shared/data/mocks';
 import {
   buildStartsAt,
   formatBookingRange,
@@ -36,7 +35,8 @@ export type BookingStatus =
   | 'cancelled'
   | 'pending'
   | 'rejected'
-  | 'reschedule_requested';
+  | 'reschedule_requested'
+  | 'no_show';
 
 export type BookingCategory =
   | 'appointment'
@@ -62,6 +62,12 @@ export type ConsolidatedBooking = {
   category: BookingCategory;
   status: BookingStatus;
   statusLabel: string;
+  bookingType?: string;
+  viewerRole?: 'customer' | 'provider';
+  customerName?: string;
+  customerId?: string;
+  providerId?: string;
+  paymentStatus?: string;
   visual: BookingVisual;
   providerRole?: string;
   durationMinutes?: number;
@@ -90,226 +96,6 @@ export type TimelineSection = {
   label: 'TODAY' | 'TOMORROW' | 'THIS_WEEK' | 'LATER';
   items: ConsolidatedBooking[];
 };
-
-const remya = doctors.find(d => d.id === 'doc-remya')!;
-const sathish = doctors.find(d => d.id === 'doc-sathish')!;
-const apollo = labs.find(l => l.id === 'lab-apollo')!;
-const fitAm = fitnessClasses.find(c => c.id === 'fit-sathish-am')!;
-const yogaImg = fitnessClasses[0]?.imageUrl;
-
-function statusLabel(status: BookingStatus): string {
-  const labels: Record<BookingStatus, string> = {
-    confirmed: 'Confirmed',
-    upcoming: 'Upcoming',
-    online_live: 'Online',
-    provider_assigned: 'Provider Assigned',
-    on_the_way: 'On the Way',
-    completed: 'Completed',
-    cancelled: 'Cancelled',
-    pending: 'Pending',
-    rejected: 'Rejected',
-    reschedule_requested: 'New time proposed',
-  };
-  return labels[status];
-}
-
-function seedBookings(now: Date): ConsolidatedBooking[] {
-  const today630pm = buildStartsAt(now, '6:30 PM', 0);
-  const today1030am = buildStartsAt(now, '10:30 AM', 0);
-  const today1030amEnd = buildStartsAt(now, '11:30 AM', 0);
-  const tomorrow7am = buildStartsAt(now, '7:00 AM', 1);
-  const tomorrow830am = buildStartsAt(now, '8:30 AM', 1);
-  const tomorrow830amEnd = buildStartsAt(now, '9:00 AM', 1);
-  const threeDays730pm = buildStartsAt(now, '7:30 PM', 3);
-  const nextWeek10am = buildStartsAt(now, '10:00 AM', 5);
-  const pastWeek = buildStartsAt(now, '5:30 AM', -3);
-  const pastEvent = buildStartsAt(new Date('2026-04-12'), '6:00 AM', 0);
-
-  return [
-    {
-      id: 'bk-remya',
-      entityId: 'doc-remya',
-      providerName: remya.name,
-      serviceTitle: 'Online Consultation',
-      providerRole: remya.specialty,
-      startsAt: today630pm,
-      locationLabel: 'Video consultation',
-      mode: 'online',
-      isOnline: true,
-      isClass: false,
-      category: 'appointment',
-      status: 'confirmed',
-      statusLabel: statusLabel('confirmed'),
-      visual: 'avatar',
-      amount: remya.fee,
-      imageUrl: remya.imageUrl,
-      isReserved: true,
-    },
-    {
-      id: 'bk-ac',
-      providerName: 'Kumar',
-      serviceTitle: 'AC Repair',
-      providerRole: 'AC Technician',
-      startsAt: today1030am,
-      endsAt: today1030amEnd,
-      locationLabel: 'Home',
-      mode: 'home',
-      isOnline: false,
-      isClass: false,
-      category: 'home_service',
-      status: 'on_the_way',
-      statusLabel: statusLabel('on_the_way'),
-      visual: 'icon',
-      iconName: 'settings',
-      etaMinutes: 18,
-      amount: 499,
-      isReserved: true,
-    },
-    {
-      id: 'bk-yoga',
-      entityId: 'fit-sathish-am',
-      providerName: 'Meera',
-      serviceTitle: 'Beginner Yoga',
-      providerRole: 'Fit Studio',
-      startsAt: tomorrow7am,
-      locationLabel: 'Studio · 2.4 km',
-      mode: 'center',
-      isOnline: false,
-      isClass: true,
-      category: 'class',
-      status: 'confirmed',
-      statusLabel: statusLabel('confirmed'),
-      visual: 'thumbnail',
-      durationMinutes: 45,
-      amount: 599,
-      imageUrl: yogaImg,
-      isReserved: true,
-    },
-    {
-      id: 'bk-apollo-b12',
-      entityId: 'lab-apollo',
-      testId: 'test-b12',
-      providerName: apollo.name,
-      serviceTitle: 'Vitamin B12 Test',
-      providerRole: 'Home collection',
-      startsAt: tomorrow830am,
-      endsAt: tomorrow830amEnd,
-      locationLabel: 'Home collection',
-      mode: 'home',
-      isOnline: false,
-      isClass: false,
-      category: 'lab',
-      status: 'confirmed',
-      statusLabel: statusLabel('confirmed'),
-      visual: 'logo',
-      amount: 400,
-      imageUrl: apollo.imageUrl,
-      isReserved: true,
-    },
-    {
-      id: 'bk-fitness-am',
-      entityId: 'fit-sathish-am',
-      providerName: fitAm.coach,
-      serviceTitle: fitAm.title,
-      providerRole: fitAm.location,
-      startsAt: threeDays730pm,
-      locationLabel: fitAm.location,
-      mode: 'center',
-      isOnline: false,
-      isClass: true,
-      category: 'class',
-      status: 'upcoming',
-      statusLabel: statusLabel('upcoming'),
-      visual: 'thumbnail',
-      durationMinutes: 60,
-      amount: fitAm.fee,
-      imageUrl: fitAm.imageUrl,
-      isReserved: true,
-    },
-    {
-      id: 'bk-hospital',
-      entityId: 'doc-sathish',
-      providerName: 'Apollo Hospitals',
-      serviceTitle: 'Orthopedic Consultation',
-      providerRole: sathish.specialty,
-      startsAt: nextWeek10am,
-      locationLabel: 'Greams Road · Chennai',
-      mode: 'center',
-      isOnline: false,
-      isClass: false,
-      category: 'hospital',
-      status: 'confirmed',
-      statusLabel: statusLabel('confirmed'),
-      visual: 'logo',
-      amount: 500,
-      imageUrl: apollo.imageUrl,
-      isReserved: true,
-    },
-    {
-      id: 'bk-event',
-      providerName: 'TrailBlaze Tours',
-      serviceTitle: 'Yercaud Weekend Adventure',
-      startsAt: pastEvent,
-      locationLabel: 'CMBTA Bus Stand',
-      isOnline: false,
-      isClass: false,
-      category: 'event',
-      status: 'upcoming',
-      statusLabel: statusLabel('upcoming'),
-      visual: 'thumbnail',
-      amount: 3499,
-      imageUrl: yogaImg,
-      isReserved: true,
-    },
-    {
-      id: 'bk-physio-past',
-      entityId: 'doc-sathish',
-      providerName: sathish.name,
-      serviceTitle: 'Sports Physiotherapy',
-      providerRole: sathish.specialty,
-      startsAt: pastWeek,
-      locationLabel: 'Knock Clinic',
-      mode: 'center',
-      isOnline: false,
-      isClass: false,
-      category: 'appointment',
-      status: 'completed',
-      statusLabel: statusLabel('completed'),
-      visual: 'avatar',
-      amount: sathish.fee,
-      imageUrl: sathish.imageUrl,
-      isReserved: true,
-    },
-    {
-      id: 'bk-online-music',
-      providerName: 'Arun',
-      serviceTitle: 'Guitar Basics',
-      providerRole: 'Music Academy',
-      startsAt: buildStartsAt(now, '7:30 PM', 2),
-      locationLabel: 'Online',
-      mode: 'online',
-      isOnline: true,
-      isClass: true,
-      category: 'class',
-      status: 'confirmed',
-      statusLabel: statusLabel('confirmed'),
-      visual: 'thumbnail',
-      durationMinutes: 60,
-      amount: 799,
-      imageUrl: yogaImg,
-      isReserved: true,
-    },
-  ];
-}
-
-let cachedSeed: ConsolidatedBooking[] | null = null;
-
-export function getConsolidatedBookings(now = new Date()): ConsolidatedBooking[] {
-  if (!cachedSeed) {
-    cachedSeed = seedBookings(now);
-  }
-  return cachedSeed.map(b => ({ ...b }));
-}
 
 export function isBookedItem(booking: ConsolidatedBooking): boolean {
   return booking.isReserved !== false;
@@ -393,6 +179,10 @@ export function resolveBookingActions(
 ): ResolvedBookingActions {
   const mins = minutesUntil(booking.startsAt, now);
 
+  if (booking.viewerRole === 'provider') {
+    return { primary: 'view_details' };
+  }
+
   if (booking.status === 'completed') {
     return { primary: 'book_again', secondary: 'rate' };
   }
@@ -400,6 +190,9 @@ export function resolveBookingActions(
     return { primary: 'book_again' };
   }
   if (booking.status === 'rejected') {
+    return { primary: 'book_again' };
+  }
+  if (booking.status === 'no_show') {
     return { primary: 'book_again' };
   }
   if (booking.status === 'pending' || booking.status === 'reschedule_requested') {
@@ -525,6 +318,10 @@ export function navigateBookingTarget(
   navigation: { navigate: (screen: string, params?: object) => void },
   booking: ConsolidatedBooking,
 ) {
+  if (booking.isReserved !== false) {
+    navigation.navigate('BookingDetail', { bookingId: booking.id });
+    return;
+  }
   if (booking.category === 'class' || booking.isClass) {
     navigation.navigate('ClassDetail', {
       classId: booking.entityId ?? booking.id.replace(/^class-/, ''),

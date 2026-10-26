@@ -17,10 +17,18 @@ export function mapApiBookingToConsolidated(booking: Booking): ConsolidatedBooki
     locationLabel: detail.locationLabel,
     mode: booking.serviceMode,
     isOnline: booking.serviceMode === 'online',
-    isClass: booking.category === 'class',
+    isClass: ['class', 'group_session', 'course', 'workshop'].includes(
+      booking.bookingType,
+    ),
     category: booking.category as BookingCategory,
     status: mapBookingStatus(booking.status),
     statusLabel: getStatusLabel(booking.status),
+    bookingType: booking.bookingType,
+    viewerRole: booking.viewerRole,
+    customerName: booking.customerName,
+    customerId: booking.mobileUserId,
+    providerId: booking.providerId ?? undefined,
+    paymentStatus: booking.paymentStatus,
     visual: getVisualType(booking.category, detail),
     providerRole: detail.providerRole,
     durationMinutes: booking.durationMinutes || undefined,
@@ -42,7 +50,7 @@ function mapBookingStatus(status: string): BookingStatus {
     in_progress: 'upcoming',
     completed: 'completed',
     cancelled: 'cancelled',
-    no_show: 'cancelled',
+    no_show: 'no_show',
   };
   return (statusMap[status] as BookingStatus) || 'upcoming';
 }

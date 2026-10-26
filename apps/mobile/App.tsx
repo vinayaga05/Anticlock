@@ -10,6 +10,7 @@ import { StreamChatProvider } from '@/shared/providers/StreamChatProvider';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { useNotificationSetup } from '@/shared/hooks/useNotificationSetup';
 import { LiveContentSync } from '@/shared/realtime/LiveContentSync';
+import { LiveBookingSync } from '@/shared/realtime/LiveBookingSync';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,10 +23,10 @@ const queryClient = new QueryClient({
 
 function AppShell() {
   const theme = useTheme();
-  const { session, user } = useAuth();
+  const { user } = useAuth();
 
   // Set up push notifications when user is authenticated
-  useNotificationSetup(!!session);
+  useNotificationSetup(Boolean(user && user.id !== 'temporary-guest'));
 
   return (
     <>
@@ -33,7 +34,12 @@ function AppShell() {
         barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'}
         backgroundColor={theme.colors.background}
       />
-      {user && user.id !== 'temporary-guest' ? <LiveContentSync /> : null}
+      {user && user.id !== 'temporary-guest' ? (
+        <>
+          <LiveContentSync />
+          <LiveBookingSync />
+        </>
+      ) : null}
       <RootNavigator />
     </>
   );

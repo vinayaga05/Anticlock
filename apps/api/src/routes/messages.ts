@@ -20,7 +20,8 @@ import {
 } from '../social/ProfileFollowService.js';
 import { loadPublisher, resolveOwnedPublisher, type PublisherRef } from '../publishing/publisher.js';
 import { db } from '../db/client.js';
-import { directMessageReports } from '../db/schema.js';
+import { and, eq, inArray } from 'drizzle-orm';
+import { bookings, directMessageReports, providerMemberships } from '../db/schema.js';
 
 const messagesRoutes = new Hono<AppEnv>();
 
@@ -34,6 +35,50 @@ function requireMobileAuth(c: { get: (k: 'auth') => { kind: string; sub: string 
     });
   }
   return auth.sub;
+}
+
+async function bookingCallIsAuthorized(input: {
+  bookingId: string;
+  userId: string;
+  viewer: PublisherRef;
+  target: PublisherRef;
+}) {
+  const [booking] = await db.select().from(bookings).where(and(
+    eq(bookings.id, input.bookingId),
+    eq(bookings.status, 'confirmed'),
+    eq(bookings.serviceMode, 'online'),
+  ));
+  if (!booking?.providerId) return false;
+  const startsAt = booking.startsAt.getTime();
+  const endsAt = booking.endsAt?.getTime()
+    ?? startsAt + (booking.durationMinutes ?? 60) * 60_000;
+  const now = Date.now();
+  if (now < startsAt - 15 * 60_000 || now > endsAt + 30 * 60_000) return false;
+  if (
+    booking.mobileUserId === input.userId &&
+    input.viewer.type === 'personal' &&
+    input.viewer.id === booking.mobileUserId &&
+    input.target.type === 'business' &&
+    input.target.id === booking.providerId
+  ) {
+    return true;
+  }
+  if (
+    input.viewer.type !== 'business' ||
+    input.viewer.id !== booking.providerId ||
+    input.target.type !== 'personal' ||
+    input.target.id !== booking.mobileUserId
+  ) {
+    return false;
+  }
+  const [membership] = await db.select({ role: providerMemberships.role })
+    .from(providerMemberships)
+    .where(and(
+      eq(providerMemberships.mobileUserId, input.userId),
+      eq(providerMemberships.providerId, booking.providerId),
+      inArray(providerMemberships.role, ['owner', 'admin']),
+    ));
+  return Boolean(membership);
 }
 
 /** Revoke stale pre-policy channels before issuing a fresh client token. */
@@ -135,7 +180,7 @@ messagesRoutes.post('/calls', requireAuth, async (c) => {
   }
 
   try {
-    const { otherProfile, viewerProfile, mode } = parsed.data;
+    const { otherProfile, viewerProfile, mode, bookingId } = parsed.data;
     const viewer = await resolveOwnedPublisher(userId, viewerProfile);
     const target = { id: otherProfile.id, type: otherProfile.type } as const;
     const targetProfile = await loadPublisher(target);
@@ -152,7 +197,16 @@ messagesRoutes.post('/calls', requireAuth, async (c) => {
     if (await profilesAreBlocked(viewer.ref, target)) {
       return c.json({ error: { code: 'profile_blocked', message: 'Call unavailable' } }, 403);
     }
-    if (targetPrivacy.isPrivate && !(await hasAcceptedFollow(viewer.ref, target))) {
+    const authorizedBooking = bookingId
+      ? await bookingCallIsAuthorized({ bookingId, userId, viewer: viewer.ref, target })
+      : false;
+    if (bookingId && !authorizedBooking) {
+      return c.json(
+        { error: { code: 'booking_call_unavailable', message: 'This booking is not currently joinable' } },
+        403,
+      );
+    }
+    if (!authorizedBooking && targetPrivacy.isPrivate && !(await hasAcceptedFollow(viewer.ref, target))) {
       return c.json(
         { error: { code: 'private_profile', message: 'Follow this private profile before calling' } },
         403,
@@ -187,6 +241,7 @@ messagesRoutes.post('/calls', requireAuth, async (c) => {
           caller_avatar: viewer.publisher.avatarUrl,
           callee_name: targetProfile.displayName,
           callee_avatar: targetProfile.avatarUrl,
+          ...(bookingId ? { booking_id: bookingId } : {}),
         },
       },
     });

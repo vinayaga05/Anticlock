@@ -41,6 +41,7 @@ import { ClassDetailScreen } from '@/features/booking/screens/ClassDetailScreen'
 import { ScheduleScreen } from '@/features/booking/screens/ScheduleScreen';
 import { BookingConfirmScreen } from '@/features/booking/screens/BookingConfirmScreen';
 import { MyBookingsScreen } from '@/features/booking/screens/MyBookingsScreen';
+import { BookingDetailScreen } from '@/features/booking/screens/BookingDetailScreen';
 import { CommunitiesScreen } from '@/features/community/screens/CommunitiesScreen';
 import { ExploreCreateScreen } from '@/features/community/screens/ExploreCreateScreen';
 import {
@@ -296,6 +297,11 @@ export function RootNavigator() {
               name="MyBookings"
               component={MyBookingsScreen}
               options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="BookingDetail"
+              component={BookingDetailScreen}
+              options={{ title: 'Booking details' }}
             />
             <Stack.Screen
               name="Communities"

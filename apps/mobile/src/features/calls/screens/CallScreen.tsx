@@ -46,7 +46,7 @@ export function CallScreen() {
   const { videoClient, isVideoReady, error: streamError } = useStreamChat();
   const [call, setCall] = useState<Call | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { mode, incoming, callId, callType, targetProfile, viewerProfile } = route.params;
+  const { mode, incoming, callId, callType, targetProfile, viewerProfile, bookingId } = route.params;
   const AcceptedCallContent = useMemo(
     () => (mode === 'audio' ? AudioCallContent : CallContent),
     [mode],
@@ -68,7 +68,7 @@ export function CallScreen() {
             throw new Error('The profile for this call is unavailable.');
           }
           await requestOutgoingPermissions(mode);
-          const created = await createVideoCall(targetProfile, viewerProfile, mode);
+          const created = await createVideoCall(targetProfile, viewerProfile, mode, bookingId);
           activeCall = videoClient!.call(created.callType, created.callId, { reuseInstance: true });
           if (mode === 'audio') await activeCall.camera.disable();
           await activeCall.get({ ring: true, video: mode === 'video' });
@@ -92,11 +92,10 @@ export function CallScreen() {
     incoming,
     callId,
     callType,
-    targetProfile?.id,
-    targetProfile?.type,
-    viewerProfile?.id,
-    viewerProfile?.type,
+    targetProfile,
+    viewerProfile,
     mode,
+    bookingId,
   ]);
 
   if (error || streamError) {

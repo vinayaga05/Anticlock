@@ -43,11 +43,13 @@ export async function createVideoCall(
   otherProfile: PublisherRef,
   viewerProfile: PublisherRef,
   mode: 'audio' | 'video',
+  bookingId?: string,
 ): Promise<CreateCallResponse> {
   return apiClient.post<CreateCallResponse>('/v1/messages/calls', {
     otherProfile,
     viewerProfile,
     mode,
+    bookingId,
   });
 }
 

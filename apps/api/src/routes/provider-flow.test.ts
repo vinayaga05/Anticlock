@@ -106,7 +106,7 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
         basic: { providerName: name, contactPerson: 'Asha', mobile: '9876543210', email: 'asha@example.com' },
         location: { address: '12 Lake Road', city: 'Chennai', area: 'Adyar', pincode: '600020', latitude: 13.001, longitude: 80.25 },
         availability: { workingDays: ['mon', 'tue'], openingTime: '09:00', closingTime: '18:00' },
-        services: { pricingStartsAt: '1,500', atLocation: true, homeVisit: true },
+        services: { pricingStartsAt: '1,500', atLocation: true, homeVisit: true, online: true },
         profile: { description: `${name} description for guests`, yearsInOperation: '4' },
       },
       aadhaarNumber: '234567890123',
@@ -480,7 +480,7 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     const card = (byCategory.json.data as Json[]).find(p => p.id === firstProviderId);
     assert.equal(card.city, 'Chennai');
     assert.equal(card.priceFrom, 1500);
-    assert.deepEqual(card.modes, ['center', 'home']);
+    assert.deepEqual(card.modes, ['center', 'home', 'online']);
     assert.equal(card.categories[0].name, `Pilates ${runId}`);
     assert.ok(!JSON.stringify(card).includes('234567890123'), 'never leaks KYC');
     assert.ok(!('mobile' in card) && !('email' in card));
@@ -544,6 +544,9 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     assert.equal(created.json.booking.status, 'pending');
     assert.equal(created.json.booking.amount, 1500);
     assert.equal(created.json.booking.paymentStatus, 'pending');
+    assert.equal(created.json.booking.bookingMode, 'on_site');
+    assert.equal(created.json.booking.bookingType, 'appointment');
+    assert.equal(created.json.booking.viewerRole, 'customer');
     assert.equal(created.json.booking.detail.providerName, `Lotus Pilates ${runId}`);
     {
       const { eq } = await import('drizzle-orm');
@@ -556,7 +559,53 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     let ownerNotes = await notificationsFor(OWNER);
     assert.equal(ownerNotes[0].type, 'booking_created');
     assert.equal(ownerNotes[0].data.bookingId, bookingId);
-    assert.equal(ownerNotes[0].data.screen, 'ProviderDashboard');
+    assert.equal(ownerNotes[0].data.screen, 'BookingDetail');
+
+    const onlineBooking = await call('OTHER', 'POST', '/v1/bookings', {
+      providerId: firstProviderId,
+      categoryId,
+      category: 'appointment',
+      serviceMode: 'online',
+      startsAt: nextAvailableTime(0, 15),
+      durationMinutes: 60,
+      detail: { serviceTitle: 'Online coaching' },
+    });
+    assert.equal(onlineBooking.status, 201, JSON.stringify(onlineBooking.json));
+    assert.equal(onlineBooking.json.booking.bookingMode, 'online');
+
+    const classBooking = await call('OTHER', 'POST', '/v1/bookings', {
+      providerId: firstProviderId,
+      categoryId,
+      category: 'class',
+      bookingType: 'group_session',
+      serviceMode: 'center',
+      startsAt: nextAvailableTime(1, 15),
+      durationMinutes: 60,
+      detail: { serviceTitle: 'Small group reformer' },
+    });
+    assert.equal(classBooking.status, 201, JSON.stringify(classBooking.json));
+    assert.equal(classBooking.json.booking.bookingType, 'group_session');
+
+    const allList = await call('OTHER', 'GET', '/v1/bookings?filter=all&limit=100');
+    const allIds = new Set((allList.json.bookings as Json[]).map(item => item.id));
+    assert.ok(allIds.has(bookingId));
+    assert.ok(allIds.has(onlineBooking.json.booking.id));
+    assert.ok(allIds.has(classBooking.json.booking.id));
+    assert.ok(allList.json.counts.all >= 3);
+    const onSiteList = await call('OTHER', 'GET', '/v1/bookings?filter=on_site&limit=100');
+    const onSiteIds = new Set((onSiteList.json.bookings as Json[]).map(item => item.id));
+    assert.ok(onSiteIds.has(bookingId));
+    assert.ok(onSiteIds.has(classBooking.json.booking.id));
+    assert.ok(!onSiteIds.has(onlineBooking.json.booking.id));
+    const onlineList = await call('OTHER', 'GET', '/v1/bookings?filter=online&limit=100');
+    assert.ok((onlineList.json.bookings as Json[]).some(item => item.id === onlineBooking.json.booking.id));
+    const classList = await call('OTHER', 'GET', '/v1/bookings?filter=classes&limit=100');
+    assert.ok((classList.json.bookings as Json[]).some(item => item.id === classBooking.json.booking.id));
+
+    const providerList = await call('OWNER', 'GET', '/v1/bookings?filter=all&limit=100');
+    const providerView = (providerList.json.bookings as Json[]).find(item => item.id === bookingId);
+    assert.equal(providerView.viewerRole, 'provider');
+    assert.equal(providerView.customerName, 'Bala Customer');
 
     const overlapping = await create(
       new Date(new Date(firstStart).getTime() + 30 * 60_000).toISOString(),
@@ -567,7 +616,7 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
 
     const dash = await call('OWNER', 'GET', `/v1/provider/businesses/${firstProviderId}`);
     assert.equal(dash.status, 200);
-    assert.equal(dash.json.business.counts.upcomingBookings, 1);
+    assert.equal(dash.json.business.counts.upcomingBookings, 3);
     assert.equal(dash.json.business.upcomingBookings[0].customerName, 'Bala Customer');
     assert.equal(dash.json.business.services[0].categoryId, categoryId);
 
@@ -582,7 +631,26 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     assert.equal(accepted.json.booking.status, 'confirmed');
     let customerNotes = await notificationsFor(OTHER);
     assert.equal(customerNotes[0].type, 'booking_confirmed');
-    assert.equal(customerNotes[0].data.screen, 'MyBookings');
+    assert.equal(customerNotes[0].data.screen, 'BookingDetail');
+
+    const customerMovedStart = nextAvailableTime(2, 15);
+    const customerMoved = await call(
+      'OTHER',
+      'POST',
+      `/v1/bookings/${onlineBooking.json.booking.id}/reschedule`,
+      { startsAt: customerMovedStart, reason: 'Customer requested another day' },
+    );
+    assert.equal(customerMoved.status, 200, JSON.stringify(customerMoved.json));
+    assert.equal(customerMoved.json.booking.status, 'reschedule_requested');
+    assert.equal(customerMoved.json.booking.startsAt, customerMovedStart);
+    ownerNotes = await notificationsFor(OWNER);
+    assert.equal(ownerNotes[0].type, 'booking_rescheduled');
+    assert.equal(ownerNotes[0].data.bookingId, onlineBooking.json.booking.id);
+    assert.equal((await act(onlineBooking.json.booking.id, 'accept')).json.booking.status, 'confirmed');
+    assert.equal((await call('OTHER', 'POST', `/v1/bookings/${onlineBooking.json.booking.id}/cancel`, { reason: 'Cleanup' })).json.booking.status, 'cancelled');
+
+    assert.equal((await act(classBooking.json.booking.id, 'accept')).json.booking.status, 'confirmed');
+    assert.equal((await act(classBooking.json.booking.id, 'complete')).json.booking.status, 'completed');
 
     const movedStart = new Date(new Date(firstStart).getTime() + 90 * 60_000).toISOString();
     const moved = await act(bookingId, 'reschedule', { startsAt: movedStart, reason: 'Trainer availability changed' });
@@ -594,6 +662,11 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
 
     const customerView = await call('OTHER', 'GET', `/v1/bookings/${bookingId}`);
     assert.equal(customerView.json.booking.status, 'reschedule_requested');
+    const customerAccepted = await call('OTHER', 'POST', `/v1/bookings/${bookingId}/confirm-reschedule`);
+    assert.equal(customerAccepted.status, 200, JSON.stringify(customerAccepted.json));
+    assert.equal(customerAccepted.json.booking.status, 'confirmed');
+    ownerNotes = await notificationsFor(OWNER);
+    assert.equal(ownerNotes[0].type, 'booking_confirmed');
     const cancelled = await call('OTHER', 'POST', `/v1/bookings/${bookingId}/cancel`, { reason: 'Cannot attend the new time' });
     assert.equal(cancelled.status, 200, JSON.stringify(cancelled.json));
     assert.equal(cancelled.json.booking.status, 'cancelled');
@@ -640,7 +713,7 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     ownerNotes = await notificationsFor(OWNER);
     assert.equal(customerNotes[0].type, 'booking_reminder');
     assert.equal(ownerNotes[0].type, 'booking_reminder');
-    assert.equal(ownerNotes[0].data.screen, 'ProviderDashboard');
+    assert.equal(ownerNotes[0].data.screen, 'BookingDetail');
 
     const edited = await call('OWNER', 'PATCH', `/v1/provider/businesses/${firstProviderId}`, {
       description: 'Small-group reformer Pilates',

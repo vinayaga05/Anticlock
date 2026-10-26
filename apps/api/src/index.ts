@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { serve } from '@hono/node-server';
+import { createNodeWebSocket } from '@hono/node-ws';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { authRoutes } from './routes/auth.js';
@@ -47,6 +48,8 @@ import {
 import { logTestLoginWarning } from './lib/otp/testLogin.js';
 import { httpError } from './lib/httpError.js';
 import { mediaService } from './media/MediaService.js';
+import { requireAuth } from './middleware/auth.js';
+import { subscribeBookingEvents } from './realtime/bookingEvents.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -79,6 +82,7 @@ logAiProviderStartup(aiConfig);
 logTestLoginWarning();
 
 const app = new Hono();
+const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 
 app.use(
   '*',
@@ -96,6 +100,43 @@ app.get('/health', async c =>
     service: 'anticlock-api',
     version: '0.1.0',
     redis: await redisHealthCheck(),
+  }),
+);
+
+app.get(
+  '/v1/bookings/stream',
+  requireAuth,
+  upgradeWebSocket(c => {
+    const auth = c.get('auth');
+    let unsubscribe: (() => void) | null = null;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
+    return {
+      onOpen(_event, ws) {
+        if (auth.kind !== 'mobile') {
+          ws.close(1008, 'Mobile session required');
+          return;
+        }
+        ws.send(JSON.stringify({ type: 'ready', at: new Date().toISOString() }));
+        unsubscribe = subscribeBookingEvents(event => {
+          if (event.userIds.includes(auth.sub)) ws.send(JSON.stringify(event));
+        });
+        heartbeat = setInterval(() => {
+          ws.send(JSON.stringify({ type: 'ping', at: new Date().toISOString() }));
+        }, 25_000);
+      },
+      onClose() {
+        if (heartbeat) clearInterval(heartbeat);
+        heartbeat = null;
+        unsubscribe?.();
+        unsubscribe = null;
+      },
+      onError() {
+        if (heartbeat) clearInterval(heartbeat);
+        heartbeat = null;
+        unsubscribe?.();
+        unsubscribe = null;
+      },
+    };
   }),
 );
 
@@ -141,11 +182,12 @@ app.onError((err, c) => {
 
 const port = Number(process.env.API_PORT ?? 4000);
 const hostname = process.env.API_HOST ?? '0.0.0.0';
-serve({ fetch: app.fetch, port, hostname }, info => {
+const server = serve({ fetch: app.fetch, port, hostname }, info => {
   console.log(`Knock API listening on http://${hostname}:${info.port}`);
   startAssistantLifecycleJob();
   startBookingReminderJob();
   void mediaService.ensureStorageReady();
 });
+injectWebSocket(server);
 
 export default app;

@@ -61,6 +61,7 @@ export type RootStackParamList = {
     patientName?: string;
   };
   MyBookings: undefined;
+  BookingDetail: { bookingId: string };
   Communities: undefined;
   Inbox: undefined;
   Call: {
@@ -72,6 +73,7 @@ export type RootStackParamList = {
     callId?: string;
     callType?: 'default';
     incoming?: boolean;
+    bookingId?: string;
   };
   Thread: {
     conversationId: string;

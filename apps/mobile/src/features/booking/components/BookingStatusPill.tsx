@@ -21,6 +21,7 @@ const STATUS_STYLES: Record<
   pending: { bg: 'rgba(245,158,11,0.12)', text: '#B45309', border: 'rgba(245,158,11,0.22)' },
   rejected: { bg: 'rgba(239,68,68,0.12)', text: '#B91C1C', border: 'rgba(239,68,68,0.22)' },
   reschedule_requested: { bg: 'rgba(245,158,11,0.12)', text: '#B45309', border: 'rgba(245,158,11,0.22)' },
+  no_show: { bg: 'rgba(100,116,139,0.12)', text: '#475569', border: 'rgba(100,116,139,0.22)' },
 };
 
 export function BookingStatusPill({ status, label }: Props) {

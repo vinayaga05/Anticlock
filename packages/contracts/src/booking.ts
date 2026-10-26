@@ -26,12 +26,40 @@ export type BookingCategory = z.infer<typeof BookingCategorySchema>;
 export const ServiceModeSchema = z.enum(['online', 'center', 'home']);
 export type ServiceMode = z.infer<typeof ServiceModeSchema>;
 
+export const BookingModeSchema = z.enum(['on_site', 'online']);
+export type BookingMode = z.infer<typeof BookingModeSchema>;
+
+export const BookingTypeSchema = z.enum([
+  'appointment',
+  'class',
+  'group_session',
+  'course',
+  'workshop',
+  'home_service',
+  'lab',
+  'event',
+  'hospital',
+  'other',
+]);
+export type BookingType = z.infer<typeof BookingTypeSchema>;
+
+export const BookingListFilterSchema = z.enum([
+  'all',
+  'on_site',
+  'online',
+  'classes',
+]);
+export type BookingListFilter = z.infer<typeof BookingListFilterSchema>;
+
 
 export const BookingDetailSchema = z.object({
   providerName: z.string().optional(),
   providerRole: z.string().optional(),
   serviceTitle: z.string(),
   locationLabel: z.string().optional(),
+  address: z.string().optional(),
+  mapLatitude: z.number().min(-90).max(90).optional(),
+  mapLongitude: z.number().min(-180).max(180).optional(),
   imageUrl: z.string().url().optional(),
   iconName: z.string().optional(),
   notes: z.string().optional(),
@@ -44,6 +72,10 @@ export const BookingSchema = z.object({
   providerId: z.string().uuid().nullable(),
   categoryId: z.string().nullable(),
   category: BookingCategorySchema,
+  bookingMode: BookingModeSchema,
+  bookingType: BookingTypeSchema,
+  viewerRole: z.enum(['customer', 'provider']),
+  customerName: z.string().optional(),
   status: BookingStatusSchema,
   serviceMode: ServiceModeSchema,
   startsAt: z.string().datetime(),
@@ -64,6 +96,7 @@ export const CreateBookingRequestSchema = z.object({
   providerId: z.string().uuid(),
   categoryId: z.string().min(1),
   category: BookingCategorySchema,
+  bookingType: BookingTypeSchema.optional(),
   serviceMode: ServiceModeSchema,
   startsAt: z.string().datetime(),
   endsAt: z.string().datetime().nullable().optional(),
@@ -128,11 +161,21 @@ export const CancelBookingRequestSchema = z.object({
 });
 export type CancelBookingRequest = z.infer<typeof CancelBookingRequestSchema>;
 
+export const CustomerRescheduleBookingRequestSchema = z.object({
+  startsAt: z.string().datetime(),
+  endsAt: z.string().datetime().nullable().optional(),
+  reason: z.string().max(500).optional(),
+});
+export type CustomerRescheduleBookingRequest = z.infer<
+  typeof CustomerRescheduleBookingRequestSchema
+>;
+
 export const BookingListQuerySchema = z.object({
   status: z
     .union([BookingStatusSchema, z.literal('upcoming'), z.literal('past')])
     .optional(),
   category: BookingCategorySchema.optional(),
+  filter: BookingListFilterSchema.optional(),
   limit: z.number().int().positive().max(100).optional(),
   cursor: z.string().optional(),
 });
@@ -141,6 +184,12 @@ export type BookingListQuery = z.infer<typeof BookingListQuerySchema>;
 export const BookingListResponseSchema = z.object({
   bookings: z.array(BookingSchema),
   nextCursor: z.string().nullable(),
+  counts: z.object({
+    all: z.number().int().nonnegative(),
+    onSite: z.number().int().nonnegative(),
+    online: z.number().int().nonnegative(),
+    classes: z.number().int().nonnegative(),
+  }),
 });
 export type BookingListResponse = z.infer<typeof BookingListResponseSchema>;
 

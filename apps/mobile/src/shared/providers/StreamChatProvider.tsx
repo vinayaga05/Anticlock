@@ -19,6 +19,7 @@ interface StreamChatContextType {
   isVideoReady: boolean;
   isConnecting: boolean;
   error: string | null;
+  retry: () => void;
 }
 
 const StreamChatContext = createContext<StreamChatContextType>({
@@ -28,6 +29,7 @@ const StreamChatContext = createContext<StreamChatContextType>({
   isVideoReady: false,
   isConnecting: false,
   error: null,
+  retry: () => undefined,
 });
 
 export const useStreamChat = () => useContext(StreamChatContext);
@@ -75,6 +77,7 @@ export function StreamChatProvider({ children }: { children: React.ReactNode }) 
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryVersion, setRetryVersion] = useState(0);
   const { user } = useAuth();
   const userId = user?.id === 'temporary-guest' ? null : user?.id ?? null;
 
@@ -143,7 +146,7 @@ export function StreamChatProvider({ children }: { children: React.ReactNode }) 
       connectedChat?.disconnectUser().catch(console.error);
       connectedVideo?.disconnectUser().catch(console.error);
     };
-  }, [userId, user?.displayName, user?.avatarUrl]);
+  }, [userId, user?.displayName, user?.avatarUrl, retryVersion]);
 
   const contextValue: StreamChatContextType = {
     client,
@@ -152,6 +155,7 @@ export function StreamChatProvider({ children }: { children: React.ReactNode }) 
     isVideoReady,
     isConnecting,
     error,
+    retry: () => setRetryVersion(value => value + 1),
   };
 
   // OverlayProvider always mounted (supplies ThemeContext / overlay portal for

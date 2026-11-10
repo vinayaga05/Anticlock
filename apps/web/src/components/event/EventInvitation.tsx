@@ -3,22 +3,23 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import {
-  Activity,
   ArrowDown,
   ArrowRight,
-  CalendarDays,
   CheckCircle2,
   CircleDot,
-  Dumbbell,
-  HeartPulse,
+  Flag,
   Languages,
+  Mic2,
+  Music2,
   Sparkles,
   Ticket,
   Timer,
+  Utensils,
   UsersRound,
-  Watch,
   Zap,
 } from 'lucide-react';
+import { EventArtwork } from '@/components/event/EventArtwork';
+import { EventFloat, EventReveal } from '@/components/event/EventMotion';
 import { EventPaymentPanel } from '@/components/event/EventPaymentPanel';
 import { eventConfig } from '@/config/event';
 
@@ -259,7 +260,8 @@ const trackStyles = [
   'border-[#1aa8bd] bg-[#d8f7fb] text-[#073b59]',
 ] as const;
 
-const trackIcons = [Dumbbell, HeartPulse, Watch] as const;
+const highlightArtwork = ['community', 'strength', 'trophy'] as const;
+const scheduleIcons = [Flag, Mic2, Music2, Utensils, Mic2, Music2] as const;
 
 export function EventInvitation() {
   const [language, setLanguage] = useState<Language>('en');
@@ -269,7 +271,7 @@ export function EventInvitation() {
   return (
     <main
       lang={language}
-      className="min-h-screen overflow-hidden bg-[#f9fcff] text-[#111b4b]"
+      className="event-invitation min-h-screen overflow-hidden bg-[#f9fcff] text-[#111b4b]"
       style={isTamil ? { fontFamily: '"Noto Sans Tamil", "Tamil Sangam MN", sans-serif' } : undefined}
     >
       <header className="absolute inset-x-0 top-0 z-20">
@@ -317,16 +319,19 @@ export function EventInvitation() {
         <div className="absolute bottom-[23%] left-[4%] text-5xl font-black text-[#f0a414]">✦</div>
 
         <div className="relative mx-auto grid max-w-7xl items-center gap-10 px-4 pb-16 pt-8 sm:px-6 sm:pb-20 lg:grid-cols-[1fr_0.9fr] lg:gap-16 lg:px-8 lg:pb-24 lg:pt-14">
-          <div className="text-center lg:text-left">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#09235b]/15 bg-white/80 px-4 py-2 text-xs font-black uppercase tracking-[0.13em] text-[#0b5f9d] shadow-sm">
-              <Sparkles size={14} className="text-[#e94c62]" />
-              {copy.hero.eyebrow}
+          <EventReveal className="text-center lg:text-left">
+            <div className="flex items-center justify-center gap-3 lg:justify-start">
+              <EventFloat className="shrink-0" delay={0.2}><EventArtwork kind="trophy" className="h-16 w-16" /></EventFloat>
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#09235b]/15 bg-white/80 px-4 py-2 text-xs font-black uppercase tracking-[0.13em] text-[#0b5f9d] shadow-sm">
+                <Sparkles size={14} className="shrink-0 text-[#e94c62]" />
+                {copy.hero.eyebrow}
+              </div>
             </div>
             <p className="mt-5 text-sm font-black uppercase tracking-[0.11em] text-[#09235b] sm:text-base">{copy.hero.academy}</p>
             <p className="mt-2 text-base font-bold text-[#e25a27] sm:text-lg">{copy.hero.tagline}</p>
 
             <div className="mt-6 flex items-center justify-center gap-3 text-sm font-black text-[#0b5f9d] lg:justify-start">
-              <CalendarDays size={19} className="text-[#e94c62]" />
+              <EventArtwork kind="calendar" className="h-10 w-10 shrink-0" />
               <time dateTime={eventConfig.isoDate}>{copy.hero.date}</time>
             </div>
 
@@ -349,9 +354,10 @@ export function EventInvitation() {
               <UsersRound size={18} className="mt-0.5 shrink-0 text-[#e25a27]" />
               <span>{copy.hero.community}</span>
             </div>
-          </div>
+          </EventReveal>
 
-          <figure className="relative mx-auto w-full max-w-sm py-3 sm:max-w-[27rem]">
+          <EventReveal className="relative mx-auto w-full max-w-[25rem] py-3 sm:max-w-[30rem]" delay={0.12}>
+          <figure>
             <div className="absolute -left-7 top-8 h-28 w-28 rounded-full bg-[#11b5da]/35 blur-2xl" />
             <div className="absolute -bottom-5 -right-5 h-36 w-36 rounded-full bg-[#e94c62]/30 blur-2xl" />
             <div className="relative overflow-hidden rounded-[2rem] border-[6px] border-[#f4bb28] bg-white shadow-[0_30px_80px_rgba(9,35,91,0.28)] rotate-[-2deg] transition duration-500 hover:rotate-0">
@@ -361,7 +367,7 @@ export function EventInvitation() {
                 width={1024}
                 height={1535}
                 priority
-                sizes="(max-width: 640px) 82vw, (max-width: 1024px) 56vw, 432px"
+                sizes="(max-width: 640px) calc(100vw - 2rem), 480px"
                 className="h-auto w-full"
               />
             </div>
@@ -370,19 +376,20 @@ export function EventInvitation() {
               <p className="mt-1 text-xs leading-5 text-[#415878]">{copy.hero.posterCaption}</p>
             </figcaption>
           </figure>
+          </EventReveal>
         </div>
       </section>
 
       <section className="relative -mt-1 overflow-hidden bg-[#09235b] py-5 text-white">
         <div className="mx-auto grid max-w-6xl gap-4 px-4 sm:grid-cols-3 sm:px-6 lg:px-8">
           {copy.highlights.map((highlight, index) => (
-            <div key={highlight.label} className="flex items-center justify-center gap-3 border-white/15 text-center sm:border-r sm:last:border-r-0">
-              <span className={`h-3 w-3 rounded-full ${['bg-[#f7c92d]', 'bg-[#6ee8e0]', 'bg-[#ff8e78]'][index]}`} />
+            <EventReveal key={highlight.label} className="flex items-center justify-center gap-3 border-white/15 text-left sm:border-r sm:last:border-r-0" delay={index * 0.08}>
+              <EventArtwork kind={highlightArtwork[index]} className="h-14 w-14 shrink-0" />
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.15em] text-white/55">{highlight.label}</p>
                 <p className="mt-0.5 text-sm font-black">{highlight.value}</p>
               </div>
-            </div>
+            </EventReveal>
           ))}
         </div>
       </section>
@@ -390,40 +397,46 @@ export function EventInvitation() {
       <section id="programme" className="scroll-mt-8 bg-white py-20 sm:py-28">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid gap-10 lg:grid-cols-[0.78fr_1.22fr] lg:gap-16">
-            <div>
+            <EventReveal>
               <p className="text-xs font-black uppercase tracking-[0.2em] text-[#d23848]">{copy.programme.eyebrow}</p>
               <h2 className="mt-5 max-w-md text-balance text-4xl font-black tracking-[-0.055em] text-[#09235b] sm:text-5xl">{copy.programme.title}</h2>
               <p className="mt-6 max-w-md text-base leading-7 text-[#415878]">{copy.programme.description}</p>
               <div className="mt-8 rounded-2xl border border-[#bceaf4] bg-[#eaf9ff] p-5 text-sm font-bold leading-7 text-[#0b5f9d]">
                 <p>{copy.programme.hosts}</p>
               </div>
-            </div>
+            </EventReveal>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-[1.75rem] border border-[#f1d97e] bg-[#fff8df] p-6 sm:p-7">
-                <div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f4bb28] text-[#09235b]"><Timer size={22} /></span><h3 className="font-black text-[#09235b]">{copy.nav.programme}</h3></div>
+              <EventReveal className="rounded-[1.75rem] border border-[#f1d97e] bg-[#fff8df] p-6 sm:p-7" delay={0.08}>
+                <div className="flex items-center gap-3"><EventArtwork kind="calendar" className="h-16 w-16 shrink-0" /><h3 className="font-black text-[#09235b]">{copy.nav.programme}</h3></div>
                 <ol className="mt-7 space-y-4">
-                  {copy.programme.schedule.map((item, index) => (
-                    <li key={`${item.time}-${item.title}`} className="flex gap-3 text-sm">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#09235b] text-xs font-black text-[#f4bb28]">{index + 1}</span>
-                      <div><p className="font-black text-[#09235b]">{item.time}</p><p className="mt-0.5 text-[#415878]">{item.title}</p></div>
-                    </li>
-                  ))}
+                  {copy.programme.schedule.map((item, index) => {
+                    const Icon = scheduleIcons[index];
+                    return (
+                      <li key={`${item.time}-${item.title}`} className="flex gap-3 text-sm">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-[#b66b07] shadow-sm"><Icon size={17} aria-hidden="true" /></span>
+                        <div><p className="font-black text-[#09235b]">{item.time}</p><p className="mt-0.5 text-[#415878]">{item.title}</p></div>
+                      </li>
+                    );
+                  })}
                 </ol>
-              </div>
+              </EventReveal>
 
-              <div className="rounded-[1.75rem] border border-[#ffb4a6] bg-[#fff0ed] p-6 sm:p-7">
-                <div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#e94c62] text-white"><Activity size={22} /></span><h3 className="font-black text-[#7b101d]">{copy.programme.sessionsTitle}</h3></div>
+              <EventReveal className="rounded-[1.75rem] border border-[#ffb4a6] bg-[#fff0ed] p-6 sm:p-7" delay={0.16}>
+                <div className="flex items-center gap-3"><EventArtwork kind="nutrition" className="h-16 w-16 shrink-0" /><h3 className="font-black text-[#7b101d]">{copy.programme.sessionsTitle}</h3></div>
                 <div className="mt-7 space-y-5">
-                  {copy.programme.sessions.map((session) => (
+                  {copy.programme.sessions.map((session, index) => (
                     <article key={session.time} className="border-b border-[#7b101d]/10 pb-5 last:border-b-0 last:pb-0">
+                      <div className="mb-3 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-white bg-white shadow-sm">
+                        {index === 0 ? <Image src="/app/products-protein-supplements.webp" alt="" width={64} height={64} className="h-full w-full object-cover" /> : <EventArtwork kind="watch" className="h-14 w-14" />}
+                      </div>
                       <p className="text-xs font-black uppercase tracking-[0.13em] text-[#d23848]">{session.time}</p>
                       <h4 className="mt-2 font-black leading-6 text-[#7b101d]">{session.title}</h4>
                       <p className="mt-1 text-sm font-bold text-[#7b101d]/65">{session.speaker}</p>
                     </article>
                   ))}
                 </div>
-              </div>
+              </EventReveal>
             </div>
           </div>
         </div>
@@ -431,39 +444,45 @@ export function EventInvitation() {
 
       <section id="seminars" className="scroll-mt-8 bg-[#edfaff] py-20 sm:py-28">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl">
+          <EventReveal className="max-w-3xl">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-[#0b8da8]">{copy.seminars.eyebrow}</p>
             <h2 className="mt-5 text-balance text-4xl font-black tracking-[-0.055em] text-[#09235b] sm:text-5xl">{copy.seminars.title}</h2>
             <p className="mt-5 text-lg leading-8 text-[#415878]">{copy.seminars.description}</p>
-          </div>
+          </EventReveal>
 
           <div className="mt-12 grid gap-5 lg:grid-cols-3">
             {copy.seminars.tracks.map((track, index) => {
-              const Icon = trackIcons[index];
               return (
-                <article key={track.title} className={`rounded-[1.75rem] border-2 p-6 shadow-lg shadow-[#09235b]/5 sm:p-7 ${trackStyles[index]}`}>
-                  <div className="flex items-center justify-between"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/75 shadow-sm"><Icon size={24} /></span><span className="text-xs font-black uppercase tracking-[0.14em] opacity-60">0{index + 1}</span></div>
-                  <p className="mt-8 text-xs font-black uppercase tracking-[0.15em] opacity-70">{track.label}</p>
+                <EventReveal key={track.title} className="h-full" delay={index * 0.08}>
+                <article className={`event-card h-full rounded-[1.75rem] border-2 p-6 shadow-lg shadow-[#09235b]/5 sm:p-7 ${trackStyles[index]}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-[1.35rem] border-2 border-white bg-white shadow-md">
+                      {index < 2 ? <Image src={index === 0 ? '/app/fitness-bodybuilding.webp' : '/app/wellness-nutrition-sports.webp'} alt="" width={80} height={80} className="h-full w-full object-cover" /> : <EventArtwork kind="watch" className="h-[4.5rem] w-[4.5rem]" />}
+                    </span>
+                    <span className="text-xs font-black uppercase tracking-[0.14em] opacity-60">0{index + 1}</span>
+                  </div>
+                  <p className="mt-6 text-xs font-black uppercase tracking-[0.15em] opacity-70">{track.label}</p>
                   <h3 className="mt-2 text-2xl font-black tracking-tight">{track.title}</h3>
                   <ul className="mt-5 space-y-3 text-sm leading-6">
                     {track.points.map((point) => <li key={point} className="flex gap-2.5"><CheckCircle2 size={17} className="mt-0.5 shrink-0" /> <span>{point}</span></li>)}
                   </ul>
                 </article>
+                </EventReveal>
               );
             })}
           </div>
 
-          <div className="mt-7 overflow-hidden rounded-[1.75rem] bg-[#09235b] p-7 text-white shadow-xl shadow-[#09235b]/20 sm:p-9">
+          <EventReveal className="mt-7 overflow-hidden rounded-[1.75rem] bg-[#09235b] p-7 text-white shadow-xl shadow-[#09235b]/20 sm:p-9">
             <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
               <div><p className="text-xs font-black uppercase tracking-[0.2em] text-[#6ee8e0]">{copy.seminars.breakdown.eyebrow}</p><h3 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">{copy.seminars.breakdown.items[0][1]}</h3></div>
               <span className="inline-flex w-fit items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-black text-[#f7c92d]"><Timer size={17} /> 60 min</span>
             </div>
             <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               {copy.seminars.breakdown.items.map(([time, title]) => (
-                <div key={time} className="rounded-2xl border border-white/15 bg-white/5 p-4"><p className="text-xs font-black text-[#f7c92d]">{time}</p><p className="mt-2 text-sm font-bold leading-5 text-white/85">{title}</p></div>
+                <div key={time} className="event-card rounded-2xl border border-white/15 bg-white/5 p-4"><p className="text-xs font-black text-[#f7c92d]">{time}</p><p className="mt-2 text-sm font-bold leading-5 text-white/85">{title}</p></div>
               ))}
             </div>
-          </div>
+          </EventReveal>
         </div>
       </section>
 
@@ -474,9 +493,10 @@ export function EventInvitation() {
           <div className="text-center"><p className="text-xs font-black uppercase tracking-[0.2em] text-[#fff0a7]">{copy.faq.eyebrow}</p><h2 className="mt-5 text-4xl font-black tracking-[-0.055em] text-white sm:text-5xl">{copy.faq.title}</h2></div>
           <div className="mt-12 grid gap-4 md:grid-cols-2">
             {copy.faq.items.map(([question, answer], index) => (
-              <article key={question} className={`rounded-2xl border-2 p-6 shadow-lg ${index % 2 === 0 ? 'border-[#fff3c5] bg-[#fff8eb] text-[#09235b]' : 'border-[#09235b]/20 bg-[#6ee8e0] text-[#073b59]'}`}>
+              <EventReveal key={question} delay={index * 0.06}><article className={`event-card h-full rounded-2xl border-2 p-6 shadow-lg ${index % 2 === 0 ? 'border-[#fff3c5] bg-[#fff8eb] text-[#09235b]' : 'border-[#09235b]/20 bg-[#6ee8e0] text-[#073b59]'}`}>
                 <h3 className="flex gap-3 font-black"><CircleDot className="mt-0.5 shrink-0 text-[#e94c62]" size={17} />{question}</h3><p className="mt-3 pl-7 text-sm leading-6 opacity-80">{answer}</p>
               </article>
+              </EventReveal>
             ))}
           </div>
         </div>

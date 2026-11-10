@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import { EventArtwork } from '@/components/event/EventArtwork';
+import { EventReveal } from '@/components/event/EventMotion';
 import {
   Check,
   Copy,
@@ -139,11 +141,12 @@ export function EventPaymentPanel({
         <div className="absolute left-[7%] top-8 h-12 w-5 rotate-[28deg] rounded-full bg-[#20dac5]" />
         <div className="absolute bottom-8 right-[8%] text-4xl font-black text-[#ff684d]">✦</div>
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-          <div className="relative overflow-hidden rounded-[1.75rem] border-4 border-[#1b0b42] bg-white shadow-[0_24px_65px_rgba(61,20,86,0.18)]">
+          <EventReveal className="relative overflow-hidden rounded-[1.75rem] border-4 border-[#1b0b42] bg-white shadow-[0_24px_65px_rgba(61,20,86,0.18)]">
             <div className="grid lg:grid-cols-[1.05fr_0.95fr_0.9fr]">
               <div className="relative overflow-hidden bg-[#ff684d] p-6 text-[#1b0b42] sm:p-8">
                 <div className="absolute -left-12 -top-16 h-44 w-44 rounded-full bg-[#ffc62a]/70 blur-3xl" />
                 <div className="relative">
+                  <EventArtwork kind="ticket" className="mb-2 h-14 w-14" />
                   <span className="inline-flex items-center gap-2 rounded-full border border-[#1b0b42]/20 bg-white/45 px-3 py-1.5 text-xs font-black uppercase tracking-[0.15em]"><Ticket size={15} /> {copy.admission}</span>
                   <h2 id="payment-heading" className="mt-4 text-2xl font-black tracking-[-0.045em] sm:text-3xl">{copy.title}</h2>
                   <p className="mt-3 max-w-md text-sm leading-6 text-[#1b0b42]/75">{copy.description}</p>
@@ -175,7 +178,7 @@ export function EventPaymentPanel({
                 {!whatsappLink && !emailLink && <p className="mt-3 text-xs leading-5 text-[#8d789d]">{copy.contactsDemo}</p>}
               </div>
             </div>
-          </div>
+          </EventReveal>
         </div>
       </section>
     );

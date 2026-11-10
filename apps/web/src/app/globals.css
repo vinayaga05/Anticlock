@@ -80,3 +80,25 @@ body {
   backface-visibility: hidden;
   contain: layout style paint;
 }
+
+.event-invitation :is(a, button):focus-visible {
+  outline: 3px solid #0b7696;
+  outline-offset: 5px;
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .event-invitation .event-card {
+    transition: transform 220ms ease, box-shadow 220ms ease;
+  }
+
+  .event-invitation .event-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 32px rgba(9, 35, 91, 0.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .event-invitation :is(a, button, figure > div) {
+    transform: none !important;
+  }
+}

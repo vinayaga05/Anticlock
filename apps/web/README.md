@@ -155,6 +155,21 @@ All content lives in `src/config/`:
 
 Update these files to change website content without touching components.
 
+### Event landing page
+
+The premium event page is available at `/event`. It uses the Knock visual system and a transparent manual UPI-verification flow: a participant pays ₹500, sends a screenshot or UPI transaction ID, and receives an invitation after the event team verifies payment.
+
+Set these public values before publishing the page:
+
+```bash
+NEXT_PUBLIC_EVENT_UPI_ID=your-upi-id@bank
+NEXT_PUBLIC_EVENT_PAYEE_NAME="Your Event Name"
+NEXT_PUBLIC_EVENT_WHATSAPP_NUMBER=919876543210
+NEXT_PUBLIC_EVENT_EMAIL=events@example.com
+```
+
+`NEXT_PUBLIC_EVENT_QR_IMAGE_URL` is optional. When it is omitted, the page generates a scannable QR from the UPI ID. Do not publish payment or proof-of-payment actions until the UPI ID plus at least one support contact is configured.
+
 ## Screenshots & Images
 
 **Real App Screenshots**:

@@ -15,20 +15,22 @@ export function Navbar() {
       setIsScrolled(window.scrollY > 20);
     };
 
-    window.addEventListener('scroll', handleScroll);
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        isScrolled ? 'glass-dark shadow-lg' : 'bg-transparent'
+      aria-label="Main navigation"
+      className={`site-nav fixed top-0 left-0 right-0 z-50 border-b transition-all duration-300 ${
+        isScrolled ? 'border-[#09235b]/10 bg-white/95 shadow-lg shadow-[#09235b]/5 backdrop-blur-xl' : 'border-[#09235b]/5 bg-white/80 backdrop-blur-md'
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 md:h-20">
           <Link href="/" className="flex items-center space-x-2 md:space-x-3">
-            <div className="relative w-10 h-10 md:w-11 md:h-11 flex-shrink-0">
+            <div className="relative w-10 h-10 md:w-11 md:h-11 flex-shrink-0 overflow-hidden rounded-xl shadow-sm">
               <Image
                 src="/brand/logo-square.png"
                 alt="Knock"
@@ -38,31 +40,34 @@ export function Navbar() {
                 priority
               />
             </div>
-            <span className="text-xl md:text-2xl font-bold text-white">Knock</span>
+            <span className="text-xl md:text-2xl font-black tracking-tight text-[#09235b]">Knock<span className="text-[#e94c62]">.</span></span>
           </Link>
 
-          <div className="hidden md:flex items-center space-x-8">
+          <div className="hidden lg:flex items-center space-x-8">
             {navigation.main.map((item) => (
               <Link
                 key={item.name}
                 href={item.href}
-                className="text-white/90 hover:text-white transition-colors font-medium"
+                className="text-[#415878] hover:text-[#d23848] transition-colors font-bold"
               >
                 {item.name}
               </Link>
             ))}
             <Link
               href="#download"
-              className="px-6 py-2.5 bg-gradient-to-r from-aqua to-aqua-deep text-white rounded-full font-semibold hover:shadow-lg hover:scale-105 transition-all"
+              className="rounded-xl bg-[#09235b] px-6 py-2.5 font-black text-white shadow-md shadow-[#09235b]/10 transition hover:bg-[#0b5f9d] motion-safe:hover:-translate-y-0.5"
             >
               Download
             </Link>
           </div>
 
           <button
-            className="md:hidden text-white p-2"
+            type="button"
+            className="rounded-xl border border-[#09235b]/10 bg-white p-2 text-[#09235b] lg:hidden"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label="Toggle menu"
+            aria-expanded={isMobileMenuOpen}
+            aria-controls="mobile-navigation"
           >
             {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -70,13 +75,13 @@ export function Navbar() {
       </div>
 
       {isMobileMenuOpen && (
-        <div className="md:hidden glass-dark border-t border-white/10">
+        <div id="mobile-navigation" className="border-t border-[#09235b]/10 bg-[#f4fbff] shadow-xl shadow-[#09235b]/10 lg:hidden">
           <div className="px-4 py-6 space-y-4">
             {navigation.main.map((item) => (
               <Link
                 key={item.name}
                 href={item.href}
-                className="block text-white/90 hover:text-white transition-colors font-medium py-2"
+                className="block py-2 font-bold text-[#415878] transition-colors hover:text-[#d23848]"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 {item.name}
@@ -84,7 +89,7 @@ export function Navbar() {
             ))}
             <Link
               href="#download"
-              className="block text-center px-6 py-3 bg-gradient-to-r from-aqua to-aqua-deep text-white rounded-full font-semibold"
+              className="block rounded-xl bg-[#09235b] px-6 py-3 text-center font-black text-white"
               onClick={() => setIsMobileMenuOpen(false)}
             >
               Download

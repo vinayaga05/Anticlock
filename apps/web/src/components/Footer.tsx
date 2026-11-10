@@ -6,12 +6,12 @@ export function Footer() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="bg-black text-white pt-16 pb-8">
+    <footer className="border-t-4 border-[#f4bb28] bg-[#09235b] text-white pt-16 pb-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
           <div className="lg:col-span-2">
             <Link href="/" className="inline-flex items-center space-x-3 mb-4">
-              <div className="relative w-12 h-12 flex-shrink-0">
+              <div className="relative w-12 h-12 flex-shrink-0 overflow-hidden rounded-xl shadow-lg">
                 <Image
                   src="/brand/logo-square.png"
                   alt="Knock"

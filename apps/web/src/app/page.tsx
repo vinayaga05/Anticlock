@@ -1,4 +1,5 @@
 import { Navbar } from '@/components/Navbar';
+import { HomeTheme } from '@/components/HomeTheme';
 import { Footer } from '@/components/Footer';
 import { HeroSection } from '@/components/sections/HeroSection';
 import { FeaturesSection } from '@/components/sections/FeaturesSection';
@@ -11,7 +12,7 @@ import { CTASection } from '@/components/sections/CTASection';
 
 export default function HomePage() {
   return (
-    <>
+    <HomeTheme>
       <Navbar />
       <main>
         <HeroSection />
@@ -24,6 +25,6 @@ export default function HomePage() {
         <CTASection />
       </main>
       <Footer />
-    </>
+    </HomeTheme>
   );
 }

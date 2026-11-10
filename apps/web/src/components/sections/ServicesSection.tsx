@@ -1,6 +1,6 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import Image from 'next/image';
 import { 
   Heart, Dumbbell, Trophy, Leaf, Plane, Scissors, GraduationCap, Home, ShoppingBag 
@@ -20,29 +20,38 @@ const iconMap: Record<string, any> = {
   'shopping-bag': ShoppingBag,
 };
 
+const cardStyles = [
+  'border-[#bceaf4] bg-[#eaf9ff]',
+  'border-[#f1d97e] bg-[#fff8df]',
+  'border-[#ffb4a6] bg-[#fff0ed]',
+  'border-[#d8d0fb] bg-[#f3efff]',
+] as const;
+
 export function ServicesSection() {
+  const reduceMotion = useReducedMotion();
+
   return (
-    <section id="services" className="py-24 bg-gradient-to-br from-gray-50 to-white">
+    <section id="services" className="bg-[#edfaff] py-20 text-[#09235b] sm:py-28">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <motion.h2
-            initial={{ opacity: 0, y: 20 }}
+            initial={reduceMotion ? false : { y: 18 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-4xl md:text-5xl font-bold mb-4"
+            className="mb-4 text-4xl font-black tracking-[-0.055em] text-[#09235b] md:text-5xl"
           >
-            <span className="bg-gradient-to-r from-aqua via-coral to-lavender bg-clip-text text-transparent">
+            <span className="text-[#0b7696]">
               9 Service Categories
             </span>
             <br />
             Your Entire Lifestyle
           </motion.h2>
           <motion.p
-            initial={{ opacity: 0, y: 20 }}
+            initial={reduceMotion ? false : { y: 18 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.2 }}
-            className="text-xl text-gray-600 max-w-2xl mx-auto"
+            className="mx-auto max-w-2xl text-lg leading-8 text-[#415878] sm:text-xl"
           >
             From health and wellness to travel and courses—everything you need, beautifully
             organized and ready to book.
@@ -57,45 +66,42 @@ export function ServicesSection() {
             return (
               <motion.div
                 key={tree.id}
-                initial={{ opacity: 0, scale: 0.9 }}
-                whileInView={{ opacity: 1, scale: 1 }}
+                initial={reduceMotion ? false : { y: 18 }}
+                whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.05 }}
                 className="group"
               >
                 <div
-                  className="relative h-full p-6 rounded-2xl bg-white border-2 border-transparent hover:border-gray-200 hover:shadow-lg transition-all duration-300 overflow-hidden"
-                  style={{
-                    background: `linear-gradient(135deg, ${tree.color}08 0%, white 100%)`,
-                  }}
+                  className={`relative h-full overflow-hidden rounded-[1.75rem] border-2 p-6 shadow-lg shadow-[#09235b]/5 transition-shadow duration-300 hover:shadow-xl hover:shadow-[#09235b]/10 sm:p-7 ${cardStyles[index % cardStyles.length]}`}
                 >
                   <div
-                    className="absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl opacity-20 group-hover:opacity-30 transition-opacity"
+                    className="absolute -right-12 -top-12 h-40 w-40 rounded-full opacity-10"
                     style={{ background: tree.color }}
                   ></div>
                   <div className="relative">
                     {/* Category artwork */}
-                    <div className="mb-4 relative w-20 h-20 rounded-xl overflow-hidden" style={{ backgroundColor: `${tree.color}10` }}>
+                    <div className="relative mb-5 h-24 w-24 overflow-hidden rounded-[1.4rem] border-4 border-white bg-white shadow-md">
                       {categoryImage ? (
                         <Image
                           src={categoryImage}
                           alt={tree.name}
                           fill
-                          sizes="80px"
+                          sizes="96px"
                           className="object-cover"
                           loading="lazy"
                         />
                       ) : (
                         <div
-                          className="inline-flex p-3 rounded-xl"
+                          className="flex h-full w-full items-center justify-center rounded-xl"
                           style={{ backgroundColor: `${tree.color}15` }}
                         >
-                          <Icon size={28} style={{ color: tree.color }} />
+                          <Icon aria-hidden="true" size={32} style={{ color: tree.color }} />
                         </div>
                       )}
                     </div>
-                    <h3 className="text-xl font-bold mb-2 text-gray-900">{tree.name}</h3>
-                    <p className="text-gray-600 leading-relaxed">{tree.description}</p>
+                    <h3 className="mb-2 text-xl font-black text-[#09235b]">{tree.name}</h3>
+                    <p className="leading-7 text-[#415878]">{tree.description}</p>
                   </div>
                 </div>
               </motion.div>

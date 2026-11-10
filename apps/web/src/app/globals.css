@@ -3,18 +3,16 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 11, 11, 15;
-  --background-rgb: 250, 250, 247;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 247, 247, 244;
-    --background-rgb: 11, 11, 15;
-  }
+  --foreground-rgb: 9, 35, 91;
+  --background-rgb: 249, 252, 255;
+  color-scheme: light;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+
   *,
   *::before,
   *::after {
@@ -84,6 +82,25 @@ body {
 .event-invitation :is(a, button):focus-visible {
   outline: 3px solid #0b7696;
   outline-offset: 5px;
+}
+
+.marketing-site section[id] {
+  scroll-margin-top: 6rem;
+}
+
+.marketing-site :is(a, button):focus-visible,
+.site-nav :is(a, button):focus-visible {
+  outline: 3px solid #0b7696;
+  outline-offset: 5px;
+}
+
+.marketing-site ::selection {
+  background: #ffe1db;
+  color: #09235b;
+}
+
+.marketing-site footer :is(a, button):focus-visible {
+  outline-color: #f4bb28;
 }
 
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {

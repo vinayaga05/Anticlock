@@ -1,7 +1,8 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Download, Apple, Play } from 'lucide-react';
+import { Apple, Play, Sparkles } from 'lucide-react';
+import { EventArtwork } from '@/components/event/EventArtwork';
 import { getAppStoreButton, getPlayStoreButton } from '@/lib/utils';
 import { PhoneFrame } from '@/components/ui/PhoneFrame';
 import { HomeScreen, ClipsScreen, MarketplaceScreen } from '@/components/ui/AppScreens';
@@ -11,16 +12,16 @@ export function HeroSection() {
   const playStore = getPlayStoreButton();
 
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-black via-gray-900 to-black pt-20 pb-12 lg:pb-20">
-      <div className="absolute inset-0 gradient-radial opacity-60"></div>
+    <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-[#eaf9ff] pt-20 pb-12 lg:pb-20">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_8%_18%,rgba(17,181,218,0.28),transparent_25%),radial-gradient(circle_at_93%_12%,rgba(255,186,34,0.4),transparent_25%),radial-gradient(circle_at_88%_87%,rgba(238,70,103,0.22),transparent_26%),linear-gradient(135deg,#effcff_0%,#ffffff_48%,#fff8df_100%)]" aria-hidden="true" />
       
       {/* Optimized blur orbs with reduced blur and GPU acceleration */}
-      <div className="absolute inset-0" suppressHydrationWarning>
-        <div className="blur-orb absolute top-20 left-10 w-72 h-72 bg-aqua/20 rounded-full blur-2xl animate-float"></div>
-        <div className="blur-orb absolute bottom-20 right-10 w-96 h-96 bg-coral/20 rounded-full blur-2xl animate-float" style={{ animationDelay: '1s' }}></div>
+      <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+        <div className="absolute left-[4%] top-[24%] h-14 w-6 rotate-[28deg] rounded-full bg-[#ff8e2b]" />
+        <div className="absolute bottom-[12%] left-[16%] h-6 w-14 -rotate-[30deg] rounded-full border-4 border-[#11b5da]" />
         {/* Centered lime orb - use container for positioning, inner div for animation */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64">
-          <div className="blur-orb w-full h-full bg-lime/20 rounded-full blur-2xl animate-float" style={{ animationDelay: '2s' }}></div>
+          <div className="h-full w-full rounded-full bg-[#f4bb28]/15 blur-2xl" />
         </div>
       </div>
 
@@ -34,8 +35,8 @@ export function HeroSection() {
               transition={{ duration: 0.8 }}
               className="mb-4 lg:mb-6"
             >
-              <span className="inline-flex items-center px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 text-white/90 text-sm font-medium">
-                <span className="w-2 h-2 bg-aqua rounded-full mr-2 animate-pulse"></span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-[#09235b]/15 bg-white/85 px-4 py-2 text-sm font-bold text-[#0b5f9d] shadow-sm">
+                <Sparkles aria-hidden="true" className="text-[#e94c62]" size={17} />
                 Your lifestyle, simplified
               </span>
             </motion.div>
@@ -44,11 +45,11 @@ export function HeroSection() {
               initial={false}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.2 }}
-              className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-white mb-4 lg:mb-6 leading-tight"
+              className="mb-4 text-5xl font-black leading-[1.03] tracking-[-0.055em] text-[#09235b] sm:text-6xl lg:mb-6 lg:text-6xl xl:text-7xl"
             >
               Discover, Book,
               <br />
-              <span className="bg-gradient-to-r from-aqua via-coral to-lime bg-clip-text text-transparent">
+              <span className="font-serif italic text-[#d23848]">
                 Live Your Best Life
               </span>
             </motion.h1>
@@ -57,7 +58,7 @@ export function HeroSection() {
               initial={false}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.4 }}
-              className="text-lg sm:text-xl lg:text-2xl text-white/80 mb-8 lg:mb-12 max-w-3xl lg:max-w-none leading-relaxed"
+              className="text-lg sm:text-xl lg:text-2xl text-[#415878] mb-8 lg:mb-10 max-w-3xl lg:max-w-none leading-relaxed"
             >
               From health and fitness to travel and beauty—explore services, connect with communities,
               and book everything in one place.
@@ -73,8 +74,8 @@ export function HeroSection() {
                 href={appStore.url}
                 className={`inline-flex items-center px-8 py-4 rounded-2xl font-semibold transition-all ${
                   appStore.available
-                    ? 'bg-white text-black hover:scale-105 hover:shadow-xl'
-                    : 'bg-white/20 text-white/60 cursor-not-allowed'
+                    ? 'bg-[#09235b] text-white hover:bg-[#0b5f9d] hover:shadow-xl motion-safe:hover:-translate-y-1'
+                    : 'border border-[#09235b]/15 bg-white/75 text-[#52677e] cursor-not-allowed'
                 }`}
                 {...(!appStore.available && { 'aria-disabled': 'true' })}
               >
@@ -85,8 +86,8 @@ export function HeroSection() {
                 href={playStore.url}
                 className={`inline-flex items-center px-8 py-4 rounded-2xl font-semibold transition-all ${
                   playStore.available
-                    ? 'bg-gradient-to-r from-aqua to-aqua-deep text-white hover:scale-105 hover:shadow-xl'
-                    : 'bg-white/20 text-white/60 cursor-not-allowed'
+                    ? 'border-2 border-[#e94c62] bg-white text-[#c22d42] hover:bg-[#fff0f1] hover:shadow-xl motion-safe:hover:-translate-y-1'
+                    : 'border border-[#09235b]/15 bg-white/75 text-[#52677e] cursor-not-allowed'
                 }`}
                 {...(!playStore.available && { 'aria-disabled': 'true' })}
               >
@@ -99,15 +100,18 @@ export function HeroSection() {
               initial={false}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 1, delay: 0.8 }}
-              className="flex flex-wrap items-center justify-center lg:justify-start gap-3 text-white/70 text-sm"
+              className="flex flex-wrap items-center justify-center lg:justify-start gap-3 text-[#09235b] text-xs font-bold"
             >
-              <span className="px-4 py-2 rounded-full bg-white/5 backdrop-blur-sm border border-white/10">
+              <span className="inline-flex items-center gap-2 rounded-2xl border border-[#f1d97e] bg-[#fff8df] py-2 pl-2 pr-3 shadow-sm">
+                <EventArtwork kind="strength" className="h-8 w-8" />
                 9 Service Categories
               </span>
-              <span className="px-4 py-2 rounded-full bg-white/5 backdrop-blur-sm border border-white/10">
+              <span className="inline-flex items-center gap-2 rounded-2xl border border-[#bceaf4] bg-[#eaf9ff] py-2 pl-2 pr-3 shadow-sm">
+                <EventArtwork kind="community" className="h-8 w-8" />
                 Social Discovery
               </span>
-              <span className="px-4 py-2 rounded-full bg-white/5 backdrop-blur-sm border border-white/10">
+              <span className="inline-flex items-center gap-2 rounded-2xl border border-[#ffb4a6] bg-[#fff0ed] py-2 pl-2 pr-3 shadow-sm">
+                <Sparkles aria-hidden="true" className="mx-1 text-[#d23848]" size={22} />
                 AI-Powered
               </span>
             </motion.div>
@@ -125,7 +129,7 @@ export function HeroSection() {
                 }}
                 transition={{ 
                   opacity: { duration: 0.8, delay: 0.3 },
-                  y: { duration: 4, repeat: Infinity, ease: "easeInOut", repeatType: "loop" }
+                  y: { duration: 3.2, ease: "easeInOut" }
                 }}
               >
                 <PhoneFrame delay={0.3}>
@@ -146,7 +150,7 @@ export function HeroSection() {
                 transition={{ 
                   opacity: { duration: 0.8, delay: 0.5 },
                   x: { duration: 0.8, delay: 0.5 },
-                  y: { duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1, repeatType: "loop" }
+                  y: { duration: 3.2, ease: "easeInOut", delay: 0.4 }
                 }}
               >
                 <PhoneFrame delay={0.5} variant="tilted-left">
@@ -167,7 +171,7 @@ export function HeroSection() {
                 transition={{ 
                   opacity: { duration: 0.8, delay: 0.7 },
                   x: { duration: 0.8, delay: 0.7 },
-                  y: { duration: 4.5, repeat: Infinity, ease: "easeInOut", delay: 0.5, repeatType: "loop" }
+                  y: { duration: 3.2, ease: "easeInOut", delay: 0.2 }
                 }}
               >
                 <PhoneFrame delay={0.7} variant="tilted-right">
@@ -190,14 +194,14 @@ export function HeroSection() {
                 </PhoneFrame>
               </motion.div>
             </div>
-            <p className="text-xs text-white/50 mt-2">Sample screen</p>
+            <p className="text-xs text-[#52677e] mt-3">Sample screen</p>
           </div>
         </div>
       </div>
 
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce">
-        <div className="w-6 h-10 border-2 border-white/30 rounded-full p-1">
-          <div className="w-1.5 h-3 bg-white/50 rounded-full"></div>
+      <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2" aria-hidden="true">
+        <div className="w-6 h-10 border-2 border-[#09235b]/25 rounded-full p-1">
+          <div className="w-1.5 h-3 bg-[#0b7696] rounded-full"></div>
         </div>
       </div>
     </section>

@@ -1,31 +1,33 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Check } from 'lucide-react';
 import { differentiators } from '@/config/content';
 
 export function WhyAnticlockSection() {
+  const reduceMotion = useReducedMotion();
+
   return (
-    <section className="py-16 md:py-24 bg-white">
+    <section className="bg-white py-20 text-[#09235b] sm:py-28">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <motion.h2
-            initial={{ opacity: 0, y: 20 }}
+            initial={reduceMotion ? false : { y: 18 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-4xl md:text-5xl font-bold mb-4"
+            className="mb-4 text-4xl font-black tracking-[-0.055em] md:text-5xl"
           >
             Why Choose{' '}
-            <span className="bg-gradient-to-r from-aqua to-coral bg-clip-text text-transparent">
+            <span className="font-serif italic text-[#d23848]">
               Knock
             </span>
           </motion.h2>
           <motion.p
-            initial={{ opacity: 0, y: 20 }}
+            initial={reduceMotion ? false : { y: 18 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.2 }}
-            className="text-xl text-gray-600 max-w-2xl mx-auto"
+            className="mx-auto max-w-2xl text-lg leading-8 text-[#415878] md:text-xl"
           >
             More than just another booking app—a complete lifestyle platform designed for modern
             living
@@ -36,20 +38,20 @@ export function WhyAnticlockSection() {
           {differentiators.map((item, index) => (
             <motion.div
               key={item.title}
-              initial={{ opacity: 0, y: 30 }}
+              initial={reduceMotion ? false : { y: 18 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ delay: index * 0.1 }}
-              className="flex gap-3 md:gap-4"
+              transition={{ duration: 0.5, delay: reduceMotion ? 0 : index * 0.08 }}
+              className={`flex gap-4 rounded-[1.75rem] border-2 p-6 shadow-lg shadow-[#09235b]/5 ${index % 3 === 0 ? 'border-[#bceaf4] bg-[#eaf9ff]' : index % 3 === 1 ? 'border-[#ffb4a6] bg-[#fff0ed]' : 'border-[#f1d97e] bg-[#fff8df]'}`}
             >
               <div className="flex-shrink-0">
-                <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-gradient-to-br from-aqua to-aqua-deep flex items-center justify-center">
-                  <Check className="text-white" size={20} />
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm">
+                  <Check className="text-[#0b7696]" size={22} aria-hidden="true" />
                 </div>
               </div>
               <div>
-                <h3 className="text-lg md:text-xl font-bold mb-1 md:mb-2 text-gray-900">{item.title}</h3>
-                <p className="text-sm md:text-base text-gray-600 leading-relaxed">{item.description}</p>
+                <h3 className="mb-2 text-lg font-black text-[#09235b] md:text-xl">{item.title}</h3>
+                <p className="text-sm leading-7 text-[#415878]">{item.description}</p>
               </div>
             </motion.div>
           ))}

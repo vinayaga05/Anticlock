@@ -1,34 +1,36 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Check, ArrowRight } from 'lucide-react';
 import { providerBenefits } from '@/config/content';
 import { PhoneFrame } from '@/components/ui/PhoneFrame';
 import { ProviderScreen } from '@/components/ui/AppScreens';
 
 export function ProvidersSection() {
+  const reduceMotion = useReducedMotion();
+
   return (
-    <section id="providers" className="py-16 md:py-24 bg-gradient-to-br from-gray-900 to-black text-white relative overflow-hidden">
-      <div className="absolute inset-0 opacity-20">
-        <div className="absolute top-1/3 left-1/4 w-72 h-72 bg-aqua/40 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-1/3 right-1/4 w-72 h-72 bg-coral/40 rounded-full blur-3xl"></div>
+    <section id="providers" className="relative scroll-mt-24 overflow-hidden bg-[#eaf9ff] py-20 text-[#09235b] sm:py-28">
+      <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+        <div className="absolute -right-16 top-0 h-80 w-80 rounded-full bg-[#11b5da]/15 blur-3xl" />
+        <div className="absolute -left-20 bottom-0 h-80 w-80 rounded-full bg-[#f4bb28]/20 blur-3xl" />
       </div>
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
           <motion.div
-            initial={{ opacity: 0, x: -30 }}
-            whileInView={{ opacity: 1, x: 0 }}
+            initial={reduceMotion ? false : { y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6">
-              <span className="bg-gradient-to-r from-aqua via-coral to-lime bg-clip-text text-transparent">
+            <h2 className="mb-6 text-3xl font-black tracking-[-0.055em] md:text-4xl lg:text-5xl">
+              <span className="font-serif italic text-[#d23848]">
                 Grow Your Business
               </span>
               <br />
               With Knock
             </h2>
-            <p className="text-lg md:text-xl text-white/80 mb-8 leading-relaxed">
+            <p className="mb-8 text-lg leading-8 text-[#415878] md:text-xl">
               Service providers from health practitioners to fitness trainers, beauty professionals to tour operators—grow
               your business on Knock.
             </p>
@@ -36,22 +38,22 @@ export function ProvidersSection() {
               {providerBenefits.map((benefit, index) => (
                 <motion.div
                   key={index}
-                  initial={{ opacity: 0, x: -20 }}
+                  initial={reduceMotion ? false : { x: -12 }}
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }}
-                  transition={{ delay: index * 0.1 }}
-                  className="flex items-start gap-3"
+                  transition={{ duration: 0.4, delay: reduceMotion ? 0 : index * 0.06 }}
+                  className="flex items-start gap-3 rounded-2xl border border-[#bceaf4] bg-white/85 px-4 py-3 shadow-sm"
                 >
-                  <div className="flex-shrink-0 w-5 h-5 md:w-6 md:h-6 rounded-full bg-aqua/20 flex items-center justify-center mt-0.5">
-                    <Check className="text-aqua" size={14} />
+                  <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#f4bb28]">
+                    <Check className="text-[#09235b]" size={14} aria-hidden="true" />
                   </div>
-                  <p className="text-sm md:text-base text-white/90">{benefit}</p>
+                  <p className="text-sm font-semibold leading-6 text-[#09235b] md:text-base">{benefit}</p>
                 </motion.div>
               ))}
             </div>
             <a
               href="#download"
-              className="inline-flex items-center px-6 md:px-8 py-3 md:py-4 bg-gradient-to-r from-aqua to-aqua-deep text-white rounded-xl md:rounded-2xl font-semibold hover:scale-105 transition-transform text-sm md:text-base"
+              className="inline-flex items-center rounded-2xl bg-[#09235b] px-6 py-4 text-sm font-black text-white shadow-lg shadow-[#09235b]/20 transition hover:bg-[#0b5f9d] motion-safe:hover:-translate-y-1 md:px-8 md:text-base"
             >
               Become a Provider
               <ArrowRight className="ml-2" size={20} />
@@ -59,17 +61,17 @@ export function ProvidersSection() {
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, x: 30 }}
-            whileInView={{ opacity: 1, x: 0 }}
+            initial={reduceMotion ? false : { y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="flex flex-col items-center lg:items-end"
+            className="relative flex flex-col items-center rounded-[2.5rem] border-2 border-[#bceaf4] bg-white/75 px-8 py-10 shadow-xl shadow-[#09235b]/10 lg:items-center"
           >
-            <div className="w-64 md:w-72">
+            <div className="w-full max-w-[16rem] md:max-w-[18rem]">
               <PhoneFrame delay={0.3}>
                 <ProviderScreen />
               </PhoneFrame>
             </div>
-            <p className="text-xs text-white/50 mt-2">Sample screen</p>
+            <p className="mt-4 text-xs font-semibold text-[#52677e]">Sample screen</p>
           </motion.div>
         </div>
       </div>

@@ -1,18 +1,17 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import {
   Activity,
   ArrowDown,
   ArrowRight,
-  Award,
   CalendarDays,
   CheckCircle2,
   CircleDot,
   Dumbbell,
   HeartPulse,
   Languages,
-  Medal,
   Sparkles,
   Ticket,
   Timer,
@@ -40,6 +39,8 @@ const invitationCopy = {
       primaryAction: 'Explore the programme',
       secondaryAction: 'Reserve for ₹500',
       community: '500+ fitness and sports trainers, practitioners and students',
+      posterLabel: 'Official programme poster',
+      posterCaption: 'The original artwork keeps every organiser, guest, session and visual detail together.',
     },
     pass: {
       presenting: 'Academy presents',
@@ -151,6 +152,8 @@ const invitationCopy = {
       primaryAction: 'நிகழ்ச்சி நிரலைப் பார்க்க',
       secondaryAction: '₹500-க்கு பதிவு செய்ய',
       community: 'ஃபிட்னஸ் மற்றும் விளையாட்டுத் துறையைச் சார்ந்த 500+ பயிற்சியாளர்கள் மற்றும் மாணவர்கள்',
+      posterLabel: 'அதிகாரப்பூர்வ நிகழ்ச்சி போஸ்டர்',
+      posterCaption: 'அசல் போஸ்டரில் அனைத்து ஒருங்கிணைப்பாளர், விருந்தினர், அமர்வு மற்றும் காட்சி விவரங்களும் இடம்பெற்றுள்ளன.',
     },
     pass: {
       presenting: 'அகாடமி வழங்கும்',
@@ -348,48 +351,25 @@ export function EventInvitation() {
             </div>
           </div>
 
-          <div className="relative mx-auto w-full max-w-md py-3 sm:max-w-[31rem]">
+          <figure className="relative mx-auto w-full max-w-sm py-3 sm:max-w-[27rem]">
             <div className="absolute -left-7 top-8 h-28 w-28 rounded-full bg-[#11b5da]/35 blur-2xl" />
             <div className="absolute -bottom-5 -right-5 h-36 w-36 rounded-full bg-[#e94c62]/30 blur-2xl" />
-            <div className="relative overflow-hidden rounded-[2.35rem] border-[7px] border-[#f4bb28] bg-[#7b101d] p-2 shadow-[0_30px_80px_rgba(9,35,91,0.24)] rotate-[-2deg] transition duration-500 hover:rotate-0">
-              <div className="relative overflow-hidden rounded-[1.75rem] border-2 border-white/45 bg-[radial-gradient(circle_at_80%_15%,rgba(255,211,74,0.75),transparent_25%),linear-gradient(145deg,#fffef7_0%,#fff5d8_100%)] p-6 text-[#09235b] sm:p-8">
-                <div className="absolute inset-x-0 top-0 h-4 bg-[repeating-linear-gradient(135deg,#e94c62_0_13px,#fff9e8_13px_24px,#11b5da_24px_37px)]" />
-                <div className="absolute -left-4 top-[55%] h-8 w-8 rounded-full bg-[#eaf9ff]" />
-                <div className="absolute -right-4 top-[55%] h-8 w-8 rounded-full bg-[#eaf9ff]" />
-                <div className="absolute right-7 top-8 text-3xl text-[#e94c62]">✦</div>
-                <div className="absolute bottom-9 left-8 h-10 w-3 rotate-[29deg] rounded-full bg-[#11b5da]" />
-                <div className="absolute bottom-10 right-8 h-4 w-12 -rotate-[24deg] rounded-full border-2 border-[#6c5fe6]" />
-
-                <div className="relative pt-3">
-                  <div className="flex items-center justify-between text-[0.65rem] font-black uppercase tracking-[0.2em] text-[#8d4434]">
-                    <span>{copy.pass.presenting}</span>
-                    <span>{copy.pass.admit}</span>
-                  </div>
-                  <div className="mt-7 flex items-center gap-4">
-                    <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-4 border-[#f4bb28] bg-[#7b101d] text-[#f7ca32] shadow-lg"><Award size={42} /></span>
-                    <div>
-                      <p className="text-3xl font-black tracking-[-0.055em] text-[#7b101d]">{copy.pass.title}</p>
-                      <p className="mt-1 text-lg font-black text-[#d23848]">{copy.pass.annual}</p>
-                    </div>
-                  </div>
-                  <div className="mt-7 border-y-2 border-dashed border-[#7b101d]/20 py-5">
-                    <p className="flex items-center gap-2 text-sm font-black text-[#09235b]"><Medal size={18} className="text-[#e25a27]" /> {copy.pass.awards}</p>
-                    <p className="mt-3 flex items-center gap-2 text-sm font-black text-[#09235b]"><Zap size={18} className="text-[#6c5fe6]" /> {copy.pass.launch}</p>
-                  </div>
-                  <div className="mt-6 flex items-end justify-between">
-                    <div>
-                      <p className="text-[0.65rem] font-black uppercase tracking-[0.17em] text-[#8d4434]">{copy.pass.entry}</p>
-                      <p className="mt-1 text-4xl font-black tracking-[-0.07em] text-[#09235b]">₹{eventConfig.fee}</p>
-                    </div>
-                    <div className="rounded-2xl bg-[#09235b] px-4 py-3 text-right text-xs font-bold text-white shadow-lg">
-                      <p className="text-[#6ee8e0]">UPI</p>
-                      <p className="mt-1 text-white/70">{copy.pass.verify}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="relative overflow-hidden rounded-[2rem] border-[6px] border-[#f4bb28] bg-white shadow-[0_30px_80px_rgba(9,35,91,0.28)] rotate-[-2deg] transition duration-500 hover:rotate-0">
+              <Image
+                src="/event/mupperum-vizha-poster.jpg"
+                alt={`${copy.hero.posterLabel} — ${copy.hero.title}`}
+                width={1024}
+                height={1535}
+                priority
+                sizes="(max-width: 640px) 82vw, (max-width: 1024px) 56vw, 432px"
+                className="h-auto w-full"
+              />
             </div>
-          </div>
+            <figcaption className="relative mt-4 rounded-2xl border border-[#09235b]/10 bg-white/85 px-4 py-3 text-center shadow-sm backdrop-blur">
+              <p className="text-xs font-black uppercase tracking-[0.15em] text-[#d23848]">{copy.hero.posterLabel}</p>
+              <p className="mt-1 text-xs leading-5 text-[#415878]">{copy.hero.posterCaption}</p>
+            </figcaption>
+          </figure>
         </div>
       </section>
 
@@ -487,8 +467,6 @@ export function EventInvitation() {
         </div>
       </section>
 
-      <EventPaymentPanel language={language} />
-
       <section id="faq" className="relative scroll-mt-8 overflow-hidden bg-[#0b7696] py-20 sm:py-28">
         <div className="absolute left-[7%] top-16 h-8 w-20 -rotate-[30deg] rounded-full border-4 border-[#ffc62a]" />
         <div className="absolute bottom-14 right-[7%] text-5xl font-black text-[#ff684d]">✦</div>
@@ -508,6 +486,8 @@ export function EventInvitation() {
         <div className="absolute left-[10%] top-0 h-56 w-56 rounded-full bg-[#6ee8e0]/60 blur-3xl" />
         <div className="relative mx-auto flex max-w-5xl flex-col items-center justify-between gap-8 text-center md:flex-row md:text-left"><div><div className="flex items-center justify-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-[#7b101d] md:justify-start"><Languages size={17} /> English · தமிழ்</div><h2 className="mt-3 text-balance text-4xl font-black tracking-[-0.06em] sm:text-5xl">{copy.cta.title}</h2></div><a href="#pay" className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-[#09235b] px-6 py-4 font-black text-white shadow-xl shadow-[#09235b]/25 transition hover:-translate-y-1 hover:bg-[#0b5f9d]">{copy.cta.action} <ArrowRight size={19} /></a></div>
       </section>
+
+      <EventPaymentPanel language={language} compact />
 
       <footer className="bg-[#09235b] px-4 py-8 sm:px-6 lg:px-8"><div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 text-center sm:flex-row sm:text-left"><a href="/" className="inline-flex items-center gap-2 text-sm font-black text-white"><Zap size={16} className="text-[#f7c92d]" /> Anticlock</a><p className="max-w-2xl text-xs leading-5 text-white/60">{copy.footer}</p><a href="#pay" className="inline-flex items-center gap-1.5 text-xs font-black text-[#6ee8e0] transition hover:text-white"><Ticket size={15} /> {copy.nav.entry}</a></div></footer>
     </main>

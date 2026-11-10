@@ -103,7 +103,13 @@ const paymentCopy = {
   },
 } as const;
 
-export function EventPaymentPanel({ language = 'en' }: { language?: 'en' | 'ta' }) {
+export function EventPaymentPanel({
+  language = 'en',
+  compact = false,
+}: {
+  language?: 'en' | 'ta';
+  compact?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
   const copy = paymentCopy[language];
   const upiLink = getUpiPaymentLink();
@@ -125,6 +131,54 @@ export function EventPaymentPanel({ language = 'en' }: { language?: 'en' | 'ta' 
     } catch {
       setCopied(false);
     }
+  }
+
+  if (compact) {
+    return (
+      <section id="pay" aria-labelledby="payment-heading" className="relative scroll-mt-8 overflow-hidden bg-[#fff6e4] py-12 sm:py-16">
+        <div className="absolute left-[7%] top-8 h-12 w-5 rotate-[28deg] rounded-full bg-[#20dac5]" />
+        <div className="absolute bottom-8 right-[8%] text-4xl font-black text-[#ff684d]">✦</div>
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+          <div className="relative overflow-hidden rounded-[1.75rem] border-4 border-[#1b0b42] bg-white shadow-[0_24px_65px_rgba(61,20,86,0.18)]">
+            <div className="grid lg:grid-cols-[1.05fr_0.95fr_0.9fr]">
+              <div className="relative overflow-hidden bg-[#ff684d] p-6 text-[#1b0b42] sm:p-8">
+                <div className="absolute -left-12 -top-16 h-44 w-44 rounded-full bg-[#ffc62a]/70 blur-3xl" />
+                <div className="relative">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-[#1b0b42]/20 bg-white/45 px-3 py-1.5 text-xs font-black uppercase tracking-[0.15em]"><Ticket size={15} /> {copy.admission}</span>
+                  <h2 id="payment-heading" className="mt-4 text-2xl font-black tracking-[-0.045em] sm:text-3xl">{copy.title}</h2>
+                  <p className="mt-3 max-w-md text-sm leading-6 text-[#1b0b42]/75">{copy.description}</p>
+                </div>
+              </div>
+
+              <div className="border-y-2 border-dashed border-[#1b0b42]/15 bg-[#fffdf8] p-6 sm:p-8 lg:border-x-2 lg:border-y-0">
+                <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.16em] text-[#8e72ff]">{copy.scan}</p><h3 className="mt-1 text-xl font-black text-[#1b0b42]">{copy.pay}</h3></div><span className="rounded-xl bg-[#20dac5] p-2.5 text-[#1b0b42]"><QrCode size={21} /></span></div>
+                <div className="mt-5 flex items-center gap-4 rounded-2xl border border-dashed border-[#ff684d]/45 bg-[#fff8eb] p-4">
+                  {eventPayment.qrImageUrl ? (
+                    <img src={eventPayment.qrImageUrl} alt={`${copy.qrAlt} — ${eventConfig.name}`} className="h-24 w-24 rounded-xl bg-white object-contain p-2 shadow-sm" />
+                  ) : upiLink ? (
+                    <QRCodeSVG value={upiLink} size={96} level="H" includeMargin bgColor="#ffffff" fgColor="#101918" title={`${copy.qrAlt} — ${eventConfig.name}`} className="shrink-0 rounded-xl bg-white p-1 shadow-sm" />
+                  ) : (
+                    <span className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl bg-[#8e72ff] text-white shadow-lg shadow-[#8e72ff]/25"><QrCode size={38} /></span>
+                  )}
+                  <div className="min-w-0"><p className="text-xs font-black uppercase tracking-[0.14em] text-[#8e72ff]">UPI ID</p><code className="mt-1 block truncate text-sm font-black text-[#1b0b42]">{eventPayment.upiId || copy.upiComing}</code>{!hasQr && <p className="mt-2 text-xs leading-5 text-[#685579]">{copy.qrDemo}</p>}</div>
+                </div>
+              </div>
+
+              <div className="bg-[#f3efff] p-6 sm:p-8">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#ffc62a] text-[#1b0b42]"><Check size={18} /></span>
+                <h3 className="mt-4 font-black text-[#1b0b42]">{copy.paid}</h3>
+                <p className="mt-2 text-sm leading-6 text-[#685579]">{copy.proof}</p>
+                <div className="mt-4 grid gap-2">
+                  <ProofLink href={whatsappLink} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#20b97f] px-3 py-2.5 text-sm font-black text-[#07352b] transition hover:bg-[#20dac5]" disabledTitle={copy.disabledTitle}><MessageCircle size={17} /> {copy.whatsapp}</ProofLink>
+                  <ProofLink href={emailLink} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#dcd2eb] bg-white px-3 py-2.5 text-sm font-black text-[#1b0b42] transition hover:border-[#8e72ff]" disabledTitle={copy.disabledTitle}><Mail size={17} /> {copy.email}</ProofLink>
+                </div>
+                {!whatsappLink && !emailLink && <p className="mt-3 text-xs leading-5 text-[#8d789d]">{copy.contactsDemo}</p>}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   return (

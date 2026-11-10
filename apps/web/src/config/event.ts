@@ -1,14 +1,14 @@
 const readPublicValue = (value: string | undefined) => value?.trim() ?? '';
 
 export const eventConfig = {
-  name: readPublicValue(process.env.NEXT_PUBLIC_EVENT_NAME) || 'Knock Live 2026',
-  eyebrow: 'The Anticlock Experience',
+  name: readPublicValue(process.env.NEXT_PUBLIC_EVENT_NAME) || 'Anticlock Sports, Health & Fitness Academy',
+  eyebrow: 'Mupperum Vizha · 10th Annual Celebration',
   date: 'Wednesday, 25 November 2026',
   isoDate: '2026-11-25',
   fee: 500,
   currency: 'INR',
   description:
-    'A grand Knock gathering for people who discover, connect, and bring their lifestyle to life.',
+    'A fitness, health and sports celebration with expert seminars, achiever awards and community learning.',
 };
 
 /**
@@ -43,7 +43,9 @@ export function getUpiPaymentLink() {
 export function getPaymentProofMessage() {
   return [
     `Hi! I have paid ₹${eventConfig.fee} for ${eventConfig.name}.`,
+    `வணக்கம்! ${eventConfig.name} நிகழ்விற்காக ₹${eventConfig.fee} செலுத்தியுள்ளேன்.`,
     'My UPI transaction ID is: [add transaction ID]',
+    'எனது UPI பரிவர்த்தனை எண்: [பரிவர்த்தனை எண்ணை சேர்க்கவும்]',
     'I have attached my payment screenshot. Please send my invitation on WhatsApp and email.',
   ].join('\n');
 }

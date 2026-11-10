@@ -24,17 +24,19 @@ function ProofLink({
   href,
   children,
   className,
+  disabledTitle,
 }: {
   href: string;
   children: React.ReactNode;
   className: string;
+  disabledTitle: string;
 }) {
   if (!href) {
     return (
       <span
         aria-disabled="true"
         className={`${className} cursor-not-allowed opacity-45`}
-        title="Add the event contact in the website environment settings to enable this action."
+        title={disabledTitle}
       >
         {children}
       </span>
@@ -48,8 +50,62 @@ function ProofLink({
   );
 }
 
-export function EventPaymentPanel() {
+const paymentCopy = {
+  en: {
+    admission: 'Event admission',
+    title: 'Your invitation starts here.',
+    description: 'Pay the entry fee with any UPI app. Then send your screenshot or transaction ID so our team can verify it and share your invitation.',
+    oneEntry: 'one entry · UPI only',
+    steps: ['Scan the QR or open your preferred UPI app.', 'Pay the exact entry fee of ₹500.', 'Share the proof of payment below.'],
+    verified: 'Payment is verified manually. Your spot is confirmed when you receive the invitation from the event team.',
+    scan: 'Scan to pay',
+    pay: 'Pay ₹500 by UPI',
+    apps: 'Works with Google Pay, PhonePe, Paytm, BHIM, and other UPI apps.',
+    qrAlt: 'UPI QR code',
+    qrComing: 'Your UPI QR will appear here',
+    qrDemo: 'This live demo keeps payment disabled until the event team adds real UPI details.',
+    upiComing: 'UPI ID coming soon',
+    openUpi: 'Open a UPI app',
+    demo: 'Demo mode — the organizer’s UPI details are being set up.',
+    paid: 'Already paid?',
+    proof: 'Send the screenshot or UPI transaction ID. We’ll reply with your invitation through WhatsApp and email after verification.',
+    whatsapp: 'Send on WhatsApp',
+    email: 'Email proof',
+    contactsDemo: 'Demo mode keeps proof-of-payment links disabled until event contact details are added.',
+    copy: 'Copy UPI ID',
+    copied: 'UPI ID copied',
+    disabledTitle: 'Event contact details must be added before this action can be used.',
+  },
+  ta: {
+    admission: 'நிகழ்வு பதிவு',
+    title: 'உங்கள் அழைப்பிதழ் இங்கே தொடங்குகிறது.',
+    description: 'எந்த UPI செயலியிலும் பதிவுக் கட்டணத்தை செலுத்துங்கள். பின்னர் ஸ்கிரீன்ஷாட் அல்லது பரிவர்த்தனை எண்ணை பகிருங்கள்; எங்கள் குழு சரிபார்த்து அழைப்பிதழை அனுப்பும்.',
+    oneEntry: 'ஒரு பதிவு · UPI மட்டும்',
+    steps: ['QR குறியீட்டை ஸ்கேன் செய்யுங்கள் அல்லது விருப்பமான UPI செயலியைத் திறக்கவும்.', '₹500 பதிவுக் கட்டணத்தை செலுத்துங்கள்.', 'பணம் செலுத்திய ஆதாரத்தை கீழே பகிருங்கள்.'],
+    verified: 'பணம் செலுத்தியது கைமுறையாகச் சரிபார்க்கப்படும். நிகழ்வுக் குழுவிடமிருந்து அழைப்பிதழ் வந்ததும் உங்கள் இடம் உறுதியாகும்.',
+    scan: 'செலுத்த ஸ்கேன் செய்யவும்',
+    pay: 'UPI மூலம் ₹500 செலுத்துங்கள்',
+    apps: 'Google Pay, PhonePe, Paytm, BHIM மற்றும் மற்ற UPI செயலிகளுடன் செயல்படும்.',
+    qrAlt: 'UPI QR குறியீடு',
+    qrComing: 'உங்கள் UPI QR இங்கே வரும்',
+    qrDemo: 'நிகழ்வுக் குழு உண்மையான UPI விவரங்களைச் சேர்க்கும் வரை இந்த நேரடி டெமோவில் பணம் செலுத்துதல் முடக்கப்பட்டுள்ளது.',
+    upiComing: 'UPI ஐடி விரைவில் வரும்',
+    openUpi: 'UPI செயலியைத் திறக்கவும்',
+    demo: 'டெமோ நிலை — ஒருங்கிணைப்பாளரின் UPI விவரங்கள் அமைக்கப்படுகின்றன.',
+    paid: 'ஏற்கனவே செலுத்திவிட்டீர்களா?',
+    proof: 'பணம் செலுத்திய ஸ்கிரீன்ஷாட் அல்லது UPI பரிவர்த்தனை எண்ணை அனுப்புங்கள். சரிபார்த்த பிறகு WhatsApp மற்றும் மின்னஞ்சல் மூலம் அழைப்பிதழை அனுப்புவோம்.',
+    whatsapp: 'WhatsApp-ல் அனுப்பவும்',
+    email: 'மின்னஞ்சல் ஆதாரம்',
+    contactsDemo: 'நிகழ்வுத் தொடர்பு விவரங்கள் சேர்க்கப்படும் வரை டெமோ நிலையில் பணம் செலுத்திய ஆதார இணைப்புகள் முடக்கப்பட்டுள்ளன.',
+    copy: 'UPI ஐடியை நகலெடுக்கவும்',
+    copied: 'UPI ஐடி நகலெடுக்கப்பட்டது',
+    disabledTitle: 'இந்த செயலைப் பயன்படுத்துவதற்கு முன் நிகழ்வுத் தொடர்பு விவரங்கள் சேர்க்கப்பட வேண்டும்.',
+  },
+} as const;
+
+export function EventPaymentPanel({ language = 'en' }: { language?: 'en' | 'ta' }) {
   const [copied, setCopied] = useState(false);
+  const copy = paymentCopy[language];
   const upiLink = getUpiPaymentLink();
   const whatsappLink = getWhatsAppProofLink();
   const emailLink = getEmailProofLink();
@@ -89,26 +145,22 @@ export function EventPaymentPanel() {
               <div className="relative">
                 <span className="inline-flex items-center gap-2 rounded-full border border-[#1b0b42]/25 bg-white/40 px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-[#1b0b42]">
                   <Ticket size={15} />
-                  Event admission
+                  {copy.admission}
                 </span>
                 <h2 id="payment-heading" className="mt-5 text-3xl font-black tracking-[-0.045em] sm:text-4xl">
-                  Your invitation starts here.
+                  {copy.title}
                 </h2>
                 <p className="mt-4 max-w-md text-base leading-7 text-[#1b0b42]/75">
-                  Pay the entry fee with any UPI app. Then send your screenshot or transaction ID so our team can verify it and share your invitation.
+                  {copy.description}
                 </p>
 
                 <div className="mt-8 flex items-end gap-4">
                   <span className="text-6xl font-black tracking-[-0.08em] sm:text-7xl">₹{eventConfig.fee}</span>
-                  <span className="mb-2 text-sm font-bold text-[#1b0b42]/60">one entry · UPI only</span>
+                  <span className="mb-2 text-sm font-bold text-[#1b0b42]/60">{copy.oneEntry}</span>
                 </div>
 
                 <ol className="mt-10 space-y-4 text-sm text-[#1b0b42]/80">
-                  {[
-                    'Scan the QR or open your preferred UPI app.',
-                    'Pay the exact entry fee of ₹500.',
-                    'Share the proof of payment below.',
-                  ].map((step, index) => (
+                  {copy.steps.map((step, index) => (
                     <li key={step} className="flex gap-3">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#1b0b42] text-xs font-black text-[#ffc62a]">
                         {index + 1}
@@ -120,7 +172,7 @@ export function EventPaymentPanel() {
 
                 <div className="mt-10 flex items-start gap-3 rounded-2xl border border-[#1b0b42]/15 bg-white/35 p-4 text-xs leading-5 text-[#1b0b42]/75">
                   <ShieldCheck className="mt-0.5 shrink-0 text-[#1b0b42]" size={17} />
-                  <p>Payment is verified manually. Your spot is confirmed when you receive the invitation from the event team.</p>
+                  <p>{copy.verified}</p>
                 </div>
               </div>
             </div>
@@ -129,9 +181,9 @@ export function EventPaymentPanel() {
               <div className="relative rounded-[1.5rem] border-2 border-dashed border-[#1b0b42]/20 bg-white p-5 shadow-[0_20px_55px_rgba(64,31,101,0.12)] sm:p-7">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-[0.18em] text-[#8e72ff]">Scan to pay</p>
-                    <h3 className="mt-2 text-2xl font-black tracking-[-0.035em] text-[#1b0b42]">Pay ₹{eventConfig.fee} by UPI</h3>
-                    <p className="mt-2 text-sm leading-6 text-[#5b4775]">Works with Google Pay, PhonePe, Paytm, BHIM, and other UPI apps.</p>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-[#8e72ff]">{copy.scan}</p>
+                    <h3 className="mt-2 text-2xl font-black tracking-[-0.035em] text-[#1b0b42]">{copy.pay}</h3>
+                    <p className="mt-2 text-sm leading-6 text-[#5b4775]">{copy.apps}</p>
                   </div>
                   <span className="rounded-2xl bg-[#20dac5] p-3 text-[#1b0b42]"><QrCode size={24} /></span>
                 </div>
@@ -142,7 +194,7 @@ export function EventPaymentPanel() {
                   {eventPayment.qrImageUrl ? (
                     <img
                       src={eventPayment.qrImageUrl}
-                      alt={`UPI QR code for ${eventConfig.name}`}
+                      alt={`${copy.qrAlt} — ${eventConfig.name}`}
                       className="h-56 w-56 rounded-xl bg-white object-contain p-3 shadow-sm"
                     />
                   ) : upiLink ? (
@@ -153,14 +205,14 @@ export function EventPaymentPanel() {
                       includeMargin
                       bgColor="#ffffff"
                       fgColor="#101918"
-                      title={`UPI QR code for ${eventConfig.name}`}
+                      title={`${copy.qrAlt} — ${eventConfig.name}`}
                       className="rounded-xl bg-white p-2 shadow-sm"
                     />
                   ) : (
                     <div className="max-w-[17rem] text-center">
                       <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-[#8e72ff] text-white shadow-lg shadow-[#8e72ff]/25"><QrCode size={32} /></span>
-                      <p className="mt-4 text-sm font-black text-[#1b0b42]">Your UPI QR will appear here</p>
-                      <p className="mt-2 text-xs leading-5 text-[#685579]">This live demo keeps payment disabled until the event team adds real UPI details.</p>
+                      <p className="mt-4 text-sm font-black text-[#1b0b42]">{copy.qrComing}</p>
+                      <p className="mt-2 text-xs leading-5 text-[#685579]">{copy.qrDemo}</p>
                     </div>
                   )}
                 </div>
@@ -169,14 +221,14 @@ export function EventPaymentPanel() {
                   <p className="px-1 text-xs font-black uppercase tracking-[0.14em] text-[#8e72ff]">UPI ID</p>
                   <div className="mt-2 flex items-center gap-2">
                     <code className="min-w-0 flex-1 truncate rounded-xl bg-white px-3 py-3 text-sm font-bold text-[#1b0b42] shadow-sm">
-                      {eventPayment.upiId || 'UPI ID coming soon'}
+                      {eventPayment.upiId || copy.upiComing}
                     </code>
                     <button
                       type="button"
                       onClick={copyUpiId}
                       disabled={!hasUpiId}
                       className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#1b0b42] text-white transition hover:bg-[#8e72ff] disabled:cursor-not-allowed disabled:opacity-35"
-                      aria-label={copied ? 'UPI ID copied' : 'Copy UPI ID'}
+                      aria-label={copied ? copy.copied : copy.copy}
                     >
                       {copied ? <Check size={18} /> : <Copy size={18} />}
                     </button>
@@ -188,18 +240,18 @@ export function EventPaymentPanel() {
                     href={upiLink}
                     className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1b0b42] px-4 py-3.5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#8e72ff] hover:shadow-lg"
                   >
-                    Open a UPI app <ExternalLink size={16} />
+                    {copy.openUpi} <ExternalLink size={16} />
                   </a>
                 ) : (
                   <span
                     aria-disabled="true"
                     className="mt-4 flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-2xl bg-[#eadff0] px-4 py-3.5 text-sm font-bold text-[#907d9d]"
                   >
-                    Open a UPI app <ExternalLink size={16} />
+                    {copy.openUpi} <ExternalLink size={16} />
                   </span>
                 )}
                 {isDemoPayment && (
-                  <p className="mt-3 text-center text-xs font-semibold text-[#8e72ff]">Demo mode — the organizer&apos;s UPI details are being set up.</p>
+                  <p className="mt-3 text-center text-xs font-semibold text-[#8e72ff]">{copy.demo}</p>
                 )}
               </div>
 
@@ -207,26 +259,28 @@ export function EventPaymentPanel() {
                 <div className="flex items-start gap-3">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#ffc62a] text-[#1b0b42]"><Check size={18} /></span>
                   <div>
-                    <h3 className="font-black text-[#1b0b42]">Already paid?</h3>
-                    <p className="mt-1 text-sm leading-6 text-[#685579]">Send the screenshot or UPI transaction ID. We&apos;ll reply with your invitation through WhatsApp and email after verification.</p>
+                    <h3 className="font-black text-[#1b0b42]">{copy.paid}</h3>
+                    <p className="mt-1 text-sm leading-6 text-[#685579]">{copy.proof}</p>
                   </div>
                 </div>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
                   <ProofLink
                     href={whatsappLink}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#20b97f] px-4 py-3 text-sm font-black text-[#07352b] transition hover:bg-[#20dac5]"
+                    disabledTitle={copy.disabledTitle}
                   >
-                    <MessageCircle size={18} /> Send on WhatsApp
+                    <MessageCircle size={18} /> {copy.whatsapp}
                   </ProofLink>
                   <ProofLink
                     href={emailLink}
                     className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#e3d9ee] bg-[#fbf7ff] px-4 py-3 text-sm font-black text-[#1b0b42] transition hover:border-[#8e72ff] hover:bg-[#f0e9ff]"
+                    disabledTitle={copy.disabledTitle}
                   >
-                    <Mail size={18} /> Email proof
+                    <Mail size={18} /> {copy.email}
                   </ProofLink>
                 </div>
                 {!whatsappLink && !emailLink && (
-                  <p className="mt-4 text-center text-xs leading-5 text-[#8d789d]">Demo mode keeps proof-of-payment links disabled until event contact details are added.</p>
+                  <p className="mt-4 text-center text-xs leading-5 text-[#8d789d]">{copy.contactsDemo}</p>
                 )}
               </div>
             </div>

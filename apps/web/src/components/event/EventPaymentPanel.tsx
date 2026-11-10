@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { EventArtwork } from '@/components/event/EventArtwork';
 import { EventReveal } from '@/components/event/EventMotion';
+import { EventRegistrationForm } from '@/components/event/EventRegistrationForm';
+import type { EventRegistration } from '@/config/eventRegistration';
 import {
   Check,
   Copy,
@@ -77,6 +79,7 @@ const paymentCopy = {
     copy: 'Copy UPI ID',
     copied: 'UPI ID copied',
     disabledTitle: 'Event contact details must be added before this action can be used.',
+    registrationRequired: 'Complete your participant details above before sending payment proof.',
   },
   ta: {
     admission: 'நிகழ்வு பதிவு',
@@ -102,6 +105,7 @@ const paymentCopy = {
     copy: 'UPI ஐடியை நகலெடுக்கவும்',
     copied: 'UPI ஐடி நகலெடுக்கப்பட்டது',
     disabledTitle: 'இந்த செயலைப் பயன்படுத்துவதற்கு முன் நிகழ்வுத் தொடர்பு விவரங்கள் சேர்க்கப்பட வேண்டும்.',
+    registrationRequired: 'பணம் செலுத்திய ஆதாரத்தை அனுப்புவதற்கு முன் மேலே பங்கேற்பாளர் விவரங்களை நிரப்புங்கள்.',
   },
 } as const;
 
@@ -113,10 +117,13 @@ export function EventPaymentPanel({
   compact?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+  const [registration, setRegistration] = useState<EventRegistration>();
   const copy = paymentCopy[language];
   const upiLink = getUpiPaymentLink();
-  const whatsappLink = getWhatsAppProofLink();
-  const emailLink = getEmailProofLink();
+  const hasProofContacts = Boolean(getWhatsAppProofLink() || getEmailProofLink());
+  const whatsappLink = registration ? getWhatsAppProofLink(registration) : '';
+  const emailLink = registration ? getEmailProofLink(registration) : '';
+  const proofDisabledTitle = hasProofContacts && !registration ? copy.registrationRequired : copy.disabledTitle;
   const hasUpiId = Boolean(eventPayment.upiId);
   const hasQr = Boolean(eventPayment.qrImageUrl || upiLink);
   const isDemoPayment = !hasQr;
@@ -141,6 +148,8 @@ export function EventPaymentPanel({
         <div className="absolute left-[7%] top-8 h-12 w-5 rotate-[28deg] rounded-full bg-[#20dac5]" />
         <div className="absolute bottom-8 right-[8%] text-4xl font-black text-[#ff684d]">✦</div>
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+          <EventRegistrationForm language={language} onReady={setRegistration} onEdit={() => setRegistration(undefined)} />
+          <div id="event-payment-options" className="scroll-mt-8">
           <EventReveal className="relative overflow-hidden rounded-[1.75rem] border-4 border-[#1b0b42] bg-white shadow-[0_24px_65px_rgba(61,20,86,0.18)]">
             <div className="grid lg:grid-cols-[1.05fr_0.95fr_0.9fr]">
               <div className="relative overflow-hidden bg-[#ff684d] p-6 text-[#1b0b42] sm:p-8">
@@ -172,13 +181,14 @@ export function EventPaymentPanel({
                 <h3 className="mt-4 font-black text-[#1b0b42]">{copy.paid}</h3>
                 <p className="mt-2 text-sm leading-6 text-[#685579]">{copy.proof}</p>
                 <div className="mt-4 grid gap-2">
-                  <ProofLink href={whatsappLink} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#20b97f] px-3 py-2.5 text-sm font-black text-[#07352b] transition hover:bg-[#20dac5]" disabledTitle={copy.disabledTitle}><MessageCircle size={17} /> {copy.whatsapp}</ProofLink>
-                  <ProofLink href={emailLink} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#dcd2eb] bg-white px-3 py-2.5 text-sm font-black text-[#1b0b42] transition hover:border-[#8e72ff]" disabledTitle={copy.disabledTitle}><Mail size={17} /> {copy.email}</ProofLink>
+                  <ProofLink href={whatsappLink} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#20b97f] px-3 py-2.5 text-sm font-black text-[#07352b] transition hover:bg-[#20dac5]" disabledTitle={proofDisabledTitle}><MessageCircle size={17} /> {copy.whatsapp}</ProofLink>
+                  <ProofLink href={emailLink} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#dcd2eb] bg-white px-3 py-2.5 text-sm font-black text-[#1b0b42] transition hover:border-[#8e72ff]" disabledTitle={proofDisabledTitle}><Mail size={17} /> {copy.email}</ProofLink>
                 </div>
-                {!whatsappLink && !emailLink && <p className="mt-3 text-xs leading-5 text-[#8d789d]">{copy.contactsDemo}</p>}
+                {(!hasProofContacts || !registration) && <p className="mt-3 text-xs leading-5 text-[#8d789d]">{hasProofContacts ? copy.registrationRequired : copy.contactsDemo}</p>}
               </div>
             </div>
           </EventReveal>
+          </div>
         </div>
       </section>
     );
@@ -190,6 +200,8 @@ export function EventPaymentPanel({
       <div className="absolute right-[5%] top-20 text-5xl font-black text-[#ff684d]">✦</div>
       <div className="absolute bottom-12 right-[10%] h-8 w-20 -rotate-[27deg] rounded-full border-4 border-[#8e72ff]" />
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <EventRegistrationForm language={language} onReady={setRegistration} onEdit={() => setRegistration(undefined)} />
+        <div id="event-payment-options" className="scroll-mt-8">
         <div className="relative overflow-hidden rounded-[2rem] border-4 border-[#1b0b42] bg-[#1b0b42] shadow-[0_30px_90px_rgba(61,20,86,0.26)]">
           <div className="grid lg:grid-cols-[0.88fr_1.12fr]">
             <div className="relative overflow-hidden border-b-2 border-dashed border-[#1b0b42]/30 bg-[#ff684d] p-7 text-[#1b0b42] sm:p-10 lg:border-b-0 lg:border-r-2 lg:p-12">
@@ -324,25 +336,26 @@ export function EventPaymentPanel({
                   <ProofLink
                     href={whatsappLink}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#20b97f] px-4 py-3 text-sm font-black text-[#07352b] transition hover:bg-[#20dac5]"
-                    disabledTitle={copy.disabledTitle}
+                    disabledTitle={proofDisabledTitle}
                   >
                     <MessageCircle size={18} /> {copy.whatsapp}
                   </ProofLink>
                   <ProofLink
                     href={emailLink}
                     className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#e3d9ee] bg-[#fbf7ff] px-4 py-3 text-sm font-black text-[#1b0b42] transition hover:border-[#8e72ff] hover:bg-[#f0e9ff]"
-                    disabledTitle={copy.disabledTitle}
+                    disabledTitle={proofDisabledTitle}
                   >
                     <Mail size={18} /> {copy.email}
                   </ProofLink>
                 </div>
-                {!whatsappLink && !emailLink && (
-                  <p className="mt-4 text-center text-xs leading-5 text-[#8d789d]">{copy.contactsDemo}</p>
+                {(!hasProofContacts || !registration) && (
+                  <p className="mt-4 text-center text-xs leading-5 text-[#8d789d]">{hasProofContacts ? copy.registrationRequired : copy.contactsDemo}</p>
                 )}
               </div>
             </div>
           </div>
         </div>
+      </div>
       </div>
     </section>
   );

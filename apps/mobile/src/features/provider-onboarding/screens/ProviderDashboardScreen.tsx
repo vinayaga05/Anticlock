@@ -21,6 +21,8 @@ import { Button } from '@/shared/components/Button';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { RootStackParamList } from '@/shared/navigation/types';
+import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
+import { identityProfileType } from '@/shared/publishing/publisherSelection';
 import {
   useMyBusinessQuery,
   useProviderBookingActionMutation,
@@ -86,6 +88,9 @@ function BusinessDashboard({ providerId }: { providerId: string }) {
   const update = useUpdateMyBusinessMutation(providerId);
   const bookingAction = useProviderBookingActionMutation(providerId);
   const business = query.data;
+  const { identities } = useActiveProfile();
+  const publishingIdentity = identities.find(identity => identity.id === providerId && identityProfileType(identity) === 'business');
+  const canAddProducts = business?.id === providerId && business.status === 'active' && publishingIdentity && publishingIdentity.role !== 'analyst';
   const [editing, setEditing] = useState<EditDraft | null>(null);
   const [rescheduling, setRescheduling] = useState<{
     bookingId: string;
@@ -284,6 +289,22 @@ function BusinessDashboard({ providerId }: { providerId: string }) {
                   })
                 }
               />
+              {canAddProducts ? (
+                <>
+                  <Button
+                    title="Add Product"
+                    accessibilityLabel="Add product for this business"
+                    icon="shopping-bag"
+                    onPress={() => navigation.navigate('CreateExploreProduct', {
+                      publisherProfileId: business.id,
+                      publisherProfileType: 'business',
+                    })}
+                  />
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 12, lineHeight: 18 }}>
+                    List products as this business. Public Shop listings appear after review.
+                  </Text>
+                </>
+              ) : null}
             </View>
 
             <View style={styles.stats}>

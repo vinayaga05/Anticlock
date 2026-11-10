@@ -165,6 +165,13 @@ export function PublisherProfileView({
   const showSocialActions = Boolean(activeRef) && !isOwnProfile;
   const providerCategoryId =
     activeRef?.type === 'business' ? profile?.serviceCategoryId ?? null : null;
+  const businessPublishingIdentity = activeRef?.type === 'business'
+    ? identities.find(item => item.id === activeRef.id && identityProfileType(item) === 'business')
+    : undefined;
+  const canAddBusinessProduct = Boolean(
+    isOwner && businessPublishingIdentity && businessPublishingIdentity.role !== 'analyst' &&
+    publisher?.type === 'business' && publisher.id === activeRef?.id,
+  );
 
   const openClips = (reelId?: string, exploreSimilar = false) => {
     if (
@@ -338,6 +345,24 @@ export function PublisherProfileView({
         <View style={styles.detailRow}>
           <AppIcon name="globe" size={13} color={theme.colors.textSecondary} />
           <Text numberOfLines={1} style={[theme.typography.caption, { color: theme.colors.link }]}>{profile.details.website}</Text>
+        </View>
+      ) : null}
+
+      {canAddBusinessProduct && activeRef ? (
+        <View style={[styles.productActions, { borderColor: theme.colors.borderSoft, backgroundColor: theme.colors.surface }]}>
+          <PressableScale
+            accessibilityLabel="Add product for this business"
+            onPress={() => navigation.navigate('CreateExploreProduct', {
+              publisherProfileId: activeRef.id,
+              publisherProfileType: 'business',
+            })}
+            style={[styles.addProductButton, { backgroundColor: theme.colors.primary }]}>
+            <AppIcon name="shopping-bag" size={18} color="#FFFFFF" />
+            <Text style={styles.addProductLabel}>Add Product</Text>
+          </PressableScale>
+          <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
+            List products as this business. Public Shop listings appear after review.
+          </Text>
         </View>
       ) : null}
 
@@ -568,6 +593,9 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 14 },
   identity: { gap: 4 },
   detailRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  productActions: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 12, gap: 8 },
+  addProductButton: { minHeight: 44, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  addProductLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   socialActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   followButton: {
     flex: 1,

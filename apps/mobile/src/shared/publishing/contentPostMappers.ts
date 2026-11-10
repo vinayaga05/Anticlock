@@ -27,7 +27,16 @@ export type ApiContentPost = {
   contentStatus?: string;
   caption: string;
   mediaIds: string[];
-  media?: { id: string; kind: string; url: string }[];
+  media?: {
+    id: string;
+    kind: string;
+    url: string;
+    posterUrl?: string | null;
+    playbackExpiresAt?: string | null;
+    durationMs?: number | null;
+    width?: number | null;
+    height?: number | null;
+  }[];
   thumbnailMediaId: string | null;
   posterUrl?: string | null;
   visibility: string;
@@ -126,7 +135,9 @@ function postMedia(post: ApiContentPost): PostMedia[] {
       type: item.kind === 'video' ? ('video' as const) : ('image' as const),
       url: item.url,
       posterUrl:
-        item.kind === 'video' && post.posterUrl ? post.posterUrl : undefined,
+        item.kind === 'video'
+          ? post.posterUrl ?? item.posterUrl ?? undefined
+          : undefined,
     }));
 }
 

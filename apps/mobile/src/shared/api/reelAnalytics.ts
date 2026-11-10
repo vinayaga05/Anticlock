@@ -1,5 +1,6 @@
 import { apiRequest, getApiToken } from './client';
 import { isApiEnabled } from './config';
+import NetInfo from '@react-native-community/netinfo';
 
 export type ReelAnalyticsEvent = {
   eventType: 'view';
@@ -48,6 +49,43 @@ export async function recordReelAnalyticsEvent(
           watchedMs: Math.max(0, Math.round(event.watchedMs)),
           completed: event.completed,
           ...(event.sessionId ? { sessionId: event.sessionId } : {}),
+        }),
+      },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export type ClipPlaybackPerformanceEvent = {
+  eventType: 'first_frame' | 'rebuffer';
+  valueMs: number;
+  sourceType: 'hls' | 'mp4';
+  preloaded: boolean;
+  sessionId?: string;
+};
+
+/** Best-effort quality telemetry; playback never waits for this request. */
+export async function recordClipPlaybackPerformance(
+  contentPostId: string,
+  event: ClipPlaybackPerformanceEvent,
+): Promise<boolean> {
+  if (!isApiEnabled || !getApiToken()) return false;
+  try {
+    const network = await NetInfo.fetch().catch(() => null);
+    await apiRequest(
+      `/v1/content/posts/${encodeURIComponent(contentPostId)}/playback-events`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          eventId: createAnalyticsEventId(),
+          eventType: event.eventType,
+          valueMs: Math.max(0, Math.round(event.valueMs)),
+          sourceType: event.sourceType,
+          preloaded: event.preloaded,
+          ...(event.sessionId ? { sessionId: event.sessionId } : {}),
+          ...(network?.type ? { networkType: network.type } : {}),
         }),
       },
     );

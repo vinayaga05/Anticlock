@@ -74,6 +74,9 @@ This document lists all environment variables used across the Anticlock monorepo
 | `STREAM_CUSTOMER_SUBDOMAIN` | Optional | No | Custom Stream subdomain | `customer-subdomain` |
 | `STREAM_WEBHOOK_SECRET` | Optional | **Yes** | Webhook signature verification secret | `your-webhook-secret` |
 | `STREAM_MAX_DURATION_SECONDS` | Optional | No | Max video duration | `180` |
+| `CONTENT_VIDEO_PROVIDER` | Optional | No | Creator video path (`object` keeps R2/local, `stream` enables managed HLS) | `stream` |
+| `STREAM_PLAYBACK_TOKEN_TTL_SECONDS` | Optional | No | Restricted HLS token lifetime (300–86400 seconds) | `3600` |
+| `STREAM_BASIC_UPLOAD_MAX_BYTES` | Optional | No | Basic multipart Stream upload ceiling; larger videos stay on object storage | `209715200` |
 
 ### AI Providers (Genie Assistant)
 

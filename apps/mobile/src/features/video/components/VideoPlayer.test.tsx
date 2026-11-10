@@ -47,5 +47,32 @@ describe('VideoPlayer', () => {
       toggle().props.onPress();
     });
     expect(video().props.paused).toBe(false);
+    ReactTestRenderer.act(() => renderer.unmount());
+  });
+
+  it('prepares an adjacent clip silently while retaining its poster', () => {
+    AppState.currentState = 'active';
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(
+        <VideoPlayer
+          uri="https://cdn.example.com/next/manifest/video.m3u8"
+          poster="https://cdn.example.com/next/poster.jpg"
+          muted={false}
+          preloading
+        />,
+      );
+    });
+
+    const video = renderer.root.findByProps({ testID: 'native-video' });
+    const poster = renderer.root.findByProps({ testID: 'video-poster' });
+    expect(video.props.paused).toBe(true);
+    expect(video.props.muted).toBe(true);
+    expect(video.props.source.type).toBe('m3u8');
+    expect(video.props.preferredForwardBufferDuration).toBe(3);
+    expect(poster.props.source.uri).toBe(
+      'https://cdn.example.com/next/poster.jpg',
+    );
+    ReactTestRenderer.act(() => renderer.unmount());
   });
 });

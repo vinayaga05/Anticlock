@@ -38,6 +38,7 @@ import {
 } from './routes/notifications.js';
 import { messagesRoutes } from './routes/messages.js';
 import { communitiesMobileRoutes, communitiesAdminRoutes } from './routes/communities.js';
+import { exploreMobileRoutes, exploreAdminRoutes } from './routes/explore.js';
 import { coursesMobileRoutes, coursesAdminRoutes } from './routes/courses.js';
 import { startAssistantLifecycleJob } from './assistant/PrivacyService.js';
 import { redisHealthCheck } from './lib/redis.js';
@@ -160,6 +161,7 @@ app.route('/v1/notifications', notificationsMobileRoutes);
 app.route('/v1/devices', devicesMobileRoutes);
 app.route('/v1/messages', messagesRoutes);
 app.route('/v1/communities', communitiesMobileRoutes);
+app.route('/v1/explore', exploreMobileRoutes);
 app.route('/v1/courses', coursesMobileRoutes);
 app.route('/admin', adminRoutes);
 app.route('/admin/courses', coursesAdminRoutes);
@@ -173,6 +175,7 @@ app.route('/admin/reels', reelsAdminRoutes);
 app.route('/admin/moderation', moderationAdminRoutes);
 app.route('/admin/notifications', notificationsAdminRoutes);
 app.route('/admin/communities', communitiesAdminRoutes);
+app.route('/admin/explore', exploreAdminRoutes);
 app.route('/webhooks/cloudflare/stream', streamWebhookRoutes);
 
 app.onError((err, c) => {

@@ -127,9 +127,16 @@ export type RootStackParamList = {
   StoryCreator: undefined;
   SavedHub: undefined;
   ExploreCreate: undefined;
-  CreateExploreEvent: { challengeId?: string } | undefined;
-  CreateExploreProduct: undefined;
-  ExploreSubmissionDetail: { itemId: string };
+  CreateExploreEvent: { challengeId?: string; itemId?: string } | undefined;
+  CreateExploreProduct:
+    | {
+        itemId?: string;
+        /** Preserve the business shown at the Add Product entry point. */
+        publisherProfileId?: string;
+        publisherProfileType?: 'personal' | 'business';
+      }
+    | undefined;
+  ExploreSubmissionDetail: { itemId: string; kind: 'event' | 'product' };
   TeamDetail: { teamId: string };
   TeamRoster: { teamId: string };
   TeamPlayerForm: { teamId: string; playerId?: string };

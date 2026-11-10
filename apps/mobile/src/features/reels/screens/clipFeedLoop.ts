@@ -14,6 +14,16 @@ export type LoopedClipFeedEntry = {
   loopSentinel: boolean;
 };
 
+/** Bounded native-player window: previous, current and next only. */
+export function clipPlayerWindowState(
+  index: number,
+  currentIndex: number,
+): 'active' | 'preload' | null {
+  const distance = index - currentIndex;
+  if (distance === 0) return 'active';
+  return Math.abs(distance) === 1 ? 'preload' : null;
+}
+
 export function mergeLoadedReelPages(pages: ReadonlyArray<ReadonlyArray<ReelItem>>): ReelItem[] {
   const byId = new Map<string, ReelItem>();
   for (const page of pages) {

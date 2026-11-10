@@ -920,6 +920,41 @@ export const contentPostViewEvents = pgTable(
   ]
 );
 
+/** Sampled playback-quality events used to tune Clip startup and buffering. */
+export const contentClipPlaybackEvents = pgTable(
+  "content_clip_playback_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    contentPostId: uuid("content_post_id")
+      .notNull()
+      .references(() => contentPosts.id, { onDelete: "cascade" }),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id").notNull(),
+    eventType: text("event_type").notNull(),
+    valueMs: integer("value_ms").notNull(),
+    sourceType: text("source_type").notNull(),
+    networkType: text("network_type"),
+    preloaded: boolean("preloaded").notNull().default(false),
+    sessionId: uuid("session_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("content_clip_playback_events_event_uid").on(
+      table.contentPostId,
+      table.mobileUserId,
+      table.eventId
+    ),
+    index("content_clip_playback_events_post_created_idx").on(
+      table.contentPostId,
+      table.createdAt
+    ),
+  ]
+);
+
 /** A unique row per viewer keeps like/unlike state and counters race-safe. */
 export const contentPostLikes = pgTable(
   "content_post_likes",
@@ -1313,6 +1348,24 @@ export const products = pgTable(
     inventory: integer("inventory").notNull().default(0),
     status: text("status").notNull().default("draft"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    ownerMobileUserId: uuid("owner_mobile_user_id").references(
+      () => mobileUsers.id,
+      { onDelete: "set null" },
+    ),
+    authorMobileUserId: uuid("author_mobile_user_id").references(
+      () => mobileUsers.id,
+      { onDelete: "set null" },
+    ),
+    authorProviderId: uuid("author_provider_id").references(
+      () => providers.id,
+      { onDelete: "set null" },
+    ),
+    reviewStatus: text("review_status").notNull().default("approved"),
+    requestedVisibility: text("requested_visibility").notNull().default("public"),
+    reviewReason: text("review_reason"),
+    reviewVersion: integer("review_version").notNull().default(1),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1323,6 +1376,8 @@ export const products = pgTable(
   (table) => [
     index("products_category_status_idx").on(table.categoryId, table.status),
     index("products_slug_idx").on(table.slug),
+    index("products_owner_updated_idx").on(table.ownerMobileUserId, table.updatedAt),
+    index("products_review_created_idx").on(table.reviewStatus, table.createdAt),
   ]
 );
 
@@ -1343,6 +1398,124 @@ export const productImages = pgTable(
   (table) => [
     index("product_images_product_idx").on(table.productId, table.sortOrder),
   ]
+);
+
+/** User-created Explore events. Events are deliberately separate from Trips. */
+export const exploreEvents = pgTable(
+  "explore_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ownerMobileUserId: uuid("owner_mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    authorMobileUserId: uuid("author_mobile_user_id").references(
+      () => mobileUsers.id,
+      { onDelete: "cascade" },
+    ),
+    authorProviderId: uuid("author_provider_id").references(
+      () => providers.id,
+      { onDelete: "cascade" },
+    ),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    categoryId: text("category_id")
+      .notNull()
+      .references(() => serviceCategories.id, { onDelete: "restrict" }),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    timezone: text("timezone").notNull(),
+    venueType: text("venue_type").notNull(),
+    location: jsonb("location").$type<{
+      name: string;
+      address: string;
+      latitude?: number;
+      longitude?: number;
+    }>(),
+    onlineUrl: text("online_url"),
+    ticketType: text("ticket_type").notNull(),
+    capacity: integer("capacity").notNull(),
+    registrationCount: integer("registration_count").notNull().default(0),
+    price: integer("price").notNull().default(0),
+    currency: text("currency").notNull().default("INR"),
+    contact: jsonb("contact").$type<{
+      name: string;
+      email?: string;
+      phone?: string;
+    }>().notNull(),
+    requestedVisibility: text("requested_visibility").notNull(),
+    reviewStatus: text("review_status").notNull().default("draft"),
+    reviewReason: text("review_reason"),
+    reviewVersion: integer("review_version").notNull().default(1),
+    challengeId: uuid("challenge_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("explore_events_review_created_idx").on(table.reviewStatus, table.createdAt),
+    index("explore_events_owner_updated_idx").on(table.ownerMobileUserId, table.updatedAt),
+    index("explore_events_category_start_idx").on(table.categoryId, table.startsAt),
+    index("explore_events_start_idx").on(table.startsAt),
+  ],
+);
+
+export const exploreEventMedia = pgTable(
+  "explore_event_media",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => exploreEvents.id, { onDelete: "cascade" }),
+    mediaAssetId: uuid("media_asset_id")
+      .notNull()
+      .references(() => mediaAssets.id, { onDelete: "cascade" }),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => [
+    unique("explore_event_media_asset_uidx").on(table.eventId, table.mediaAssetId),
+    index("explore_event_media_event_idx").on(table.eventId, table.sortOrder),
+  ],
+);
+
+export const exploreEventRegistrations = pgTable(
+  "explore_event_registrations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => exploreEvents.id, { onDelete: "cascade" }),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("registered"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  },
+  (table) => [
+    unique("explore_event_registration_uidx").on(table.eventId, table.mobileUserId),
+    index("explore_event_registration_user_idx").on(table.mobileUserId, table.createdAt),
+  ],
+);
+
+export const exploreSaves = pgTable(
+  "explore_saves",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    mobileUserId: uuid("mobile_user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: uuid("entity_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("explore_save_user_entity_uidx").on(table.mobileUserId, table.entityType, table.entityId),
+    index("explore_save_user_created_idx").on(table.mobileUserId, table.createdAt),
+  ],
 );
 
 /** Orders table for shop checkout and fulfillment */

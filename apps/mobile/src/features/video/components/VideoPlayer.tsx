@@ -7,6 +7,7 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   AppState,
   Image,
   Platform,
@@ -44,6 +45,11 @@ interface VideoPlayerProps {
   onPlaybackComplete?: (duration: number) => void;
   /** Reports playback failures so a feed can refresh expiring media URLs. */
   onPlaybackError?: (message: string) => void;
+  /** Prepare a nearby feed item without exposing controls or playing audio. */
+  preloading?: boolean;
+  /** Time from native load start until the first decoded frame. */
+  onPlaybackReady?: (startupMs: number) => void;
+  onBufferingChange?: (isBuffering: boolean) => void;
 }
 
 /** Metro serves assets on the host; emulator localhost ≠ host without adb reverse. */
@@ -64,19 +70,32 @@ function redactPlaybackUri(uri: string): string {
   return uri.split(/[?#]/, 1)[0];
 }
 
+const ANDROID_VIDEO_CACHE_MB = 256;
+const ANDROID_CLIP_BUFFER_CONFIG = {
+  minBufferMs: 2_500,
+  maxBufferMs: 5_000,
+  bufferForPlaybackMs: 750,
+  bufferForPlaybackAfterRebufferMs: 1_500,
+  backBufferDurationMs: 1_000,
+  initialBitrate: 800_000,
+  cacheSizeMB: ANDROID_VIDEO_CACHE_MB,
+} as const;
+
 function toSource(playbackUri: string) {
   if (!playbackUri) return undefined;
+  const bufferConfig =
+    Platform.OS === 'android' ? ANDROID_CLIP_BUFFER_CONFIG : undefined;
   if (
     /\.m3u8(\?|$)/i.test(playbackUri) ||
     playbackUri.includes('/manifest/video.m3u8')
   ) {
-    return { uri: playbackUri, type: 'm3u8' as const };
+    return { uri: playbackUri, type: 'm3u8' as const, bufferConfig };
   }
   if (/\.mp4(\?|$)/i.test(playbackUri) || playbackUri.startsWith('file://')) {
-    return { uri: playbackUri, type: 'mp4' as const };
+    return { uri: playbackUri, type: 'mp4' as const, bufferConfig };
   }
   // Metro asset URIs: http://localhost:8081/assets/...
-  return { uri: playbackUri };
+  return { uri: playbackUri, bufferConfig };
 }
 
 export function VideoPlayer({
@@ -89,6 +108,9 @@ export function VideoPlayer({
   onPlaybackProgress,
   onPlaybackComplete,
   onPlaybackError,
+  preloading = false,
+  onPlaybackReady,
+  onBufferingChange,
 }: VideoPlayerProps) {
   const ref = useRef<VideoRef>(null);
   const durationRef = useRef(0);
@@ -102,12 +124,18 @@ export function VideoPlayer({
   const [failed, setFailed] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [duration, setDuration] = useState(0);
+  const [showLoading, setShowLoading] = useState(false);
+  const posterOpacity = useRef(new Animated.Value(1)).current;
+  const loadStartedAtRef = useRef(Date.now());
+  const firstFrameReportedRef = useRef(false);
 
   const playbackUri = useMemo(() => resolvePlaybackUri(uri), [uri]);
+  // Playback state must not recreate the source: the adjacent preloaded
+  // player is promoted by toggling `paused`, not by reloading its manifest.
   const source = useMemo(() => toSource(playbackUri), [playbackUri]);
   // Pause on tab blur / navigation away / app background so audio does not
   // keep playing under other screens.
-  const isPaused = localPaused || paused || !isFocused || !appActive;
+  const isPaused = preloading || localPaused || paused || !isFocused || !appActive;
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', next => {
@@ -124,15 +152,49 @@ export function VideoPlayer({
     setIsMuted(muted);
     durationRef.current = 0;
     setDuration(0);
+    setShowLoading(false);
+    posterOpacity.setValue(1);
+    loadStartedAtRef.current = Date.now();
+    firstFrameReportedRef.current = false;
     // Reset mute to the caller's default only when the clip source changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- muted is an initial value per uri
-  }, [playbackUri]);
+  }, [playbackUri, posterOpacity]);
+
+  useEffect(() => {
+    if (ready || failed || preloading) {
+      setShowLoading(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowLoading(true), 180);
+    return () => clearTimeout(timer);
+  }, [failed, preloading, ready]);
+
+  const handleReadyForDisplay = useCallback(() => {
+    setReady(true);
+    setShowLoading(false);
+    Animated.timing(posterOpacity, {
+      toValue: 0,
+      duration: 140,
+      useNativeDriver: true,
+    }).start();
+    if (!preloading && !firstFrameReportedRef.current) {
+      firstFrameReportedRef.current = true;
+      onPlaybackReady?.(Math.max(0, Date.now() - loadStartedAtRef.current));
+    }
+  }, [onPlaybackReady, posterOpacity, preloading]);
+
+  useEffect(() => {
+    if (preloading || !ready || firstFrameReportedRef.current) return;
+    // A prepared next player can already have a decoded frame when its cell
+    // becomes active. Record that as an effectively warm start.
+    firstFrameReportedRef.current = true;
+    onPlaybackReady?.(0);
+  }, [onPlaybackReady, preloading, ready]);
 
   const handleLoad = (data: OnLoadData) => {
     const mediaDuration = Number.isFinite(data.duration) ? data.duration : 0;
     durationRef.current = mediaDuration;
     setDuration(mediaDuration);
-    setReady(true);
     setFailed(false);
     setErrorMsg(null);
   };
@@ -169,15 +231,22 @@ export function VideoPlayer({
           controls={false}
           repeat
           paused={isPaused}
-          muted={isMuted}
-          poster={poster && !ready ? poster : undefined}
-          posterResizeMode="cover"
+          muted={preloading || isMuted}
           playInBackground={false}
           playWhenInactive={false}
           ignoreSilentSwitch="ignore"
           mixWithOthers="mix"
           shutterColor="transparent"
+          preferredForwardBufferDuration={preloading ? 3 : 5}
+          reportBandwidth={!preloading && Platform.OS === 'android'}
+          onLoadStart={() => {
+            loadStartedAtRef.current = Date.now();
+            firstFrameReportedRef.current = false;
+          }}
           onLoad={handleLoad}
+          onBuffer={({ isBuffering }) => {
+            if (ready) onBufferingChange?.(isBuffering);
+          }}
           onProgress={handleProgress}
           onEnd={() => {
             onPlaybackComplete?.(Math.max(0, durationRef.current));
@@ -200,21 +269,31 @@ export function VideoPlayer({
             setReady(false);
             setErrorMsg(msg);
           }}
-          onReadyForDisplay={() => setReady(true)}
+          onReadyForDisplay={handleReadyForDisplay}
+        />
+      ) : null}
+      {poster && !failed ? (
+        <Animated.Image
+          testID="video-poster"
+          source={{ uri: poster }}
+          resizeMode="cover"
+          style={[styles.poster, { opacity: posterOpacity }]}
         />
       ) : null}
       <Pressable
         testID="video-playback-toggle"
         style={styles.playbackToggle}
         onPress={() => {
-          if (failed) return;
+          if (failed || preloading) return;
           setLocalPaused(value => !value);
         }}
         accessibilityRole="button"
         accessibilityLabel={isPaused ? 'Play video' : 'Pause video'}
       />
-      {!ready && !failed ? (
-        <View style={styles.loading} pointerEvents="none">
+      {showLoading && !ready && !failed ? (
+        <View
+          style={[styles.loading, poster ? styles.loadingOverPoster : null]}
+          pointerEvents="none">
           <ActivityIndicator color="#fff" />
         </View>
       ) : null}
@@ -228,7 +307,7 @@ export function VideoPlayer({
           ) : null}
         </View>
       ) : null}
-      {localPaused && ready ? (
+      {!preloading && localPaused && ready ? (
         <View style={styles.pauseOverlay} pointerEvents="box-none">
           <View style={styles.pauseControls} pointerEvents="box-none">
             <Pressable
@@ -281,6 +360,11 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  poster: {
+    ...StyleSheet.absoluteFill,
+    width: '100%',
+    height: '100%',
+  },
   playbackToggle: {
     ...StyleSheet.absoluteFill,
   },
@@ -320,6 +404,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     paddingHorizontal: 24,
     gap: 8,
+  },
+  loadingOverPoster: {
+    backgroundColor: 'transparent',
   },
   failText: {
     color: 'rgba(255,255,255,0.85)',

@@ -128,6 +128,8 @@ export const NAV_ITEMS: NavItem[] = [
   },
   { href: '/cms', label: 'CMS', permission: 'cms.read' },
   { href: '/reels', label: 'Reels', permission: 'cms.read' },
+  { href: '/explore/events', label: 'Event review', permission: 'catalog.read' },
+  { href: '/shop/products', label: 'Product review', permission: 'catalog.read' },
   { href: '/commerce', label: 'Commerce', permission: 'orders.manage' },
   { href: '/operations', label: 'Operations', permission: 'bookings.manage' },
   { href: '/community', label: 'Community', permission: 'moderation.act' },

@@ -138,7 +138,7 @@ export function ThreadScreen() {
 
   if (loading || (!isReady && isConnecting)) {
     return (
-      <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
+      <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={[styles.statusText, { color: theme.colors.textSecondary }]}>Loading conversation…</Text>
@@ -149,7 +149,7 @@ export function ThreadScreen() {
 
   if (!client || !isReady || !channel || error) {
     return (
-      <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
+      <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
         <View style={styles.centerContainer}>
           <AppIcon name="messages" size={34} color={theme.colors.textTertiary} />
           <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>Chat unavailable</Text>
@@ -163,8 +163,9 @@ export function ThreadScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
+    <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]} edges={['top', 'left', 'right']}>
       <View style={[styles.chatHeader, { borderBottomColor: theme.colors.borderSoft }]}>
+        <IconButton name="back" accessibilityLabel="Back to Knock" onPress={() => navigation.goBack()} glass={false} />
         <PressableScale
           style={styles.profileAction}
           disabled={!peerRef}
@@ -178,14 +179,19 @@ export function ThreadScreen() {
           )}
           <View style={styles.profileText}>
             <Text numberOfLines={1} style={[theme.typography.section, { color: theme.colors.textPrimary }]}>{title}</Text>
-            <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
+            <Text numberOfLines={1} style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
               {profileType === 'business' ? 'Business profile' : 'Direct message'}{ownProfile?.name ? ` · As ${ownProfile.name}` : ''}
             </Text>
           </View>
         </PressableScale>
         <IconButton name="more" accessibilityLabel="Conversation actions" onPress={openActions} glass={false} />
       </View>
-      <Channel channel={channel} markReadOnMount>
+      {/* Channel must fit below the header; MessageComposer owns the bottom safe inset. */}
+      <Channel
+        channel={channel}
+        markReadOnMount
+        keyboardVerticalOffset={0}
+        additionalKeyboardAvoidingViewProps={{ style: styles.chatBody }}>
         <MessageList />
         <MessageComposer />
       </Channel>
@@ -195,6 +201,7 @@ export function ThreadScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  chatBody: { flex: 1, minHeight: 0 },
   chatHeader: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth },
   profileAction: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
   profileText: { flex: 1, minWidth: 0 },

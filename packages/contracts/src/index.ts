@@ -17,3 +17,4 @@ export * from './community.js';
 export * from './courses.js';
 export * from './shop.js';
 export * from './trips.js';
+export * from './explore.js';

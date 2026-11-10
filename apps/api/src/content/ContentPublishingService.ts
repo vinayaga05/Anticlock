@@ -665,7 +665,10 @@ export async function serializePosts(
         mediaIds: row.mediaIds,
         media: deliverable,
         thumbnailMediaId: row.thumbnailMediaId,
-        posterUrl: poster?.url ?? null,
+        posterUrl:
+          poster?.url ??
+          deliverable.find((item) => item.kind === "video")?.posterUrl ??
+          null,
         hashtags: row.hashtags,
         taggedUserIds: row.taggedMobileUserIds,
         location: row.location ?? null,

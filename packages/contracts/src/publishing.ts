@@ -325,6 +325,9 @@ export const ContentVideoUploadSessionSchema = z.object({
   mediaId: z.string().uuid(),
   uploadUrl: z.string().url(),
   headers: z.record(z.string()),
+  method: z.enum(["PUT", "POST"]).optional(),
+  fieldName: z.string().min(1).optional(),
+  provider: z.string().min(1).optional(),
   expiresAt: z.string().datetime(),
 });
 export type ContentVideoUploadSession = z.infer<
@@ -385,6 +388,21 @@ export type RecordContentClipViewRequest = z.infer<
   typeof RecordContentClipViewRequestSchema
 >;
 
+export const RecordContentClipPlaybackEventRequestSchema = z
+  .object({
+    eventId: z.string().uuid(),
+    eventType: z.enum(["first_frame", "rebuffer"]),
+    valueMs: z.number().int().min(0).max(10 * 60 * 1_000),
+    sourceType: z.enum(["hls", "mp4"]),
+    networkType: z.string().trim().min(1).max(40).optional(),
+    preloaded: z.boolean().default(false),
+    sessionId: z.string().uuid().optional(),
+  })
+  .strict();
+export type RecordContentClipPlaybackEventRequest = z.infer<
+  typeof RecordContentClipPlaybackEventRequestSchema
+>;
+
 /** A state-setting API is idempotent across retries and multiple devices. */
 export const SetContentClipLikeRequestSchema = z
   .object({ liked: z.boolean() })
@@ -400,6 +418,12 @@ export const ContentFeedItemSchema = ContentPostSchema.extend({
   /** The first playable video in a Clip. Additional media stays in mediaIds. */
   playbackUrl: z.string().url(),
   posterUrl: z.string().url().nullable(),
+  playback: z.object({
+    type: z.enum(["hls", "mp4"]),
+    hlsUrl: z.string().url().nullable(),
+    fallbackMp4Url: z.string().url().nullable(),
+    expiresAt: z.string().datetime().nullable(),
+  }).optional(),
   duplicateClusterId: z.string().min(1),
   trendingScore: z.number(),
   /** Current viewer state is returned with the personalized feed item. */
@@ -410,6 +434,9 @@ export const ContentFeedItemSchema = ContentPostSchema.extend({
   music: ClipMusicAttributionSchema.nullable().optional(),
   /** Duration of the playable video, when known. */
   durationMs: z.number().int().positive().nullable().optional(),
+  width: z.number().int().positive().nullable().optional(),
+  height: z.number().int().positive().nullable().optional(),
+  aspectRatio: z.number().positive().nullable().optional(),
 });
 export type ContentFeedItem = z.infer<typeof ContentFeedItemSchema>;
 
@@ -491,6 +518,11 @@ export const ContentMediaItemSchema = z.object({
   id: z.string().uuid(),
   kind: z.enum(["image", "video"]),
   url: z.string().url(),
+  posterUrl: z.string().url().nullable().optional(),
+  playbackExpiresAt: z.string().datetime().nullable().optional(),
+  durationMs: z.number().int().positive().nullable().optional(),
+  width: z.number().int().positive().nullable().optional(),
+  height: z.number().int().positive().nullable().optional(),
 });
 export type ContentMediaItem = z.infer<typeof ContentMediaItemSchema>;
 

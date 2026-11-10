@@ -39,6 +39,16 @@ export type ApiReelFeedItem = {
   category: string | null;
   playbackUrl: string;
   posterUrl: string | null;
+  playback?: {
+    type: 'hls' | 'mp4';
+    hlsUrl: string | null;
+    fallbackMp4Url: string | null;
+    expiresAt: string | null;
+  };
+  durationMs?: number | null;
+  width?: number | null;
+  height?: number | null;
+  aspectRatio?: number | null;
   likeCount: number;
   commentCount: number;
   saveCount: number;
@@ -79,6 +89,16 @@ export type ApiContentClipFeedItem = {
   duplicateClusterId: string;
   playbackUrl: string;
   posterUrl: string | null;
+  playback?: {
+    type: 'hls' | 'mp4';
+    hlsUrl: string | null;
+    fallbackMp4Url: string | null;
+    expiresAt: string | null;
+  };
+  durationMs?: number | null;
+  width?: number | null;
+  height?: number | null;
+  aspectRatio?: number | null;
   likeCount: number;
   commentCount: number;
   viewCount: number;
@@ -269,6 +289,10 @@ export function mapApiContentClipToItem(
   item: ApiContentClipFeedItem,
 ): ReelItem {
   const publisher = item.publisher;
+  const playbackUrl =
+    item.playback?.hlsUrl ??
+    item.playback?.fallbackMp4Url ??
+    item.playbackUrl;
   return {
     id: item.id,
     // `title` drives the feed's "♪" label. Only Clips with on-device music
@@ -302,8 +326,15 @@ export function mapApiContentClipToItem(
       serviceCategoryId: item.serviceCategoryId ?? null,
     },
     caption: typeof item.caption === 'string' ? item.caption : '',
-    videoUrl: item.playbackUrl,
+    videoUrl: playbackUrl,
     posterUrl: isRemoteMediaUrl(item.posterUrl) ? item.posterUrl : '',
+    playback: item.playback
+      ? {
+          ...item.playback,
+          durationMs: item.durationMs ?? null,
+          aspectRatio: item.aspectRatio ?? null,
+        }
+      : undefined,
     likeCount: nonNegativeNumber(item.likeCount),
     commentCount: nonNegativeNumber(item.commentCount),
     liked: item.viewerHasLiked === true,
@@ -377,7 +408,8 @@ export function useServiceCategoriesQuery(
  * personalized feed. Profile playback must retain the profile's own sequence.
  */
 export function mapApiProfileClipToItem(item: ApiContentPost): ReelItem | null {
-  const playbackUrl = item.media?.find(media => media.kind === 'video')?.url;
+  const video = item.media?.find(media => media.kind === 'video');
+  const playbackUrl = video?.url;
   if (!playbackUrl || item.format !== 'clip' || item.mediaType !== 'video') {
     return null;
   }
@@ -413,7 +445,16 @@ export function mapApiProfileClipToItem(item: ApiContentPost): ReelItem | null {
     },
     caption: item.caption,
     videoUrl: playbackUrl,
-    posterUrl: item.posterUrl ?? '',
+    posterUrl: item.posterUrl ?? video?.posterUrl ?? '',
+    playback: {
+      type: /\.m3u8(?:\?|$)/i.test(playbackUrl) ? 'hls' : 'mp4',
+      hlsUrl: /\.m3u8(?:\?|$)/i.test(playbackUrl) ? playbackUrl : null,
+      fallbackMp4Url: /\.m3u8(?:\?|$)/i.test(playbackUrl) ? null : playbackUrl,
+      expiresAt: video?.playbackExpiresAt ?? null,
+      durationMs: video?.durationMs ?? null,
+      aspectRatio:
+        video?.width && video?.height ? video.width / video.height : null,
+    },
     likeCount: item.likeCount ?? 0,
     commentCount: item.commentCount ?? 0,
     liked: item.viewerHasLiked === true,

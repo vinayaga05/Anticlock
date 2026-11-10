@@ -1,5 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, Alert, Image, StyleSheet, Text, View } from 'react-native';
+import Video from 'react-native-video';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { Button } from '@/shared/components/Button';
@@ -8,7 +9,9 @@ import { EmptyState } from '@/shared/components/EmptyState';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { useCartStore } from '@/shared/store/cartStore';
 import { RootStackParamList } from '@/shared/navigation/types';
-import { useProductQuery } from '@/shared/api';
+import { useProductQuery, useSaveProductMutation } from '@/shared/api';
+import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
+import { identityProfileType } from '@/shared/publishing/publisherSelection';
 
 export function ProductDetailScreen() {
   const theme = useTheme();
@@ -16,12 +19,15 @@ export function ProductDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'ProductDetail'>>();
   const productId = route.params.productId;
   const add = useCartStore(s => s.addProduct);
+  const { active } = useActiveProfile();
+  const viewer = active ? { id: active.id, type: identityProfileType(active) } : undefined;
 
   const {
     data: apiProduct,
     isLoading,
     error,
-  } = useProductQuery(productId);
+  } = useProductQuery(productId, viewer);
+  const save = useSaveProductMutation(productId, viewer);
 
   const product = apiProduct;
 
@@ -39,7 +45,7 @@ export function ProductDetailScreen() {
     return (
       <ScreenContainer tabAware={false}>
         <EmptyState
-          icon="alert-circle"
+          icon="search"
           title="Error loading product"
           description={(error as Error).message}
         />
@@ -56,13 +62,17 @@ export function ProductDetailScreen() {
   }
 
   const imageUrl = product.images?.[0]?.url;
+  const mediaKind = product.images?.[0]?.kind;
   const price = Math.round(product.price / 100);
   const { name, description, inventory } = product;
   const outOfStock = inventory === 0;
+  const canPurchase = product.status === 'published' && product.reviewStatus === 'approved';
 
   return (
     <ScreenContainer scrollable tabAware={false}>
-      {imageUrl ? <Image source={{ uri: imageUrl }} style={styles.hero} /> : null}
+      {imageUrl ? mediaKind === 'video' ? (
+        <Video source={{ uri: imageUrl }} style={styles.hero} controls repeat resizeMode="cover" />
+      ) : <Image source={{ uri: imageUrl }} style={styles.hero} /> : null}
       <Text style={[theme.typography.largeTitle, { color: theme.colors.textPrimary }]}>
         {name}
       </Text>
@@ -80,6 +90,11 @@ export function ProductDetailScreen() {
           Out of stock
         </Text>
       )}
+      {!canPurchase ? (
+        <Text style={[theme.typography.bodySmall, { color: theme.colors.warning, marginTop: 4 }]}>
+          This followers-only listing is awaiting public approval. Contact the seller for details.
+        </Text>
+      ) : null}
 
       {description && (
         <Card style={{ marginTop: 12 }}>
@@ -93,9 +108,18 @@ export function ProductDetailScreen() {
 
       <View style={{ marginTop: 16, gap: 10 }}>
         <Button
+          title={product.viewerHasSaved ? 'Saved' : 'Save product'}
+          variant="secondary"
+          icon="bookmark"
+          disabled={save.isPending}
+          onPress={() => save.mutate(product.viewerHasSaved, {
+            onError: caught => Alert.alert('Could not update saved products', caught instanceof Error ? caught.message : 'Please try again.'),
+          })}
+        />
+        <Button
           title="Add to cart"
           icon="cart"
-          disabled={outOfStock}
+          disabled={outOfStock || !canPurchase}
           onPress={() => {
             add(product.id, name, price, imageUrl);
             Alert.alert('Added', `${name} added to cart.`);
@@ -105,12 +129,23 @@ export function ProductDetailScreen() {
           title="Buy now"
           variant="secondary"
           icon="credit-card"
-          disabled={outOfStock}
+          disabled={outOfStock || !canPurchase}
           onPress={() => {
             add(product.id, name, price, imageUrl);
             navigation.navigate('Checkout');
           }}
         />
+        {product.publisherProfileId && product.publisherProfileType ? (
+          <Button
+            title="Contact seller"
+            variant="secondary"
+            icon="messages"
+            onPress={() => navigation.navigate('Profile', {
+              profileId: product.publisherProfileId,
+              profileType: product.publisherProfileType,
+            })}
+          />
+        ) : null}
       </View>
     </ScreenContainer>
   );

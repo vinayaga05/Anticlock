@@ -31,6 +31,13 @@ export function routeForNotification(
       ? { screen: 'MyBookings' }
       : { screen: 'BookingDetail', params: { bookingId } };
   }
+  const entityId = typeof data.entityId === 'string' ? data.entityId : null;
+  if (entityId && (data.entityType === 'event' || data.entityType === 'product')) {
+    return {
+      screen: 'ExploreSubmissionDetail',
+      params: { itemId: entityId, kind: data.entityType },
+    };
+  }
   return null;
 }
 

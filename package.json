@@ -28,5 +28,8 @@
   "devDependencies": {
     "turbo": "^2.5.4",
     "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@op-engineering/op-sqlite": "^18.2.5"
   }
 }

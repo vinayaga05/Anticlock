@@ -20,6 +20,10 @@ import {
 } from "./ObjectStorageProvider.js";
 import { R2ObjectStorageProvider } from "./R2ObjectStorageProvider.js";
 import {
+  getVideoProvider,
+  streamThumbnailUrl,
+} from "./CloudflareStreamVideoProvider.js";
+import {
   assertAllowedMime,
   detectMimeFromMagic,
   maxBytesForKind,
@@ -840,10 +844,73 @@ export class MediaService {
     if (!asset || !this.isPublicContentAssetDeliverable(asset, expectedKind)) {
       return null;
     }
+    if (asset.storageProvider === "stream") {
+      if (!asset.externalId || asset.kind !== "video") return null;
+      const provider = getVideoProvider();
+      if (!provider) return null;
+      return (await provider.getPlayback(asset.externalId, false)).playbackUrl;
+    }
     return this.storage.createDownloadUrl({
       bucket: asset.bucket as "public-media" | "private-documents",
       key: asset.storageKey,
       accessLevel: "public",
+    });
+  }
+
+  /** Stable playback metadata emitted with a feed row; URLs stay separate. */
+  async getPublicContentMediaMetadata(
+    mediaId: string,
+    expectedKind?: "video" | "image"
+  ) {
+    const asset = await this.repo.getAsset(mediaId);
+    if (!asset || !this.isPublicContentAssetDeliverable(asset, expectedKind)) {
+      return null;
+    }
+    return {
+      storageProvider: asset.storageProvider,
+      posterUrl:
+        asset.thumbnailUrl ??
+        (asset.storageProvider === "stream" && asset.externalId
+          ? streamThumbnailUrl(asset.externalId)
+          : null),
+      durationMs: asset.durationMs ?? null,
+      width: asset.width ?? null,
+      height: asset.height ?? null,
+    };
+  }
+
+  /**
+   * Delivery URL for an asset after the caller has already applied its own
+   * owner/follower/admin visibility gate. Private objects remain private in
+   * R2 and are exposed only through a short-lived signed URL.
+   */
+  async getAuthorizedContentDeliveryUrl(
+    mediaId: string,
+    expectedKind?: "video" | "image"
+  ) {
+    const asset = await this.repo.getAsset(mediaId);
+    if (
+      !asset ||
+      (expectedKind !== undefined && asset.kind !== expectedKind) ||
+      asset.processingStatus !== "ready" ||
+      asset.deletedAt ||
+      asset.archivedAt ||
+      !["approved", "not_required"].includes(asset.moderationStatus)
+    ) {
+      return null;
+    }
+    if (asset.storageProvider === "stream") {
+      if (!asset.externalId || asset.kind !== "video") return null;
+      const provider = getVideoProvider();
+      if (!provider) return null;
+      return (
+        await provider.getPlayback(asset.externalId, asset.accessLevel !== "public")
+      ).playbackUrl;
+    }
+    return this.storage.createDownloadUrl({
+      bucket: asset.bucket as "public-media" | "private-documents",
+      key: asset.storageKey,
+      accessLevel: asset.accessLevel as MediaAccessLevel,
     });
   }
 
@@ -1198,6 +1265,84 @@ export class MediaService {
     // Non-public posts must not be put in a public bucket merely because the
     // author selected the privacy option after uploading.
     const accessLevel = body.visibility === "public" ? "public" : "private";
+    const streamBasicUploadMaxBytes = Number(
+      process.env.STREAM_BASIC_UPLOAD_MAX_BYTES ?? 200 * 1024 * 1024
+    );
+    const contentVideoProvider = (
+      process.env.CONTENT_VIDEO_PROVIDER ?? "object"
+    ).trim().toLowerCase();
+    // The current mobile integration uses Stream's basic multipart upload.
+    // Oversized videos retain the proven R2 path until resumable TUS support
+    // is introduced instead of receiving a URL that Cloudflare will reject.
+    const videoProvider =
+      contentVideoProvider === "stream" &&
+      body.kind === "video" &&
+      body.byteSize <= streamBasicUploadMaxBytes
+        ? getVideoProvider()
+        : null;
+    if (videoProvider) {
+      const asset = await this.repo.createAsset({
+        kind: body.kind,
+        storageProvider: "stream",
+        // Keep the same owner marker used by the existing R2 authorization
+        // path. The UID is added only after Cloudflare provisions it.
+        storageKey: `${accessLevel}/content-${mobileUserId}/stream-pending`,
+        bucket: "stream",
+        mimeType: body.contentType,
+        byteSize: body.byteSize,
+        width: body.width ?? null,
+        height: body.height ?? null,
+        durationMs: body.durationMs ?? null,
+        originalFilename: body.filename,
+        accessLevel,
+        processingStatus: "initiated",
+        moderationStatus: "not_required",
+        createdBy: null,
+      });
+
+      try {
+        const target = await videoProvider.createUploadSession({
+          maxDurationSeconds: Number(
+            process.env.STREAM_MAX_DURATION_SECONDS ?? 180,
+          ),
+          requireSignedUrls: accessLevel !== "public",
+          meta: {
+            mediaAssetId: asset.id,
+            mobileUserId,
+            filename: body.filename,
+          },
+        });
+        await this.repo.updateAsset(asset.id, {
+          storageKey: `${accessLevel}/content-${mobileUserId}/stream:${target.externalId}`,
+          externalId: target.externalId,
+          processingStatus: "uploading",
+          thumbnailUrl: streamThumbnailUrl(target.externalId),
+        });
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+        const session = await this.repo.createSession({
+          mediaId: asset.id,
+          createdBy: null,
+          expiresAt,
+          status: "open",
+          expectedMime: body.contentType,
+          maxBytes,
+        });
+        return {
+          sessionId: session.id,
+          mediaId: asset.id,
+          uploadUrl: target.uploadUrl,
+          headers: {},
+          method: target.method,
+          fieldName: target.fieldName,
+          provider: "stream" as const,
+          expiresAt: expiresAt.toISOString(),
+        };
+      } catch (error) {
+        await this.repo.updateAsset(asset.id, { processingStatus: "failed" });
+        throw error;
+      }
+    }
+
     const bucket = bucketForAccess(accessLevel);
     const ext = extensionForMime(body.contentType);
     const hint = `content-${mobileUserId}`;
@@ -1252,6 +1397,8 @@ export class MediaService {
           ? `${apiBase}/v1/content/uploads/${session.id}/content`
           : target.uploadUrl,
       headers: target.headers,
+      method: "PUT" as const,
+      provider: this.storage.name,
       expiresAt: expiresAt.toISOString(),
     };
   }
@@ -1283,7 +1430,16 @@ export class MediaService {
     sessionId: string,
     body: Buffer
   ) {
-    await this.requireMobileContentSession(mobileUserId, sessionId);
+    const { asset } = await this.requireMobileContentSession(
+      mobileUserId,
+      sessionId
+    );
+    if (asset.storageProvider === "stream") {
+      throw Object.assign(
+        new Error("Stream uploads must go directly to the provider"),
+        { code: "invalid_upload_target", status: 400 }
+      );
+    }
     return this.putLocalContentInternal(
       {
         sub: mobileUserId,
@@ -1304,7 +1460,13 @@ export class MediaService {
     sessionId: string,
     checksumSha256?: string
   ) {
-    await this.requireMobileContentSession(mobileUserId, sessionId);
+    const { session, asset } = await this.requireMobileContentSession(
+      mobileUserId,
+      sessionId
+    );
+    if (asset.storageProvider === "stream") {
+      return this.completeMobileStreamContentUpload(session, asset);
+    }
     const result = await this.completeUpload(
       {
         sub: mobileUserId,
@@ -1323,6 +1485,65 @@ export class MediaService {
     return {
       asset: result.asset,
       duplicateOf: result.duplicateOf ? { id: result.duplicateOf.id } : null,
+    };
+  }
+
+  private async completeMobileStreamContentUpload(
+    session: NonNullable<
+      Awaited<ReturnType<typeof mediaRepository.getSession>>
+    >,
+    asset: NonNullable<Awaited<ReturnType<typeof mediaRepository.getAsset>>>
+  ) {
+    if (!asset.externalId) {
+      await this.repo.updateAsset(asset.id, { processingStatus: "failed" });
+      await this.repo.updateSession(session.id, { status: "failed" });
+      throw Object.assign(new Error("Stream upload is not initialized"), {
+        code: "upload_missing",
+        status: 400,
+      });
+    }
+    if (session.expiresAt.getTime() < Date.now() && session.status === "open") {
+      await this.repo.updateSession(session.id, { status: "expired" });
+      throw Object.assign(new Error("Upload session expired"), {
+        code: "session_expired",
+        status: 410,
+      });
+    }
+
+    const provider = getVideoProvider();
+    if (!provider) {
+      throw Object.assign(new Error("Cloudflare Stream is not configured"), {
+        code: "stream_unavailable",
+        status: 500,
+      });
+    }
+    const status = await provider.getStatus(asset.externalId);
+    if (status.status === "error") {
+      const failed = await this.repo.updateAsset(asset.id, {
+        processingStatus: "failed",
+      });
+      await this.repo.updateSession(session.id, { status: "failed" });
+      return {
+        asset: await this.mapAsset(failed!),
+        duplicateOf: null,
+      };
+    }
+
+    const ready = status.status === "ready";
+    const updated = await this.repo.updateAsset(asset.id, {
+      processingStatus: ready ? "ready" : "processing",
+      moderationStatus: ready ? "approved" : asset.moderationStatus,
+      durationMs: status.durationMs ?? asset.durationMs,
+      thumbnailUrl:
+        asset.thumbnailUrl ?? streamThumbnailUrl(asset.externalId),
+    });
+    // The byte transfer is finished even when transcoding is still running.
+    // The Stream webhook (or readiness reconciliation during publish) owns the
+    // later processing -> ready transition.
+    await this.repo.updateSession(session.id, { status: "completed" });
+    return {
+      asset: await this.mapAsset(updated!),
+      duplicateOf: null,
     };
   }
 
@@ -1414,13 +1635,50 @@ export class MediaService {
    * caller can move a draft to `processing` (still uploading/processing) or
    * `failed` (terminal) instead of returning a generic error.
    */
+  private async reconcileStreamContentAsset(
+    asset: NonNullable<Awaited<ReturnType<typeof mediaRepository.getAsset>>>
+  ) {
+    if (
+      asset.storageProvider !== "stream" ||
+      !asset.externalId ||
+      asset.processingStatus === "ready" ||
+      asset.processingStatus === "failed"
+    ) {
+      return asset;
+    }
+    const provider = getVideoProvider();
+    if (!provider) return asset;
+    try {
+      const status = await provider.getStatus(asset.externalId);
+      if (status.status === "processing") return asset;
+      return (
+        (await this.repo.updateAsset(asset.id, {
+          processingStatus: status.status === "ready" ? "ready" : "failed",
+          moderationStatus:
+            status.status === "ready" ? "approved" : asset.moderationStatus,
+          durationMs: status.durationMs ?? asset.durationMs,
+          thumbnailUrl:
+            asset.thumbnailUrl ?? streamThumbnailUrl(asset.externalId),
+        })) ?? asset
+      );
+    } catch {
+      // A transient provider-status failure must not convert a healthy upload
+      // into a terminal failure. The webhook or a later publish retry can
+      // reconcile it.
+      return asset;
+    }
+  }
+
   async inspectMobileContentAssets(mobileUserId: string, mediaIds: string[]) {
     const marker = `/content-${mobileUserId}/`;
     const assets = await Promise.all(
       [...new Set(mediaIds)].map((id) => this.repo.getAsset(id))
     );
     let state: "ready" | "pending" | "failed" | "forbidden" = "ready";
-    for (const asset of assets) {
+    for (const loadedAsset of assets) {
+      const asset = loadedAsset
+        ? await this.reconcileStreamContentAsset(loadedAsset)
+        : null;
       if (!asset || !asset.storageKey.includes(marker)) return { state: "forbidden" as const };
       if (
         asset.processingStatus === "failed" ||
@@ -1453,13 +1711,38 @@ export class MediaService {
     ) {
       return null;
     }
-    const url = await this.storage.createDownloadUrl({
-      bucket: asset.bucket as "public-media" | "private-documents",
-      key: asset.storageKey,
-      accessLevel: asset.accessLevel === "public" ? "public" : "private",
-    });
+    let url: string | null;
+    let posterUrl = asset.thumbnailUrl ?? null;
+    let playbackExpiresAt: string | null = null;
+    if (asset.storageProvider === "stream") {
+      if (!asset.externalId || asset.kind !== "video") return null;
+      const provider = getVideoProvider();
+      if (!provider) return null;
+      const playback = await provider.getPlayback(
+        asset.externalId,
+        asset.accessLevel !== "public"
+      );
+      url = playback.playbackUrl;
+      posterUrl = playback.thumbnailUrl ?? posterUrl;
+      playbackExpiresAt = playback.expiresAt ?? null;
+    } else {
+      url = await this.storage.createDownloadUrl({
+        bucket: asset.bucket as "public-media" | "private-documents",
+        key: asset.storageKey,
+        accessLevel: asset.accessLevel === "public" ? "public" : "private",
+      });
+    }
     if (!url) return null;
-    return { id: asset.id, kind: asset.kind as "image" | "video", url };
+    return {
+      id: asset.id,
+      kind: asset.kind as "image" | "video",
+      url,
+      posterUrl,
+      playbackExpiresAt,
+      durationMs: asset.durationMs ?? null,
+      width: asset.width ?? null,
+      height: asset.height ?? null,
+    };
   }
 
   async completeMobileProviderUpload(

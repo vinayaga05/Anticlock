@@ -316,7 +316,7 @@ export function RootNavigator() {
             <Stack.Screen
               name="Thread"
               component={ThreadScreen}
-              options={{ title: 'Chat' }}
+              options={{ headerShown: false }}
             />
             <Stack.Screen
               name="Call"

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { StreamChat } from 'stream-chat';
 import { Chat, OverlayProvider } from 'stream-chat-react-native';
 import {
@@ -11,6 +11,8 @@ import { useAuth } from '@/shared/context/AuthProvider';
 import { isApiEnabled } from '@/shared/api/config';
 import { apiClient, getApiToken } from '@/shared/api/client';
 import { rootNavigationRef } from '@/shared/navigation/rootNavigation';
+import { useTheme } from '@/shared/hooks/useTheme';
+import { createStreamChatTheme } from '@/features/messages/streamChatTheme';
 
 interface StreamChatContextType {
   client: StreamChat | null;
@@ -71,6 +73,7 @@ function IncomingCallNavigator() {
 }
 
 export function StreamChatProvider({ children }: { children: React.ReactNode }) {
+  const theme = useTheme();
   const [client, setClient] = useState<StreamChat | null>(null);
   const [videoClient, setVideoClient] = useState<StreamVideoClient | null>(null);
   const [isReady, setIsReady] = useState(false);
@@ -80,6 +83,7 @@ export function StreamChatProvider({ children }: { children: React.ReactNode }) 
   const [retryVersion, setRetryVersion] = useState(0);
   const { user } = useAuth();
   const userId = user?.id === 'temporary-guest' ? null : user?.id ?? null;
+  const streamTheme = useMemo(() => createStreamChatTheme(theme), [theme]);
 
   useEffect(() => {
     let cancelled = false;
@@ -162,14 +166,14 @@ export function StreamChatProvider({ children }: { children: React.ReactNode }) 
   // Stream components); Chat only once the Stream client is connected.
   const chatContent =
     isApiEnabled && client && isReady ? (
-      <Chat client={client} enableOfflineSupport>{children}</Chat>
+      <Chat client={client} enableOfflineSupport style={streamTheme}>{children}</Chat>
     ) : (
       children
     );
 
   return (
     <StreamChatContext.Provider value={contextValue}>
-      <OverlayProvider>
+      <OverlayProvider value={{ style: streamTheme }}>
         {videoClient && isVideoReady ? (
           <StreamVideo client={videoClient}>
             <IncomingCallNavigator />

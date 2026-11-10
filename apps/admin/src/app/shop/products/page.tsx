@@ -1,182 +1,76 @@
 'use client';
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { Product } from '@anticlock/contracts';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { ExploreReviewRequest, Product } from '@anticlock/contracts';
 import { useState } from 'react';
 import { AdminShell } from '@/components/AdminShell';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
+const FILTERS = ['pending_review', 'changes_requested', 'approved', 'rejected', 'suspended', 'archived'] as const;
+type Action = ExploreReviewRequest['action'];
+type ReviewProduct = Product & { publisher?: { displayName: string } | null };
+
+function actionsFor(status: string): Action[] {
+  if (status === 'pending_review') return ['approve', 'request_changes', 'reject'];
+  if (status === 'approved') return ['suspend', 'archive'];
+  if (status === 'suspended') return ['restore', 'archive'];
+  return [];
+}
+
 export default function ProductsPage() {
   const { hasPermission } = useAuth();
   const qc = useQueryClient();
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [editStatus, setEditStatus] = useState<string>('');
-
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['admin', 'shop', 'products'],
-    queryFn: () =>
-      apiFetch<{ products: Product[] }>('/admin/shop/products'),
+  const [status, setStatus] = useState('pending_review');
+  const [selected, setSelected] = useState<ReviewProduct | null>(null);
+  const [action, setAction] = useState<Action>('approve');
+  const [reason, setReason] = useState('');
+  const query = useQuery({
+    queryKey: ['admin', 'shop', 'products', status],
+    queryFn: () => apiFetch<{ products: ReviewProduct[] }>(`/admin/shop/products?reviewStatus=${status}&limit=100`),
   });
-
-  const updateMutation = useMutation({
-    mutationFn: (input: { id: string; status: string }) =>
-      apiFetch(`/admin/shop/products/${input.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: input.status }),
-      }),
+  const review = useMutation({
+    mutationFn: (input: { id: string; body: ExploreReviewRequest }) => apiFetch(`/admin/shop/products/${input.id}/review`, {
+      method: 'POST', body: JSON.stringify(input.body),
+    }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'shop', 'products'] });
-      setSelectedProduct(null);
-      setEditStatus('');
+      void qc.invalidateQueries({ queryKey: ['admin', 'shop', 'products'] });
+      setSelected(null); setReason('');
     },
   });
-
-  function handleEdit(product: Product) {
-    setSelectedProduct(product);
-    setEditStatus(product.status);
-  }
-
-  function handleUpdate() {
-    if (selectedProduct && editStatus) {
-      updateMutation.mutate({ id: selectedProduct.id, status: editStatus });
-    }
-  }
-
-  function formatPrice(paise: number) {
-    return `₹${(paise / 100).toFixed(2)}`;
-  }
-
-  function getStatusBadgeClass(status: string) {
-    switch (status) {
-      case 'published':
-        return 'badge-success';
-      case 'draft':
-        return 'badge-warning';
-      case 'archived':
-        return 'badge-error';
-      default:
-        return 'badge';
-    }
-  }
+  const open = (product: ReviewProduct) => {
+    const first = actionsFor(product.reviewStatus)[0];
+    if (!first) return;
+    setSelected(product); setAction(first); setReason('');
+  };
+  const needsReason = ['request_changes', 'reject', 'suspend'].includes(action);
 
   return (
     <AdminShell>
-      <h1 className="page-title">Products</h1>
-      <p className="page-sub">
-        Manage all products in the shop. Update status and inventory.
-      </p>
-
-      <div className="card">
-        {isLoading ? <p className="muted">Loading products…</p> : null}
-        {error ? <p className="error">{(error as Error).message}</p> : null}
-
-        {data?.products && data.products.length > 0 ? (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Category</th>
-                <th>Price</th>
-                <th>Inventory</th>
-                <th>Status</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {data.products.map(product => (
-                <tr key={product.id}>
-                  <td>
-                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                      {product.images[0]?.url && (
-                        <img
-                          src={product.images[0].url}
-                          alt={product.name}
-                          style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }}
-                        />
-                      )}
-                      <div>
-                        <strong>{product.name}</strong>
-                        <div className="muted">{product.slug}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>{product.categoryId}</td>
-                  <td>
-                    <strong>{formatPrice(product.price)}</strong>
-                    {product.compareAtPrice && (
-                      <div className="muted">
-                        <s>{formatPrice(product.compareAtPrice)}</s>
-                      </div>
-                    )}
-                  </td>
-                  <td>{product.inventory} units</td>
-                  <td>
-                    <span className={`badge ${getStatusBadgeClass(product.status)}`}>
-                      {product.status}
-                    </span>
-                  </td>
-                  <td>
-                    {hasPermission('catalog.write') ? (
-                      <button
-                        type="button"
-                        className="btn secondary small"
-                        onClick={() => handleEdit(product)}
-                      >
-                        Edit
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : data?.products && data.products.length === 0 ? (
-          <p className="muted">No products found.</p>
-        ) : null}
+      <h1 className="page-title">Product review</h1>
+      <p className="page-sub">Review products submitted from the mobile app. Approval updates Explore and search immediately; the creator is notified.</p>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        {FILTERS.map(item => <button key={item} type="button" className={status === item ? 'btn' : 'btn secondary'} onClick={() => setStatus(item)}>{item.replaceAll('_', ' ')}</button>)}
       </div>
-
-      {selectedProduct && (
-        <div className="modal-overlay" onClick={() => setSelectedProduct(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h2>Edit Product Status</h2>
-            <div className="form-group">
-              <label>Product</label>
-              <p>{selectedProduct.name}</p>
-            </div>
-            <div className="form-group">
-              <label htmlFor="status">Status</label>
-              <select
-                id="status"
-                value={editStatus}
-                onChange={e => setEditStatus(e.target.value)}
-                className="form-input"
-              >
-                <option value="draft">Draft</option>
-                <option value="published">Published</option>
-                <option value="archived">Archived</option>
-              </select>
-            </div>
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn secondary"
-                onClick={() => setSelectedProduct(null)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn primary"
-                onClick={handleUpdate}
-                disabled={updateMutation.isPending}
-              >
-                {updateMutation.isPending ? 'Updating…' : 'Update'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <div className="card">
+        {query.isLoading ? <p className="muted">Loading products…</p> : null}
+        {query.error ? <p className="error">{(query.error as Error).message}</p> : null}
+        {query.data?.products.length === 0 ? <p className="muted">No products in this queue.</p> : null}
+        {query.data?.products.length ? <table className="table"><thead><tr><th>Product</th><th>Seller</th><th>Price</th><th>Stock</th><th>Visibility</th><th /></tr></thead><tbody>
+          {query.data.products.map(product => <tr key={product.id}>
+            <td><div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>{product.images[0]?.url ? <img src={product.images[0].url} alt="" style={{ width: 56, height: 48, borderRadius: 8, objectFit: 'cover' }} /> : null}<div><strong>{product.name}</strong><div className="muted">{product.categoryId}</div></div></div></td>
+            <td>{product.publisher?.displayName ?? 'Operator catalog'}</td><td>₹{(product.price / 100).toFixed(2)}</td><td>{product.inventory}</td><td>{product.requestedVisibility.replaceAll('_', ' ')}</td>
+            <td>{hasPermission('moderation.act') && product.ownerMobileUserId && actionsFor(product.reviewStatus).length ? <button type="button" className="btn secondary small" onClick={() => open(product)}>Review</button> : null}</td>
+          </tr>)}
+        </tbody></table> : null}
+      </div>
+      {selected ? <div className="modal-overlay" onClick={() => setSelected(null)}><div className="modal-content" onClick={e => e.stopPropagation()}>
+        <h2>Review {selected.name}</h2>
+        <div className="form-group"><label htmlFor="action">Action</label><select id="action" className="form-input" value={action} onChange={e => setAction(e.target.value as Action)}>{actionsFor(selected.reviewStatus).map(item => <option key={item} value={item}>{item.replaceAll('_', ' ')}</option>)}</select></div>
+        <div className="form-group"><label htmlFor="reason">Reason {needsReason ? '(required)' : '(optional)'}</label><textarea id="reason" className="form-input" rows={4} value={reason} onChange={e => setReason(e.target.value)} /></div>
+        {review.error ? <p className="error">{(review.error as Error).message}</p> : null}
+        <div className="modal-actions"><button type="button" className="btn secondary" onClick={() => setSelected(null)}>Cancel</button><button type="button" className="btn primary" disabled={review.isPending || (needsReason && !reason.trim())} onClick={() => review.mutate({ id: selected.id, body: { action, ...(reason.trim() ? { reason: reason.trim() } : {}) } })}>{review.isPending ? 'Saving…' : 'Confirm'}</button></div>
+      </div></div> : null}
     </AdminShell>
   );
 }

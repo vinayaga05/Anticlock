@@ -243,7 +243,8 @@ export function useProviderBookingActionMutation(providerId: string) {
       );
       return res.booking;
     },
-    onSuccess: () => {
+    onSuccess: booking => {
+      qc.setQueryData(['bookings', 'detail', booking.id], booking);
       qc.invalidateQueries({ queryKey: ['provider', 'business', providerId] });
       qc.invalidateQueries({ queryKey: ['bookings'] });
       qc.invalidateQueries({ queryKey: ['notifications'] });

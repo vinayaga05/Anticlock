@@ -178,6 +178,70 @@ function putNativeMediaFile(
   });
 }
 
+/** Cloudflare Stream basic direct uploads require multipart POST `file`. */
+function postNativeMediaFile(
+  uploadUrl: string,
+  headers: Headers,
+  fieldName: string,
+  file: Pick<ContentUploadFile, 'localUri' | 'contentType' | 'filename'>,
+  options: UploadOptions = {},
+): Promise<number> {
+  if (!isNativeLocalMediaUri(file.localUri)) {
+    return Promise.reject(
+      new Error('The selected media file is no longer available.'),
+    );
+  }
+
+  const { signal, onProgress } = options;
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new UploadCancelledError());
+      return;
+    }
+    const request = new XMLHttpRequest();
+    const onAbortSignal = () => request.abort();
+    signal?.addEventListener('abort', onAbortSignal);
+    const done = () => signal?.removeEventListener('abort', onAbortSignal);
+    request.open('POST', uploadUrl);
+    // Let React Native set the multipart boundary itself.
+    headers.forEach((value, name) => {
+      if (name.toLowerCase() !== 'content-type') {
+        request.setRequestHeader(name, value);
+      }
+    });
+    if (onProgress && request.upload) {
+      request.upload.onprogress = event => {
+        if (event.lengthComputable && event.total > 0) {
+          onProgress(Math.min(1, event.loaded / event.total));
+        }
+      };
+    }
+    request.onload = () => {
+      done();
+      resolve(request.status);
+    };
+    request.onerror = () => {
+      done();
+      reject(new Error('Upload failed. Check your connection and try again.'));
+    };
+    request.ontimeout = () => {
+      done();
+      reject(new Error('Upload timed out. Please try again.'));
+    };
+    request.onabort = () => {
+      done();
+      reject(new UploadCancelledError());
+    };
+    const form = new FormData();
+    form.append(fieldName, {
+      uri: file.localUri,
+      type: file.contentType,
+      name: file.filename,
+    } as unknown as Blob);
+    request.send(form);
+  });
+}
+
 /**
  * Uploads one creator-selected video or custom cover, then returns the media
  * id to put into `usePublishContentMutation`. This keeps direct R2 uploads
@@ -208,6 +272,9 @@ export async function uploadContentMedia(
       mediaId: string;
       uploadUrl: string;
       headers: Record<string, string>;
+      method?: 'PUT' | 'POST';
+      fieldName?: string;
+      provider?: string;
     };
   }>('/v1/content/uploads', {
     method: 'POST',
@@ -234,23 +301,43 @@ export async function uploadContentMedia(
       `Bearer ${session.token ?? getApiToken() ?? ''}`,
     );
   }
+  const usesMultipartPost = created.upload.method === 'POST';
   const status = isNativeLocalMediaUri(file.localUri)
-    ? await putNativeMediaFile(
-        created.upload.uploadUrl,
-        uploadHeaders,
-        file,
-        options,
-      )
+    ? usesMultipartPost
+      ? await postNativeMediaFile(
+          created.upload.uploadUrl,
+          uploadHeaders,
+          created.upload.fieldName ?? 'file',
+          file,
+          options,
+        )
+      : await putNativeMediaFile(
+          created.upload.uploadUrl,
+          uploadHeaders,
+          file,
+          options,
+        )
     : await (async () => {
         if (!file.bytes) {
           throw new Error(
             'The selected media could not be read. Please choose it again.',
           );
         }
+        let body: any = file.bytes;
+        if (usesMultipartPost) {
+          const form = new FormData();
+          (form.append as any)(
+            created.upload.fieldName ?? 'file',
+            new Blob([file.bytes as any]),
+            file.filename,
+          );
+          body = form;
+          uploadHeaders.delete('content-type');
+        }
         const put = await fetch(created.upload.uploadUrl, {
-          method: 'PUT',
+          method: usesMultipartPost ? 'POST' : 'PUT',
           headers: uploadHeaders,
-          body: file.bytes,
+          body,
           signal: options.signal,
         });
         options.onProgress?.(1);
@@ -392,6 +479,8 @@ export async function discardContentDraft(
 }
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const MEDIA_PROCESSING_RETRY_COUNT = 20;
+const MEDIA_PROCESSING_RETRY_MS = 1_500;
 
 export type PublishContentInput = ContentContainerInput & {
   /** Draft created by `ensureContentDraft` before uploading media. */
@@ -440,9 +529,9 @@ async function publishViaDraft(
       if (
         error instanceof ApiError &&
         error.code === 'media_processing' &&
-        attempt < 4
+        attempt < MEDIA_PROCESSING_RETRY_COUNT
       ) {
-        await sleep(1500);
+        await sleep(MEDIA_PROCESSING_RETRY_MS);
         continue;
       }
       throw error;

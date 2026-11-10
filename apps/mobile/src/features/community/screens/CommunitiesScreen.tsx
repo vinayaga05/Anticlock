@@ -11,19 +11,8 @@ import { Button } from '@/shared/components/Button';
 import { AppIcon } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { useTheme } from '@/shared/hooks/useTheme';
-import {
-  applyQuickFilter,
-  exploreQuickFilters,
-  featuredEvents,
-  filterExploreItems,
-  fromPeopleYouFollow,
-  myExploreSubmissions,
-  nearYouItems,
-  searchExploreItems,
-  trendingProducts,
-  upcomingEvents,
-  type ExploreItem,
-} from '@/shared/data/explore';
+import type { ExploreItem } from '@/shared/data/explore';
+import type { ExploreEvent, Product } from '@anticlock/contracts';
 import { useCommunityStore } from '@/shared/data/community';
 import {
   ExploreEventCard,
@@ -36,6 +25,16 @@ import {
 } from '@/features/community/components/ClubChallengeCards';
 import { SPORT_TAGS, CURRENT_USER_ID } from '@/shared/data/community';
 import { TAB_BAR_VISIBLE_HEIGHT } from '@/shared/navigation/FloatingPillTabBar';
+import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
+import { identityProfileType } from '@/shared/publishing/publisherSelection';
+import {
+  useExploreEventsQuery,
+  useMyExploreEventsQuery,
+} from '@/shared/api/exploreHooks';
+import {
+  useExploreProductsQuery,
+  useMyProductsQuery,
+} from '@/shared/api/shopHooks';
 
 type HubFilter = 'all' | 'events' | 'products';
 type ModeTab = 'feed' | 'teams' | 'challenges';
@@ -47,6 +46,65 @@ const MODE_TABS: { id: ModeTab; label: string }[] = [
   { id: 'challenges', label: 'Challenges' },
 ];
 
+const QUICK_FILTERS = [
+  { id: 'following', label: 'Following', appliesTo: 'all' },
+  { id: 'free', label: 'Free', appliesTo: 'events' },
+  { id: 'under500', label: 'Under ₹500', appliesTo: 'products' },
+] as const;
+
+function eventItem(event: ExploreEvent): ExploreItem {
+  const starts = new Date(event.startsAt);
+  return {
+    kind: 'event',
+    id: event.id,
+    title: event.title,
+    imageUrl: event.media[0]?.thumbnailUrl ?? event.media[0]?.url ?? '',
+    organizer: event.publisher.displayName,
+    dateLabel: starts.toLocaleDateString(undefined, {
+      weekday: 'short', month: 'short', day: 'numeric',
+    }),
+    timeLabel: starts.toLocaleTimeString(undefined, {
+      hour: 'numeric', minute: '2-digit',
+    }),
+    location: event.venueType === 'online'
+      ? 'Online'
+      : event.location?.name ?? event.location?.address ?? 'Location to be announced',
+    price: Math.round(event.price / 100),
+    spotsLeft: event.availableCapacity,
+    category: event.categoryId,
+    meta: {
+      reviewStatus: event.reviewStatus,
+      visibility: event.requestedVisibility,
+      submittedBy: event.publisher.displayName,
+      submittedAt: event.submittedAt ?? event.createdAt,
+      reviewNote: event.reviewReason ?? undefined,
+    },
+  };
+}
+
+function productItem(product: Product): ExploreItem {
+  return {
+    kind: 'product',
+    id: product.id,
+    title: product.name,
+    imageUrl: product.images[0]?.thumbnailUrl ?? product.images[0]?.url ?? '',
+    seller: product.publisher?.displayName ?? 'Anticlock Shop',
+    price: Math.round(product.price / 100),
+    compareAtPrice: product.compareAtPrice == null
+      ? undefined : Math.round(product.compareAtPrice / 100),
+    rating: 0,
+    reviewCount: 0,
+    category: product.categoryId,
+    meta: {
+      reviewStatus: product.reviewStatus,
+      visibility: product.requestedVisibility,
+      submittedBy: product.publisher?.displayName ?? 'Anticlock Shop',
+      submittedAt: product.createdAt,
+      reviewNote: product.reviewReason ?? undefined,
+    },
+  };
+}
+
 export function CommunitiesScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -57,6 +115,23 @@ export function CommunitiesScreen() {
   const [filter, setFilter] = useState<HubFilter>('all');
   const [quick, setQuick] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const { active } = useActiveProfile();
+  const viewer = active ? { id: active.id, type: identityProfileType(active) } : undefined;
+  const followingOnly = quick === 'following';
+  const eventQuery = useExploreEventsQuery({
+    search: query.trim() || undefined,
+    following: followingOnly,
+    freeOnly: quick === 'free',
+    viewer,
+  });
+  const productQuery = useExploreProductsQuery({
+    search: query.trim() || undefined,
+    following: followingOnly,
+    maxPrice: quick === 'under500' ? 50_000 : undefined,
+    viewer,
+  });
+  const myEventsQuery = useMyExploreEventsQuery();
+  const myProductsQuery = useMyProductsQuery();
 
   const myTeams = useCommunityStore(useShallow(s => s.getMyTeams()));
   const discoverTeams = useCommunityStore(
@@ -72,7 +147,7 @@ export function CommunitiesScreen() {
 
   const quickPills = useMemo(
     () =>
-      exploreQuickFilters.filter(
+      QUICK_FILTERS.filter(
         q => q.appliesTo === 'all' || q.appliesTo === filter,
       ),
     [filter],
@@ -89,7 +164,10 @@ export function CommunitiesScreen() {
       navigation.navigate('ProductDetail', { productId: item.id });
       return;
     }
-    navigation.navigate('ExploreSubmissionDetail', { itemId: item.id });
+    navigation.navigate('ExploreSubmissionDetail', {
+      itemId: item.id,
+      kind: item.kind,
+    });
   };
 
   const renderItem = (item: ExploreItem, compact = false) =>
@@ -109,23 +187,21 @@ export function CommunitiesScreen() {
       />
     );
 
-  const searchResults = useMemo(() => {
-    if (!query.trim()) return [];
-    return applyQuickFilter(
-      filterExploreItems(searchExploreItems(query), filter),
-      quick,
-    );
-  }, [query, filter, quick]);
-
-  const featured = filterExploreItems(featuredEvents, filter);
-  const trending = filterExploreItems(trendingProducts, filter);
-  const near = applyQuickFilter(
-    filterExploreItems(nearYouItems, filter),
-    quick,
+  const events = useMemo(
+    () => filter === 'products' ? [] : (eventQuery.data?.events ?? []).map(eventItem),
+    [eventQuery.data?.events, filter],
   );
-  const following = filterExploreItems(fromPeopleYouFollow, filter);
-  const upcoming = filterExploreItems(upcomingEvents, filter);
-  const mine = filterExploreItems(myExploreSubmissions, filter);
+  const products = useMemo(
+    () => filter === 'events' ? [] : (productQuery.data?.products ?? []).map(productItem),
+    [productQuery.data?.products, filter],
+  );
+  const searchResults = useMemo(() => [...events, ...products], [events, products]);
+  const mine = useMemo(() => [
+    ...(filter === 'products' ? [] : (myEventsQuery.data?.events ?? []).map(eventItem)),
+    ...(filter === 'events' ? [] : (myProductsQuery.data?.products ?? []).map(productItem)),
+  ], [filter, myEventsQuery.data?.events, myProductsQuery.data?.products]);
+  const feedLoading = eventQuery.isLoading || productQuery.isLoading;
+  const feedError = eventQuery.error ?? productQuery.error;
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
@@ -452,7 +528,19 @@ export function CommunitiesScreen() {
               ) : null}
             </View>
 
-            {query.trim() ? (
+            {feedLoading ? (
+              <View style={[styles.padded, { gap: 12 }]}>
+                <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>Loading Explore…</Text>
+              </View>
+            ) : feedError ? (
+              <View style={[styles.padded, { gap: 12 }]}>
+                <Text style={[theme.typography.bodySmall, { color: theme.colors.error }]}>Could not load Explore.</Text>
+                <Button title="Retry" variant="secondary" onPress={() => {
+                  void eventQuery.refetch();
+                  void productQuery.refetch();
+                }} />
+              </View>
+            ) : query.trim() ? (
               <View style={[styles.padded, { gap: 12 }]}>
                 <SectionHeader title="Search results" />
                 {searchResults.length === 0 ? (
@@ -488,65 +576,40 @@ export function CommunitiesScreen() {
                   </View>
                 ) : null}
 
-                {featured.length > 0 ? (
+                {events.length > 0 ? (
                   <View style={{ gap: 12 }}>
                     <View style={styles.padded}>
-                      <SectionHeader title="Featured Events" />
+                      <SectionHeader title={followingOnly ? 'Events from people you follow' : 'Upcoming Events'} />
                     </View>
                     <ScrollView
                       horizontal
                       showsHorizontalScrollIndicator={false}
                       contentContainerStyle={styles.hRow}
                     >
-                      {featured.map(item => renderItem(item, true))}
+                      {events.map(item => renderItem(item, true))}
                     </ScrollView>
                   </View>
                 ) : null}
 
-                {trending.length > 0 ? (
+                {products.length > 0 ? (
                   <View style={{ gap: 12 }}>
                     <View style={styles.padded}>
-                      <SectionHeader title="Trending Products" />
+                      <SectionHeader title={followingOnly ? 'Products from people you follow' : 'Products'} />
                     </View>
                     <ScrollView
                       horizontal
                       showsHorizontalScrollIndicator={false}
                       contentContainerStyle={styles.hRow}
                     >
-                      {trending.map(item => renderItem(item, true))}
+                      {products.map(item => renderItem(item, true))}
                     </ScrollView>
                   </View>
                 ) : null}
 
-                {near.length > 0 ? (
-                  <View style={[styles.padded, { gap: 12 }]}>
-                    <SectionHeader title="Near You" />
-                    {near.map(item => renderItem(item))}
-                  </View>
-                ) : null}
-
-                {following.length > 0 ? (
-                  <View style={[styles.padded, { gap: 12 }]}>
-                    <SectionHeader
-                      title="From People You Follow"
-                      subtitle="May include followers-only posts pending review"
-                    />
-                    {following.map(item => renderItem(item))}
-                  </View>
-                ) : null}
-
-                {upcoming.length > 0 && filter !== 'products' ? (
-                  <View style={{ gap: 12 }}>
-                    <View style={styles.padded}>
-                      <SectionHeader title="Upcoming Events" />
-                    </View>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.hRow}
-                    >
-                      {upcoming.map(item => renderItem(item, true))}
-                    </ScrollView>
+                {events.length === 0 && products.length === 0 ? (
+                  <View style={[styles.padded, { gap: 8 }]}>
+                    <SectionHeader title="Nothing here yet" />
+                    <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>Try another filter, or create the first listing.</Text>
                   </View>
                 ) : null}
               </>

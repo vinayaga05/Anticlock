@@ -114,6 +114,14 @@ export interface ReelItem {
   /** Remote HTTPS URL or local `require(...mp4)` asset id */
   videoUrl: string | number;
   posterUrl: string;
+  playback?: {
+    type: 'hls' | 'mp4';
+    hlsUrl: string | null;
+    fallbackMp4Url: string | null;
+    expiresAt: string | null;
+    durationMs?: number | null;
+    aspectRatio?: number | null;
+  };
   likeCount: number;
   commentCount: number;
   bookTarget?: {

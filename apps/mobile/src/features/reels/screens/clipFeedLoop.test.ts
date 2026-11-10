@@ -1,5 +1,6 @@
 import {
   buildLoopedClipFeed,
+  clipPlayerWindowState,
   loopCompleteClipsFeedWhenExhausted,
   mergeLoadedReelPages,
   nextClipFeedIndex,
@@ -56,5 +57,16 @@ describe('temporary Clips feed loop', () => {
     expect(buildLoopedClipFeed([])).toEqual([]);
     expect(buildLoopedClipFeed([reel('only')]).map(entry => entry.reel.id)).toEqual(['only']);
     expect(nextClipFeedIndex(0, 1)).toBe(0);
+  });
+
+  it('keeps no more than previous, current and next native players', () => {
+    const states = Array.from({ length: 20 }, (_, index) =>
+      clipPlayerWindowState(index, 8),
+    );
+    expect(states.filter(Boolean)).toHaveLength(3);
+    expect(states[7]).toBe('preload');
+    expect(states[8]).toBe('active');
+    expect(states[9]).toBe('preload');
+    expect(states[10]).toBeNull();
   });
 });

@@ -34,6 +34,7 @@ export {
   useOrderQuery,
   useCreateOrderMutation,
   useCancelOrderMutation,
+  useSaveProductMutation,
 } from './shopHooks';
 export {
   useTripsQuery,

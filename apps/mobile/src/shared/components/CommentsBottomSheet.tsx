@@ -114,7 +114,6 @@ export function CommentsBottomSheet({
   const expandedY = insets.top + TOP_GAP;
   const closedY = SCREEN_HEIGHT;
   const defaultY = expandedY + (1 - DEFAULT_VISIBLE) * (closedY - expandedY);
-  const sheetHeight = closedY - expandedY;
 
   const translateY = useSharedValue(closedY);
   const backdrop = useSharedValue(0);
@@ -339,8 +338,13 @@ export function CommentsBottomSheet({
       );
     });
 
+  // The old translated full-height sheet left its composer below the visible
+  // viewport at the default snap. Keep the bottom edge fixed to the screen by
+  // resizing from the animated top edge instead, so the list flexes above the
+  // composer and the input remains reachable at every snap point.
   const sheetStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
+    height: Math.max(0, closedY - translateY.value),
+    top: translateY.value,
   }));
 
   const backdropStyle = useAnimatedStyle(() => ({
@@ -394,7 +398,6 @@ export function CommentsBottomSheet({
         style={[
           styles.sheet,
           {
-            height: sheetHeight,
             backgroundColor: theme.colors.backgroundElevated,
           },
           sheetStyle,

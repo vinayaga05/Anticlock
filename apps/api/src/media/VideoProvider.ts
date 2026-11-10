@@ -6,7 +6,15 @@ export interface VideoProvider {
   createUploadSession(input: {
     maxDurationSeconds?: number;
     meta?: Record<string, string>;
-  }): Promise<{ uploadUrl: string; externalId: string }>;
+    /** Prevent playback by UID alone for non-public content. */
+    requireSignedUrls?: boolean;
+  }): Promise<{
+    uploadUrl: string;
+    externalId: string;
+    /** Cloudflare basic direct uploads accept multipart POST, not R2 PUT. */
+    method: 'POST';
+    fieldName: 'file';
+  }>;
 
   getStatus(externalId: string): Promise<{
     status: 'processing' | 'ready' | 'error';
@@ -16,6 +24,7 @@ export interface VideoProvider {
   getPlayback(externalId: string, signed?: boolean): Promise<{
     playbackUrl: string;
     thumbnailUrl?: string;
+    expiresAt?: string;
   }>;
 
   getThumbnail(externalId: string): Promise<string | null>;

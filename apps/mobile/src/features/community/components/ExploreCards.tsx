@@ -31,7 +31,7 @@ function StatusChips({
   if (reviewStatus === 'approved' && visibility === 'public') return null;
 
   const tone =
-    reviewStatus === 'needs_changes' || reviewStatus === 'rejected_policy'
+    ['needs_changes', 'changes_requested', 'rejected_policy', 'rejected', 'suspended'].includes(reviewStatus)
       ? theme.colors.warning
       : theme.colors.primary;
 

@@ -32,6 +32,12 @@ export function streamPlaybackUrl(uid: string) {
   return `https://customer-${process.env.STREAM_ACCOUNT_ID}.cloudflarestream.com/${uid}/manifest/video.m3u8`;
 }
 
+function streamDeliveryBase() {
+  const subdomain = process.env.STREAM_CUSTOMER_SUBDOMAIN?.trim();
+  if (subdomain) return `https://${subdomain}`;
+  return `https://customer-${process.env.STREAM_ACCOUNT_ID}.cloudflarestream.com`;
+}
+
 export function streamThumbnailUrl(uid: string) {
   const subdomain = process.env.STREAM_CUSTOMER_SUBDOMAIN?.trim();
   if (subdomain) {
@@ -65,13 +71,24 @@ async function streamFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
 /**
  * Cloudflare Stream implementation of VideoProvider.
- * Direct creator uploads + public HLS playback (no signed URLs in this slice).
+ * Direct creator uploads + public or short-lived signed HLS playback.
  */
 export class CloudflareStreamVideoProvider implements VideoProvider {
+  private readonly signedPlaybackCache = new Map<
+    string,
+    { playbackUrl: string; thumbnailUrl: string; expiresAt: string }
+  >();
+
   async createUploadSession(input: {
     maxDurationSeconds?: number;
     meta?: Record<string, string>;
-  }): Promise<{ uploadUrl: string; externalId: string }> {
+    requireSignedUrls?: boolean;
+  }): Promise<{
+    uploadUrl: string;
+    externalId: string;
+    method: 'POST';
+    fieldName: 'file';
+  }> {
     const maxDurationSeconds =
       input.maxDurationSeconds ??
       Number(process.env.STREAM_MAX_DURATION_SECONDS ?? 180);
@@ -82,13 +99,18 @@ export class CloudflareStreamVideoProvider implements VideoProvider {
         method: 'POST',
         body: JSON.stringify({
           maxDurationSeconds,
-          requireSignedURLs: false,
+          requireSignedURLs: input.requireSignedUrls === true,
           meta: input.meta ?? {},
         }),
       },
     );
 
-    return { uploadUrl: result.uploadURL, externalId: result.uid };
+    return {
+      uploadUrl: result.uploadURL,
+      externalId: result.uid,
+      method: 'POST',
+      fieldName: 'file',
+    };
   }
 
   async getStatus(externalId: string): Promise<{
@@ -119,8 +141,49 @@ export class CloudflareStreamVideoProvider implements VideoProvider {
 
   async getPlayback(
     externalId: string,
-    _signed?: boolean,
-  ): Promise<{ playbackUrl: string; thumbnailUrl?: string }> {
+    signed = false,
+  ): Promise<{
+    playbackUrl: string;
+    thumbnailUrl?: string;
+    expiresAt?: string;
+  }> {
+    if (signed) {
+      const cached = this.signedPlaybackCache.get(externalId);
+      if (
+        cached &&
+        new Date(cached.expiresAt).getTime() - Date.now() > 60 * 1000
+      ) {
+        return cached;
+      }
+      const ttlSeconds = Math.min(
+        24 * 60 * 60,
+        Math.max(
+          5 * 60,
+          Number(process.env.STREAM_PLAYBACK_TOKEN_TTL_SECONDS ?? 60 * 60),
+        ),
+      );
+      const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
+      const result = await streamFetch<{ token: string }>(
+        `/${encodeURIComponent(externalId)}/token`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            exp: Math.floor(expiresAt.getTime() / 1000),
+          }),
+        },
+      );
+      const playback = {
+        playbackUrl: `${streamDeliveryBase()}/${result.token}/manifest/video.m3u8`,
+        thumbnailUrl: streamThumbnailUrl(externalId),
+        expiresAt: expiresAt.toISOString(),
+      };
+      if (this.signedPlaybackCache.size >= 1_000) {
+        const oldest = this.signedPlaybackCache.keys().next().value;
+        if (oldest) this.signedPlaybackCache.delete(oldest);
+      }
+      this.signedPlaybackCache.set(externalId, playback);
+      return playback;
+    }
     return {
       playbackUrl: streamPlaybackUrl(externalId),
       thumbnailUrl: streamThumbnailUrl(externalId),

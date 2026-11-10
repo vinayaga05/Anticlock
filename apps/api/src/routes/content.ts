@@ -20,6 +20,7 @@ import {
   CreateContentDraftRequestSchema,
   CreateContentUploadRequestSchema,
   PublishContentDraftRequestSchema,
+  RecordContentClipPlaybackEventRequestSchema,
   RecordContentClipViewRequestSchema,
   SetContentClipLikeRequestSchema,
   UpdateContentDraftRequestSchema,
@@ -28,6 +29,7 @@ import { ZodError } from "zod";
 import { db } from "../db/client.js";
 import {
   contentClusterDeliveries,
+  contentClipPlaybackEvents,
   contentContainers,
   contentPostLikes,
   contentPostDeliveries,
@@ -155,6 +157,10 @@ type PreparedClipCandidate = {
   author: ClipFeedAuthor;
   playbackUrl: string;
   posterUrl: string | null;
+  playbackType: "hls" | "mp4";
+  durationMs: number | null;
+  width: number | null;
+  height: number | null;
   trendingScore: number;
 };
 
@@ -284,8 +290,9 @@ async function prepareClipCandidate(
   const playbackMediaId = post.mediaIds[0];
   if (!playbackMediaId) return null;
 
-  const [playbackUrl, posterUrl, author] = await Promise.all([
+  const [playbackUrl, playbackMetadata, customPosterUrl, author] = await Promise.all([
     mediaService.getPublicContentDeliveryUrl(playbackMediaId, "video"),
+    mediaService.getPublicContentMediaMetadata(playbackMediaId, "video"),
     post.thumbnailMediaId
       ? mediaService.getPublicContentDeliveryUrl(post.thumbnailMediaId, "image")
       : Promise.resolve(null),
@@ -297,7 +304,12 @@ async function prepareClipCandidate(
     post,
     author,
     playbackUrl,
-    posterUrl,
+    posterUrl: customPosterUrl ?? playbackMetadata?.posterUrl ?? null,
+    playbackType:
+      playbackMetadata?.storageProvider === "stream" ? "hls" : "mp4",
+    durationMs: playbackMetadata?.durationMs ?? null,
+    width: playbackMetadata?.width ?? null,
+    height: playbackMetadata?.height ?? null,
     trendingScore: calculateClipTrendingScore(post, now),
   };
 }
@@ -1241,6 +1253,25 @@ contentMobileRoutes.get("/feeds/clip-ranked-legacy", requireAuth, async (c) => {
           expiresAt: post.expiresAt?.toISOString() ?? null,
           playbackUrl: candidate.playbackUrl,
           posterUrl: candidate.posterUrl,
+          playback: {
+            type: candidate.playbackType,
+            hlsUrl:
+              candidate.playbackType === "hls"
+                ? candidate.playbackUrl
+                : null,
+            fallbackMp4Url:
+              candidate.playbackType === "mp4"
+                ? candidate.playbackUrl
+                : null,
+            expiresAt: null,
+          },
+          durationMs: candidate.durationMs,
+          width: candidate.width,
+          height: candidate.height,
+          aspectRatio:
+            candidate.width && candidate.height
+              ? candidate.width / candidate.height
+              : null,
           duplicateClusterId: post.duplicateClusterId,
           trendingScore: candidate.trendingScore,
           viewCount: post.viewCount,
@@ -1333,6 +1364,42 @@ contentMobileRoutes.post("/posts/:id/view-events", async (c) => {
       return { recorded: true, viewCount: updated.viewCount };
     });
     return c.json({ data });
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
+  }
+});
+
+/** Idempotent sampled startup/rebuffer telemetry; never changes engagement. */
+contentMobileRoutes.post("/posts/:id/playback-events", async (c) => {
+  try {
+    const mobileUserId = await requireActiveMobile(c.get("auth"));
+    const body = RecordContentClipPlaybackEventRequestSchema.parse(
+      await c.req.json()
+    );
+    const { post } = await requireVisiblePost(
+      mobileUserId,
+      c.req.param("id")
+    );
+    if (post.format !== "clip" || post.mediaType !== "video") {
+      throw clipNotFoundError();
+    }
+    const [event] = await db
+      .insert(contentClipPlaybackEvents)
+      .values({
+        contentPostId: post.id,
+        mobileUserId,
+        eventId: body.eventId,
+        eventType: body.eventType,
+        valueMs: body.valueMs,
+        sourceType: body.sourceType,
+        networkType: body.networkType ?? null,
+        preloaded: body.preloaded,
+        sessionId: body.sessionId ?? null,
+      })
+      .onConflictDoNothing()
+      .returning({ id: contentClipPlaybackEvents.id });
+    return c.json({ data: { recorded: Boolean(event) } });
   } catch (error) {
     const { status, body } = errorResponse(error);
     return c.json(body, status);

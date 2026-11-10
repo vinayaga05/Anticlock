@@ -63,6 +63,7 @@ import { createOrGetChannel } from '@/shared/api/messagesClient';
 import { useStreamChat } from '@/shared/providers/StreamChatProvider';
 import {
   createAnalyticsEventId,
+  recordClipPlaybackPerformance,
   recordReelAnalyticsEvent,
 } from '@/shared/api/reelAnalytics';
 import {
@@ -79,6 +80,7 @@ import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
 import { identityProfileType } from '@/shared/publishing/publisherSelection';
 import {
   buildLoopedClipFeed,
+  clipPlayerWindowState,
   mergeLoadedReelPages,
   type LoopedClipFeedEntry,
 } from './clipFeedLoop';
@@ -331,7 +333,6 @@ export function ReelFeedScreen() {
   const pageHeight = Math.max(1, Math.round(windowHeight));
   const addToCart = useCartStore(s => s.add);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [playbackCycle, setPlaybackCycle] = useState(0);
   const [liked, setLiked] = useState<Record<string, boolean>>({});
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
@@ -357,6 +358,7 @@ export function ReelFeedScreen() {
   const [coins] = useState(120);
   const viewedReelIds = useRef(new Set<string>());
   const completedReelIds = useRef(new Set<string>());
+  const bufferingStartedAtRef = useRef<Record<string, number>>({});
   const likedByIdRef = useRef<Record<string, boolean>>({});
   const likeCountByIdRef = useRef<Record<string, number>>({});
   const likeRequestVersions = useRef<Record<string, number>>({});
@@ -551,7 +553,6 @@ export function ReelFeedScreen() {
     currentIndexRef.current = nextIndex;
     activeReelIdRef.current = reels[nextIndex]?.id ?? null;
     setCurrentIndex(nextIndex);
-    setPlaybackCycle(cycle => cycle + 1);
     requestAnimationFrame(() => {
       if (reels.length) {
         listRef.current?.scrollToIndex({ index: nextIndex, animated: false });
@@ -784,9 +785,8 @@ export function ReelFeedScreen() {
       if (!entry.loopSentinel || loopJumpPendingRef.current) return;
       loopJumpPendingRef.current = true;
       // The sentinel renders clip 1, then swaps to its canonical row without a
-      // visible transition. Remounting playback guarantees a zero-time start.
+      // visible transition. The bounded player window will prepare that row.
       requestAnimationFrame(() => {
-        setPlaybackCycle(cycle => cycle + 1);
         currentIndexRef.current = 0;
         activeReelIdRef.current = loopedFeedRef.current[0]?.reel.id ?? null;
         listRef.current?.scrollToIndex({ index: 0, animated: false });
@@ -809,7 +809,6 @@ export function ReelFeedScreen() {
       currentIndexRef.current = 0;
       activeReelIdRef.current = null;
       setCurrentIndex(0);
-      setPlaybackCycle(cycle => cycle + 1);
       requestAnimationFrame(() => {
         // Empty feeds have no rows. scrollToIndex(0) crashes FlatList.
         if (!loopedFeedRef.current.length) {
@@ -1032,38 +1031,79 @@ export function ReelFeedScreen() {
 
   const renderItem = ({ item: entry, index }: { item: LoopedClipFeedEntry; index: number }) => {
     const item = entry.reel;
+    const playerWindowState = clipPlayerWindowState(index, currentIndex);
+    const isActivePlayer = playerWindowState === 'active';
+    // Retain one player on either side. The next cell prepares its first
+    // segment while paused; the previous cell is briefly reusable on a back
+    // swipe. FlatList's small window keeps this bounded at three players.
+    const shouldMountPlayer = playerWindowState !== null;
     const isLiked = liked[item.id] ?? !!item.liked;
     const action = getReelAction(item);
     const musicLabel = item.title ? `♪ ${item.title}` : '♪ Original audio';
 
     return (
       <View style={[styles.reel, { height: pageHeight, width: pageWidth }]}>
-        {index === currentIndex ? (
+        {shouldMountPlayer ? (
           <VideoPlayer
-            key={`${entry.key}:playback:${playbackCycle}`}
             uri={item.videoUrl}
+            poster={item.posterUrl || undefined}
             muted={false}
-            paused={commentsOpen && !playbackActive}
-            onPlaybackError={message => {
-              // Content Clips use short-lived signed R2 URLs. Refresh the feed
-              // once after an HTTP status error so an expired URL can be
-              // replaced with a newly signed delivery URL.
+            preloading={!isActivePlayer}
+            paused={!isActivePlayer || (commentsOpen && !playbackActive)}
+            onPlaybackReady={isActivePlayer ? startupMs => {
+              if (item.reportTarget?.kind !== 'content_post') return;
+              recordClipPlaybackPerformance(item.reportTarget.id, {
+                eventType: 'first_frame',
+                valueMs: startupMs,
+                sourceType:
+                  item.playback?.type ??
+                  (typeof item.videoUrl === 'string' && item.videoUrl.includes('.m3u8')
+                    ? 'hls'
+                    : 'mp4'),
+                preloaded: startupMs === 0,
+                sessionId: analyticsSessionId.current ?? undefined,
+              }).catch(() => undefined);
+            } : undefined}
+            onBufferingChange={isActivePlayer ? isBuffering => {
+              if (item.reportTarget?.kind !== 'content_post') return;
+              if (isBuffering) {
+                bufferingStartedAtRef.current[item.id] ??= Date.now();
+                return;
+              }
+              const startedAt = bufferingStartedAtRef.current[item.id];
+              delete bufferingStartedAtRef.current[item.id];
+              if (!startedAt) return;
+              recordClipPlaybackPerformance(item.reportTarget.id, {
+                eventType: 'rebuffer',
+                valueMs: Date.now() - startedAt,
+                sourceType:
+                  item.playback?.type ??
+                  (typeof item.videoUrl === 'string' && item.videoUrl.includes('.m3u8')
+                    ? 'hls'
+                    : 'mp4'),
+                preloaded: false,
+                sessionId: analyticsSessionId.current ?? undefined,
+              }).catch(() => undefined);
+            } : undefined}
+            onPlaybackError={isActivePlayer ? message => {
+              // Restricted content can use short-lived R2 or Stream playback
+              // URLs. Refresh after an HTTP status error so the API can issue
+              // a new authorized URL without teaching the client token rules.
               if (
                 message.includes('ERROR_CODE_IO_BAD_HTTP_STATUS') &&
-                typeof item.videoUrl === 'string' &&
-                item.videoUrl.includes('X-Amz-Signature=')
+                item.reportTarget?.kind === 'content_post'
               ) {
                 refreshPlaybackUrls().catch(() => undefined);
               }
-            }}
-            seekControllerId={item.id}
-            onSeekControllerChange={registerClipSeekController}
-            onPlaybackProgress={(currentTime, _duration) => {
+            } : undefined}
+            seekControllerId={isActivePlayer ? item.id : undefined}
+            onSeekControllerChange={isActivePlayer ? registerClipSeekController : undefined}
+            onPlaybackProgress={isActivePlayer ? (currentTime, _duration) => {
               if (commentsOpen && !playbackActive) return;
               updateClipProgress(item.id, currentTime, _duration);
               trackPlayback(item, currentTime * 1_000, false);
-            }}
-            onPlaybackComplete={duration => {
+            } : undefined}
+            onPlaybackComplete={isActivePlayer ? duration => {
               if ((commentsOpen && !playbackActive) || duration <= 0) {
                 return;
               }
@@ -1071,7 +1111,7 @@ export function ReelFeedScreen() {
               if (autoScroll) {
                 goToNextReel();
               }
-            }}
+            } : undefined}
           />
         ) : null}
 

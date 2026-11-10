@@ -603,6 +603,27 @@ async function migrate() {
   `;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS content_clip_playback_events (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      content_post_id uuid NOT NULL REFERENCES content_posts(id) ON DELETE CASCADE,
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      event_id uuid NOT NULL,
+      event_type text NOT NULL,
+      value_ms integer NOT NULL CHECK (value_ms >= 0),
+      source_type text NOT NULL,
+      network_type text,
+      preloaded boolean NOT NULL DEFAULT false,
+      session_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (content_post_id, mobile_user_id, event_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS content_clip_playback_events_post_created_idx
+      ON content_clip_playback_events (content_post_id, created_at DESC)
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS content_post_likes (
       content_post_id uuid NOT NULL REFERENCES content_posts(id) ON DELETE CASCADE,
       mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
@@ -1778,6 +1799,136 @@ async function migrate() {
   await sql`
     CREATE INDEX IF NOT EXISTS direct_message_reports_status_created_idx
       ON direct_message_reports (status, created_at)
+  `;
+
+  /** User-created Explore products and events with a real review lifecycle. */
+  await sql`
+    ALTER TABLE products
+      ADD COLUMN IF NOT EXISTS owner_mobile_user_id uuid REFERENCES mobile_users(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS author_mobile_user_id uuid REFERENCES mobile_users(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS author_provider_id uuid REFERENCES providers(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS review_status text NOT NULL DEFAULT 'approved',
+      ADD COLUMN IF NOT EXISTS requested_visibility text NOT NULL DEFAULT 'public',
+      ADD COLUMN IF NOT EXISTS review_reason text,
+      ADD COLUMN IF NOT EXISTS review_version integer NOT NULL DEFAULT 1,
+      ADD COLUMN IF NOT EXISTS submitted_at timestamptz,
+      ADD COLUMN IF NOT EXISTS approved_at timestamptz
+  `;
+  await sql`
+    UPDATE products
+    SET review_status = CASE
+      WHEN status = 'published' THEN 'approved'
+      WHEN status = 'archived' THEN 'archived'
+      ELSE 'draft'
+    END,
+    approved_at = CASE WHEN status = 'published' THEN COALESCE(approved_at, updated_at) END
+    WHERE owner_mobile_user_id IS NULL
+      AND review_status IS DISTINCT FROM CASE
+        WHEN status = 'published' THEN 'approved'
+        WHEN status = 'archived' THEN 'archived'
+        ELSE 'draft'
+      END
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS products_owner_updated_idx
+      ON products (owner_mobile_user_id, updated_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS products_review_created_idx
+      ON products (review_status, created_at DESC)
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS explore_events (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      owner_mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      author_mobile_user_id uuid REFERENCES mobile_users(id) ON DELETE CASCADE,
+      author_provider_id uuid REFERENCES providers(id) ON DELETE CASCADE,
+      title text NOT NULL,
+      description text NOT NULL,
+      category_id text NOT NULL REFERENCES service_categories(id) ON DELETE RESTRICT,
+      tags jsonb NOT NULL DEFAULT '[]'::jsonb,
+      starts_at timestamptz NOT NULL,
+      ends_at timestamptz NOT NULL,
+      timezone text NOT NULL,
+      venue_type text NOT NULL CHECK (venue_type IN ('physical', 'online', 'hybrid')),
+      location jsonb,
+      online_url text,
+      ticket_type text NOT NULL CHECK (ticket_type IN ('free', 'paid', 'registration_required')),
+      capacity integer NOT NULL CHECK (capacity > 0),
+      registration_count integer NOT NULL DEFAULT 0 CHECK (registration_count >= 0),
+      price integer NOT NULL DEFAULT 0 CHECK (price >= 0),
+      currency text NOT NULL DEFAULT 'INR',
+      contact jsonb NOT NULL,
+      requested_visibility text NOT NULL CHECK (requested_visibility IN ('followers_only', 'public')),
+      review_status text NOT NULL DEFAULT 'draft' CHECK (review_status IN ('draft', 'pending_review', 'approved', 'changes_requested', 'rejected', 'suspended', 'archived')),
+      review_reason text,
+      review_version integer NOT NULL DEFAULT 1 CHECK (review_version > 0),
+      challenge_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      submitted_at timestamptz,
+      approved_at timestamptz,
+      archived_at timestamptz,
+      deleted_at timestamptz,
+      CONSTRAINT explore_event_one_author CHECK (
+        (author_mobile_user_id IS NOT NULL AND author_provider_id IS NULL)
+        OR (author_mobile_user_id IS NULL AND author_provider_id IS NOT NULL)
+      )
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS explore_events_review_created_idx
+      ON explore_events (review_status, created_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS explore_events_owner_updated_idx
+      ON explore_events (owner_mobile_user_id, updated_at DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS explore_events_category_start_idx
+      ON explore_events (category_id, starts_at)
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS explore_event_media (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      event_id uuid NOT NULL REFERENCES explore_events(id) ON DELETE CASCADE,
+      media_asset_id uuid NOT NULL REFERENCES media_assets(id) ON DELETE CASCADE,
+      sort_order integer NOT NULL DEFAULT 0,
+      CONSTRAINT explore_event_media_asset_uidx UNIQUE (event_id, media_asset_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS explore_event_media_event_idx
+      ON explore_event_media (event_id, sort_order)
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS explore_event_registrations (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      event_id uuid NOT NULL REFERENCES explore_events(id) ON DELETE CASCADE,
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      status text NOT NULL DEFAULT 'registered' CHECK (status IN ('registered', 'cancelled')),
+      created_at timestamptz NOT NULL DEFAULT now(),
+      cancelled_at timestamptz,
+      CONSTRAINT explore_event_registration_uidx UNIQUE (event_id, mobile_user_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS explore_event_registration_user_idx
+      ON explore_event_registrations (mobile_user_id, created_at DESC)
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS explore_saves (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      entity_type text NOT NULL CHECK (entity_type IN ('event', 'product')),
+      entity_id uuid NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      CONSTRAINT explore_save_user_entity_uidx UNIQUE (mobile_user_id, entity_type, entity_id)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS explore_save_user_created_idx
+      ON explore_saves (mobile_user_id, created_at DESC)
   `;
 
   console.log("Migrations applied.");

@@ -6,6 +6,10 @@ export type ExploreReviewStatus =
   | 'submitted'
   | 'pending_review'
   | 'approved'
+  | 'changes_requested'
+  | 'rejected'
+  | 'suspended'
+  | 'archived'
   | 'needs_changes'
   | 'rejected_policy';
 
@@ -62,9 +66,15 @@ export function reviewStatusLabel(status: ExploreReviewStatus): string {
     case 'approved':
       return 'Approved';
     case 'needs_changes':
+    case 'changes_requested':
       return 'Needs Changes';
     case 'rejected_policy':
+    case 'rejected':
       return 'Rejected';
+    case 'suspended':
+      return 'Suspended';
+    case 'archived':
+      return 'Archived';
   }
 }
 

@@ -28,6 +28,7 @@ jest.mock('@react-navigation/native', () => ({
 
 const mockRefetch = jest.fn();
 let mockProfilePosts: any[] = [];
+let mockIdentities: any[] = [];
 let mockProfileSummary: any = {
   publisher: { id: 'profile-1', type: 'personal', displayName: 'Me', handle: 'me' },
   counts: { posts: 0, clips: 1, flash: 0, stories: 0 },
@@ -36,7 +37,7 @@ let mockProfileSummary: any = {
 };
 jest.mock('@/shared/publishing/useActiveProfile', () => ({
   useActiveProfile: () => ({
-    identities: [],
+    identities: mockIdentities,
     active: { id: 'profile-1', type: 'user', name: 'Me', profileType: 'personal' },
   }),
 }));
@@ -65,6 +66,7 @@ describe('PublisherProfileView', () => {
       profile: { id: 'business-2', type: 'business', displayName: 'Studio', avatarUrl: 'https://cdn.example/logo.png', verified: true },
     });
     mockFollowRefs = [];
+    mockIdentities = [];
     mockProfilePosts = [
       {
         id: 'clip-42',
@@ -157,6 +159,72 @@ describe('PublisherProfileView', () => {
       reelId: 'clip-42',
       providerHasClips: true,
     });
+  });
+
+  it('lets an owner add a product as the displayed business while the global profile is personal', () => {
+    mockIdentities = [{ id: 'business-2', type: 'provider', profileType: 'business', name: 'Studio', role: 'owner' }];
+    mockProfileSummary = {
+      publisher: { id: 'business-2', type: 'business', displayName: 'Studio', handle: 'studio' },
+      counts: { posts: 0, clips: 0, flash: 0, stories: 0 },
+      socialCounts: { followers: 0, following: 0, pendingRequests: 0 },
+      viewerCanManage: true,
+    };
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(<PublisherProfileView profileType="business" profileId="business-2" />);
+    });
+    const action = renderer.root.findAll(node => node.props.accessibilityLabel === 'Add product for this business')[0];
+    expect(action).toBeDefined();
+    ReactTestRenderer.act(() => action.props.onPress());
+    expect(mockNavigate).toHaveBeenCalledWith('CreateExploreProduct', {
+      publisherProfileId: 'business-2',
+      publisherProfileType: 'business',
+    });
+  });
+
+  it.each([
+    ['personal', 'profile-1', true],
+    ['business', 'business-2', false],
+  ] as const)('does not offer Add Product for a %s profile with manage=%s', (type, id, viewerCanManage) => {
+    mockIdentities = [{ id: 'business-2', type: 'provider', profileType: 'business', name: 'Studio', role: 'owner' }];
+    mockProfileSummary = {
+      publisher: { id, type, displayName: 'Profile', handle: null },
+      counts: { posts: 0, clips: 0, flash: 0, stories: 0 },
+      viewerCanManage,
+    };
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(<PublisherProfileView profileType={type} profileId={id} />);
+    });
+    expect(renderer.root.findAll(node => node.props.accessibilityLabel === 'Add product for this business')).toHaveLength(0);
+  });
+
+  it('does not offer Add Product while a different business summary is still displayed', () => {
+    mockIdentities = [{ id: 'business-2', type: 'provider', profileType: 'business', name: 'Studio', role: 'owner' }];
+    mockProfileSummary = {
+      publisher: { id: 'business-1', type: 'business', displayName: 'First business', handle: null },
+      counts: { posts: 0, clips: 0, flash: 0, stories: 0 },
+      viewerCanManage: true,
+    };
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(<PublisherProfileView profileType="business" profileId="business-2" />);
+    });
+    expect(renderer.root.findAll(node => node.props.accessibilityLabel === 'Add product for this business')).toHaveLength(0);
+  });
+
+  it.each(['analyst', 'unavailable'])('does not offer Add Product when publishing membership is %s', role => {
+    mockIdentities = role === 'unavailable' ? [] : [{ id: 'business-2', type: 'provider', profileType: 'business', name: 'Studio', role }];
+    mockProfileSummary = {
+      publisher: { id: 'business-2', type: 'business', displayName: 'Studio', handle: null },
+      counts: { posts: 0, clips: 0, flash: 0, stories: 0 },
+      viewerCanManage: true,
+    };
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(<PublisherProfileView profileType="business" profileId="business-2" />);
+    });
+    expect(renderer.root.findAll(node => node.props.accessibilityLabel === 'Add product for this business')).toHaveLength(0);
   });
 
   it('shows the provider empty state and can explore same-category Clips', () => {

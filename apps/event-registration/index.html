@@ -1098,11 +1098,11 @@
                 const randomNum = Math.floor(1000 + Math.random() * 9000);
                 state.regId = `ACHFA-2026-${randomNum}`;
 
-                if (submitBtn) submitBtn.textContent = 'Uploading to Firebase Storage...';
-                const screenshotUrl = await uploadPaymentScreenshot(mobile);
+                if (submitBtn) submitBtn.textContent = 'Uploading screenshot...';
+                const screenshot = await uploadPaymentScreenshot(mobile);
 
                 if (submitBtn) submitBtn.textContent = 'Saving registration...';
-                const saved = await saveRegistration(mobile, screenshotUrl);
+                const saved = await saveRegistration(mobile, screenshot);
                 populatePassFromRecord(saved);
                 showNotice("Registration Saved", "Transaction ID and payment screenshot URL were stored in Firebase.", false);
                 goToStep(3);

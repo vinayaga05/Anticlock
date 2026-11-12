@@ -44,6 +44,7 @@ import {
   resolveFormSchema,
 } from './FormSchemaService.js';
 import { computeApplicationReadiness } from './applicationReadiness.js';
+import { ensureProviderIntroClip } from '../content/ContentPublishingService.js';
 
 type ApplicationRow = typeof providerApplications.$inferSelect;
 
@@ -853,6 +854,20 @@ export class ProviderApplicationService {
         newStatus: normalizeProviderApplicationStatus(updatedRow.status),
       },
     });
+
+    if (
+      normalizeProviderApplicationStatus(updatedRow.status) === 'approved' &&
+      updatedRow.providerId
+    ) {
+      try {
+        await ensureProviderIntroClip(updatedRow.providerId);
+      } catch (err) {
+        console.error(
+          '[ProviderApplicationService] intro clip publish failed',
+          err,
+        );
+      }
+    }
 
     await this.notifyStatusChange(updatedRow);
     return this.getApplicationAdmin(applicationId);

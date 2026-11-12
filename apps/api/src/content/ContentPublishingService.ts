@@ -56,6 +56,9 @@ import {
 } from "../publishing/publisher.js";
 import { canProfileViewContent, getProfilePrivacy, hasAcceptedFollow, profileConnectionCounts, profileFollowService, profilesAreBlocked } from "../social/ProfileFollowService.js";
 import { exceedsClipDuration, musicAttributionFromEdit } from "./musicTracks.js";
+import { introVideoMediaIdFromPublicProfile } from "./providerIntroClip.js";
+
+export { introVideoMediaIdFromPublicProfile } from "./providerIntroClip.js";
 
 type Container = typeof contentContainers.$inferSelect;
 type Post = typeof contentPosts.$inferSelect;
@@ -544,9 +547,146 @@ export async function publishContainer(
   return { post, draft: serializeDraft(refreshed, owned.publisher, post) };
 }
 
-// ── Viewer-facing reads ───────────────────────────────────────────────────
-
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Turns a provider onboarding introduction video into a public Clip so it
+ * appears when customers open Clips for that plumber, doctor, or any other
+ * approved business. Idempotent: reuses the existing Clip when the same
+ * intro media already has a Clip for the provider. Removed and rejected
+ * Clips also count, so reads cannot undo an owner or moderation decision.
+ *
+ * Provider-app uploads live under a different storage marker than creator
+ * Clips, so this path does not go through the normal draft publish gate.
+ */
+export async function ensureProviderIntroClip(providerId: string) {
+  if (!UUID_RE.test(providerId)) return null;
+  const [provider] = await db
+    .select({
+      id: providers.id,
+      mobileUserId: providers.mobileUserId,
+      status: providers.status,
+      publicProfile: providers.publicProfile,
+    })
+    .from(providers)
+    .where(eq(providers.id, providerId))
+    .limit(1);
+  if (!provider || provider.status !== "active") return null;
+
+  const introVideoMediaId = introVideoMediaIdFromPublicProfile(
+    provider.publicProfile as Record<string, unknown> | null
+  );
+  if (!introVideoMediaId) return null;
+  if (!(await mediaService.isPublicContentDeliverable(introVideoMediaId, "video"))) {
+    return null;
+  }
+
+  const findExisting = async () => {
+    const rows = await db
+      .select()
+      .from(contentPosts)
+      .where(
+        and(
+          eq(contentPosts.authorProviderId, providerId),
+          eq(contentPosts.format, "clip"),
+          eq(contentPosts.duplicateClusterId, introVideoMediaId)
+        )
+      )
+      .limit(1);
+    return rows[0] ?? null;
+  };
+
+  const existing = await findExisting();
+  if (existing) return existing;
+
+  const ref: PublisherRef = { type: "business", id: providerId };
+  const clipProvider = await providerClipMetadata(ref, "clip");
+  const now = new Date();
+
+  const result = await db.transaction(async (tx) => {
+    // Profile summary, profile posts and provider-feed reads can arrive
+    // together. Lock the provider before checking so they create one Clip.
+    const [lockedProvider] = await tx
+      .select({ status: providers.status, publicProfile: providers.publicProfile })
+      .from(providers)
+      .where(eq(providers.id, providerId))
+      .for("update");
+    if (
+      !lockedProvider ||
+      lockedProvider.status !== "active" ||
+      introVideoMediaIdFromPublicProfile(
+        lockedProvider.publicProfile as Record<string, unknown> | null
+      ) !== introVideoMediaId
+    ) {
+      return null;
+    }
+
+    const [raced] = await tx
+      .select()
+      .from(contentPosts)
+      .where(
+        and(
+          eq(contentPosts.authorProviderId, providerId),
+          eq(contentPosts.format, "clip"),
+          eq(contentPosts.duplicateClusterId, introVideoMediaId)
+        )
+      )
+      .limit(1);
+    if (raced) return { post: raced, inserted: false };
+
+    const [container] = await tx
+      .insert(contentContainers)
+      .values({
+        createdByMobileUserId: provider.mobileUserId,
+        ...authorColumnsFor(ref),
+        format: "clip",
+        mediaType: "video",
+        caption: "Introduction",
+        mediaIds: [introVideoMediaId],
+        hashtags: [],
+        taggedMobileUserIds: [],
+        location: null,
+        visibility: "public",
+        edit: null,
+        status: "published",
+        publishedAt: now,
+      })
+      .returning();
+
+    const [post] = await tx
+      .insert(contentPosts)
+      .values({
+        containerId: container!.id,
+        createdByMobileUserId: provider.mobileUserId,
+        ...authorColumnsFor(ref),
+        ...clipProvider,
+        format: "clip",
+        mediaType: "video",
+        caption: "Introduction",
+        mediaIds: [introVideoMediaId],
+        thumbnailMediaId: null,
+        hashtags: [],
+        taggedMobileUserIds: [],
+        location: null,
+        duplicateClusterId: introVideoMediaId,
+        visibility: "public",
+        edit: null,
+        musicTrackId: null,
+        status: "published",
+        expiresAt: null,
+        publishedAt: now,
+      })
+      .returning();
+    return { post: post!, inserted: true };
+  });
+
+  if (result?.inserted && result.post.status === "published") {
+    void publishContentEvent(postEvent("post.published", result.post));
+  }
+  return result?.post ?? null;
+}
+
+// ── Viewer-facing reads ───────────────────────────────────────────────────
 
 function encodeCursor(post: Pick<Post, "publishedAt" | "id">) {
   return Buffer.from(`${post.publishedAt.toISOString()}|${post.id}`).toString(
@@ -714,6 +854,14 @@ export async function listPosts(
     cursor?: string;
   }
 ) {
+  if (
+    query.format === "clip" &&
+    query.publisher?.type === "business" &&
+    query.publisher.id &&
+    !query.cursor
+  ) {
+    await ensureProviderIntroClip(query.publisher.id);
+  }
   const now = new Date();
   const [viewer, blocked] = await Promise.all([
     loadViewerContext(viewerUserId),
@@ -796,6 +944,12 @@ export async function listProviderCategoryClips(
     throw appError("Provider Clip feed not found", "not_found", 404);
   }
 
+  // Existing approved providers may already have an intro video that was
+  // never published as a Clip. Materialize it before the first page.
+  if (!query.cursor) {
+    await ensureProviderIntroClip(query.providerId);
+  }
+
   const now = new Date();
   const cursor = decodeProviderClipCursor(query.cursor);
   const priority = sql<number>`CASE WHEN ${contentPosts.providerId} = ${query.providerId} THEN 0 ELSE 1 END`;
@@ -867,6 +1021,9 @@ export async function getProfileSummary(
   ]);
   if (!publisher || blocked.has(publisherKey(ref))) {
     throw appError("Profile not found", "not_found", 404);
+  }
+  if (ref.type === "business") {
+    await ensureProviderIntroClip(ref.id);
   }
   const now = new Date();
   const details = ref.type === "personal"

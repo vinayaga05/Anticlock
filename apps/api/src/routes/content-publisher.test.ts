@@ -779,6 +779,163 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
     assert.ok(ids(afterApproval.json.items).includes(pending.postId));
   });
 
+  it("surfaces a business introduction video in Clips for any provider category", async () => {
+    const { and, eq } = await import("drizzle-orm");
+    const { subscribeContentEvents } = await import("../realtime/contentEvents.js");
+    const introId = randomUUID();
+    await db.insert(schema.mediaAssets).values({
+      id: introId,
+      kind: "video",
+      storageProvider: "local",
+      storageKey: `public/provider-app-${randomUUID()}/${introId}/final.mp4`,
+      bucket: "public-media",
+      mimeType: "video/mp4",
+      byteSize: 1000,
+      durationMs: 12_000,
+      accessLevel: "public",
+      processingStatus: "ready",
+      moderationStatus: "approved",
+      checksumSha256: `${runId}-intro-${introId}`,
+    });
+    await db
+      .update(schema.providers)
+      .set({
+        publicProfile: {
+          common: {
+            basic: { handle: "ashayoga", logoUrl: "https://cdn.example.com/yoga.png" },
+            profile: { introVideoMediaId: introId },
+          },
+        },
+      })
+      .where(eq(schema.providers.id, BIZ1));
+
+    const savedRedisUrl = process.env.REDIS_URL;
+    delete process.env.REDIS_URL;
+    const publishedIds: string[] = [];
+    const unsubscribe = subscribeContentEvents((event) => {
+      if (event.type === "post.published" && event.publisherProfileId === BIZ1) {
+        publishedIds.push(event.postId);
+      }
+    });
+    let reads: Awaited<ReturnType<typeof call>>[];
+    try {
+      const urls = [
+        `/v1/content/profiles/business/${BIZ1}`,
+        `/v1/content/profiles/business/${BIZ1}/posts?format=clip`,
+        `/v1/content/feeds/provider-clips?providerId=${BIZ1}&serviceCategoryId=${categoryId}&limit=50`,
+      ];
+      // Details loads header and clips together; another viewer may open
+      // the same provider at the same time. All reads must reuse one intro.
+      reads = await Promise.all(
+        [...urls, ...urls].map((url) => call("B", "GET", url)),
+      );
+    } finally {
+      unsubscribe();
+      if (savedRedisUrl === undefined) delete process.env.REDIS_URL;
+      else process.env.REDIS_URL = savedRedisUrl;
+    }
+    for (const read of reads) assert.equal(read.status, 200, JSON.stringify(read.json));
+    const introPosts = await db
+      .select({ id: schema.contentPosts.id })
+      .from(schema.contentPosts)
+      .where(and(
+        eq(schema.contentPosts.authorProviderId, BIZ1),
+        eq(schema.contentPosts.duplicateClusterId, introId),
+      ));
+    assert.equal(introPosts.length, 1, "concurrent first reads create exactly one intro Clip");
+    assert.deepEqual(publishedIds, [introPosts[0].id], "only insertion emits a publish event");
+
+    const before = reads[0]!;
+    assert.equal(before.status, 200, JSON.stringify(before.json));
+    assert.ok(
+      before.json.profile.counts.clips >= 1,
+      "introduction video counts as a Clip on the business profile",
+    );
+
+    const feed = await call(
+      "B",
+      "GET",
+      `/v1/content/feeds/provider-clips?providerId=${BIZ1}&serviceCategoryId=${categoryId}&limit=50`,
+    );
+    assert.equal(feed.status, 200, JSON.stringify(feed.json));
+    const intro = (feed.json.items as Json[]).find(
+      (item) =>
+        item.duplicateClusterId === introId ||
+        (Array.isArray(item.mediaIds) && item.mediaIds.includes(introId)),
+    );
+    assert.ok(intro, "introduction video plays in provider Clips");
+    assert.equal(intro.caption, "Introduction");
+    assert.equal(intro.providerId, BIZ1);
+    assert.equal(intro.serviceCategoryId, categoryId);
+    assert.equal(intro.publisherProfileId, BIZ1);
+
+    const profilePosts = await call(
+      "B",
+      "GET",
+      `/v1/content/profiles/business/${BIZ1}/posts?format=clip`,
+    );
+    assert.ok(ids(profilePosts.json.items).includes(intro.id));
+
+    const again = await call("B", "GET", `/v1/content/profiles/business/${BIZ1}`);
+    assert.equal(
+      again.json.profile.counts.clips,
+      before.json.profile.counts.clips,
+      "ensure is idempotent and does not duplicate the intro Clip",
+    );
+
+    async function assertIntroStaysHidden(status: "removed" | "rejected") {
+      const savedRedisUrl = process.env.REDIS_URL;
+      delete process.env.REDIS_URL;
+      const publishedIds: string[] = [];
+      const unsubscribe = subscribeContentEvents((event) => {
+        if (event.type === "post.published" && event.publisherProfileId === BIZ1) {
+          publishedIds.push(event.postId);
+        }
+      });
+      let hiddenReads: Awaited<ReturnType<typeof call>>[];
+      try {
+        hiddenReads = await Promise.all([
+          call("B", "GET", `/v1/content/profiles/business/${BIZ1}`),
+          call("B", "GET", `/v1/content/profiles/business/${BIZ1}/posts?format=clip`),
+          call("B", "GET", `/v1/content/feeds/provider-clips?providerId=${BIZ1}&serviceCategoryId=${categoryId}&limit=50`),
+        ]);
+      } finally {
+        unsubscribe();
+        if (savedRedisUrl === undefined) delete process.env.REDIS_URL;
+        else process.env.REDIS_URL = savedRedisUrl;
+      }
+      for (const read of hiddenReads) assert.equal(read.status, 200, JSON.stringify(read.json));
+      assert.equal(hiddenReads[0]!.json.profile.counts.clips, before.json.profile.counts.clips - 1);
+      for (const read of hiddenReads.slice(1)) {
+        assert.ok(!(read.json.items as Json[]).some((item) =>
+          item.duplicateClusterId === introId || item.mediaIds?.includes(introId),
+        ), `${status} intro stays out of profiles and provider feeds`);
+      }
+      const rows = await db
+        .select({ status: schema.contentPosts.status })
+        .from(schema.contentPosts)
+        .where(and(
+          eq(schema.contentPosts.authorProviderId, BIZ1),
+          eq(schema.contentPosts.duplicateClusterId, introId),
+        ));
+      assert.deepEqual(rows, [{ status }], "reads preserve the existing decision without creating another intro");
+      assert.deepEqual(publishedIds, [], "hidden intro reads emit no publication event");
+    }
+
+    const removed = await call("A", "DELETE", `/v1/content/posts/${intro.id}`);
+    assert.equal(removed.status, 200, JSON.stringify(removed.json));
+    await assertIntroStaysHidden("removed");
+
+    // Put this fixture into review, then use the actual admin decision route.
+    await db.update(schema.contentPosts).set({ status: "pending_review" })
+      .where(eq(schema.contentPosts.id, intro.id));
+    const rejected = await call("admin", "POST", `/admin/moderation/content/${intro.id}/review`, {
+      decision: "reject", note: "Intro declined",
+    });
+    assert.equal(rejected.status, 200, JSON.stringify(rejected.json));
+    await assertIntroStaysHidden("rejected");
+  });
+
   it("enforces profile-scoped follows, private requests, rejection, blocking, and business privacy", async () => {
     const follow = (who: string, followerId: string, followerType: "personal" | "business", followedId: string, followedType: "personal" | "business") =>
       call(who, "POST", "/v1/profile-follows", {

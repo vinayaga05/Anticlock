@@ -58,7 +58,8 @@ export function mapMarketplaceCard(
       (card.providerKind === 'business' ? 'Business' : 'Professional'),
     categoryIds: card.categoryIds,
     actionType,
-    imageUrl: card.avatarUrl ?? card.coverUrl ?? '',
+    // Prefer cover art for detail/hero posters; fall back to the logo.
+    imageUrl: card.coverUrl ?? card.avatarUrl ?? '',
     rating: 0,
     reviewCount: 0,
     location: { city: card.city ?? '', area: card.area ?? '' },

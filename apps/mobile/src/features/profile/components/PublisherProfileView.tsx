@@ -36,6 +36,7 @@ import {
   type ProfileRelationship,
 } from '@/shared/api/profileFollows';
 import { UserCallActions } from '@/features/calls/components/UserCallActions';
+import { softFill } from '@/shared/theme/colors';
 
 type Tab = 'flash' | 'clip';
 
@@ -185,7 +186,14 @@ export function PublisherProfileView({
         providerName: publisher.displayName,
         ...(reelId ? { reelId } : {}),
         ...(exploreSimilar ? { exploreSimilar: true } : {}),
-        providerHasClips: Boolean(reelId || profile?.counts.clips),
+        // Never force an empty feed from a stale zero count. Introduction
+        // videos become Clips asynchronously; only skip the load when the
+        // profile explicitly chose "explore similar" with no own Clips.
+        ...(reelId || profile?.counts.clips
+          ? { providerHasClips: true }
+          : exploreSimilar
+            ? { providerHasClips: false }
+            : {}),
       });
       return;
     }
@@ -554,6 +562,14 @@ export function PublisherProfileView({
               ]}>
               {thumb ? (
                 <Image source={{ uri: thumb }} style={styles.cellImage} />
+              ) : isClip ? (
+                <View
+                  style={[
+                    styles.cellPlaceholder,
+                    { backgroundColor: softFill(theme.colors.primary, 0.16) },
+                  ]}>
+                  <AppIcon name="reels" size={22} color={theme.colors.primary} />
+                </View>
               ) : (
                 <Text numberOfLines={4} style={[theme.typography.caption, styles.cellText, { color: theme.colors.textPrimary }]}>
                   {item.caption}
@@ -626,6 +642,11 @@ const styles = StyleSheet.create({
   gridRow: { gap: 1, marginBottom: 1 },
   cell: { marginBottom: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   cellImage: { width: '100%', height: '100%' },
+  cellPlaceholder: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   cellText: { padding: 8 },
   videoBadge: { position: 'absolute', top: 8, right: 8 },
   empty: { alignItems: 'center', paddingVertical: 48 },

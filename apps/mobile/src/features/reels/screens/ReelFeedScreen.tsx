@@ -431,6 +431,16 @@ export function ReelFeedScreen() {
       ),
     [providerReelsQuery.data?.pages],
   );
+  // When the profile still reports zero Clips, keep loading this provider's
+  // own rows so an onboarding introduction video can appear before peers.
+  const providerOwnReels = useMemo(() => {
+    if (!providerPlayback || !params?.providerId) return EMPTY_REELS;
+    return loadedProviderReels.filter(
+      reel =>
+        reel.authorProfile?.id === params.providerId ||
+        reel.contentMetadata?.providerId === params.providerId,
+    );
+  }, [providerPlayback, params?.providerId, loadedProviderReels]);
   const viewerSuffix = activeViewerProfile
     ? `&viewerProfileType=${encodeURIComponent(identityProfileType(activeViewerProfile))}&viewerProfileId=${encodeURIComponent(activeViewerProfile.id)}`
     : '';
@@ -441,9 +451,19 @@ export function ReelFeedScreen() {
   });
   const jumpToTopRef = useRef(false);
   const revealedReelIdRef = useRef<string | null>(null);
+  // Only show the explicit empty/explore step after the provider feed has
+  // loaded and still has no own Clips. A stale providerHasClips=false must
+  // not hide an introduction video that the API just published.
+  const showingProviderEmptyStep =
+    providerPlayback &&
+    params?.providerHasClips === false &&
+    !showSimilarProviders &&
+    !providerReelsQuery.isLoading &&
+    Boolean(providerReelsQuery.data) &&
+    providerOwnReels.length === 0;
   const queriedReels = providerPlayback
     ? params?.providerHasClips === false && !showSimilarProviders
-      ? EMPTY_REELS
+      ? providerOwnReels
       : loadedProviderReels
     : profilePlayback
       ? profileReelsQuery.data
@@ -464,13 +484,25 @@ export function ReelFeedScreen() {
     }
   }, [refetch]);
   const pagedQuery = providerPlayback ? providerReelsQuery : globalReelsQuery;
-  const hasNextPage = !profilePlayback && Boolean(pagedQuery.hasNextPage);
-  const isFetchingNextPage = !profilePlayback && pagedQuery.isFetchingNextPage;
+  const restrictingToProviderOwn =
+    providerPlayback &&
+    params?.providerHasClips === false &&
+    !showSimilarProviders;
+  const hasNextPage =
+    !profilePlayback &&
+    !restrictingToProviderOwn &&
+    Boolean(pagedQuery.hasNextPage);
+  const isFetchingNextPage =
+    !profilePlayback &&
+    !restrictingToProviderOwn &&
+    pagedQuery.isFetchingNextPage;
   const hasReachedEndOfServerFeed = profilePlayback
     ? true
-    : Boolean(pagedQuery.data) &&
-      !hasNextPage &&
-      !isFetchingNextPage;
+    : restrictingToProviderOwn
+      ? Boolean(providerReelsQuery.data)
+      : Boolean(pagedQuery.data) &&
+        !hasNextPage &&
+        !isFetchingNextPage;
   // Content-feed results are already block-filtered on the server. Also hydrate
   // the local block list so newly blocked profiles hide immediately.
   useEffect(() => {
@@ -504,16 +536,12 @@ export function ReelFeedScreen() {
   // cannot make FlatList think its data changed and recalculate its viewport.
   const feedReels = queriedReels ?? EMPTY_REELS;
   const feedLoading = providerPlayback
-    ? params?.providerHasClips === false && !showSimilarProviders
-      ? false
-      : providerReelsQuery.isLoading
+    ? providerReelsQuery.isLoading
     : profilePlayback
       ? profileReelsQuery.isLoading
       : globalReelsQuery.isLoading;
   const feedError = providerPlayback
-    ? params?.providerHasClips === false && !showSimilarProviders
-      ? null
-      : providerReelsQuery.error
+    ? providerReelsQuery.error
     : profilePlayback
       ? profileReelsQuery.error
       : globalReelsQuery.error;
@@ -1370,10 +1398,7 @@ export function ReelFeedScreen() {
                     <Text style={styles.emptyCtaLabel}>Create a clip</Text>
                   </PressableScale>
                 ) : null}
-                {providerPlayback &&
-                params?.providerHasClips === false &&
-                !showSimilarProviders &&
-                !feedError ? (
+                {showingProviderEmptyStep && !feedError && !feedLoading ? (
                   <PressableScale
                     accessibilityLabel="Explore clips from similar providers"
                     onPress={() => setShowSimilarProviders(true)}

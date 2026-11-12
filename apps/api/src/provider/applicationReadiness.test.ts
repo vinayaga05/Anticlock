@@ -23,6 +23,7 @@ const complete = {
   profile: {
     description: 'Lotus studio in Chennai',
     logoMediaId: '9f3f1f3e-5c0f-4f90-9b78-9c95ec2ce994',
+    introVideoMediaId: '8f1c7988-fa13-4812-92f0-e5e7187b0570',
   },
 };
 
@@ -166,6 +167,7 @@ describe('computeApplicationReadiness', () => {
     assert.deepEqual(missing.missing.map(m => m.key).sort(), [
       'identity.businessRegistration',
       'location.map',
+      'profile.introVideo',
       'profile.logo',
     ]);
     const ok = computeApplicationReadiness({
@@ -174,5 +176,32 @@ describe('computeApplicationReadiness', () => {
       commonPayload: complete,
     });
     assert.deepEqual(ok.missing, []);
+  });
+
+  it('blocks submit and approval when the introduction video is missing', () => {
+    const withoutIntro = {
+      ...complete,
+      profile: {
+        description: 'Lotus studio in Chennai',
+        logoMediaId: '9f3f1f3e-5c0f-4f90-9b78-9c95ec2ce994',
+      },
+    };
+    const r = computeApplicationReadiness({
+      schema,
+      commonPayload: withoutIntro,
+      dynamicPayload: {},
+      categoryIds: ['fitness.gym'],
+      documentFieldKeys: [
+        'identity.aadhaarDocument',
+        'identity.idDocument',
+        'identity.businessRegistration',
+      ],
+      hasAadhaar: true,
+    });
+    assert.equal(r.complete, false);
+    const intro = r.missing.find(item => item.key === 'profile.introVideo');
+    assert.ok(intro);
+    assert.equal(intro.reason, 'required');
+    assert.equal(intro.message, 'Introduction video is required');
   });
 });

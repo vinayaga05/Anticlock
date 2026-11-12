@@ -100,7 +100,9 @@ const commonFields = [
     key: 'profile.introVideo',
     type: 'video' as const,
     label: 'Introduction video',
+    required: true,
     sectionId: 'profile',
+    helpText: 'Required. Upload a short video introducing your business.',
   },
   {
     key: 'profile.description',

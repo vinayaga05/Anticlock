@@ -40,6 +40,7 @@ import { messagesRoutes } from './routes/messages.js';
 import { communitiesMobileRoutes, communitiesAdminRoutes } from './routes/communities.js';
 import { exploreMobileRoutes, exploreAdminRoutes } from './routes/explore.js';
 import { coursesMobileRoutes, coursesAdminRoutes } from './routes/courses.js';
+import { eventRegistrationRoutes } from './routes/event-registration.js';
 import { startAssistantLifecycleJob } from './assistant/PrivacyService.js';
 import { redisHealthCheck } from './lib/redis.js';
 import {
@@ -72,8 +73,27 @@ function assertProductionConfiguration() {
 
 function corsOrigins() {
   const adminOrigin = process.env.ADMIN_ORIGIN ?? 'http://localhost:3000';
-  if (isProduction) return [adminOrigin];
-  return [adminOrigin, 'http://localhost:3001', 'http://127.0.0.1:3000'];
+  const configured = (process.env.CORS_ORIGINS ?? '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean);
+  const productionDefaults = [
+    adminOrigin,
+    'https://knock.org.in',
+    'https://www.knock.org.in',
+  ];
+  const developmentDefaults = [
+    adminOrigin,
+    'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://localhost:5500',
+  ];
+  return [
+    ...new Set([
+      ...(isProduction ? productionDefaults : developmentDefaults),
+      ...configured,
+    ]),
+  ];
 }
 
 assertProductionConfiguration();
@@ -162,6 +182,7 @@ app.route('/v1/devices', devicesMobileRoutes);
 app.route('/v1/messages', messagesRoutes);
 app.route('/v1/communities', communitiesMobileRoutes);
 app.route('/v1/explore', exploreMobileRoutes);
+app.route('/v1/event-registration', eventRegistrationRoutes);
 app.route('/v1/courses', coursesMobileRoutes);
 app.route('/admin', adminRoutes);
 app.route('/admin/courses', coursesAdminRoutes);

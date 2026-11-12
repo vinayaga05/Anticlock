@@ -696,6 +696,21 @@
 
         let paymentQRCodeObj = null;
         let passQRCodeObj = null;
+        let submissionInProgress = false;
+        let screenshotUploadCache = null;
+        const pendingRegistrationSaves = new Map();
+        const DATABASE_TIMEOUT_MS = 20000;
+        const UPLOAD_TIMEOUT_MS = 45000;
+
+        function withTimeout(promise, milliseconds, message, onTimeout) {
+            return new Promise((resolve, reject) => {
+                const timer = setTimeout(() => {
+                    reject(new Error(message));
+                    if (onTimeout) onTimeout();
+                }, milliseconds);
+                Promise.resolve(promise).then(resolve, reject).finally(() => clearTimeout(timer));
+            });
+        }
 
         function normalizeMobile(raw) {
             const digits = String(raw || '').replace(/\D/g, '');
@@ -706,6 +721,30 @@
 
         function registrationRef(mobile) {
             return db.ref(`registrations/${mobile}`);
+        }
+
+        function readRegistration(mobile) {
+            return withTimeout(
+                registrationRef(mobile).once('value'),
+                DATABASE_TIMEOUT_MS,
+                'Could not check your registration in time. Check your connection and try again.'
+            );
+        }
+
+        async function waitForRegistrationSave(mobile, pending) {
+            const saved = await withTimeout(
+                pending.promise,
+                DATABASE_TIMEOUT_MS,
+                'Still waiting for registration confirmation. Check your connection and press the button again to check. Do not pay again.'
+            );
+            if (pendingRegistrationSaves.get(mobile) === pending) pendingRegistrationSaves.delete(mobile);
+            return saved;
+        }
+
+        function showSavedRegistration(saved) {
+            populatePassFromRecord(saved);
+            showNotice('Registration Saved', 'Your registration and payment screenshot were saved successfully.', false);
+            goToStep(3);
         }
 
         function populatePassFromRecord(record) {
@@ -769,35 +808,53 @@
             if (!state.screenshotFile) {
                 throw new Error('Payment screenshot file is missing.');
             }
-
-            const contentType = state.screenshotFile.type || 'image/jpeg';
-            const dataBase64 = await fileToBase64(state.screenshotFile);
-            const response = await fetch(`${EVENT_REGISTRATION_API}/payment-screenshot`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    mobile,
-                    transactionId: state.utr,
-                    contentType,
-                    filename: state.screenshotFile.name || `payment.${extensionFromFile(state.screenshotFile)}`,
-                    dataBase64
-                })
-            });
-
-            const payload = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(payload.error || 'Could not upload screenshot to Cloudflare R2.');
+            const file = state.screenshotFile;
+            const transactionId = state.utr;
+            if (screenshotUploadCache && screenshotUploadCache.file === file &&
+                screenshotUploadCache.mobile === mobile && screenshotUploadCache.transactionId === transactionId) {
+                return screenshotUploadCache.result;
             }
+
+            const controller = new AbortController();
+            const payload = await withTimeout((async () => {
+                const contentType = file.type || 'image/jpeg';
+                const dataBase64 = await fileToBase64(file);
+                const response = await fetch(`${EVENT_REGISTRATION_API}/payment-screenshot`, {
+                    method: 'POST',
+                    signal: controller.signal,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        mobile,
+                        transactionId,
+                        contentType,
+                        filename: file.name || `payment.${extensionFromFile(file)}`,
+                        dataBase64
+                    })
+                });
+                const uploaded = await response.json().catch(() => {
+                    throw new Error('Screenshot upload confirmation could not be read. Please try again.');
+                });
+                if (!response.ok) {
+                    throw new Error(uploaded?.error || 'Could not upload screenshot. Please try again.');
+                }
+                if (!uploaded || uploaded.storage !== 'r2' ||
+                    !['bucket', 'key', 'screenshotUrl'].every(key => typeof uploaded[key] === 'string' && uploaded[key].trim())) {
+                    throw new Error('Screenshot upload could not be confirmed. Please try again.');
+                }
+                return uploaded;
+            })(), UPLOAD_TIMEOUT_MS, 'Screenshot upload timed out. Check your connection and try again.', () => controller.abort());
 
             state.screenshotUrl = payload.screenshotUrl || '';
             state.screenshotKey = payload.key || '';
             state.screenshotBucket = payload.bucket || '';
-            return {
+            const result = {
                 screenshotUrl: state.screenshotUrl,
                 screenshotKey: state.screenshotKey,
                 screenshotBucket: state.screenshotBucket,
                 screenshotStorage: 'r2'
             };
+            screenshotUploadCache = { file, mobile, transactionId, result };
+            return result;
         }
 
         async function saveRegistration(mobile, screenshot) {
@@ -827,8 +884,19 @@
                 issuedAt
             };
 
-            await registrationRef(mobile).set(payload);
-            return payload;
+            const pending = { payload, promise: null };
+            // Firebase applies writes to its local cache before the server
+            // acknowledges them. Keep the original write across retries so a
+            // cached snapshot cannot be mistaken for a confirmed registration.
+            pending.promise = Promise.resolve().then(() => registrationRef(mobile).set(payload)).then(
+                () => payload,
+                error => {
+                    if (pendingRegistrationSaves.get(mobile) === pending) pendingRegistrationSaves.delete(mobile);
+                    throw error;
+                }
+            );
+            pendingRegistrationSaves.set(mobile, pending);
+            return waitForRegistrationSave(mobile, pending);
         }
 
         // Custom Notification Function replacing alert()
@@ -955,7 +1023,12 @@
             state.whatsapp = mobile;
 
             try {
-                const existingSnap = await registrationRef(mobile).once('value');
+                const pending = pendingRegistrationSaves.get(mobile);
+                if (pending) {
+                    showSavedRegistration(await waitForRegistrationSave(mobile, pending));
+                    return;
+                }
+                const existingSnap = await readRegistration(mobile);
                 if (existingSnap.exists()) {
                     populatePassFromRecord(existingSnap.val());
                     showNotice("Already Registered", `This mobile number already has pass ${existingSnap.val().regId}. Showing your existing pass.`, false);
@@ -964,7 +1037,7 @@
                 }
             } catch (err) {
                 console.error(err);
-                showNotice("Database Error", "Could not verify mobile number against Firebase. Please try again.");
+                showNotice("Database Error", err.message || "Could not verify your registration. Please try again.");
                 return;
             }
 
@@ -1047,6 +1120,7 @@
 
         function removeImage(e) {
             if(e) e.stopPropagation();
+            screenshotUploadCache = null;
             state.screenshotBase64 = '';
             state.screenshotFile = null;
             state.screenshotUrl = '';
@@ -1058,35 +1132,43 @@
         // Handle Step 2 Payment Verification & Issue Pass
         async function handleVerifyAndGeneratePass(e) {
             e.preventDefault();
-
-            const utrVal = document.getElementById('utrNumber').value.trim();
-            if (utrVal.length !== 12 || isNaN(utrVal)) {
-                showNotice("Invalid UTR", "Please enter a valid 12-digit UTR or Transaction Reference Number.");
-                return;
-            }
-
-            if (!state.screenshotFile && !state.screenshotBase64) {
-                showNotice("Screenshot Missing", "Please attach a payment screenshot as proof.");
-                return;
-            }
+            if (submissionInProgress) return;
 
             const mobile = normalizeMobile(state.whatsapp);
             if (!mobile) {
                 showNotice("Invalid Mobile", "A valid 10-digit mobile number is required as the unique registration ID.");
                 return;
             }
+            const pending = pendingRegistrationSaves.get(mobile);
 
-            state.utr = utrVal;
+            const utrVal = document.getElementById('utrNumber').value.trim();
+            if (!pending && !/^\d{12}$/.test(utrVal)) {
+                showNotice("Invalid UTR", "Please enter a valid 12-digit UTR or Transaction Reference Number.");
+                return;
+            }
+
+            if (!pending && !state.screenshotFile) {
+                showNotice("Screenshot Missing", "Please attach a payment screenshot as proof.");
+                return;
+            }
+
+            if (!pending) state.utr = utrVal;
             state.whatsapp = mobile;
+            submissionInProgress = true;
 
             const submitBtn = e.target.querySelector('button[type="submit"]');
             if (submitBtn) {
                 submitBtn.disabled = true;
-                submitBtn.textContent = 'Uploading screenshot...';
+                submitBtn.textContent = 'Checking registration...';
             }
 
             try {
-                const existingSnap = await registrationRef(mobile).once('value');
+                if (pending) {
+                    if (submitBtn) submitBtn.textContent = 'Checking saved registration...';
+                    showSavedRegistration(await waitForRegistrationSave(mobile, pending));
+                    return;
+                }
+                const existingSnap = await readRegistration(mobile);
                 if (existingSnap.exists()) {
                     populatePassFromRecord(existingSnap.val());
                     showNotice("Already Registered", `This mobile number already has pass ${existingSnap.val().regId}.`, false);
@@ -1103,14 +1185,13 @@
 
                 if (submitBtn) submitBtn.textContent = 'Saving registration...';
                 const saved = await saveRegistration(mobile, screenshot);
-                populatePassFromRecord(saved);
-                showNotice("Registration Saved", "Transaction ID and payment screenshot URL were stored in Firebase.", false);
-                goToStep(3);
+                showSavedRegistration(saved);
             } catch (err) {
                 console.error(err);
                 const message = (err && err.message) ? err.message : "Could not save registration to Firebase. Please try again.";
                 showNotice("Save Failed", message);
             } finally {
+                submissionInProgress = false;
                 if (submitBtn) {
                     submitBtn.disabled = false;
                     submitBtn.textContent = 'Verify Payment & Generate Pass';

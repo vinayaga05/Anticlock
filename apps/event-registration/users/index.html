@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="no-referrer">
+  <title>Registration users · Anticlock</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{color-scheme:dark;--bg:#030712;--surface:#0f172a;--border:#243147;--text:#f1f5f9;--muted:#94a3b8;--pink:#ec4899;--blue:#2563eb}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 15% 0%,#181334 0,transparent 50%),var(--bg);font:14px/1.5 Inter,system-ui,sans-serif;color:var(--text);min-height:100vh}button,input,select{font:inherit}button,a,input,select{outline-offset:4px}button{cursor:pointer}button:disabled{opacity:.5;cursor:default}a{color:#93c5fd;text-decoration:none}a:hover{text-decoration:underline}h1,h2,p{margin:0}header{padding:24px max(24px,calc((100vw - 1400px)/2));border-bottom:1px solid var(--border);background:#030712c9;display:flex;align-items:center;justify-content:space-between;gap:24px}.brand{font-weight:800;letter-spacing:.03em;color:var(--pink)}.brand span{color:#60a5fa}.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.15em;color:var(--muted);margin-top:4px}main{max-width:1448px;margin:auto;padding:36px 24px 72px}.heading{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:26px}h1{font-size:30px;letter-spacing:-.04em;line-height:1.25}.description{color:var(--muted);margin-top:10px;max-width:650px}.panel{background:#0f172aee;border:1px solid var(--border);border-radius:20px;overflow:hidden}.login{max-width:540px;margin:48px auto;padding:36px;text-align:center}.login-icon{height:58px;width:58px;margin:0 auto 20px;border-radius:18px;display:grid;place-items:center;background:linear-gradient(135deg,#ec48992e,#2563eb38);color:#f9a8d4}.login h2{font-size:22px}.login p{margin:12px 0 22px;color:var(--muted)}.primary,.secondary{border:0;border-radius:11px;padding:12px 18px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;gap:8px}.primary{background:linear-gradient(105deg,var(--pink),var(--blue));color:#fff}.secondary{background:#1e293b;color:#e2e8f0;border:1px solid #334155}.account{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap}.account-text{color:var(--muted);font-size:12px;max-width:300px;overflow-wrap:anywhere}.status{padding:18px 20px;border:1px solid var(--border);border-radius:14px;background:#111d32;color:#cbd5e1;margin-bottom:20px}.status[data-kind=error]{background:#3b122333;border-color:#be185d66;color:#fecdd3}.status strong{display:block;font-size:15px;margin-bottom:4px}.status p{overflow-wrap:anywhere}.status button{margin-top:12px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:22px}.stat{min-width:0;padding:20px 22px;background:#0f172ad9;border:1px solid var(--border);border-radius:16px}.stat span{color:var(--muted);font-size:12px}.stat strong{overflow-wrap:anywhere;display:block;font-size:28px;letter-spacing:-.04em;margin-top:5px}.stat:first-child strong{color:#f9a8d4}.toolbar{display:flex;gap:14px;padding:20px;align-items:end;flex-wrap:wrap;border-bottom:1px solid var(--border)}label{display:block;font-size:12px;color:var(--muted);margin-bottom:7px}.search{flex:1;min-width:230px}input,select{width:100%;background:#080f1e;border:1px solid #334155;color:var(--text);padding:11px 13px;border-radius:10px}select{min-width:160px}.table-scroll{overflow:auto}table{width:100%;border-collapse:collapse;text-align:left}th{padding:14px 20px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;background:#0b1324;white-space:nowrap}td{padding:17px 20px;border-bottom:1px solid #1e293b;vertical-align:middle}tbody tr:hover{background:#17233966}.name{font-weight:700;max-width:260px;overflow-wrap:anywhere}.sub{display:block;color:var(--muted);font-size:12px;margin-top:3px;overflow-wrap:anywhere}.mono{font-variant-numeric:tabular-nums}.badge{display:inline-block;border-radius:99px;padding:4px 10px;background:#2563eb1f;color:#bfdbfe;font-size:12px;font-weight:600;white-space:nowrap}.badge[data-category=VIP]{background:#ec489922;color:#f9a8d4}.row-action{border:1px solid #334155;background:#1e293b;color:#e2e8f0;border-radius:8px;padding:7px 12px}.footer{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:18px 20px;color:var(--muted);font-size:12px;flex-wrap:wrap}.pagination{display:flex;align-items:center;gap:12px}.empty{text-align:center;padding:52px 20px;color:var(--muted)}.empty strong{display:block;color:#e2e8f0;font-size:17px;margin-bottom:8px}.note{color:var(--muted);font-size:12px;margin-top:18px}.details-dialog{position:fixed;inset:0;z-index:10;background:#020617bb;display:flex;align-items:center;justify-content:center;padding:24px}.details-card{width:min(700px,100%);max-height:90vh;overflow:auto;background:#0f172a;border:1px solid #334155;border-radius:20px;box-shadow:0 25px 100px #0008}.dialog-heading{display:flex;align-items:start;justify-content:space-between;gap:24px;padding:24px;border-bottom:1px solid var(--border)}.dialog-heading h2{font-size:22px;overflow-wrap:anywhere}.close{color:#cbd5e1;background:#1e293b;border:0;border-radius:9px;min-width:38px;height:38px;font-size:22px}.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 24px;padding:12px 24px 24px;margin:0}.detail-grid div{padding:13px 0;border-bottom:1px solid #1e293b;min-width:0}.detail-grid dt{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:5px}.detail-grid dd{margin:0;overflow-wrap:anywhere}.detail-grid .wide{grid-column:1/-1}.proof{padding:0 24px 24px}.proof p{font-size:12px;color:var(--muted);margin-top:10px}[hidden]{display:none!important}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+    @media(max-width:700px){header{padding:18px 20px;align-items:flex-start;flex-direction:column;gap:12px}main{padding:26px 16px 48px}.heading{gap:14px;flex-direction:column}h1{font-size:26px}.stats{gap:10px}.stat{padding:15px 12px}.stat strong{font-size:22px}.toolbar{padding:16px}.search{min-width:100%}.toolbar>div:not(.search){flex:1}.login{padding:28px 22px;margin:26px auto}.account{justify-content:flex-start}.detail-grid{grid-template-columns:1fr}.details-dialog{padding:12px}.description{font-size:13px}td,th{padding-left:16px;padding-right:16px}}
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+</head>
+<body>
+  <header>
+    <div><a class="brand" href="/">ANTICLOCK <span>SPORTS HEALTH &amp; FITNESS</span></a><div class="eyebrow">Organiser workspace</div></div>
+    <div id="account" class="account" hidden><span id="accountEmail" class="account-text"></span><button id="signOut" class="secondary" type="button">Sign out</button></div>
+  </header>
+  <main>
+    <div class="heading"><div><h1>Registered users</h1><p class="description">Participant details and submitted payment proof from event registrations.</p></div><a href="/">Registration page ↗</a></div>
+    <section id="loginPanel" class="panel login" aria-labelledby="loginTitle">
+      <div class="login-icon" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4m-4 5v2"/></svg></div>
+      <h2 id="loginTitle">Organiser sign-in</h2><p>Sign in with your approved Google account to view participant details.</p>
+      <button id="signIn" class="primary" type="button">Continue with Google</button>
+    </section>
+    <section id="status" class="status" role="status" aria-live="polite" hidden><strong id="statusTitle"></strong><p id="statusMessage"></p><p id="accountId" class="sub" hidden></p><button id="retry" class="secondary" type="button" hidden>Try again</button></section>
+    <section id="roster" hidden aria-label="Registrations">
+      <div class="stats"><div class="stat"><span>Registered users</span><strong id="totalUsers">0</strong></div><div class="stat"><span>Passes recorded</span><strong id="totalPasses">0</strong></div><div class="stat"><span>Recorded amount</span><strong id="totalAmount">₹0</strong></div></div>
+      <div class="panel">
+        <div class="toolbar"><div class="search"><label for="search">Search registrations</label><input id="search" type="search" placeholder="Name, mobile, email, ID or UTR" autocomplete="off"></div><div><label for="category">Pass category</label><select id="category"><option value="">All categories</option></select></div><button id="refresh" class="secondary" type="button">Refresh</button></div>
+        <div class="table-scroll"><table><caption class="sr-only">Registered participants, newest first</caption><thead><tr><th scope="col">Participant</th><th scope="col">Contact</th><th scope="col">Pass</th><th scope="col">Amount</th><th scope="col">Registered</th><th scope="col"><span class="sr-only">Details</span></th></tr></thead><tbody id="rows"></tbody></table></div>
+        <div id="empty" class="empty" hidden><strong id="emptyTitle"></strong><p id="emptyMessage"></p></div>
+        <div class="footer"><span id="resultCount"></span><div class="pagination"><button id="previous" class="secondary" type="button">Previous</button><span id="pageLabel"></span><button id="next" class="secondary" type="button">Next</button></div><span id="updatedAt"></span></div>
+      </div><p class="note">Amounts and payment screenshots were submitted by participants. They do not confirm payment verification.</p>
+    </section>
+  </main>
+  <div id="details" class="details-dialog" role="dialog" aria-modal="true" aria-labelledby="detailName" hidden>
+    <div class="details-card"><div class="dialog-heading"><div><h2 id="detailName"></h2><p id="detailId" class="sub"></p></div><button id="closeDetails" class="close" type="button" aria-label="Close participant details">×</button></div><dl id="detailFields" class="detail-grid"></dl><div id="proof" class="proof"></div></div>
+  </div>
+  <script>
+  // Registered users application. No registration data is written by this page.
+  (() => {
+    'use strict';
+    const FIREBASE_CONFIG = {
+      apiKey: 'AIzaSyDg_cid7rgx6xo7aTDruaAr6HIrO8u1oow',
+      authDomain: 'knock-bafe3.firebaseapp.com',
+      databaseURL: 'https://knock-bafe3-default-rtdb.firebaseio.com',
+      projectId: 'knock-bafe3',
+      messagingSenderId: '60833926002',
+      appId: '1:60833926002:web:c9e14a288e8e01be27ebeb'
+    };
+    const PAGE_SIZE = 20;
+    const TIMEOUT_MS = 20000;
+    const state = { records: [], page: 1, query: '', category: '', allowed: false, user: null, authVersion: 0, dataVersion: 0, stop: null, timer: null, lastFocus: null };
+    let auth = null;
+    let database = null;
+    const $ = id => document.getElementById(id);
+    const text = value => typeof value === 'string' ? value.trim() : typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
+    const numeric = value => (typeof value === 'number' || typeof value === 'string' && value.trim()) && Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
+    const money = value => value === null ? '—' : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(value);
+    function safeUrl(value) {
+      try { const url = new URL(text(value)); return ['http:', 'https:'].includes(url.protocol) ? url.href : null; } catch { return null; }
+    }
+    function categoryName(value) {
+      const label = text(value);
+      const known = { student: 'Student', general: 'General', vip: 'VIP' };
+      return known[label.toLowerCase().replace(/\s+pass$/, '')] || label || 'Not recorded';
+    }
+    function normalizedRecords(value) {
+      if (!value || typeof value !== 'object') return [];
+      return Object.entries(value).flatMap(([key, record]) => {
+        if (!record || typeof record !== 'object' || Array.isArray(record)) return [];
+        const quantityValue = numeric(record.quantity ?? record.ticketCount);
+        const quantity = quantityValue !== null && Number.isInteger(quantityValue) ? quantityValue : null;
+        const unitPrice = numeric(record.unitPrice);
+        const amount = numeric(record.totalAmount ?? record.amount) ?? (quantity !== null && unitPrice !== null ? quantity * unitPrice : null);
+        const created = record.createdAt ?? record.registeredAt ?? record.created_at ?? record.issuedAt;
+        const parsedDate = typeof created === 'number' ? created : typeof created === 'string' && created.trim() ? Date.parse(created) : NaN;
+        const user = {
+          key, name: text(record.fullName) || text(record.name) || [text(record.firstName), text(record.lastName)].filter(Boolean).join(' ') || 'Unnamed participant',
+          mobile: text(record.mobile) || text(record.whatsapp) || text(record.phone) || key,
+          email: text(record.email), age: text(record.age), gender: text(record.gender) || text(record.sex),
+          category: categoryName(record.category), quantity, unitPrice, amount,
+          utr: text(record.transactionId) || text(record.utr), regId: text(record.regId) || text(record.registrationId),
+          created: Number.isFinite(parsedDate) && Number.isFinite(new Date(parsedDate).getTime()) ? parsedDate : null, issuedAt: text(record.issuedAt),
+          screenshotUrl: safeUrl(record.screenshotUrl), screenshotStorage: text(record.screenshotStorage),
+          screenshotBucket: text(record.screenshotBucket), screenshotKey: text(record.screenshotKey)
+        };
+        user.search = [user.name, user.mobile, user.email, user.regId, user.utr].join(' ').toLocaleLowerCase();
+        return [user];
+      }).sort((a, b) => (b.created ?? -Infinity) - (a.created ?? -Infinity) || a.key.localeCompare(b.key));
+    }
+    function filteredRecords(records, query, category) {
+      const terms = text(query).toLocaleLowerCase().split(/\s+/).filter(Boolean);
+      return records.filter(record => (!category || record.category === category) && terms.every(term => record.search.includes(term)));
+    }
+    const dateLabel = value => value === null ? 'Not recorded' : new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+    function showStatus(title, message, kind = 'info', retry = false, showAccountId = false) {
+      $('status').hidden = false; $('status').dataset.kind = kind;
+      $('statusTitle').textContent = title; $('statusMessage').textContent = message; $('retry').hidden = !retry;
+      $('accountId').hidden = !showAccountId || !state.user; $('accountId').textContent = showAccountId && state.user ? `Account ID: ${text(state.user.uid)}` : '';
+    }
+    function stopSubscription() {
+      state.dataVersion += 1;
+      if (state.stop) { state.stop(); state.stop = null; }
+      if (state.timer !== null) { clearTimeout(state.timer); state.timer = null; }
+    }
+    function closeDetails() {
+      $('details').hidden = true; $('detailFields').replaceChildren(); $('proof').replaceChildren();
+      $('detailName').textContent = ''; $('detailId').textContent = '';
+      if (state.lastFocus && typeof state.lastFocus.focus === 'function') state.lastFocus.focus();
+      state.lastFocus = null;
+    }
+    function clearSensitiveData() {
+      state.records = []; state.page = 1; state.query = ''; state.category = '';
+      $('rows').replaceChildren(); $('roster').hidden = true; $('search').value = ''; $('category').value = '';
+      $('totalUsers').textContent = '0'; $('totalPasses').textContent = '0'; $('totalAmount').textContent = money(0);
+      $('resultCount').textContent = ''; $('updatedAt').textContent = ''; $('accountId').hidden = true; $('accountId').textContent = ''; closeDetails();
+      $('category').replaceChildren(option('', 'All categories'));
+    }
+    function option(value, label) { const element = document.createElement('option'); element.value = value; element.textContent = label; return element; }
+    function cell(label, className = '') { const element = document.createElement('td'); element.textContent = label; element.className = className; return element; }
+    function subcell(primary, secondary, className = '') {
+      const element = document.createElement('td'); const label = document.createElement('div'); label.textContent = primary; label.className = className; element.append(label);
+      if (secondary) { const sub = document.createElement('span'); sub.className = 'sub'; sub.textContent = secondary; element.append(sub); } return element;
+    }
+    function rebuildCategories() {
+      const categories = [...new Set(state.records.map(record => record.category))].sort((a, b) => a.localeCompare(b));
+      if (!categories.includes(state.category)) state.category = '';
+      $('category').replaceChildren(option('', 'All categories'), ...categories.map(label => option(label, label)));
+      $('category').value = state.category;
+    }
+    function render() {
+      if (!state.allowed) return;
+      const visible = filteredRecords(state.records, state.query, state.category);
+      const pages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+      state.page = Math.min(Math.max(state.page, 1), pages);
+      const start = (state.page - 1) * PAGE_SIZE;
+      const rows = visible.slice(start, start + PAGE_SIZE).map(record => {
+        const row = document.createElement('tr');
+        row.append(subcell(record.name, record.regId, 'name'), subcell(record.mobile || '—', record.email, 'mono'));
+        const pass = document.createElement('td'); const badge = document.createElement('span'); badge.className = 'badge'; badge.dataset.category = record.category; badge.textContent = record.category; pass.append(badge);
+        const quantity = document.createElement('span'); quantity.className = 'sub'; quantity.textContent = record.quantity === null ? 'Quantity not recorded' : `${record.quantity} ${record.quantity === 1 ? 'pass' : 'passes'}`; pass.append(quantity);
+        row.append(pass, cell(money(record.amount), 'mono'), cell(dateLabel(record.created)));
+        const action = document.createElement('td'); const button = document.createElement('button'); button.type = 'button'; button.className = 'row-action'; button.textContent = 'Details'; button.setAttribute('aria-label', `View details for ${record.name}`); button.addEventListener('click', () => openDetails(record, button)); action.append(button); row.append(action); return row;
+      });
+      $('rows').replaceChildren(...rows); $('roster').hidden = false;
+      $('totalUsers').textContent = String(state.records.length);
+      $('totalPasses').textContent = String(state.records.reduce((sum, record) => sum + (record.quantity ?? 0), 0));
+      $('totalAmount').textContent = money(state.records.reduce((sum, record) => sum + (record.amount ?? 0), 0));
+      $('empty').hidden = visible.length > 0;
+      $('emptyTitle').textContent = state.records.length ? 'No matching registrations' : 'No registrations yet';
+      $('emptyMessage').textContent = state.records.length ? 'Try another name, contact, registration ID or pass category.' : 'Registrations will appear here after participants save their details.';
+      $('resultCount').textContent = visible.length ? `${start + 1}–${Math.min(start + PAGE_SIZE, visible.length)} of ${visible.length}${visible.length !== state.records.length ? ` matching · ${state.records.length} total` : ' registrations'}` : `0 of ${state.records.length} registrations`;
+      $('pageLabel').textContent = `Page ${state.page} of ${pages}`;
+      $('previous').disabled = state.page <= 1; $('next').disabled = state.page >= pages;
+    }
+    function detail(label, value, wide = false) {
+      const group = document.createElement('div'); if (wide) group.className = 'wide';
+      const title = document.createElement('dt'); title.textContent = label;
+      const body = document.createElement('dd'); body.textContent = value == null || value === '' ? 'Not recorded' : String(value); group.append(title, body); return group;
+    }
+    function openDetails(record, trigger) {
+      if (!state.allowed) return;
+      state.lastFocus = trigger || document.activeElement;
+      $('detailName').textContent = record.name; $('detailId').textContent = record.regId || 'Registration ID not recorded';
+      const values = [detail('Mobile', record.mobile), detail('Email', record.email), detail('Age', record.age), detail('Gender', record.gender), detail('Pass category', record.category), detail('Quantity', record.quantity), detail('Unit price', money(record.unitPrice)), detail('Recorded amount', money(record.amount)), detail('UTR / transaction reference', record.utr, true), detail('Registered', dateLabel(record.created)), detail('Pass issued', record.issuedAt), detail('Image storage', record.screenshotStorage), detail('Image bucket', record.screenshotBucket), detail('Image key', record.screenshotKey, true)];
+      $('detailFields').replaceChildren(...values); $('proof').replaceChildren();
+      if (record.screenshotUrl) { const link = document.createElement('a'); link.href = record.screenshotUrl; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.referrerPolicy = 'no-referrer'; link.className = 'secondary'; link.textContent = 'Open submitted payment screenshot ↗'; $('proof').append(link); }
+      else { const message = document.createElement('p'); message.textContent = 'No valid screenshot link was recorded.'; $('proof').append(message); }
+      $('details').hidden = false; $('closeDetails').focus();
+    }
+    function readError(error) {
+      const permission = /permission[-_]denied/i.test(error?.code || '');
+      return permission ? 'This account does not have permission to read registrations. Contact the organiser to enable access.' : 'Registrations could not be loaded. Check your connection and try again.';
+    }
+    function deadline(promise, message) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(message)), TIMEOUT_MS);
+        Promise.resolve(promise).then(resolve, reject).finally(() => clearTimeout(timer));
+      });
+    }
+    function loadRecords(authVersion) {
+      stopSubscription(); clearSensitiveData();
+      if (!state.allowed || authVersion !== state.authVersion) return;
+      const dataVersion = state.dataVersion;
+      showStatus('Loading registrations', 'Getting the latest participant details…');
+      const ref = database.ref('registrations');
+      function fail(error) {
+        if (authVersion !== state.authVersion || dataVersion !== state.dataVersion) return;
+        stopSubscription(); state.allowed = false; clearSensitiveData(); showStatus('Unable to load registrations', readError(error), 'error', true, /permission[-_]denied/i.test(error?.code || ''));
+      }
+      const receive = snapshot => {
+        if (!state.allowed || authVersion !== state.authVersion || dataVersion !== state.dataVersion) return;
+        if (state.timer !== null) { clearTimeout(state.timer); state.timer = null; }
+        closeDetails(); state.records = normalizedRecords(snapshot.val()); rebuildCategories(); render();
+        $('status').hidden = true; $('updatedAt').textContent = `Updated ${new Intl.DateTimeFormat('en-IN', { hour: '2-digit', minute: '2-digit' }).format(new Date())}`;
+      };
+      state.stop = () => ref.off('value', receive);
+      state.timer = setTimeout(() => fail({ code: 'timeout' }), TIMEOUT_MS);
+      try { ref.on('value', receive, fail); } catch (error) { fail(error); }
+    }
+    async function handleAuth(user) {
+      const version = ++state.authVersion; stopSubscription(); clearSensitiveData(); state.allowed = false; state.user = user;
+      $('account').hidden = !user; $('accountEmail').textContent = user ? text(user.email) || 'Signed in' : '';
+      $('loginPanel').hidden = Boolean(user); $('signIn').disabled = false;
+      if (!user) { $('status').hidden = true; return; }
+      showStatus('Checking organiser access', 'Confirming that this account can view participant details…');
+      try {
+        const access = await deadline(database.ref(`registrationAdmins/${user.uid}`).once('value'), 'Organiser access could not be checked in time.');
+        if (version !== state.authVersion) return;
+        if (access.val() !== true) { showStatus('Organiser access required', 'This account is not approved to view registrations. Contact the organiser for access.', 'error', true, true); return; }
+        state.allowed = true; loadRecords(version);
+      } catch (error) {
+        if (version !== state.authVersion) return;
+        showStatus('Unable to confirm organiser access', /permission[-_]denied/i.test(error?.code || '') ? 'Organiser access has not been configured for this account. Contact the organiser to enable it.' : 'Access could not be checked. Check your connection and try again.', 'error', true, true);
+      }
+    }
+    function signInError(error) {
+      if (['auth/unauthorized-domain', 'auth/operation-not-allowed', 'auth/configuration-not-found'].includes(error?.code) || /CONFIGURATION_NOT_FOUND/.test(error?.message || '')) return 'Google sign-in is not enabled for this website yet. Contact the organiser to finish sign-in setup.';
+      if (['auth/popup-closed-by-user', 'auth/cancelled-popup-request'].includes(error?.code)) return 'Sign-in was cancelled. Choose Continue with Google to try again.';
+      if (error?.code === 'auth/popup-blocked') return 'Your browser blocked the sign-in window. Allow pop-ups for this website and try again.';
+      return 'Sign-in could not be completed. Check your connection and try again.';
+    }
+    $('signIn').addEventListener('click', async () => {
+      if (!auth) { window.location.reload(); return; }
+      $('signIn').disabled = true;
+      try { const provider = new firebase.auth.GoogleAuthProvider(); provider.setCustomParameters({ prompt: 'select_account' }); await auth.signInWithPopup(provider); }
+      catch (error) { showStatus('Sign-in not completed', signInError(error), 'error'); }
+      finally { $('signIn').disabled = false; }
+    });
+    $('signOut').addEventListener('click', async () => {
+      ++state.authVersion; stopSubscription(); state.allowed = false; clearSensitiveData();
+      try { await auth.signOut(); } catch { showStatus('Sign-out not completed', 'Participant details have been cleared. Try signing out again.', 'error'); }
+    });
+    const retry = () => auth ? handleAuth(auth.currentUser) : window.location.reload();
+    $('retry').addEventListener('click', retry); $('refresh').addEventListener('click', retry);
+    $('search').addEventListener('input', event => { state.query = event.target.value; state.page = 1; render(); });
+    $('category').addEventListener('change', event => { state.category = event.target.value; state.page = 1; render(); });
+    $('previous').addEventListener('click', () => { state.page -= 1; render(); }); $('next').addEventListener('click', () => { state.page += 1; render(); });
+    $('closeDetails').addEventListener('click', closeDetails);
+    $('details').addEventListener('click', event => { if (event.target === $('details')) closeDetails(); });
+    document.addEventListener('keydown', event => {
+      if ($('details').hidden) return;
+      if (event.key === 'Escape') { event.preventDefault(); closeDetails(); }
+      if (event.key === 'Tab') {
+        const focusable = Array.from($('details').querySelectorAll('button,a[href]'));
+        const first = focusable[0]; const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    });
+    // The model is exposed for regression tests; it contains no credentials or record data.
+    window.UsersRoster = { normalizedRecords, filteredRecords, safeUrl };
+    try {
+      if (typeof firebase === 'undefined') throw new Error('sdk_unavailable');
+      firebase.initializeApp(FIREBASE_CONFIG); auth = firebase.auth(); database = firebase.database();
+      auth.onAuthStateChanged(handleAuth, () => { ++state.authVersion; stopSubscription(); state.allowed = false; state.user = null; clearSensitiveData(); $('account').hidden = true; $('accountEmail').textContent = ''; $('loginPanel').hidden = false; $('signIn').disabled = false; showStatus('Sign-in unavailable', 'Please reload this page and try signing in again.', 'error', true); });
+    } catch {
+      showStatus('Connection unavailable', 'The sign-in service could not load. Check your connection and try again.', 'error', true);
+    }
+  })();
+  </script>
+</body>
+</html>

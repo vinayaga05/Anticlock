@@ -34,6 +34,7 @@ describe('Explore event and product flow (integration)', { skip: !TEST_DATABASE_
   let sqlClient: any;
   let schema: any;
   const productIds: string[] = [];
+  const eventStartsAt = new Date(Date.now() + 7 * 86_400_000);
 
   async function call(who: string, method: string, path: string, body?: unknown) {
     const response = await app.request(path, {
@@ -49,14 +50,13 @@ describe('Explore event and product flow (integration)', { skip: !TEST_DATABASE_
   }
 
   function eventInput(title: string, visibility: 'public' | 'followers_only') {
-    const startsAt = new Date(Date.now() + 7 * 86_400_000);
     return {
       title,
       description: `${title} description`,
       categoryId: eventCategory,
       tags: ['integration'],
-      startsAt: startsAt.toISOString(),
-      endsAt: new Date(startsAt.getTime() + 3_600_000).toISOString(),
+      startsAt: eventStartsAt.toISOString(),
+      endsAt: new Date(eventStartsAt.getTime() + 3_600_000).toISOString(),
       timezone: 'Asia/Kolkata',
       venueType: 'physical',
       location: { name: 'Test ground', address: '1 Test Road, Chennai' },
@@ -145,15 +145,19 @@ describe('Explore event and product flow (integration)', { skip: !TEST_DATABASE_
 
   after(async () => {
     if (!db) return;
-    const { eq, inArray } = await import('drizzle-orm');
-    if (productIds.length) await db.delete(schema.products).where(inArray(schema.products.id, productIds));
-    await db.delete(schema.mediaAssets).where(eq(schema.mediaAssets.id, MEDIA));
-    await db.delete(schema.productCategories).where(eq(schema.productCategories.id, PRODUCT_CATEGORY));
-    await db.delete(schema.serviceCategories).where(eq(schema.serviceCategories.id, eventCategory));
-    await db.delete(schema.serviceTrees).where(eq(schema.serviceTrees.id, treeId));
-    await db.delete(schema.mobileUsers).where(inArray(schema.mobileUsers.id, [OWNER, FOLLOWER, STRANGER]));
-    await db.delete(schema.users).where(eq(schema.users.id, ADMIN));
-    await sqlClient.end({ timeout: 5 });
+    try {
+      const { eq, inArray } = await import('drizzle-orm');
+      if (productIds.length) await db.delete(schema.products).where(inArray(schema.products.id, productIds));
+      await db.delete(schema.exploreEvents).where(eq(schema.exploreEvents.ownerMobileUserId, OWNER));
+      await db.delete(schema.mediaAssets).where(eq(schema.mediaAssets.id, MEDIA));
+      await db.delete(schema.productCategories).where(eq(schema.productCategories.id, PRODUCT_CATEGORY));
+      await db.delete(schema.serviceCategories).where(eq(schema.serviceCategories.id, eventCategory));
+      await db.delete(schema.serviceTrees).where(eq(schema.serviceTrees.id, treeId));
+      await db.delete(schema.mobileUsers).where(inArray(schema.mobileUsers.id, [OWNER, FOLLOWER, STRANGER]));
+      await db.delete(schema.users).where(eq(schema.users.id, ADMIN));
+    } finally {
+      await sqlClient.end({ timeout: 5 });
+    }
   });
 
   it('enforces follower visibility, review transitions, registration capacity, and resubmission', async () => {

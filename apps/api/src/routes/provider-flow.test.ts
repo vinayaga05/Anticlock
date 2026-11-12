@@ -26,6 +26,8 @@ const PNG_BYTES = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
   'base64',
 );
+// ISO BMFF signature fixture; duration is validated from upload metadata.
+const MP4_BYTES = Buffer.from('000000186674797069736f6d0000020069736f6d69736f32', 'hex');
 
 type Json = Record<string, any>;
 
@@ -69,15 +71,18 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     applicationId: string,
     fieldKey: string,
     purpose: 'document' | 'profile',
-    kind: 'image' | 'document' = 'image',
+    kind: 'image' | 'document' | 'video' = 'image',
   ) {
+    const bytes = kind === 'video' ? MP4_BYTES : PNG_BYTES;
+    const contentType = kind === 'video' ? 'video/mp4' : 'image/png';
     const session = await call(who, 'POST', `/v1/provider/applications/${applicationId}/kyc-upload-session`, {
       fieldKey,
       purpose,
       kind,
-      filename: `${fieldKey}.png`,
-      contentType: 'image/png',
-      byteSize: PNG_BYTES.length,
+      filename: `${fieldKey}.${kind === 'video' ? 'mp4' : 'png'}`,
+      contentType,
+      byteSize: bytes.length,
+      ...(kind === 'video' ? { durationMs: 1_000 } : {}),
     });
     assert.equal(session.status, 201, JSON.stringify(session.json));
     assert.match(session.json.uploadUrl, /\/v1\/provider\/applications\/.+\/kyc-upload-sessions\/.+\/content$/);
@@ -85,8 +90,8 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
       `/v1/provider/applications/${applicationId}/kyc-upload-sessions/${session.json.sessionId}/content`,
       {
         method: 'PUT',
-        headers: { authorization: `Bearer ${tokens[who]}`, 'content-type': 'image/png' },
-        body: PNG_BYTES,
+        headers: { authorization: `Bearer ${tokens[who]}`, 'content-type': contentType },
+        body: bytes,
       },
     );
     assert.equal(put.status, 200, await put.text());
@@ -143,6 +148,7 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     appIds.push(id);
     assert.equal((await call('OWNER', 'PUT', `/v1/provider/applications/${id}/services`, { categoryIds: [categoryId] })).status, 200);
     const logo = await upload('OWNER', id, 'profile.logo', 'profile', 'image');
+    const intro = await upload('OWNER', id, 'profile.introVideo', 'profile', 'video');
     const patched = await call('OWNER', 'PATCH', `/v1/provider/applications/${id}`, {
       ...completePayload(name),
       commonPayload: {
@@ -150,6 +156,7 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
         profile: {
           ...completePayload(name).commonPayload.profile,
           logoMediaId: logo.mediaId,
+          introVideoMediaId: intro.mediaId,
         },
       },
     });
@@ -271,14 +278,17 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     assert.equal(bad.status, 400);
     assert.equal(bad.json.error.code, 'validation_error');
     // Restore a valid profile section.
-    assert.equal((await call('OWNER', 'PATCH', `/v1/provider/applications/${firstId}`, { commonPayload: { profile: { description: 'Reformer classes' } } })).status, 200);
+    assert.equal((await call('OWNER', 'PATCH', `/v1/provider/applications/${firstId}`, {
+      commonPayload: { profile: { ...detail.json.application.commonPayload.profile, description: 'Reformer classes' } },
+    })).status, 200);
   });
 
   it('stores profile images as profile media ids (not application documents)', async () => {
     const logo = await upload('OWNER', firstId, 'profile.logo', 'profile');
     assert.ok(logo.url, 'public URL returned for profile media');
+    const detail = await call('OWNER', 'GET', `/v1/provider/applications/${firstId}`);
     const patched = await call('OWNER', 'PATCH', `/v1/provider/applications/${firstId}`, {
-      commonPayload: { profile: { description: 'Reformer classes', logoMediaId: logo.mediaId } },
+      commonPayload: { profile: { ...detail.json.application.commonPayload.profile, description: 'Reformer classes', logoMediaId: logo.mediaId } },
     });
     assert.equal(patched.status, 200, JSON.stringify(patched.json));
     const app1 = patched.json.application;
@@ -303,7 +313,7 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     const readiness = detail.json.application.readiness;
     assert.equal(readiness.complete, false);
     const keys = (readiness.missing as Json[]).map(m => m.key);
-    for (const k of ['basic.contactPerson', 'location.city', 'identity.aadhaarDocument', 'identity.aadhaarNumber', 'availability.workingDays']) {
+    for (const k of ['basic.contactPerson', 'location.city', 'identity.aadhaarDocument', 'identity.aadhaarNumber', 'availability.workingDays', 'profile.introVideo']) {
       assert.ok(keys.includes(k), `missing ${k}`);
     }
     assert.equal((readiness.missing as Json[]).find(m => m.key === 'basic.email').reason, 'invalid');
@@ -397,6 +407,13 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     assert.equal(notes[0].data.providerId, firstProviderId);
 
     const { and, eq } = await import('drizzle-orm');
+    const introPosts = await db.select().from(schema.contentPosts).where(and(
+      eq(schema.contentPosts.authorProviderId, firstProviderId),
+      eq(schema.contentPosts.duplicateClusterId, approved.json.application.commonPayload.profile.introVideoMediaId),
+    ));
+    assert.equal(introPosts.length, 1, 'approval publishes the required introduction as one business Clip');
+    assert.equal(introPosts[0].status, 'published');
+    assert.equal(introPosts[0].visibility, 'public');
     const audit = await db.select().from(schema.auditLogs).where(and(
       eq(schema.auditLogs.entityId, firstId),
       eq(schema.auditLogs.action, 'provider_application.approve'),

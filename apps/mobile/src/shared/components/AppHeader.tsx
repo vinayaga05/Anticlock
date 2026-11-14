@@ -11,6 +11,7 @@ import { useAuth } from '@/shared/context/AuthProvider';
 import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
 import { identityAvatarUrl } from '@/shared/publishing/ProfileSwitcherSheet';
 import { identityProfileType } from '@/shared/publishing/publisherSelection';
+import { navigateToProfile } from '@/shared/navigation/businessNavigation';
 
 type AppHeaderProps = {
   showBrand?: boolean;
@@ -56,10 +57,7 @@ export function AppHeader({
   const headerAvatarUrl = active ? identityAvatarUrl(active) : user?.avatarUrl;
   const openActiveProfile = () =>
     active
-      ? navigation.navigate('Profile', {
-          profileType: identityProfileType(active),
-          profileId: active.id,
-        })
+      ? navigateToProfile(navigation, { type: identityProfileType(active), id: active.id })
       : navigation.navigate('Profile');
 
   const openNotifications =

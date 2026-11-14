@@ -31,6 +31,7 @@ export interface ObjectStorageProvider {
     key: string;
     body: Buffer;
     contentType: string;
+    signal?: AbortSignal;
   }): Promise<void>;
 
   getObjectBuffer(input: {

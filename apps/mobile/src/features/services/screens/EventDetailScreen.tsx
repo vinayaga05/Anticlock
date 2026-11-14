@@ -1,4 +1,5 @@
 import React from 'react';
+import { navigateToProfile } from '@/shared/navigation/businessNavigation';
 import { Alert, Image, Share, StyleSheet, Text, View } from 'react-native';
 import Video from 'react-native-video';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
@@ -120,10 +121,7 @@ export function EventDetailScreen() {
           title="Contact organizer"
           variant="secondary"
           icon="messages"
-          onPress={() => navigation.navigate('Profile', {
-            profileId: event.publisherProfileId,
-            profileType: event.publisherProfileType,
-          })}
+          onPress={() => navigateToProfile(navigation, { id: event.publisherProfileId, type: event.publisherProfileType })}
         />
       </View>
     </ScreenContainer>

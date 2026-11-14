@@ -701,6 +701,9 @@
         const pendingRegistrationSaves = new Map();
         const DATABASE_TIMEOUT_MS = 20000;
         const UPLOAD_TIMEOUT_MS = 45000;
+        const HEALTH_TIMEOUT_MS = 8000;
+        const SCREENSHOT_SERVICE_UNAVAILABLE =
+            'The screenshot service is temporarily unavailable. Your details and screenshot are kept on this page. Please try again later or contact the organiser. Do not pay again.';
 
         function withTimeout(promise, milliseconds, message, onTimeout) {
             return new Promise((resolve, reject) => {
@@ -804,7 +807,26 @@
             return btoa(binary);
         }
 
-        async function uploadPaymentScreenshot(mobile) {
+        async function checkScreenshotService() {
+            const controller = new AbortController();
+            try {
+                await withTimeout((async () => {
+                    const response = await fetch(new URL('/health', EVENT_REGISTRATION_API).href, {
+                        method: 'GET',
+                        cache: 'no-store',
+                        signal: controller.signal
+                    });
+                    if (controller.signal.aborted || !response.ok) throw new Error(SCREENSHOT_SERVICE_UNAVAILABLE);
+                    const health = await response.json();
+                    if (controller.signal.aborted || health?.ok !== true) throw new Error(SCREENSHOT_SERVICE_UNAVAILABLE);
+                })(), HEALTH_TIMEOUT_MS, SCREENSHOT_SERVICE_UNAVAILABLE, () => controller.abort());
+            } catch {
+                controller.abort();
+                throw new Error(SCREENSHOT_SERVICE_UNAVAILABLE);
+            }
+        }
+
+        async function uploadPaymentScreenshot(mobile, onStage = () => {}) {
             if (!state.screenshotFile) {
                 throw new Error('Payment screenshot file is missing.');
             }
@@ -815,10 +837,19 @@
                 return screenshotUploadCache.result;
             }
 
+            onStage('Connecting to screenshot service...');
+            await checkScreenshotService();
+
             const controller = new AbortController();
+            const checkAborted = () => {
+                if (controller.signal.aborted) throw new Error('Screenshot upload timed out. Check your connection and try again.');
+            };
             const payload = await withTimeout((async () => {
+                onStage('Preparing screenshot...');
                 const contentType = file.type || 'image/jpeg';
                 const dataBase64 = await fileToBase64(file);
+                checkAborted();
+                onStage('Uploading screenshot...');
                 const response = await fetch(`${EVENT_REGISTRATION_API}/payment-screenshot`, {
                     method: 'POST',
                     signal: controller.signal,
@@ -831,9 +862,12 @@
                         dataBase64
                     })
                 });
+                checkAborted();
+                onStage('Confirming upload...');
                 const uploaded = await response.json().catch(() => {
                     throw new Error('Screenshot upload confirmation could not be read. Please try again.');
                 });
+                checkAborted();
                 if (!response.ok) {
                     throw new Error(uploaded?.error || 'Could not upload screenshot. Please try again.');
                 }
@@ -1180,8 +1214,9 @@
                 const randomNum = Math.floor(1000 + Math.random() * 9000);
                 state.regId = `ACHFA-2026-${randomNum}`;
 
-                if (submitBtn) submitBtn.textContent = 'Uploading screenshot...';
-                const screenshot = await uploadPaymentScreenshot(mobile);
+                const screenshot = await uploadPaymentScreenshot(mobile, stage => {
+                    if (submitBtn) submitBtn.textContent = stage;
+                });
 
                 if (submitBtn) submitBtn.textContent = 'Saving registration...';
                 const saved = await saveRegistration(mobile, screenshot);

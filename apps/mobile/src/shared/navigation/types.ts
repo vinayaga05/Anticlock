@@ -32,6 +32,9 @@ export type RootStackParamList = {
         profileId?: string;
       }
     | undefined;
+  BusinessProfile: { providerId: string; categoryId?: string };
+  BusinessBooking: { providerId: string; categoryId?: string };
+  BusinessManage: { providerId: string; section?: 'profile' | 'services' | 'analytics' };
   AccountSettings: undefined;
   EditProfile: undefined;
   Doctors: undefined;
@@ -111,7 +114,7 @@ export type RootStackParamList = {
   MyOrders: undefined;
   ComingSoon: { title: string };
   FlashComposer: undefined;
-  ClipComposer: undefined;
+  ClipComposer: { publisherProfileId?: string; publisherProfileType?: 'personal' | 'business' } | undefined;
   ProviderClips: {
     providerId: string;
     serviceCategoryId: string;
@@ -127,7 +130,8 @@ export type RootStackParamList = {
   StoryCreator: undefined;
   SavedHub: undefined;
   ExploreCreate: undefined;
-  CreateExploreEvent: { challengeId?: string; itemId?: string } | undefined;
+  CreateComplaint: undefined;
+  CreateExploreEvent: { challengeId?: string; itemId?: string; publisherProfileId?: string; publisherProfileType?: 'personal' | 'business' } | undefined;
   CreateExploreProduct:
     | {
         itemId?: string;

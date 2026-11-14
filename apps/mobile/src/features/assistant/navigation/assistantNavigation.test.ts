@@ -92,6 +92,25 @@ describe('executeGenieAction', () => {
       params: { reelId: 'r99', q: 'yoga' },
     });
   });
+
+  it('opens a live business storefront from a historic assistant provider target', () => {
+    const navigate = jest.fn();
+    const providerId = 'ed3b2a59-3ab7-49bd-b557-d74294a01ed4';
+    executeAssistantNavigation({ navigate }, 'UniversalDetail', {
+      entityType: 'provider', entityId: providerId, categoryId: 'service-1',
+    });
+    expect(navigate).toHaveBeenCalledWith('BusinessProfile', { providerId, categoryId: 'service-1' });
+    executeAssistantNavigation({ navigate }, 'Profile', { profileType: 'business', profileId: providerId });
+    expect(navigate).toHaveBeenLastCalledWith('BusinessProfile', { providerId });
+  });
+
+  it('preserves assistant personal targets and owner application routes', () => {
+    const navigate = jest.fn();
+    executeAssistantNavigation({ navigate }, 'Profile', { userId: 'customer-1' });
+    expect(navigate).toHaveBeenLastCalledWith('Profile', { userId: 'customer-1' });
+    executeAssistantNavigation({ navigate }, 'ProviderApplicationForm', { applicationId: 'application-1' });
+    expect(navigate).toHaveBeenLastCalledWith('ProviderApplicationForm', { applicationId: 'application-1' });
+  });
 });
 
 describe('resolveGenieLocation', () => {

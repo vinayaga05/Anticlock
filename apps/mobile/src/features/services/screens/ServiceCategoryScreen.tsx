@@ -1,3 +1,4 @@
+import { navigateToProvider } from '@/shared/navigation/businessNavigation';
 import React, { useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
@@ -325,11 +326,7 @@ export function ServiceCategoryScreen() {
               // Real businesses always open their own detail page; the legacy
               // jumps below only apply to the offline demo fixtures.
               if (isMarketplaceProviderId(provider.id)) {
-                navigation.navigate('UniversalDetail', {
-                  entityType: 'provider',
-                  entityId: provider.id,
-                  categoryId,
-                });
+                navigateToProvider(navigation, provider.id, categoryId);
                 return;
               }
               if (
@@ -355,11 +352,7 @@ export function ServiceCategoryScreen() {
                 });
                 return;
               }
-              navigation.navigate('UniversalDetail', {
-                entityType: 'provider',
-                entityId: provider.id,
-                categoryId,
-              });
+              navigateToProvider(navigation, provider.id, categoryId);
             }}
           />
         ))

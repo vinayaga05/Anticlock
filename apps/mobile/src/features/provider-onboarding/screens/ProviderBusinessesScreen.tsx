@@ -50,7 +50,7 @@ export function ProviderBusinessesScreen() {
 
   const openApplication = (application: (typeof applications)[number]) => {
     if (application.status === 'approved' && application.providerId) {
-      navigation.navigate('ProviderDashboard', { providerId: application.providerId });
+      navigation.navigate('BusinessProfile', { providerId: application.providerId });
       return;
     }
     if (application.status === 'draft') {
@@ -147,6 +147,7 @@ export function ProviderBusinessesScreen() {
                     },
                   ]}>
                   <PressableScale
+                    accessibilityLabel={`Open ${application.businessName}`}
                     onPress={() => openApplication(application)}
                     style={styles.businessPress}>
                     <View style={[styles.businessIcon, { backgroundColor: theme.colors.surfaceMuted }]}>

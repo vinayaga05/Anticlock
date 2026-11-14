@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ReelCtaSchema } from "./reels.js";
 
 export const ProviderMembershipRoleSchema = z.enum([
   "owner",
@@ -355,6 +356,8 @@ export const ContentPostSchema = z.object({
   location: ContentLocationSchema.nullable(),
   visibility: z.string(),
   author: PublishingIdentitySchema,
+  /** Server-resolved business Clip action; absent on older API deployments. */
+  cta: ReelCtaSchema.nullable().optional(),
   createdAt: z.string().datetime(),
   expiresAt: z.string().datetime().nullable(),
 });

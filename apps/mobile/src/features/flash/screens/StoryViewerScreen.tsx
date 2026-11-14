@@ -24,6 +24,7 @@ import { PressableScale } from '@/shared/components/PressableScale';
 import { useStoryStore } from '@/shared/data/flash/storyStore';
 import { storyTimeLabel, type StoryItem } from '@/shared/data/flash/storyTypes';
 import { RootStackParamList } from '@/shared/navigation/types';
+import { navigateToProfile } from '@/shared/navigation/businessNavigation';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -260,7 +261,7 @@ export function StoryViewerScreen() {
           <View style={styles.headerRow}>
             <PressableScale
               onPress={() =>
-                navigation.navigate('Profile', { userId: story.author.id })
+                navigateToProfile(navigation, { id: story.author.id, type: story.author.profileType ?? 'personal' })
               }
               style={styles.headerLeft}>
               <Image source={{ uri: story.author.avatarUrl }} style={styles.headerAvatar} />

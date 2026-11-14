@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { navigateToProfile } from '@/shared/navigation/businessNavigation';
 import {
   Alert,
   Image,
@@ -128,16 +129,11 @@ export function FlashPostCard({ post }: Props) {
     }
   };
 
-  const openAuthorProfile = () =>
-    navigation.navigate(
-      'Profile',
-      post.source === 'api' && post.publisherProfileId && post.publisherProfileType
-        ? {
-            profileType: post.publisherProfileType,
-            profileId: post.publisherProfileId,
-          }
-        : { userId: post.author.id },
-    );
+  const openAuthorProfile = () => {
+    if (post.source === 'api' && post.publisherProfileId && post.publisherProfileType) {
+      navigateToProfile(navigation, { type: post.publisherProfileType, id: post.publisherProfileId });
+    } else navigation.navigate('Profile', { userId: post.author.id });
+  };
 
   return (
     <View style={[styles.post, { backgroundColor: theme.colors.background }]}>

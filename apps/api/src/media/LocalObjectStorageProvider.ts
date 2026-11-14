@@ -66,10 +66,11 @@ export class LocalObjectStorageProvider implements ObjectStorageProvider {
     key: string;
     body: Buffer;
     contentType: string;
+    signal?: AbortSignal;
   }): Promise<void> {
     const filePath = this.resolvePath(input.bucket, input.key);
     await mkdir(path.dirname(filePath), { recursive: true });
-    await writeFile(filePath, input.body);
+    await writeFile(filePath, input.body, { signal: input.signal });
   }
 
   async getObjectBuffer(input: {

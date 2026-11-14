@@ -142,7 +142,7 @@ describe('AccountSettingsScreen (profile hub)', () => {
     ReactTestRenderer.act(() => byTestId(renderer, 'row-business-details').props.onPress());
     expect(mockNavigate).toHaveBeenCalledWith('ProviderApplicationStatus', { applicationId: 'app-1' });
     ReactTestRenderer.act(() => byTestId(renderer, 'row-profile-preview').props.onPress());
-    expect(mockNavigate).toHaveBeenCalledWith('Profile', { profileType: 'business', profileId: 'b1' });
+    expect(mockNavigate).toHaveBeenCalledWith('BusinessProfile', { providerId: 'b1' });
   });
 
   it('hides rows without a destination and never shows technical terms', () => {

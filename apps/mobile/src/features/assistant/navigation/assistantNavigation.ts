@@ -1,5 +1,6 @@
 import type { GenieAction } from '@anticlock/contracts';
 import type { AssistantResultCard } from '@/features/assistant/types';
+import { legacyBusinessDestination } from '@/shared/navigation/businessNavigation';
 
 export type GenieNavigation = {
   navigate: (route: string, params?: object) => void;
@@ -22,6 +23,11 @@ export function executeAssistantNavigation(
   route: string,
   params: Record<string, unknown>,
 ) {
+  const business = legacyBusinessDestination(route, params);
+  if (business) {
+    navigation.navigate(business.screen, business.params);
+    return;
+  }
   if (route === 'Main' && params.screen) {
     const tabParams: Record<string, unknown> = {};
     if (params.reelId) tabParams.reelId = params.reelId;
@@ -157,6 +163,7 @@ export const assistantLinking = {
   config: {
     screens: {
       Profile: 'profile/:userId?',
+      BusinessProfile: 'business/:providerId',
       SavedHub: 'saved',
       Search: 'search',
       MyBookings: 'bookings',

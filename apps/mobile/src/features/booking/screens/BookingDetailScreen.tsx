@@ -17,6 +17,7 @@ import {
 } from '@/shared/api/bookingHooks';
 import { useProviderBookingActionMutation } from '@/shared/api/providerHooks';
 import { mapApiBookingToConsolidated } from '@/shared/utils/bookingMappers';
+import { navigateToProvider } from '@/shared/navigation/businessNavigation';
 
 type RescheduleDraft = { date: string | null; time: string | null };
 
@@ -204,6 +205,9 @@ export function BookingDetailScreen() {
       ) : null}
 
       <View style={styles.actions}>
+        {booking.providerId && booking.viewerRole !== 'provider' ? (
+          <Button title="View business" variant="secondary" onPress={() => navigateToProvider(navigation, booking.providerId!, booking.categoryId ?? undefined)} />
+        ) : null}
         {canJoin ? <Button title="Join video session" onPress={join} /> : null}
         {booking.bookingMode === 'on_site' && (booking.detail.address || booking.detail.locationLabel) ? (
           <Button title="Directions" variant="secondary" onPress={openDirections} />

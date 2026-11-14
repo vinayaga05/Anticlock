@@ -51,7 +51,7 @@ function harness(options = {}) {
     return elements.get(id);
   }
   const button = { disabled: false, textContent: 'Verify Payment & Generate Pass' };
-  const calls = { once: [], set: [], fetch: [] };
+  const calls = { once: [], set: [], fetch: [], health: [] };
   const deadlines = new Map();
   let deadlineId = 0;
   const database = {
@@ -89,7 +89,11 @@ function harness(options = {}) {
       return id;
     },
     clearTimeout: id => deadlines.delete(id),
-    fetch: async (url, request) => {
+    fetch: async (url, request = {}) => {
+      if (new URL(url).pathname === '/health') {
+        calls.health.push({ url, request });
+        return options.health ? options.health(url, request) : { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
       calls.fetch.push({ url, request, body: JSON.parse(request.body) });
       return options.fetch ? options.fetch(url, request) : { ok: true, json: async () => ({ ...uploaded }) };
     },
@@ -116,9 +120,11 @@ function harness(options = {}) {
     proceed: () => page.handleProceedToPayment(event),
     passVisible: () => !element('step3Section').classList.contains('hidden'),
     notice: () => `${element('dialogTitle').textContent}: ${element('dialogMessage').textContent}`,
-    async expireDeadline() {
+    async expireDeadline(expectedMilliseconds) {
       await flush();
-      const entry = [...deadlines.entries()].sort((a, b) => a[1].milliseconds - b[1].milliseconds)[0];
+      const entry = [...deadlines.entries()]
+        .filter(([, timer]) => expectedMilliseconds === undefined || timer.milliseconds === expectedMilliseconds)
+        .sort((a, b) => a[1].milliseconds - b[1].milliseconds)[0];
       assert.ok(entry, 'the stalled operation has a deadline');
       deadlines.delete(entry[0]);
       entry[1].callback();
@@ -130,7 +136,7 @@ function harness(options = {}) {
 function assertRetryableFailure(h) {
   assert.equal(h.passVisible(), false, 'no pass is shown before confirmed persistence');
   assert.equal(h.button.disabled, false, 'submit becomes available for retry');
-  assert.doesNotMatch(h.button.textContent, /^(Uploading|Saving|Checking)/);
+  assert.doesNotMatch(h.button.textContent, /^(Uploading|Saving|Checking|Connecting|Preparing|Confirming)/);
   assert.notEqual(h.element('dialogTitle').textContent, 'Registration Saved');
   assert.ok(h.element('dialogMessage').textContent, 'a visible failure message explains what happened');
 }
@@ -143,6 +149,10 @@ test('normal submission saves only R2 metadata and shows success after database 
   assert.equal(h.calls.set.length, 1);
   assert.equal(h.passVisible(), false);
   assert.equal(h.button.disabled, true);
+  assert.equal(h.calls.health.length, 1);
+  assert.match(h.calls.health[0].url, /^https:\/\/api\.anticlock\.online\/health(?:\?|$)/);
+  assert.equal(h.calls.health[0].request.method, 'GET');
+  assert.equal(h.calls.health[0].request.cache, 'no-store');
   assert.match(h.calls.fetch[0].url, /api\.anticlock\.online\/v1\/event-registration\/payment-screenshot$/);
   assert.equal(h.calls.fetch[0].body.dataBase64, 'AQID');
   const payload = h.calls.set[0].payload;
@@ -190,7 +200,7 @@ for (const phase of ['lookup', 'file read', 'upload', 'response body', 'database
     if (phase === 'database save') options.set = never;
     const h = harness(options);
     const submitting = h.submit();
-    await h.expireDeadline();
+    await h.expireDeadline(['file read', 'upload', 'response body'].includes(phase) ? 45000 : 20000);
     await submitting;
     assertRetryableFailure(h);
     if (phase === 'upload' || phase === 'response body') {
@@ -213,6 +223,7 @@ test('retry of a timed-out database save waits for its same acknowledgement inst
   await flush();
   assert.equal(h.passVisible(), false, 'cached optimistic record is not confirmation');
   assert.equal(h.calls.once.length, 1, 'retry does not read its own unacknowledged cached record');
+  assert.equal(h.calls.health.length, 1, 'checking a pending save does not require the screenshot service again');
   assert.equal(h.calls.fetch.length, 1, 'retry reuses the uploaded image');
   assert.equal(h.calls.set.length, 1, 'retry does not enqueue another registration write');
   ack.resolve();
@@ -228,6 +239,7 @@ test('a rejected database write can retry using the already uploaded R2 image', 
   assert.match(h.notice(), /permission denied/i);
   await h.submit();
   assert.equal(h.passVisible(), true);
+  assert.equal(h.calls.health.length, 1, 'retrying an acknowledged upload reuses its image without another health dependency');
   assert.equal(h.calls.fetch.length, 1);
   assert.equal(h.calls.set.length, 2);
 });
@@ -238,6 +250,7 @@ test('an existing confirmed registration opens its saved pass without uploading 
   assert.equal(h.passVisible(), true);
   assert.equal(h.element('passRegId').textContent, savedRecord.regId);
   assert.equal(h.calls.fetch.length, 0);
+  assert.equal(h.calls.health.length, 0, 'existing registrations do not depend on the screenshot service');
   assert.equal(h.calls.set.length, 0);
   assert.match(h.notice(), /Already Registered/);
   assert.equal(h.button.disabled, false);
@@ -267,4 +280,114 @@ test('a stalled registration lookup on the participant step returns an error ins
   assert.equal(h.element('step2Section').classList.contains('hidden'), true);
   assert.equal(h.passVisible(), false);
   assert.ok(h.element('dialogMessage').textContent);
+});
+
+function assertOutageFailure(h, originalFile) {
+  assertRetryableFailure(h);
+  assert.match(h.notice(), /screenshot service.*(?:unavailable|connect)/i);
+  assert.match(h.notice(), /do not pay again/i);
+  assert.equal(h.calls.fetch.length, 0, 'an unavailable service never receives the image upload');
+  assert.equal(h.calls.set.length, 0, 'an unavailable service cannot create a registration without its image');
+  assert.equal(h.page.state.screenshotFile, originalFile, 'the selected screenshot is retained');
+  assert.equal(h.page.state.fullName, savedRecord.fullName);
+  assert.equal(h.element('fullName').value, savedRecord.fullName);
+  assert.equal(h.element('email').value, savedRecord.email);
+  assert.equal(h.element('whatsapp').value, savedRecord.mobile);
+  assert.equal(h.element('utrNumber').value, savedRecord.transactionId);
+}
+
+test('an unreachable screenshot service aborts after 8 seconds and retains the form for retry', async () => {
+  const health = deferred();
+  let reads = 0;
+  const h = harness({
+    health: () => health.promise,
+    arrayBuffer: async () => { reads += 1; return Uint8Array.of(1, 2, 3).buffer; },
+  });
+  const originalFile = h.page.state.screenshotFile;
+  const submitting = h.submit();
+  await flush();
+  assert.equal(h.calls.health.length, 1);
+  assert.match(h.button.textContent, /^Connecting/);
+  assert.equal(reads, 0, 'connectivity is checked before preparing the image');
+  await h.expireDeadline(8000);
+  await submitting;
+  assert.equal(h.calls.health[0].request.signal.aborted, true);
+  assertOutageFailure(h, originalFile);
+
+  const failureMessage = h.notice();
+  health.resolve({ ok: true, json: async () => ({ ok: true }) });
+  await flush();
+  await flush();
+  assert.equal(reads, 0, 'a late health response cannot resume the abandoned image preparation');
+  assertOutageFailure(h, originalFile);
+  assert.equal(h.notice(), failureMessage);
+});
+
+test('a stalled health response body also uses the 8-second connectivity deadline', async () => {
+  const h = harness({ health: async () => ({ ok: true, json: never }) });
+  const originalFile = h.page.state.screenshotFile;
+  const submitting = h.submit();
+  await h.expireDeadline(8000);
+  await submitting;
+  assert.equal(h.calls.health[0].request.signal.aborted, true);
+  assertOutageFailure(h, originalFile);
+});
+
+for (const [reason, health] of [
+  ['an unhealthy HTTP status', async () => ({ ok: false, status: 503, json: async () => ({ ok: true }) })],
+  ['an unhealthy service payload', async () => ({ ok: true, json: async () => ({ ok: false }) })],
+  ['a missing health confirmation', async () => ({ ok: true, json: async () => ({}) })],
+  ['a malformed health value', async () => ({ ok: true, json: async () => ({ ok: 'true' }) })],
+  ['a non-JSON health response', async () => ({ ok: true, json: async () => { throw new SyntaxError('Unexpected token <'); } })],
+  ['a rejected network request', async () => { throw new TypeError('Failed to fetch'); }],
+]) {
+  test(`${reason} shows an outage message without uploading or saving`, async () => {
+    const h = harness({ health });
+    const originalFile = h.page.state.screenshotFile;
+    await h.submit();
+    assertOutageFailure(h, originalFile);
+  });
+}
+
+test('retry succeeds with the retained form and screenshot after the service recovers', async () => {
+  const options = { health: async () => { throw new TypeError('Failed to fetch'); } };
+  const h = harness(options);
+  const originalFile = h.page.state.screenshotFile;
+  await h.submit();
+  assertOutageFailure(h, originalFile);
+  options.health = async () => ({ ok: true, json: async () => ({ ok: true }) });
+  await h.submit();
+  assert.equal(h.calls.health.length, 2);
+  assert.equal(h.calls.fetch.length, 1);
+  assert.equal(h.calls.set.length, 1);
+  assert.equal(h.calls.fetch[0].body.dataBase64, 'AQID');
+  assert.equal(h.calls.set[0].payload.fullName, savedRecord.fullName);
+  assert.equal(h.calls.set[0].payload.transactionId, savedRecord.transactionId);
+  assert.equal(h.passVisible(), true);
+  assert.equal(h.element('dialogTitle').textContent, 'Registration Saved');
+});
+
+test('a late file read after the 45-second upload deadline cannot start an upload or change the failure state', async () => {
+  const fileRead = deferred();
+  const h = harness({ arrayBuffer: () => fileRead.promise });
+  const originalFile = h.page.state.screenshotFile;
+  const submitting = h.submit();
+  await flush();
+  assert.equal(h.calls.health.length, 1);
+  assert.match(h.button.textContent, /^Preparing/);
+  assert.equal(h.calls.fetch.length, 0);
+  await h.expireDeadline(45000);
+  await submitting;
+  assertRetryableFailure(h);
+  const failureMessage = h.notice();
+  const restoredLabel = h.button.textContent;
+  fileRead.resolve(Uint8Array.of(1, 2, 3).buffer);
+  await flush();
+  await flush();
+  assert.equal(h.calls.fetch.length, 0, 'an expired preparation must never POST the file later');
+  assert.equal(h.calls.set.length, 0);
+  assert.equal(h.page.state.screenshotFile, originalFile);
+  assert.equal(h.notice(), failureMessage);
+  assert.equal(h.button.textContent, restoredLabel, 'late preparation cannot restart the progress UI');
+  assert.equal(h.button.disabled, false);
 });

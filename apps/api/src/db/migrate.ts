@@ -1931,6 +1931,43 @@ async function migrate() {
       ON explore_saves (mobile_user_id, created_at DESC)
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS complaints (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      author_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+      title text NOT NULL CHECK (char_length(title) BETWEEN 3 AND 120),
+      description text NOT NULL CHECK (char_length(description) BETWEEN 10 AND 3000),
+      client_request_id text CHECK (client_request_id IS NULL OR char_length(client_request_id) BETWEEN 8 AND 100),
+      created_at timestamptz(3) NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS complaints_author_request_uidx
+      ON complaints (author_id, client_request_id)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS complaints_created_id_idx
+      ON complaints (created_at DESC, id DESC)
+  `;
+
+  await sql`CREATE TABLE IF NOT EXISTS business_reviews (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), provider_id uuid NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+    author_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE, booking_id uuid NOT NULL UNIQUE REFERENCES bookings(id) ON DELETE CASCADE,
+    rating integer NOT NULL CHECK (rating BETWEEN 1 AND 5), body text NOT NULL CHECK (char_length(body) BETWEEN 10 AND 2000),
+    photo_media_ids jsonb NOT NULL DEFAULT '[]'::jsonb, created_at timestamptz(3) NOT NULL DEFAULT now()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS business_reviews_provider_created_idx ON business_reviews(provider_id, created_at DESC, id DESC)`;
+  await sql`CREATE TABLE IF NOT EXISTS business_profile_saves (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), provider_id uuid NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+    mobile_user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE, created_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT business_profile_saves_user_provider_uidx UNIQUE(mobile_user_id,provider_id)
+  )`;
+  await sql`CREATE TABLE IF NOT EXISTS business_profile_reports (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), provider_id uuid NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+    reporter_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE, reason text NOT NULL, details text,
+    created_at timestamptz NOT NULL DEFAULT now(), CONSTRAINT business_profile_reports_user_provider_uidx UNIQUE(reporter_id,provider_id)
+  )`;
+
   console.log("Migrations applied.");
   await sql.end({ timeout: 5 });
 }

@@ -7,6 +7,7 @@ import type {
 } from '@/shared/data/flash/types';
 import type { ProfileRelationship } from '@/shared/api/profileFollows';
 import type { PublisherProfileType } from './publisherSelection';
+import type { ReelCta } from '@anticlock/contracts';
 
 /** `publisher` block returned by every content feed/profile endpoint. */
 export type ApiContentPublisher = {
@@ -45,6 +46,8 @@ export type ApiContentPost = {
   providerId?: string | null;
   businessId?: string | null;
   serviceCategoryId?: string | null;
+  /** Server-resolved product or business destination for a video. */
+  cta?: ReelCta | null;
   publisher?: ApiContentPublisher;
   relationship?: ProfileRelationship;
   author: {

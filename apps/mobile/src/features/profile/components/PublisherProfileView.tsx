@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { navigateToProfile } from '@/shared/navigation/businessNavigation';
 import {
   Alert,
   ActivityIndicator,
@@ -285,7 +286,12 @@ export function PublisherProfileView({
       {showSwitcher ? (
         <FilterPills
           activeId={activeRef?.id ?? ''}
-          onChange={setOwnSelectedId}
+          onChange={id => {
+            const selected = identities.find(item => item.id === id);
+            if (selected && identityProfileType(selected) === 'business') {
+              navigateToProfile(navigation, { type: 'business', id: selected.id });
+            } else setOwnSelectedId(id);
+          }}
           pills={identities.map(item => ({
             id: item.id,
             label:

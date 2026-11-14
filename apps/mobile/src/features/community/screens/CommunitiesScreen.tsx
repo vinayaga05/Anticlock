@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShallow } from 'zustand/react/shallow';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { AppHeader } from '@/shared/components/AppHeader';
@@ -24,7 +23,7 @@ import {
   TeamCard,
 } from '@/features/community/components/ClubChallengeCards';
 import { SPORT_TAGS, CURRENT_USER_ID } from '@/shared/data/community';
-import { TAB_BAR_VISIBLE_HEIGHT } from '@/shared/navigation/FloatingPillTabBar';
+import { ComplaintsPanel } from '@/features/community/components/ComplaintsPanel';
 import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
 import { identityProfileType } from '@/shared/publishing/publisherSelection';
 import {
@@ -37,13 +36,14 @@ import {
 } from '@/shared/api/shopHooks';
 
 type HubFilter = 'all' | 'events' | 'products';
-type ModeTab = 'feed' | 'teams' | 'challenges';
+type ModeTab = 'feed' | 'teams' | 'challenges' | 'complaints';
 type TeamTab = 'mine' | 'discover';
 
 const MODE_TABS: { id: ModeTab; label: string }[] = [
   { id: 'feed', label: 'Explore' },
   { id: 'teams', label: 'Teams' },
   { id: 'challenges', label: 'Challenges' },
+  { id: 'complaints', label: 'Complaints' },
 ];
 
 const QUICK_FILTERS = [
@@ -107,7 +107,6 @@ function productItem(product: Product): ExploreItem {
 
 export function CommunitiesScreen() {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const [mode, setMode] = useState<ModeTab>('feed');
   const [teamTab, setTeamTab] = useState<TeamTab>('mine');
@@ -219,6 +218,7 @@ export function CommunitiesScreen() {
                   key={t.id}
                   onPress={() => setMode(t.id)}
                   accessibilityLabel={t.label}
+                  accessibilityState={{ selected: active }}
                   style={[
                     styles.modeTab,
                     {
@@ -250,6 +250,8 @@ export function CommunitiesScreen() {
             })}
           </View>
         </View>
+
+        {mode === 'complaints' ? <ComplaintsPanel /> : null}
 
         {mode === 'teams' ? (
           <View
@@ -450,6 +452,12 @@ export function CommunitiesScreen() {
         {mode === 'feed' ? (
           <View style={{ gap: 20, marginTop: 12, paddingBottom: 24 }}>
             <View style={[styles.padded, { gap: 12 }]}>
+              <View style={styles.eventsHeading}>
+                <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>Events</Text>
+                <PressableScale accessibilityLabel="Create event" testID="nexus-create-event" onPress={() => navigation.navigate('CreateExploreEvent')} style={[styles.createEvent, { backgroundColor: theme.colors.primary }]}>
+                  <AppIcon name="plus" size={24} color="#fff" />
+                </PressableScale>
+              </View>
               <View
                 style={[
                   styles.search,
@@ -489,6 +497,8 @@ export function CommunitiesScreen() {
                   { id: 'products', label: 'Products' },
                 ]}
               />
+
+              {filter !== 'events' ? <Button title="Create product" icon="plus" variant="ghost" onPress={() => navigation.navigate('CreateExploreProduct')} /> : null}
 
               {quickPills.length > 0 ? (
                 <ScrollView
@@ -618,22 +628,6 @@ export function CommunitiesScreen() {
         ) : null}
       </ScreenContainer>
 
-      {mode === 'feed' ? (
-        <PressableScale
-          onPress={() => navigation.navigate('ExploreCreate')}
-          accessibilityLabel="Create event or product"
-          style={[
-            styles.fab,
-            {
-              backgroundColor: theme.colors.primary,
-              bottom: TAB_BAR_VISIBLE_HEIGHT + Math.max(insets.bottom, 8) + 16,
-              ...theme.shadows.float,
-            },
-          ]}
-        >
-          <AppIcon name="plus" size={28} color="#fff" />
-        </PressableScale>
-      ) : null}
     </View>
   );
 }
@@ -641,9 +635,10 @@ export function CommunitiesScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   padded: { paddingHorizontal: 16 },
-  modeRow: { flexDirection: 'row', gap: 8 },
+  modeRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   modeTab: {
     flex: 1,
+    minWidth: 72,
     alignItems: 'center',
     paddingVertical: 10,
     borderWidth: StyleSheet.hairlineWidth,
@@ -672,14 +667,6 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 15, padding: 0 },
   quickChip: { paddingHorizontal: 12, paddingVertical: 8 },
   hRow: { paddingHorizontal: 16, gap: 12 },
-  fab: {
-    position: 'absolute',
-    right: 18,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 20,
-  },
+  eventsHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  createEvent: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
 });

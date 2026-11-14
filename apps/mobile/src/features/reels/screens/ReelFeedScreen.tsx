@@ -1,3 +1,4 @@
+import { navigateToProfile } from '@/shared/navigation/businessNavigation';
 import React, {
   useCallback,
   useEffect,
@@ -33,7 +34,7 @@ import {
 } from '@/features/reels/components/ClipMoreSheet';
 import { GuidedReportVideoSheet } from '@/features/reels/components/GuidedReportVideoSheet';
 import { ReelItem } from '@/shared/types';
-import { useCartStore } from '@/shared/store/cartStore';
+import { resolveClipCommerceAction } from '@/features/reels/feed/clipCommerce';
 import {
   blockProfile,
   listBlockedProfiles,
@@ -102,15 +103,6 @@ function formatCount(n: number) {
   if (!Number.isFinite(n) || n < 0) return '0';
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
-}
-
-/** Product clips → Shop; service/trip clips → Book. */
-function getReelAction(item: ReelItem): 'cart' | 'book' | 'trip' | null {
-  const t = item.bookTarget;
-  if (!t) return null;
-  if (t.cta === 'cart' || t.entityType === 'product') return 'cart';
-  if (t.cta === 'trip') return 'trip';
-  return 'book';
 }
 
 function SideAction({
@@ -331,7 +323,6 @@ export function ReelFeedScreen() {
   // on the old page size, which makes the current clip visibly jump.
   const pageWidth = Math.max(1, Math.round(windowWidth));
   const pageHeight = Math.max(1, Math.round(windowHeight));
-  const addToCart = useCartStore(s => s.add);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [liked, setLiked] = useState<Record<string, boolean>>({});
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
@@ -896,64 +887,6 @@ export function ReelFeedScreen() {
     [refetch],
   );
 
-  const book = useCallback(
-    (item: ReelItem) => {
-      if (!item.bookTarget) return;
-      const target = item.bookTarget;
-      if (target.entityType && target.entityId && target.categoryId) {
-        if (target.entityType === 'event') {
-          navigation.navigate('EventDetail', { eventId: target.entityId });
-          return;
-        }
-        if (target.entityType === 'course') {
-          navigation.navigate('CourseDetail', { courseId: target.entityId });
-          return;
-        }
-        if (target.entityType === 'product') {
-          navigation.navigate('ProductDetail', { productId: target.entityId });
-          return;
-        }
-        navigation.navigate('UniversalDetail', {
-          entityType: target.entityType,
-          entityId: target.entityId,
-          categoryId: target.categoryId,
-        });
-        return;
-      }
-      if (target.entityType === 'product' && target.entityId) {
-        navigation.navigate('ProductDetail', { productId: target.entityId });
-        return;
-      }
-      if (target.serviceCategoryId && target.serviceTreeId) {
-        navigation.navigate('ServiceCategory', {
-          treeId: target.serviceTreeId,
-          categoryId: target.serviceCategoryId,
-        });
-        return;
-      }
-      const { kind, id } = target;
-      if (!kind || !id) return;
-      if (kind === 'doctor')
-        navigation.navigate('DoctorProfile', { doctorId: id });
-      else if (kind === 'lab') navigation.navigate('LabDetail', { labId: id });
-      else navigation.navigate('ClassDetail', { classId: id });
-    },
-    [navigation],
-  );
-
-  const addProduct = useCallback(
-    (item: ReelItem) => {
-      addToCart(1);
-      const productId = item.bookTarget?.entityId;
-      if (productId) {
-        navigation.navigate('ProductDetail', { productId });
-        return;
-      }
-      navigation.navigate('Main', { screen: 'Shop' });
-    },
-    [addToCart, navigation],
-  );
-
   const menuReel = useMemo(
     () => (menuReelId ? reels.find(r => r.id === menuReelId) ?? null : null),
     [menuReelId, reels],
@@ -1066,7 +999,7 @@ export function ReelFeedScreen() {
     // swipe. FlatList's small window keeps this bounded at three players.
     const shouldMountPlayer = playerWindowState !== null;
     const isLiked = liked[item.id] ?? !!item.liked;
-    const action = getReelAction(item);
+    const action = resolveClipCommerceAction(item);
     const musicLabel = item.title ? `♪ ${item.title}` : '♪ Original audio';
 
     return (
@@ -1235,22 +1168,13 @@ export function ReelFeedScreen() {
             fromTop={false}
           />
         </View>
-        <View style={[styles.meta, { bottom: bottomSafe }]}>
+        <View style={[styles.meta, { bottom: bottomSafe }, action && styles.metaWithCommerce]}>
           <PressableScale
             accessibilityLabel={`Open ${item.author} profile`}
             onPress={() =>
-              navigation.navigate(
-                'Profile',
-                item.feedSource === 'content_post' && item.authorProfile
-                  ? {
-                      profileType:
-                        item.authorProfile.type === 'user'
-                          ? 'personal'
-                          : 'business',
-                      profileId: item.authorProfile.id,
-                    }
-                  : undefined,
-              )
+              item.authorProfile
+                ? navigateToProfile(navigation, item.authorProfile)
+                : navigation.navigate('Profile')
             }
             style={styles.creatorRow}
           >
@@ -1273,10 +1197,8 @@ export function ReelFeedScreen() {
         </View>
         {action ? (
           <PressableScale
-            onPress={() => (action === 'cart' ? addProduct(item) : book(item))}
-            accessibilityLabel={
-              action === 'cart' ? 'Shop product' : 'Book related service'
-            }
+            onPress={() => navigation.navigate(action.destination.screen, action.destination.params)}
+            accessibilityLabel={action.label === 'Buy' ? 'Buy product' : 'Book with business'}
             style={[
               styles.cta,
               styles.ctaCorner,
@@ -1288,22 +1210,12 @@ export function ReelFeedScreen() {
             ]}
           >
             <AppIcon
-              name={
-                action === 'cart'
-                  ? 'cart'
-                  : action === 'trip'
-                  ? 'globe'
-                  : 'calendar'
-              }
+              name={action.icon}
               size={16}
               color="#042F2E"
             />
             <Text style={styles.ctaLabel}>
-              {action === 'cart'
-                ? 'Shop'
-                : action === 'trip'
-                ? 'Book trip'
-                : 'Book'}
+              {action.label}
             </Text>
           </PressableScale>
         ) : null}
@@ -1637,6 +1549,10 @@ const styles = StyleSheet.create({
     paddingRight: 78,
     gap: 6,
   },
+  metaWithCommerce: {
+    right: 116,
+    paddingRight: 0,
+  },
   creatorRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1730,6 +1646,9 @@ const styles = StyleSheet.create({
   },
   cta: {
     flexShrink: 0,
+    minHeight: 44,
+    minWidth: 92,
+    justifyContent: 'center',
     paddingHorizontal: 14,
     paddingVertical: 10,
     flexDirection: 'row',

@@ -1,6 +1,6 @@
 import { ZodError } from 'zod';
 
-export type HttpErrorStatus = 400 | 401 | 403 | 404 | 409 | 410 | 422 | 429 | 500;
+export type HttpErrorStatus = 400 | 401 | 403 | 404 | 408 | 409 | 410 | 422 | 429 | 500;
 
 export type HttpErrorBody = {
   error: { code: string; message: string; details?: unknown };

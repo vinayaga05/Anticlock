@@ -1,3 +1,4 @@
+import { navigateToProvider } from '@/shared/navigation/businessNavigation';
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -141,11 +142,7 @@ export function SearchScreen() {
                   subtitle={p.subtitle || p.type}
                   icon="user"
                   onPress={() =>
-                    navigation.navigate('UniversalDetail', {
-                      entityType: 'provider',
-                      entityId: p.id,
-                      categoryId: p.categoryIds[0],
-                    })
+                    navigateToProvider(navigation, p.id, p.categoryIds[0])
                   }
                 />
               ))}

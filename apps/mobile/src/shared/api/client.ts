@@ -5,6 +5,7 @@ export class ApiError extends Error {
     public status: number,
     public code: string,
     message: string,
+    public retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -55,11 +56,12 @@ export async function apiRequest<T>(
     throw new ApiError(0, 'api_disabled', 'API_BASE_URL is not configured');
   }
 
+  const requestToken = bearerToken;
   const headers = new Headers(init.headers);
   if (!headers.has('Content-Type') && !(init.body instanceof ArrayBuffer)) {
     headers.set('Content-Type', 'application/json');
   }
-  if (bearerToken) headers.set('Authorization', `Bearer ${bearerToken}`);
+  if (requestToken) headers.set('Authorization', `Bearer ${requestToken}`);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -91,19 +93,23 @@ export async function apiRequest<T>(
   if (!res.ok) {
     let code = 'request_failed';
     let message = res.statusText;
+    let retryAfterSeconds: number | undefined;
     try {
       const body = (await res.json()) as {
-        error?: { code?: string; message?: string };
+        error?: { code?: string; message?: string; retryAfterSeconds?: number };
       };
       code = body.error?.code ?? code;
       message = body.error?.message ?? message;
+      const retry = body.error?.retryAfterSeconds;
+      if (typeof retry === 'number' && Number.isFinite(retry) && retry > 0) retryAfterSeconds = Math.ceil(retry);
     } catch {
       /* ignore */
     }
-    if (res.status === 401 && bearerToken) {
+    // A delayed response from an old account must not sign out a new session.
+    if (res.status === 401 && requestToken && bearerToken === requestToken) {
       onUnauthorized?.();
     }
-    throw new ApiError(res.status, code, message);
+    throw new ApiError(res.status, code, message, retryAfterSeconds);
   }
 
   return (await res.json()) as T;
@@ -137,6 +143,7 @@ export async function apiStream<TEvent>(
   onEvent: (event: TEvent) => void,
   init: { signal?: AbortSignal } = {},
 ): Promise<void> {
+  const requestToken = bearerToken;
   if (!isApiEnabled) {
     throw new ApiError(0, 'api_disabled', 'API_BASE_URL is not configured');
   }
@@ -178,8 +185,8 @@ export async function apiStream<TEvent>(
     xhr.open('POST', `${getApiBaseUrl()}${path}`);
     xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.setRequestHeader('Accept', 'text/event-stream');
-    if (bearerToken) {
-      xhr.setRequestHeader('Authorization', `Bearer ${bearerToken}`);
+    if (requestToken) {
+      xhr.setRequestHeader('Authorization', `Bearer ${requestToken}`);
     }
     xhr.responseType = 'text';
 
@@ -196,7 +203,7 @@ export async function apiStream<TEvent>(
         return;
       }
 
-      if (xhr.status === 401 && bearerToken) {
+      if (xhr.status === 401 && requestToken && bearerToken === requestToken) {
         onUnauthorized?.();
       }
 

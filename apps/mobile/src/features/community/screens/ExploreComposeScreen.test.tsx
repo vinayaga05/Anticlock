@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { Alert, TextInput } from 'react-native';
-import { CreateExploreProductScreen } from './ExploreComposeScreen';
+import { CreateExploreEventScreen, CreateExploreProductScreen } from './ExploreComposeScreen';
 
 jest.mock('@/shared/hooks/useTheme', () => require('@/test/componentMocks').themeModule);
 jest.mock('@/shared/components/ScreenContainer', () => ({ ScreenContainer: ({ children }: any) => children }));
@@ -74,6 +74,14 @@ describe('business product composer', () => {
   it('opens as the route business without switching the globally active personal profile', () => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
     ReactTestRenderer.act(() => { renderer = ReactTestRenderer.create(<CreateExploreProductScreen />); });
+    expect(renderer.root.findAll(node => node.props.testID === 'product-posting-as')[0].props.identity).toBe(business);
+    expect(mockSetActive).not.toHaveBeenCalled();
+    ReactTestRenderer.act(() => renderer.unmount());
+  });
+
+  it('preserves the explicit business identity when opening the event composer', () => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => { renderer = ReactTestRenderer.create(<CreateExploreEventScreen />); });
     expect(renderer.root.findAll(node => node.props.testID === 'product-posting-as')[0].props.identity).toBe(business);
     expect(mockSetActive).not.toHaveBeenCalled();
     ReactTestRenderer.act(() => renderer.unmount());

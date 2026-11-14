@@ -40,6 +40,7 @@ export const MediaEntityTypeSchema = z.enum([
   'PRODUCT',
   'BANNER',
   'REEL',
+  'MOBILE_USER',
 ]);
 export type MediaEntityType = z.infer<typeof MediaEntityTypeSchema>;
 

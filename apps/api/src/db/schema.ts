@@ -149,6 +149,52 @@ export const mobileUsers = pgTable("mobile_users", {
   }),
 });
 
+export const complaints = pgTable(
+  "complaints",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    clientRequestId: text("client_request_id"),
+    // Millisecond precision keeps the timestamp cursor exact in JavaScript.
+    createdAt: timestamp("created_at", { withTimezone: true, precision: 3 })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("complaints_author_request_uidx").on(t.authorId, t.clientRequestId),
+    index("complaints_created_id_idx").on(t.createdAt.desc(), t.id.desc()),
+  ],
+);
+
+export const businessReviews = pgTable("business_reviews", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  providerId: uuid("provider_id").notNull().references(() => providers.id, { onDelete: "cascade" }),
+  authorId: uuid("author_id").notNull().references(() => mobileUsers.id, { onDelete: "cascade" }),
+  bookingId: uuid("booking_id").notNull().unique().references(() => bookings.id, { onDelete: "cascade" }),
+  rating: integer("rating").notNull(), body: text("body").notNull(),
+  photoMediaIds: jsonb("photo_media_ids").$type<string[]>().notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true, precision: 3 }).notNull().defaultNow(),
+}, t => [index("business_reviews_provider_created_idx").on(t.providerId, t.createdAt.desc(), t.id.desc())]);
+
+export const businessProfileSaves = pgTable("business_profile_saves", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  providerId: uuid("provider_id").notNull().references(() => providers.id, { onDelete: "cascade" }),
+  mobileUserId: uuid("mobile_user_id").notNull().references(() => mobileUsers.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [unique("business_profile_saves_user_provider_uidx").on(t.mobileUserId, t.providerId)]);
+
+export const businessProfileReports = pgTable("business_profile_reports", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  providerId: uuid("provider_id").notNull().references(() => providers.id, { onDelete: "cascade" }),
+  reporterId: uuid("reporter_id").notNull().references(() => mobileUsers.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull(), details: text("details"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [unique("business_profile_reports_user_provider_uidx").on(t.reporterId, t.providerId)]);
+
 export const mediaAssets = pgTable("media_assets", {
   id: uuid("id").defaultRandom().primaryKey(),
   kind: text("kind").notNull(), // image | document | video

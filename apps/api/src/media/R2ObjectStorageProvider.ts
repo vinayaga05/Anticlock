@@ -142,6 +142,7 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
     key: string;
     body: Buffer;
     contentType: string;
+    signal?: AbortSignal;
   }): Promise<void> {
     await this.client.send(
       new PutObjectCommand({
@@ -150,6 +151,7 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
         Body: input.body,
         ContentType: input.contentType,
       }),
+      { abortSignal: input.signal },
     );
   }
 

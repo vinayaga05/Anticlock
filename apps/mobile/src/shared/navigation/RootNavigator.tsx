@@ -28,7 +28,10 @@ import { useMyInterestsQuery } from '@/features/interests/hooks/useInterestPrefe
 import { InterestSelectionScreen } from '@/features/interests/screens/InterestSelectionScreen';
 import { SearchScreen } from '@/features/booking/screens/SearchScreen';
 import { AccountSettingsScreen } from '@/features/settings/screens/AccountSettingsScreen';
-import { UserProfileScreen } from '@/features/profile/screens/UserProfileScreen';
+import { ProfileRouteScreen, UniversalDetailRouteScreen } from '@/shared/navigation/businessRouteScreens';
+import { BusinessProfileScreen } from '@/features/business-profile/screens/BusinessProfileScreen';
+import { BusinessBookingScreen } from '@/features/business-profile/screens/BusinessBookingScreen';
+import { BusinessManageScreen } from '@/features/business-profile/screens/BusinessManageScreen';
 import { EditProfileScreen } from '@/features/profile/screens/EditProfileScreen';
 import { DoctorsScreen } from '@/features/booking/screens/DoctorsScreen';
 import { DoctorProfileScreen } from '@/features/booking/screens/DoctorProfileScreen';
@@ -44,6 +47,7 @@ import { MyBookingsScreen } from '@/features/booking/screens/MyBookingsScreen';
 import { BookingDetailScreen } from '@/features/booking/screens/BookingDetailScreen';
 import { CommunitiesScreen } from '@/features/community/screens/CommunitiesScreen';
 import { ExploreCreateScreen } from '@/features/community/screens/ExploreCreateScreen';
+import { CreateComplaintScreen } from '@/features/community/screens/CreateComplaintScreen';
 import {
   CreateExploreEventScreen,
   CreateExploreProductScreen,
@@ -61,7 +65,6 @@ import { ThreadScreen } from '@/features/messages/screens/ThreadScreen';
 import { CallScreen } from '@/features/calls/screens/CallScreen';
 import { ServiceTreeScreen } from '@/features/services/screens/ServiceTreeScreen';
 import { ServiceCategoryScreen } from '@/features/services/screens/ServiceCategoryScreen';
-import { UniversalDetailScreen } from '@/features/services/screens/UniversalDetailScreen';
 import { ServiceRequestScreen } from '@/features/services/screens/ServiceRequestScreen';
 import { CourseDetailScreen } from '@/features/services/screens/CourseDetailScreen';
 import { EventDetailScreen } from '@/features/services/screens/EventDetailScreen';
@@ -224,9 +227,12 @@ export function RootNavigator() {
             />
             <Stack.Screen
               name="Profile"
-              component={UserProfileScreen}
+              component={ProfileRouteScreen}
               options={{ headerShown: false }}
             />
+            <Stack.Screen name="BusinessProfile" component={BusinessProfileScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="BusinessBooking" component={BusinessBookingScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="BusinessManage" component={BusinessManageScreen} options={{ headerShown: false }} />
             <Stack.Screen
               name="AccountSettings"
               component={AccountSettingsScreen}
@@ -335,7 +341,7 @@ export function RootNavigator() {
             />
             <Stack.Screen
               name="UniversalDetail"
-              component={UniversalDetailScreen}
+              component={UniversalDetailRouteScreen}
               options={{ title: 'Details' }}
             />
             <Stack.Screen
@@ -430,6 +436,11 @@ export function RootNavigator() {
               name="SavedHub"
               component={SavedHubScreen}
               options={{ title: 'Saved' }}
+            />
+            <Stack.Screen
+              name="CreateComplaint"
+              component={CreateComplaintScreen}
+              options={{ title: 'Add complaint' }}
             />
             <Stack.Screen
               name="ExploreCreate"

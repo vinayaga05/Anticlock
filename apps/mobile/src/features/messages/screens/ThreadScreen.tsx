@@ -12,6 +12,7 @@ import { AppIcon } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { blockProfile } from '@/shared/api/profileFollows';
 import { reportConversation, type PublisherRef } from '@/shared/api/messagesClient';
+import { navigateToProfile } from '@/shared/navigation/businessNavigation';
 
 type ProfileMember = {
   user_id?: string;
@@ -169,7 +170,8 @@ export function ThreadScreen() {
         <PressableScale
           style={styles.profileAction}
           disabled={!peerRef}
-          onPress={() => peerRef && navigation.navigate('Profile', { profileId: peerRef.id, profileType: peerRef.type })}>
+          accessibilityLabel={`Open ${title} profile`}
+          onPress={() => peerRef && navigateToProfile(navigation, peerRef)}>
           {avatarUrl ? (
             <Image source={{ uri: avatarUrl }} style={styles.chatAvatar} />
           ) : (

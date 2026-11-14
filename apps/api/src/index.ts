@@ -41,6 +41,8 @@ import { communitiesMobileRoutes, communitiesAdminRoutes } from './routes/commun
 import { exploreMobileRoutes, exploreAdminRoutes } from './routes/explore.js';
 import { coursesMobileRoutes, coursesAdminRoutes } from './routes/courses.js';
 import { eventRegistrationRoutes } from './routes/event-registration.js';
+import { complaintsMobileRoutes } from './routes/complaints.js';
+import { businessProfileRoutes } from './routes/business-profiles.js';
 import { startAssistantLifecycleJob } from './assistant/PrivacyService.js';
 import { redisHealthCheck } from './lib/redis.js';
 import {
@@ -183,6 +185,8 @@ app.route('/v1/messages', messagesRoutes);
 app.route('/v1/communities', communitiesMobileRoutes);
 app.route('/v1/explore', exploreMobileRoutes);
 app.route('/v1/event-registration', eventRegistrationRoutes);
+app.route('/v1/complaints', complaintsMobileRoutes);
+app.route('/v1/business-profiles', businessProfileRoutes);
 app.route('/v1/courses', coursesMobileRoutes);
 app.route('/admin', adminRoutes);
 app.route('/admin/courses', coursesAdminRoutes);

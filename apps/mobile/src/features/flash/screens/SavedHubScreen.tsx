@@ -15,12 +15,19 @@ import { useSavedProductsQuery } from '@/shared/api/shopHooks';
 import { apiRequest } from '@/shared/api/client';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { SavedContent } from '@/shared/data/flash/types';
+import { Button } from '@/shared/components/Button';
+import { PressableScale } from '@/shared/components/PressableScale';
+import { useSavedBusinessesQuery, useUnsaveBusinessMutation } from '@/features/business-profile/businessSavedHooks';
 
-const BUCKETS: { id: SavedContentKind | 'all'; label: string }[] = [
+type SavedHubKind = SavedContentKind | 'business';
+type SavedHubItem = Omit<SavedContent, 'kind'> & { kind: SavedHubKind };
+
+const BUCKETS: { id: SavedHubKind | 'all'; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'flash', label: 'Flash Posts' },
   { id: 'clip', label: 'Clips' },
   { id: 'service', label: 'Services' },
+  { id: 'business', label: 'Businesses' },
   { id: 'product', label: 'Products' },
   { id: 'course', label: 'Courses' },
   { id: 'event', label: 'Events' },
@@ -31,11 +38,13 @@ export function SavedHubScreen() {
   const navigation = useNavigation<any>();
   const saved = useEngagementStore(s => s.saved);
   const unsaveContent = useEngagementStore(s => s.unsaveContent);
-  const [bucket, setBucket] = useState<SavedContentKind | 'all'>('all');
+  const [bucket, setBucket] = useState<SavedHubKind | 'all'>('all');
   const { active } = useActiveProfile();
   const viewer = active ? { id: active.id, type: identityProfileType(active) } : undefined;
   const eventsQuery = useSavedExploreEventsQuery(viewer);
   const productsQuery = useSavedProductsQuery(viewer);
+  const businessesQuery = useSavedBusinessesQuery(viewer);
+  const removeBusiness = useUnsaveBusinessMutation(viewer);
   const queryClient = useQueryClient();
   const removeExplore = useMutation({
     mutationFn: async (input: { kind: 'event' | 'product'; id: string }) => {
@@ -53,7 +62,7 @@ export function SavedHubScreen() {
     },
   });
 
-  const serverSaved = useMemo<SavedContent[]>(() => [
+  const serverSaved = useMemo<SavedHubItem[]>(() => [
     ...(eventsQuery.data?.events ?? []).map(event => ({
       id: `server-event-${event.id}`,
       kind: 'event' as const,
@@ -72,7 +81,16 @@ export function SavedHubScreen() {
       refId: product.id,
       savedAt: product.updatedAt,
     })),
-  ], [eventsQuery.data?.events, productsQuery.data?.products]);
+    ...(businessesQuery.data?.pages.flatMap(page => page.businesses) ?? []).map(business => ({
+      id: `server-business-${business.id}`,
+      kind: 'business' as const,
+      title: business.name,
+      subtitle: [business.categoryLabel, [business.area, business.city].filter(Boolean).join(', ')].filter(Boolean).join(' · '),
+      imageUrl: business.avatarUrl ?? business.coverUrl ?? undefined,
+      refId: business.id,
+      savedAt: business.savedAt,
+    })),
+  ], [eventsQuery.data?.events, productsQuery.data?.products, businessesQuery.data?.pages]);
 
   const items = useMemo(
     () => {
@@ -83,7 +101,7 @@ export function SavedHubScreen() {
     [saved, serverSaved, bucket],
   );
 
-  const openItem = (kind: SavedContentKind, refId: string) => {
+  const openItem = (kind: SavedHubKind, refId: string) => {
     switch (kind) {
       case 'flash':
         navigation.navigate('Main', { screen: 'Flash' });
@@ -103,7 +121,18 @@ export function SavedHubScreen() {
       case 'service':
         navigation.navigate('Main', { screen: 'Needs' });
         break;
+      case 'business':
+        navigation.navigate('BusinessProfile', { providerId: refId });
+        break;
     }
+  };
+  const showBusinesses = bucket === 'all' || bucket === 'business';
+  const loading = bucket === 'business' ? businessesQuery.isLoading : eventsQuery.isLoading || productsQuery.isLoading || businessesQuery.isLoading;
+  const loadError = bucket === 'business' ? businessesQuery.error : eventsQuery.error || productsQuery.error || businessesQuery.error;
+  const refresh = () => {
+    void eventsQuery.refetch();
+    void productsQuery.refetch();
+    void businessesQuery.refetch();
   };
 
   return (
@@ -111,20 +140,26 @@ export function SavedHubScreen() {
       <View style={{ paddingHorizontal: theme.spacing.lg, gap: theme.spacing.md, flex: 1 }}>
         <FilterPills
           activeId={bucket}
-          onChange={id => setBucket(id as SavedContentKind | 'all')}
+          onChange={id => setBucket(id as SavedHubKind | 'all')}
           pills={BUCKETS}
         />
+        {removeBusiness.error ? <Text accessibilityRole="alert" style={{ color: theme.colors.error }}>This business could not be removed. Try Remove again.</Text> : null}
         <FlatList
           data={items}
           keyExtractor={item => item.id}
           contentContainerStyle={{ gap: 10, paddingBottom: 40 }}
+          refreshing={Boolean(eventsQuery.isRefetching || productsQuery.isRefetching || businessesQuery.isRefetching)}
+          onRefresh={refresh}
+          ListFooterComponent={showBusinesses ? <View style={{ gap: 10, paddingTop: 10 }}>
+            {businessesQuery.isError ? <Button title="Retry saved businesses" variant="secondary" onPress={() => { void businessesQuery.refetch(); }} disabled={businessesQuery.isFetching} /> : businessesQuery.hasNextPage ? <Button title="More saved businesses" variant="secondary" loading={businessesQuery.isFetchingNextPage} disabled={businessesQuery.isFetching} onPress={() => { if (!businessesQuery.isFetching) void businessesQuery.fetchNextPage({ cancelRefetch: false }); }} /> : null}
+          </View> : null}
           ListEmptyComponent={
             <EmptyState
               icon="save"
-              title={eventsQuery.isLoading || productsQuery.isLoading ? 'Loading saved items…' : 'Nothing saved yet'}
-              description={eventsQuery.error || productsQuery.error
-                ? 'Some saved items could not be loaded. Pull down or reopen this screen to retry.'
-                : 'Save Flash posts, Play videos, and marketplace items to find them here.'}
+              title={loading ? 'Loading saved items…' : 'Nothing saved yet'}
+              description={loadError
+                ? 'Some saved items could not be loaded. Pull down to retry.'
+                : bucket === 'business' ? 'Save an approved business from its profile to find it here.' : 'Save businesses, Flash posts, Play videos, and marketplace items to find them here.'}
             />
           }
           renderItem={({ item }) => (
@@ -157,13 +192,17 @@ export function SavedHubScreen() {
                   {item.subtitle ? ` · ${item.subtitle}` : ''}
                 </Text>
               </View>
-              <Text
-                onPress={() => item.id.startsWith('server-')
-                  ? removeExplore.mutate({ kind: item.kind as 'event' | 'product', id: item.refId })
-                  : unsaveContent(item.id)}
-                style={[theme.typography.caption, { color: theme.colors.primary }]}>
-                Remove
-              </Text>
+              <PressableScale
+                accessibilityLabel={`Remove ${item.title}`}
+                disabled={item.kind === 'business' && removeBusiness.isPending}
+                onPress={() => item.kind === 'business'
+                  ? removeBusiness.mutate(item.refId)
+                  : item.id.startsWith('server-')
+                    ? removeExplore.mutate({ kind: item.kind as 'event' | 'product', id: item.refId })
+                    : unsaveContent(item.id)}
+                style={{ minHeight: 44, justifyContent: 'center', paddingLeft: 8 }}>
+                <Text style={[theme.typography.caption, { color: theme.colors.primary }]}>Remove</Text>
+              </PressableScale>
             </Card>
           )}
         />

@@ -282,9 +282,8 @@ function BusinessDashboard({ providerId }: { providerId: string }) {
                 variant="secondary"
                 icon="globe"
                 onPress={() =>
-                  navigation.navigate('UniversalDetail', {
-                    entityType: 'provider',
-                    entityId: business.id,
+                  navigation.navigate('BusinessProfile', {
+                    providerId: business.id,
                     categoryId: business.categories[0]?.id ?? '',
                   })
                 }

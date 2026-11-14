@@ -115,17 +115,20 @@ export function UniversalDetailScreen() {
     isRealProvider ? 'business' : undefined,
     isRealProvider ? provider!.id : undefined,
   );
+  const effectiveCategoryId = categoryId || provider?.categoryIds[0] || '';
   const category =
-    getCategory(categoryId) ??
+    getCategory(effectiveCategoryId) ??
     (provider ? provider.categoryIds.map(id => getCategory(id)).find(Boolean) : undefined);
   const event = entityType === 'event' ? getEvent(entityId) : undefined;
   const course = entityType === 'course' ? getCourse(entityId) : undefined;
   const product = entityType === 'product' ? getProduct(entityId) : undefined;
 
   const actionType =
-    provider?.actionType ??
-    category?.actionType ??
-    (product?.isProperty ? 'property_enquiry' : 'product_purchase');
+    isRealProvider && provider?.actionType === 'product_purchase'
+      ? 'service_request'
+      : provider?.actionType ??
+        category?.actionType ??
+        (product?.isProperty ? 'property_enquiry' : 'product_purchase');
 
   const cta = useMemo(() => resolvePrimaryCta(actionType), [actionType]);
 
@@ -297,7 +300,7 @@ export function UniversalDetailScreen() {
       }
       case 'request':
         navigation.navigate('ServiceRequest', {
-          categoryId,
+          categoryId: effectiveCategoryId,
           providerId: provider?.id,
         });
         break;

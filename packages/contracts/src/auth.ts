@@ -79,7 +79,12 @@ export type MobileUser = z.infer<typeof MobileUserSchema>;
 
 export const UpdateMobileProfileRequestSchema = z.object({
   displayName: z.string().trim().min(2).max(80),
-  avatarUrl: z.string().url().max(2_000).nullable(),
+  avatarUrl: z.string().url().max(2_000).refine(value => {
+    try {
+      const url = new URL(value);
+      return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
+    } catch { return false; }
+  }, 'Use a public HTTP or HTTPS photo URL.').nullable(),
   bio: z.string().trim().max(160).nullable(),
   location: z.string().trim().max(80).nullable(),
   website: z.string().url().max(2_000).nullable(),

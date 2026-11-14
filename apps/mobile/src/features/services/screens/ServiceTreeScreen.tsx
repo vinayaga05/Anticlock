@@ -1,5 +1,5 @@
 import React, { useLayoutEffect } from 'react';
-import { ImageBackground, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { HealthScreenShell } from '@/shared/components/HealthScreenShell';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
@@ -47,18 +47,25 @@ export function ServiceTreeScreen() {
   const content = (
     <>
       {isHealth ? (
-        healthAd ? (
-          <ImageBackground
-            source={{ uri: healthAd.imageUrl! }}
-            style={styles.healthAd}
-            imageStyle={styles.healthAdImage}
-            resizeMode="cover"
+        healthAd?.imageUrl ? (
+          <View
+            style={[
+              styles.healthAd,
+              {
+                borderRadius: theme.radius['2xl'],
+                ...theme.shadows.card,
+              },
+            ]}
+            accessible
+            accessibilityRole="image"
+            accessibilityLabel={healthAd.title}
           >
-            <View style={styles.healthAdShade} />
-            <Text style={styles.healthAdTitle} numberOfLines={2}>
-              {healthAd.title}
-            </Text>
-          </ImageBackground>
+            <Image
+              source={{ uri: healthAd.imageUrl }}
+              style={styles.healthAdImage}
+              resizeMode="cover"
+            />
+          </View>
         ) : null
       ) : (
         <View
@@ -143,23 +150,10 @@ const styles = StyleSheet.create({
   healthAd: {
     height: 170,
     overflow: 'hidden',
-    justifyContent: 'flex-end',
+    backgroundColor: '#E8EEF2',
   },
   healthAdImage: {
     width: '100%',
     height: '100%',
-  },
-  healthAdShade: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
-  },
-  healthAdTitle: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: '800',
-    padding: 16,
-    textShadowColor: 'rgba(0,0,0,0.55)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
   },
 });

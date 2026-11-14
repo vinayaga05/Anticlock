@@ -35,6 +35,8 @@ import {
 } from '../db/schema.js';
 import { parseCursorDate } from '../lib/cursor.js';
 import { notificationService } from '../notifications/NotificationService.js';
+import { businessProfileService } from '../provider/BusinessProfileService.js';
+import { configuredServiceDuration } from '../provider/businessAvailability.js';
 import {
   bookingChangedEvent,
   publishBookingEvent,
@@ -152,15 +154,17 @@ export class BookingService {
     providerId: string,
     categoryId: string | null | undefined,
     mode: CreateBookingRequest['serviceMode'],
+    executor: typeof db | BookingTransaction = db,
   ) {
-    const [row] = await db
-      .select({ provider: providers, offering: providerServiceOfferings, actionType: serviceCategories.actionType })
+    const [row] = await executor
+      .select({ provider: providers, offering: providerServiceOfferings, actionType: serviceCategories.actionType, categoryName: serviceCategories.name })
       .from(providers)
       .innerJoin(providerServiceOfferings, eq(providerServiceOfferings.providerId, providers.id))
       .innerJoin(serviceCategories, eq(providerServiceOfferings.categoryId, serviceCategories.id))
       .where(and(
         eq(providers.id, providerId),
         eq(providers.status, 'active'),
+        eq(serviceCategories.status, 'published'),
         categoryId ? eq(providerServiceOfferings.categoryId, categoryId) : undefined,
       ))
       .limit(1);
@@ -170,7 +174,12 @@ export class BookingService {
 
     const common = object(object(row.provider.publicProfile).common);
     const services = object(common.services);
-    const allowed =
+    const availability = object(common.availability);
+    const offering = object(row.offering.metadata);
+    if (availability.temporarilyUnavailable === true || offering.available === false) {
+      throw appError('This service is currently unavailable', 'service_unavailable', 409);
+    }
+    const allowed = Array.isArray(offering.modes) ? offering.modes.includes(mode) :
       (mode === 'online' && services.online === true) ||
       (mode === 'home' && services.homeVisit === true) ||
       (mode === 'center' && services.atLocation === true);
@@ -199,7 +208,7 @@ export class BookingService {
         inArray(bookings.status, ACTIVE_STATUSES),
         excludeBookingId ? ne(bookings.id, excludeBookingId) : undefined,
         lt(bookings.startsAt, endsAt),
-        sql`COALESCE(${bookings.endsAt}, ${bookings.startsAt} + interval '60 minutes') > ${startsAt.toISOString()}::timestamptz`,
+        sql`COALESCE(${bookings.endsAt}, ${bookings.startsAt} + COALESCE(${bookings.durationMinutes}, 60) * interval '1 minute') > ${startsAt.toISOString()}::timestamptz`,
       ))
       .limit(1);
     if (conflict) {
@@ -221,17 +230,23 @@ export class BookingService {
     if (startsAt.getTime() <= Date.now()) {
       throw appError('Choose a future date and time', 'invalid_schedule', 400);
     }
-    const endsAt = bookingEnd(startsAt, request);
-    if (endsAt <= startsAt) throw appError('End time must be after start time', 'invalid_schedule', 400);
-
-    const providerData = await this.assertProviderCanBook(
-      request.providerId,
-      request.categoryId,
-      request.serviceMode,
-    );
-    assertWithinProviderHours(providerData.provider, startsAt, endsAt);
-    const amount = providerData.offering.pricingStartsAt ?? request.amount ?? null;
     const [row] = await db.transaction(async tx => {
+      // Service edits share this lock, so booking cannot accept an old mode,
+      // duration or price while an owner changes the offering.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${request.providerId!}))`);
+      const providerData = await this.assertProviderCanBook(request.providerId!, request.categoryId, request.serviceMode, tx);
+      await businessProfileService.assertBookingAccess(providerData.provider, mobileUserId, tx);
+      const configuredDuration = configuredServiceDuration(object(providerData.offering.metadata).durationMinutes);
+      const effectiveDuration = configuredDuration ?? request.durationMinutes ?? 60;
+      const endsAt = bookingEnd(startsAt, { ...request, durationMinutes: request.durationMinutes ?? effectiveDuration });
+      if (endsAt <= startsAt) throw appError('End time must be after start time', 'invalid_schedule', 400);
+      const actualDuration = (endsAt.getTime() - startsAt.getTime()) / 60_000;
+      if (!Number.isInteger(actualDuration) || actualDuration > 2147483647) throw appError('Choose a duration in whole minutes', 'invalid_duration', 400);
+      if (configuredDuration !== null && actualDuration !== configuredDuration) throw appError('Use the duration configured for this service', 'invalid_duration', 400);
+      assertWithinProviderHours(providerData.provider, startsAt, endsAt);
+      // A missing business price remains unquoted; the customer cannot invent
+      // a payable amount for an offering by supplying one in the request.
+      const amount = providerData.offering.pricingStartsAt ?? null;
       await this.assertNoConflict(tx, request.providerId!, mobileUserId, startsAt, endsAt);
       return tx
         .insert(bookings)
@@ -244,13 +259,13 @@ export class BookingService {
           serviceMode: request.serviceMode,
           startsAt,
           endsAt,
-          durationMinutes: request.durationMinutes ?? 60,
+          durationMinutes: actualDuration,
           amount,
           paymentStatus: 'pending',
           detail: {
             ...request.detail,
             providerName: providerData.provider.name,
-            serviceTitle: request.detail.serviceTitle || providerData.provider.name,
+            serviceTitle: providerData.categoryName,
           },
           metadata: {
             ...(request.metadata ?? {}),

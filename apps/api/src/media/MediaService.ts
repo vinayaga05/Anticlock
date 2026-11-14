@@ -31,6 +31,10 @@ import {
   validateVideoUploadMetadata,
   validateUploadedBytes,
 } from "./validateUpload.js";
+import { randomUUID } from "node:crypto";
+import { ApiError } from "../lib/httpError.js";
+import { managedAvatarReference, validateAvatarUpload } from "./validateAvatarUpload.js";
+import type { db as DatabaseClient } from "../db/client.js";
 
 function createStorage(): ObjectStorageProvider {
   const mode = (process.env.MEDIA_STORAGE ?? "local").toLowerCase();
@@ -68,6 +72,100 @@ export class MediaService {
         this.storage.ensurePrivateBucket(),
         this.storage.ensurePublicBucket(),
       ]);
+    }
+  }
+
+  /** Uploads a draft photo; only PUT /auth/mobile/profile changes the profile. */
+  async uploadMobileAvatar(
+    auth: AuthClaims,
+    input: { bytes: Buffer; contentType: string; filename: string },
+  ): Promise<{ avatarUrl: string }> {
+    if (auth.kind !== "mobile" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(auth.sub)) {
+      throw new ApiError(403, "forbidden", "An active mobile account is required.");
+    }
+    const { db } = await import("../db/client.js");
+    const { mobileUsers } = await import("../db/schema.js");
+    const { and, eq } = await import("drizzle-orm");
+    const [owner] = await db.select({ id: mobileUsers.id }).from(mobileUsers)
+      .where(and(eq(mobileUsers.id, auth.sub), eq(mobileUsers.isActive, true))).limit(1);
+    if (!owner) throw new ApiError(403, "forbidden", "An active mobile account is required.");
+
+    const validated = validateAvatarUpload(input.bytes, input.contentType);
+    const id = randomUUID();
+    const bucket = "public-media" as const;
+    const key = `public/avatars/${auth.sub}/${id}/original.${extensionForMime(validated.mimeType)}`;
+    const base = (process.env.API_PUBLIC_URL ?? `http://localhost:${process.env.API_PORT ?? 4000}`).replace(/\/$/, "");
+    const delivery = new URL(`${base}/v1/media/file/${bucket}/${encodeURIComponent(key)}`);
+    if (!["http:", "https:"].includes(delivery.protocol) || delivery.username || delivery.password) throw new Error("Invalid API public URL");
+    await this.repo.createAsset({
+      id, kind: "image", storageProvider: this.storage.name, storageKey: key, bucket,
+      ...validated, originalFilename: input.filename.split(/[\\/]/).pop()?.slice(0, 200) || `avatar.${extensionForMime(validated.mimeType)}`,
+      accessLevel: "public", processingStatus: "uploading", moderationStatus: "not_required", createdBy: null,
+    });
+    const controller = new AbortController();
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    let writing: Promise<void> | undefined;
+    const cleanup = () => { void Promise.resolve().then(() => this.storage.deleteObject({ bucket, key })).catch(() => {}); };
+    try {
+      writing = this.storage.putObject({ bucket, key, body: input.bytes, contentType: validated.mimeType, signal: controller.signal });
+      await Promise.race([
+        writing,
+        new Promise<never>((_, reject) => {
+          deadline = setTimeout(() => {
+            reject(new ApiError(408, "upload_timeout", "The photo upload timed out. Please try again."));
+            controller.abort();
+          }, 40000);
+        }),
+      ]);
+      if (controller.signal.aborted) throw new ApiError(408, "upload_timeout", "The photo upload timed out. Please try again.");
+      if (deadline !== undefined) clearTimeout(deadline);
+      const ready = await this.repo.updateAsset(id, { processingStatus: "ready" });
+      if (!ready) throw new Error("Avatar asset could not be confirmed");
+      return { avatarUrl: delivery.href };
+    } catch (error) {
+      controller.abort();
+      // An uploading asset is already unavailable publicly. Neither database
+      // cleanup nor object cleanup may delay or replace the original failure.
+      void Promise.resolve().then(() => this.repo.updateAsset(id, { processingStatus: "failed" })).catch(() => {});
+      cleanup();
+      // Cancellation can race a remote write finishing; remove it again once
+      // that write settles successfully so it cannot leave abandoned bytes.
+      void writing?.then(() => { if (controller.signal.aborted) cleanup(); }, () => {});
+      throw error;
+    } finally { if (deadline !== undefined) clearTimeout(deadline); }
+  }
+
+  /** Called inside the profile-save transaction after its active user is locked. */
+  async replaceMobileAvatarUsage(
+    auth: AuthClaims,
+    avatarUrl: string | null,
+    transaction: Parameters<Parameters<typeof DatabaseClient.transaction>[0]>[0],
+  ) {
+    if (auth.kind !== "mobile") throw new ApiError(403, "forbidden", "Mobile session required.");
+    const { mediaAssets, mediaUsages } = await import("../db/schema.js");
+    const { and, eq, isNull, inArray } = await import("drizzle-orm");
+    const base = process.env.API_PUBLIC_URL ?? `http://localhost:${process.env.API_PORT ?? 4000}`;
+    const reference = managedAvatarReference(avatarUrl, base);
+    let mediaId: string | null = null;
+    if (reference) {
+      if (reference.ownerId.toLowerCase() !== auth.sub.toLowerCase()) {
+        throw new ApiError(403, "forbidden", "Choose a photo uploaded for your own profile.");
+      }
+      const [asset] = await transaction.select({ id: mediaAssets.id }).from(mediaAssets).where(and(
+        eq(mediaAssets.id, reference.mediaId), eq(mediaAssets.storageKey, reference.key),
+        eq(mediaAssets.bucket, "public-media"), eq(mediaAssets.kind, "image"),
+        eq(mediaAssets.accessLevel, "public"), eq(mediaAssets.processingStatus, "ready"),
+        inArray(mediaAssets.moderationStatus, ["not_required", "approved"]),
+        isNull(mediaAssets.deletedAt), isNull(mediaAssets.archivedAt),
+      )).limit(1).for("update");
+      if (!asset) throw new ApiError(409, "avatar_unavailable", "This photo is no longer available. Choose it again.");
+      mediaId = asset.id;
+    }
+    await transaction.delete(mediaUsages).where(and(
+      eq(mediaUsages.entityType, "MOBILE_USER"), eq(mediaUsages.entityId, auth.sub), eq(mediaUsages.usageType, "PROFILE"),
+    ));
+    if (mediaId) {
+      await transaction.insert(mediaUsages).values({ mediaId, entityType: "MOBILE_USER", entityId: auth.sub, usageType: "PROFILE", sortOrder: 0 });
     }
   }
 

@@ -1,3 +1,4 @@
+import { navigateToProvider } from '@/shared/navigation/businessNavigation';
 import React, { useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -99,11 +100,7 @@ export function HomeScreen() {
               key={p.id}
               provider={p}
               onPress={() =>
-                navigation.navigate('UniversalDetail', {
-                  entityType: 'provider',
-                  entityId: p.id,
-                  categoryId: p.categoryIds[0],
-                })
+                navigateToProvider(navigation, p.id, p.categoryIds[0])
               }
             />
           ))}

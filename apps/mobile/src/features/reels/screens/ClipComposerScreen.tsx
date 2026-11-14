@@ -8,7 +8,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { RootStackParamList } from '@/shared/navigation/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { VideoPlayer } from '@/features/video/components/VideoPlayer';
 import { Button } from '@/shared/components/Button';
@@ -55,6 +56,8 @@ import {
 } from '@/features/reels/editor/clipEditModel';
 import {
   canCancelUpload,
+  canRestoreClipPublisherDraft,
+  matchesClipPublisher,
   normalizeHashtags,
   normalizeTaggedUserIds,
   uploadProgressPercent,
@@ -124,11 +127,14 @@ function phaseTitle(status: UploadStatus) {
 export function ClipComposerScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
+  const route = useRoute<RouteProp<RootStackParamList, 'ClipComposer'>>();
+  const requestedPublisherId = route.params?.publisherProfileId?.trim();
+  const requestedPublisherType = route.params?.publisherProfileType;
   const insets = useSafeAreaInsets();
   const publishContent = usePublishContentMutation();
   // Persisted per format; a restored draft re-asserts its own profile and
   // nothing resets it to the personal profile afterwards.
-  const publisher = usePublisherSelection('clip');
+  const publisher = usePublisherSelection('clip', requestedPublisherId);
   const {
     identities,
     identity,
@@ -176,7 +182,7 @@ export function ClipComposerScreen() {
 
   useEffect(() => {
     const draft = loadDraft();
-    if (!draft) return;
+    if (!draft || !canRestoreClipPublisherDraft(draft.identityId, requestedPublisherId)) return;
     restoreIdentity(draft.identityId);
     setCover(draft.cover);
     setCoverMode(draft.coverMode);
@@ -348,6 +354,10 @@ export function ClipComposerScreen() {
       );
       return;
     }
+    if (!matchesClipPublisher(identity, requestedPublisherId, requestedPublisherType)) {
+      Alert.alert('Business publishing unavailable', 'This business is no longer available for publishing. Reopen its profile to try again.');
+      return;
+    }
     if (coverMode === 'custom' && !cover) {
       Alert.alert(
         'Choose a cover',
@@ -452,7 +462,12 @@ export function ClipComposerScreen() {
       });
       uploadAbortRef.current = null;
       uploadDraftIdRef.current = null;
-      storage.remove(STORAGE_KEYS.CLIP_COMPOSER_DRAFT);
+      // Opening an explicit business composer can leave a different profile's
+      // saved draft untouched. Publishing this Clip must preserve that draft.
+      const savedDraft = loadDraft();
+      if (!savedDraft || canRestoreClipPublisherDraft(savedDraft.identityId, requestedPublisherId)) {
+        storage.remove(STORAGE_KEYS.CLIP_COMPOSER_DRAFT);
+      }
       if (!mountedRef.current) return;
       setUploadStatus({ phase: 'complete', progress: 100 });
       const pendingReview = result?.post.contentStatus === 'pending_review';
@@ -590,7 +605,7 @@ export function ClipComposerScreen() {
           onSelect={publisher.select}
           isLoading={publisher.isLoading}
           fallbackApplied={publisher.fallbackApplied}
-          disabled={isPublishing}
+          disabled={isPublishing || Boolean(requestedPublisherId)}
         />
 
         <Card style={styles.section}>

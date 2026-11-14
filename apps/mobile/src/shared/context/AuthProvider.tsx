@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -17,18 +18,19 @@ import {
   verifyOtp,
   updateProfile as persistProfile,
 } from '@/shared/services/auth/authService';
-import type { MobileUser, OtpSendResult, ProfileUpdate } from '@/shared/services/auth/types';
+import type { MobileUser, OtpSendResult, ProfileUpdate, OtpRequestOptions } from '@/shared/services/auth/types';
 import { setUnauthorizedHandler } from '@/shared/api/client';
 import { ensureUserAvatar } from '@/shared/services/auth/avatar';
 
 type AuthState = {
   user: MobileUser | null;
   loading: boolean;
-  requestOtp: (phone: string) => Promise<OtpSendResult>;
+  requestOtp: (phone: string, options?: OtpRequestOptions) => Promise<OtpSendResult>;
   loginWithOtp: (
     phone: string,
     code: string,
     requestId: string,
+    options?: OtpRequestOptions,
   ) => Promise<void>;
   continueAsGuest: () => void;
   logout: () => Promise<void>;
@@ -40,25 +42,35 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<MobileUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const authGeneration = useRef(0);
 
   const logout = useCallback(async () => {
-    await logoutRemote();
+    authGeneration.current += 1;
+    // Capture/send the current token before clearing local state immediately.
+    const revocation = logoutRemote();
     clearSession();
     setUser(null);
+    await revocation;
   }, []);
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
+      authGeneration.current += 1;
       clearSession();
       setUser(null);
+      setLoading(false);
     });
-    return () => setUnauthorizedHandler(null);
+    return () => {
+      authGeneration.current += 1;
+      setUnauthorizedHandler(null);
+    };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     async function bootstrap() {
+      const generation = authGeneration.current;
       const session = readStoredSession();
       if (!session) {
         if (!cancelled) {
@@ -70,6 +82,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const validated = await validateSession(session);
       if (cancelled) return;
+      if (generation !== authGeneration.current || readStoredSession()?.token !== session.token) {
+        setLoading(false);
+        return;
+      }
 
       if (validated) {
         persistSession({ ...session, user: validated });
@@ -87,9 +103,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const requestOtp = useCallback(async (phone: string) => sendOtp(phone), []);
+  const requestOtp = useCallback(async (phone: string, options?: OtpRequestOptions) => sendOtp(phone, options), []);
 
   const continueAsGuest = useCallback(() => {
+    authGeneration.current += 1;
     // Intentionally in-memory only: this is a temporary way to preview the app
     // and guests return to sign-in after the app restarts.
     setUser(
@@ -102,16 +119,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loginWithOtp = useCallback(
-    async (phone: string, code: string, requestId: string) => {
-      const session = await verifyOtp(phone, code, requestId);
+    async (phone: string, code: string, requestId: string, options?: OtpRequestOptions) => {
+      const generation = ++authGeneration.current;
+      const isCurrentAttempt = () => generation === authGeneration.current && options?.isCurrentAttempt?.() !== false;
+      const session = await verifyOtp(phone, code, requestId, { ...options, isCurrentAttempt });
+      if (!isCurrentAttempt() || options?.signal?.aborted || readStoredSession()?.token !== session.token) {
+        throw new Error('This sign-in attempt is no longer active.');
+      }
       setUser(session.user);
     },
     [],
   );
 
   const updateProfile = useCallback(async (input: ProfileUpdate) => {
+    const expectedSession = readStoredSession();
+    if (!expectedSession) throw new Error('Please sign in to edit your profile.');
     const updatedUser = await persistProfile(input);
-    setUser(updatedUser);
+    const currentSession = readStoredSession();
+    if (
+      !currentSession ||
+      currentSession.user.id !== expectedSession.user.id ||
+      currentSession.token !== expectedSession.token
+    ) {
+      throw new Error('Your account changed. Reopen Edit profile to try again.');
+    }
+    setUser(current => current?.id === expectedSession.user.id ? updatedUser : current);
   }, []);
 
   const value = useMemo(

@@ -11,21 +11,22 @@ const source = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)]
 assert.ok(source, 'the users page contains its application script');
 const snap = value => ({ val: () => value });
 const flush = () => new Promise(resolve => setImmediate(resolve));
+function plain(value) { return JSON.parse(JSON.stringify(value)); }
 function deferred() {
-  let resolve;
-  let reject;
+  let resolve; let reject;
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
 }
-function plain(value) { return JSON.parse(JSON.stringify(value)); }
+function response(value, status = 200, etag = '"record-v1"') {
+  return { ok: status >= 200 && status < 300, status, headers: { get: name => name.toLowerCase() === 'etag' ? etag : null }, json: async () => value };
+}
 
 function harness(options = {}) {
   const elements = new Map();
-  const calls = { refs: [], once: [], on: [], off: [], signIn: 0, signOut: 0 };
+  const calls = { refs: [], on: [], off: [], auth: 0, reload: 0, fetch: [] };
   const timers = new Map();
+  let serverRecords = {};
   let timerId = 0;
-  let authChanged;
-  let authFailed;
   let document;
   class Element {
     constructor(tag = 'div', id = '') {
@@ -48,6 +49,7 @@ function harness(options = {}) {
       await Promise.all((this.listeners.get(type) || []).map(handler => handler(event)));
     }
     focus() { document.activeElement = this; }
+    contains(element) { return element === this || this.children.some(child => child.contains(element)); }
     querySelectorAll(selector) {
       const descendants = this.children.flatMap(child => [child, ...child.querySelectorAll(selector)]);
       return descendants.filter(child => child.tagName === 'BUTTON' || child.tagName === 'A' && child.href);
@@ -69,44 +71,37 @@ function harness(options = {}) {
     createElement: tag => new Element(tag),
     addEventListener(type, handler) { this.listeners.set(type, handler); },
   };
-  const auth = {
-    currentUser: null,
-    onAuthStateChanged(handler, error) { authChanged = handler; authFailed = error; },
-    async signInWithPopup(provider) {
-      calls.signIn += 1;
-      return options.signIn ? options.signIn(provider) : undefined;
-    },
-    async signOut() {
-      calls.signOut += 1;
-      if (options.signOut) return options.signOut();
-      auth.currentUser = null;
-      await authChanged(null);
-    },
-  };
-  function authFactory() { return auth; }
-  authFactory.GoogleAuthProvider = class { setCustomParameters(parameters) { this.parameters = parameters; } };
   const database = {
     ref(refPath) {
       calls.refs.push(refPath);
+      if (options.refError) throw options.refError;
       return {
-        once(event) {
-          calls.once.push({ path: refPath, event });
-          return options.access ? options.access(refPath) : Promise.resolve(snap(true));
-        },
         on(event, receive, error) {
           const listener = { path: refPath, event, receive, error };
           calls.on.push(listener);
           if (options.on) options.on(listener);
         },
         off(event, receive) { calls.off.push({ path: refPath, event, receive }); },
-        set() { throw new Error('The users page must never write registration data'); },
+        set() { throw new Error('Record writes must use conditional REST requests'); },
+        update() { throw new Error('Record writes must use conditional REST requests'); },
+        remove() { throw new Error('Record writes must use conditional REST requests'); },
+        push() { throw new Error('The roster must not create new registrations'); },
       };
     },
   };
   const context = {
-    document, window: { location: { reload() {} } },
-    firebase: { initializeApp() {}, auth: authFactory, database: () => database },
-    URL, Intl, Date,
+    document, window: { location: { reload() { calls.reload += 1; } } },
+    firebase: { initializeApp() {}, auth() { calls.auth += 1; throw new Error('The roster must load without Firebase Auth'); }, database: () => database },
+    URL, Intl, Date, AbortController,
+    fetch: async (url, request = {}) => {
+      calls.fetch.push({ url, request });
+      if (options.fetch) return options.fetch(url, request, calls.fetch.length);
+      const key = decodeURIComponent(new URL(url).pathname.split('/').at(-1).replace(/\.json$/, ''));
+      if (!request.method || request.method === 'GET') return response(serverRecords[key] ?? null);
+      if (request.method === 'PUT') { serverRecords[key] = JSON.parse(request.body); return response(serverRecords[key]); }
+      if (request.method === 'DELETE') { delete serverRecords[key]; return response(null); }
+      throw new Error(`Unexpected method: ${request.method}`);
+    },
     setTimeout(callback, milliseconds) { const id = ++timerId; timers.set(id, { callback, milliseconds }); return id; },
     clearTimeout: id => timers.delete(id),
     console: { error() {}, log() {} },
@@ -115,9 +110,7 @@ function harness(options = {}) {
   vm.runInNewContext(source, context);
   return {
     model: context.window.UsersRoster, calls, element, context,
-    async user(user) { auth.currentUser = user; await authChanged(user); await flush(); },
-    failAuth: () => authFailed(new Error('unavailable')),
-    emit(value, listener = calls.on.at(-1)) { assert.ok(listener, 'an authorised subscription exists'); listener.receive(snap(value)); },
+    emit(value, listener = calls.on.at(-1)) { assert.ok(listener, 'a registrations subscription exists'); serverRecords = plain(value || {}); listener.receive(snap(value)); },
     deny(error = { code: 'PERMISSION_DENIED' }, listener = calls.on.at(-1)) { listener.error(error); },
     async expire() {
       await flush(); const [id, timer] = [...timers.entries()][0] || [];
@@ -125,11 +118,10 @@ function harness(options = {}) {
     },
   };
 }
-const organiser = { uid: 'approved-organiser', email: 'organiser@example.test' };
 function record(index = 1, overrides = {}) {
   return { fullName: `Participant ${index}`, mobile: `900000${String(index).padStart(4, '0')}`, email: `person${index}@example.test`, age: 24, gender: 'Female', category: 'Student', quantity: 1, unitPrice: 149, totalAmount: 149, transactionId: `UTR-${index}`, regId: `REG-${index}`, createdAt: new Date(Date.UTC(2026, 10, index)).toISOString(), ...overrides };
 }
-async function load(value, options) { const h = harness(options); await h.user(organiser); h.emit(value); return h; }
+async function load(value, options) { const h = harness(options); h.emit(value); return h; }
 function rowNames(h) { return h.element('rows').children.map(row => row.children[0].children[0].textContent); }
 
 // Model checks use real Firebase-shaped snapshots and legacy aliases.
@@ -162,7 +154,6 @@ test('malformed amounts, dates and empty snapshots remain safe to render', async
     b: { fullName: 'Object date', createdAt: { toString: 'not callable' }, age: {} },
     c: { name: 'Unknown date', createdAt: 'not a date', quantity: '2.5' },
   };
-  await h.user(organiser);
   assert.doesNotThrow(() => h.emit(value));
   const rows = plain(h.model.normalizedRecords(value));
   assert.equal(rows.length, 3);
@@ -179,29 +170,19 @@ test('filters across name, contact, registration ID and UTR with category and al
   assert.equal(h.model.filteredRecords(rows, 'asha', 'Student').length, 0);
 });
 
-test('signed-out and unapproved accounts do not request the registrations collection', async () => {
-  const h = harness({ access: async () => snap(false) });
-  await h.user(null); assert.equal(h.calls.refs.length, 0);
-  await h.user(organiser);
-  assert.deepEqual(h.calls.refs, ['registrationAdmins/approved-organiser']);
-  assert.equal(h.calls.on.length, 0);
+test('loads registrations immediately without sign-in, admin checks or Firebase Auth', () => {
+  const h = harness();
+  assert.equal(h.calls.auth, 0);
+  assert.deepEqual(h.calls.refs, ['registrations']);
+  assert.equal(h.calls.on.length, 1);
+  assert.equal(h.calls.on[0].event, 'value');
+  assert.equal(h.element('statusTitle').textContent, 'Loading registrations');
   assert.equal(h.element('roster').hidden, true);
-  assert.equal(h.element('statusTitle').textContent, 'Organiser access required');
-  assert.equal(h.element('accountId').hidden, false);
-  assert.equal(h.element('accountId').textContent, 'Account ID: approved-organiser');
-  await h.user(null);
-  assert.equal(h.element('accountId').textContent, '');
-  assert.equal(h.element('accountId').hidden, true);
-});
-
-test('a rejected admin flag read fails closed with a clear access message', async () => {
-  const h = harness({ access: async () => { throw { code: 'PERMISSION_DENIED' }; } });
-  await h.user(organiser);
-  assert.equal(h.calls.on.length, 0);
-  assert.equal(h.element('roster').hidden, true);
-  assert.equal(h.element('retry').hidden, false);
-  assert.match(h.element('statusMessage').textContent, /not been configured/);
-  assert.notEqual(h.element('emptyTitle').textContent, 'No registrations yet');
+  assert.doesNotMatch(html, /firebase-auth-compat|id="(?:loginPanel|signIn|signOut)"|registrationAdmins/);
+  h.emit({ a: record(1) });
+  assert.equal(h.element('roster').hidden, false);
+  assert.equal(h.element('status').hidden, true);
+  assert.deepEqual(rowNames(h), ['Participant 1']);
 });
 
 test('collection permission denial clears sensitive rows and is not shown as an empty database', async () => {
@@ -210,7 +191,7 @@ test('collection permission denial clears sensitive rows and is not shown as an 
   h.deny({ code: 'PERMISSION_DENIED' });
   assert.equal(h.element('rows').children.length, 0);
   assert.equal(h.element('roster').hidden, true);
-  assert.match(h.element('statusMessage').textContent, /does not have permission/);
+  assert.match(h.element('statusMessage').textContent, /does not allow reading/);
   assert.equal(h.element('retry').hidden, false);
   assert.equal(h.calls.off.length, 1);
   h.element('search').value = 'queued search'; await h.element('search').dispatch('input');
@@ -220,7 +201,7 @@ test('collection permission denial clears sensitive rows and is not shown as an 
   assert.equal(h.element('rows').children.length, 0, 'cancelled data callback cannot restore records');
 });
 
-test('an authenticated empty snapshot is distinguished from an error', async () => {
+test('an empty snapshot is distinguished from an error', async () => {
   const h = await load(null);
   assert.equal(h.element('roster').hidden, false);
   assert.equal(h.element('status').hidden, true);
@@ -252,7 +233,7 @@ test('participant values remain text and unsafe screenshot links are never rende
   const h = await load({ a: record(1, { fullName: malicious, email: '<script>bad()</script>', screenshotUrl: 'javascript:alert(1)' }) });
   assert.equal(rowNames(h)[0], malicious);
   assert.match(h.element('rows').textContent, /<script>bad\(\)<\/script>/);
-  const detailsButton = h.element('rows').children[0].children[5].children[0];
+  const detailsButton = rowAction(h, 0);
   await detailsButton.dispatch('click');
   assert.equal(h.element('details').hidden, false);
   assert.equal(h.element('detailName').textContent, malicious);
@@ -264,7 +245,7 @@ test('participant values remain text and unsafe screenshot links are never rende
 
 test('safe proof links open separately without exposing a referrer and detail values are retained', async () => {
   const h = await load({ a: record(1, { screenshotUrl: 'https://proof.example.test/image?signature=test', screenshotStorage: 'r2', screenshotBucket: 'documents', screenshotKey: 'registration/a.png' }) });
-  await h.element('rows').children[0].children[5].children[0].dispatch('click');
+  await rowAction(h, 0).dispatch('click');
   const link = h.element('proof').children[0];
   assert.equal(link.href, 'https://proof.example.test/image?signature=test');
   assert.equal(link.target, '_blank'); assert.equal(link.rel, 'noopener noreferrer');
@@ -273,60 +254,53 @@ test('safe proof links open separately without exposing a referrer and detail va
   assert.match(h.element('detailFields').textContent, /registration\/a\.png/);
 });
 
-test('sign-out immediately clears rows, open details, totals and subscriptions before awaiting auth', async () => {
-  const pending = deferred();
-  const h = await load({ a: record(1) }, { signOut: () => pending.promise });
+test('refresh clears details and old rows, replaces the listener, and ignores stale callbacks', async () => {
+  const h = await load({ a: record(1) });
   const listener = h.calls.on[0];
-  await h.element('rows').children[0].children[5].children[0].dispatch('click');
-  const signingOut = h.element('signOut').dispatch('click'); await flush();
+  await rowAction(h, 0).dispatch('click');
+  await h.element('refresh').dispatch('click');
   assert.equal(h.element('roster').hidden, true); assert.equal(h.element('rows').children.length, 0);
   assert.equal(h.element('detailFields').children.length, 0); assert.equal(h.element('proof').children.length, 0);
   assert.equal(h.element('detailName').textContent, ''); assert.equal(h.element('totalUsers').textContent, '0');
-  assert.equal(h.calls.off.length, 1);
+  assert.equal(h.calls.off.length, 1); assert.equal(h.calls.on.length, 2);
   h.emit({ a: record(3) }, listener);
-  assert.equal(h.element('rows').children.length, 0, 'late data cannot repopulate a signed-out view');
-  pending.resolve(); await signingOut;
+  assert.equal(h.element('rows').children.length, 0, 'late data cannot repopulate a refreshed view');
+  h.emit({ b: record(2) });
+  h.deny({ code: 'PERMISSION_DENIED' }, listener);
+  assert.deepEqual(rowNames(h), ['Participant 2'], 'old error callback cannot clear the current subscription');
 });
 
-test('stale organiser access acknowledgements cannot subscribe after sign-out or account switch', async () => {
-  const access = deferred();
-  const h = harness({ access: refPath => refPath.endsWith('/first') ? access.promise : Promise.resolve(snap(false)) });
-  const first = h.user({ uid: 'first', email: 'first@example.test' }); await flush();
-  await h.user({ uid: 'second', email: 'second@example.test' });
-  access.resolve(snap(true)); await first;
-  assert.equal(h.calls.on.length, 0);
-  assert.equal(h.element('accountEmail').textContent, 'second@example.test');
-  assert.equal(h.element('roster').hidden, true);
-});
-
-test('account switch unsubscribes existing data and ignores the previous account callbacks', async () => {
-  const h = await load({ a: record(1) }); const listener = h.calls.on[0];
-  await h.user({ uid: 'next-organiser', email: 'next@example.test' });
-  assert.equal(h.calls.off.length, 1); assert.equal(h.element('rows').children.length, 0);
-  h.emit({ a: record(9) }, listener); assert.equal(h.element('rows').children.length, 0);
-  h.emit({ b: record(2) }); assert.deepEqual(rowNames(h), ['Participant 2']);
-});
-
-test('access and data timeouts give a retry state and ignore late callbacks', async () => {
-  const access = deferred(); const gated = harness({ access: () => access.promise });
-  const signingIn = gated.user(organiser); await gated.expire(); await signingIn;
-  assert.equal(gated.calls.on.length, 0); assert.equal(gated.element('retry').hidden, false);
-  access.resolve(snap(true)); await flush(); assert.equal(gated.calls.on.length, 0);
-  const h = harness(); await h.user(organiser); const listener = h.calls.on[0];
+test('data timeout gives a retry state and ignores late callbacks', async () => {
+  const h = harness(); const listener = h.calls.on[0];
   await h.expire(); assert.equal(h.element('retry').hidden, false); assert.equal(h.element('roster').hidden, true);
+  assert.equal(h.calls.off.length, 1);
   h.emit({ a: record(1) }, listener); assert.equal(h.element('rows').children.length, 0);
   await h.element('retry').dispatch('click'); h.emit({ a: record(2) });
   assert.deepEqual(rowNames(h), ['Participant 2']);
 });
 
-test('Google configuration failures are visible and the sign-in button is restored', async () => {
-  const h = harness({ signIn: async () => { throw { code: 'auth/configuration-not-found' }; } });
-  await h.element('signIn').dispatch('click');
-  assert.equal(h.element('signIn').disabled, false);
-  assert.equal(h.element('status').hidden, false);
-  assert.equal(h.element('statusTitle').textContent, 'Sign-in not completed');
-  assert.match(h.element('statusMessage').textContent, /not enabled|finish sign-in setup/i);
-  assert.equal(h.calls.on.length, 0);
+test('permission denial can recover after database access is corrected', async () => {
+  const h = harness(); const listener = h.calls.on[0];
+  h.deny();
+  assert.equal(h.element('retry').hidden, false);
+  await h.element('retry').dispatch('click');
+  assert.equal(h.calls.on.length, 2);
+  h.emit({ a: record(1) });
+  assert.equal(h.element('status').hidden, true);
+  assert.deepEqual(rowNames(h), ['Participant 1']);
+  h.emit({ b: record(2) }, listener);
+  assert.deepEqual(rowNames(h), ['Participant 1']);
+});
+
+test('realtime snapshots update totals and preserve the current search', async () => {
+  const h = await load({ a: record(1), b: record(2) });
+  h.element('search').value = 'person1@example.test'; await h.element('search').dispatch('input');
+  h.emit({ a: record(1, { quantity: 2, totalAmount: 298 }), b: record(2), c: record(3) });
+  assert.equal(h.element('totalUsers').textContent, '3');
+  assert.equal(h.element('totalPasses').textContent, '4');
+  assert.equal(h.element('totalAmount').textContent, '₹596.00');
+  assert.deepEqual(rowNames(h), ['Participant 1']);
+  assert.match(h.element('resultCount').textContent, /1 matching · 3 total/);
 });
 
 test('SDK failure shows an actionable error and never creates a collection request', () => {
@@ -337,25 +311,200 @@ test('SDK failure shows an actionable error and never creates a collection reque
 });
 
 
-test('only the boolean approved-admin flag can unlock collection access', async () => {
-  for (const flag of [null, false, 'true', 1, {}, []]) {
-    const h = harness({ access: async () => snap(flag) });
-    await h.user(organiser);
-    assert.equal(h.calls.on.length, 0, `flag ${JSON.stringify(flag)} is not approval`);
-    assert.equal(h.element('roster').hidden, true);
+test('synchronous subscription errors show a retry state without a false empty list', () => {
+  const h = harness({ on: () => { throw new Error('network unavailable'); } });
+  assert.equal(h.element('statusTitle').textContent, 'Unable to load registrations');
+  assert.equal(h.element('retry').hidden, false);
+  assert.equal(h.element('roster').hidden, true);
+  assert.equal(h.calls.off.length, 1);
+});
+
+test('a synchronous initial snapshot completes loading and cancels its deadline', async () => {
+  const h = harness({ on: listener => listener.receive(snap({ a: record(1) })) });
+  assert.deepEqual(rowNames(h), ['Participant 1']);
+  assert.equal(h.element('status').hidden, true);
+  await assert.rejects(h.expire(), /pending operation has a deadline/);
+});
+
+test('queued filter events cannot expose an empty list before the first snapshot', async () => {
+  const h = harness();
+  h.element('search').value = 'any'; await h.element('search').dispatch('input');
+  await h.element('next').dispatch('click');
+  assert.equal(h.element('roster').hidden, true);
+  assert.equal(h.element('statusTitle').textContent, 'Loading registrations');
+});
+
+function rowAction(h, index) { return h.element('rows').children[0].children[5].querySelectorAll('button')[index]; }
+const editableRecord = overrides => record(1, { transactionId: '123456789012', utr: '123456789012', ...overrides });
+function editDraft(h, values = {}) {
+  for (const [id, value] of Object.entries(values)) h.element(id).value = String(value);
+}
+
+test('edit and delete open prefilled dialogs and cancellation sends no writes', async () => {
+  const original = editableRecord(); const h = await load({ '9000000001': original });
+  const actions = h.element('rows').children[0].children[5].querySelectorAll('button');
+  assert.deepEqual(actions.map(button => button.textContent), ['Details', 'Edit', 'Delete']);
+  await rowAction(h, 1).dispatch('click');
+  assert.equal(h.element('editDialog').hidden, false);
+  assert.equal(h.element('editName').value, original.fullName);
+  assert.equal(h.element('editEmail').value, original.email);
+  assert.equal(String(h.element('editMobile').value), original.mobile);
+  assert.equal(h.element('editRegId').value || h.element('editRegId').textContent, original.regId);
+  await h.element('cancelEdit').dispatch('click');
+  assert.equal(h.element('editDialog').hidden, true);
+  await rowAction(h, 2).dispatch('click');
+  assert.equal(h.element('deleteDialog').hidden, false);
+  assert.match(h.element('deleteName').textContent, /Participant 1/);
+  assert.equal(h.calls.fetch.filter(call => ['PUT', 'DELETE'].includes(call.request.method)).length, 0);
+  await h.element('cancelDelete').dispatch('click');
+  assert.equal(h.element('deleteDialog').hidden, true);
+  assert.equal(h.calls.fetch.length, 0);
+});
+
+test('save waits for server acknowledgement and preserves identity, dates, unknown fields and proof metadata', async () => {
+  const original = editableRecord({ screenshotUrl: 'https://proof.example.test/a', screenshotBucket: 'documents', screenshotKey: 'registration/proof.png', screenshotStorage: 'r2', approved: { by: 'owner', value: false } });
+  const ack = deferred();
+  const h = await load({ '9000000001': original }, { fetch: (url, request) => request.method === 'PUT' ? ack.promise : response(original) });
+  await rowAction(h, 1).dispatch('click');
+  editDraft(h, { editName: 'Updated Person', editEmail: 'updated@example.test', editAge: '30', editGender: 'Male', editCategory: 'VIP', editQuantity: '2', editUnitPrice: '999', editUtr: '999999999999', editMobile: 'other-mobile', editRegId: 'forged-id' });
+  const saving = h.element('editForm').dispatch('submit'); await flush();
+  assert.equal(h.calls.fetch.length, 2);
+  const [read, write] = h.calls.fetch;
+  assert.equal(read.request.headers['X-Firebase-ETag'], 'true');
+  assert.equal(write.request.method, 'PUT');
+  assert.equal(write.request.headers['if-match'], '"record-v1"');
+  assert.equal(new URL(write.url).pathname, '/registrations/9000000001.json');
+  const payload = JSON.parse(write.request.body);
+  assert.equal(payload.fullName, 'Updated Person'); assert.equal(payload.email, 'updated@example.test');
+  assert.equal(payload.age, 30); assert.equal(payload.quantity, 2); assert.equal(payload.totalAmount, 1998);
+  assert.equal(payload.transactionId, '999999999999'); assert.equal(payload.utr, payload.transactionId);
+  for (const key of ['mobile', 'regId', 'createdAt', 'issuedAt', 'screenshotUrl', 'screenshotBucket', 'screenshotKey', 'screenshotStorage', 'approved']) assert.deepEqual(payload[key], original[key], key);
+  assert.equal(h.element('editDialog').hidden, false, 'the dialog remains open before server acknowledgement');
+  assert.equal(h.element('saveEdit').disabled, true);
+  assert.doesNotMatch(h.element('statusTitle').textContent, /saved|updated/i);
+  await h.element('editForm').dispatch('submit');
+  assert.equal(h.calls.fetch.length, 2, 'a pending save cannot enqueue another write');
+  ack.resolve(response(payload)); await saving;
+  assert.equal(h.element('editDialog').hidden, true);
+  assert.match(h.element('statusTitle').textContent, /saved|updated/i);
+});
+
+test('invalid edit values never issue a network request', async () => {
+  const h = await load({ '9000000001': editableRecord() });
+  await rowAction(h, 1).dispatch('click');
+  for (const values of [{ editName: '' }, { editName: 'Person', editEmail: 'invalid' }, { editEmail: 'valid@example.test', editQuantity: '0' }, { editQuantity: '1', editUtr: 'bad-utr' }]) {
+    editDraft(h, values); await h.element('editForm').dispatch('submit');
+    assert.equal(h.calls.fetch.length, 0);
+    assert.equal(h.element('editDialog').hidden, false);
+    assert.ok(h.element('editError').textContent);
   }
 });
 
-test('auth service failure invalidates a pending admin check before it can unlock data', async () => {
-  const access = deferred(); const h = harness({ access: () => access.promise });
-  const checking = h.user(organiser); await flush();
-  h.failAuth();
-  access.resolve(snap(true)); await checking;
-  assert.equal(h.calls.on.length, 0, 'stale role acknowledgement cannot recover from an auth failure');
-  assert.equal(h.element('roster').hidden, true);
-  assert.equal(h.element('rows').children.length, 0);
-  assert.equal(h.element('statusTitle').textContent, 'Sign-in unavailable');
-  assert.equal(h.element('accountId').textContent, '');
-  assert.equal(h.element('accountEmail').textContent, '');
-  assert.equal(h.element('loginPanel').hidden, false);
+test('unrelated realtime updates do not discard an edit draft or delete confirmation', async () => {
+  const original = editableRecord(); const h = await load({ '9000000001': original });
+  await rowAction(h, 1).dispatch('click'); h.element('editName').value = 'Unsaved draft';
+  h.emit({ '9000000001': original, another: record(2) });
+  assert.equal(h.element('editDialog').hidden, false);
+  assert.equal(h.element('editName').value, 'Unsaved draft');
+  await h.element('cancelEdit').dispatch('click');
+  const lastRow = h.element('rows').children.at(-1); await lastRow.children[5].querySelectorAll('button')[2].dispatch('click');
+  h.emit({ '9000000001': original, another: record(3) });
+  assert.equal(h.element('deleteDialog').hidden, false);
+  assert.equal(h.calls.fetch.length, 0);
 });
+
+for (const action of ['edit', 'delete']) {
+  test(`${action} refuses stale or missing registrations before a write`, async () => {
+    const original = editableRecord();
+    for (const current of [null, { ...original, fullName: 'Changed elsewhere' }]) {
+      const h = await load({ '9000000001': original }, { fetch: () => response(current) });
+      await rowAction(h, action === 'edit' ? 1 : 2).dispatch('click');
+      await h.element(action === 'edit' ? 'editForm' : 'deleteConfirm').dispatch(action === 'edit' ? 'submit' : 'click');
+      assert.equal(h.calls.fetch.length, 1);
+      assert.match(h.element(action === 'edit' ? 'editError' : 'deleteError').textContent, /changed|removed|deleted|longer|refresh/i);
+    }
+  });
+
+  test(`${action} reports permission denial and a conditional write conflict without false success`, async () => {
+    const original = editableRecord();
+    for (const status of [401, 403, 412]) {
+      const h = await load({ '9000000001': original }, { fetch: (url, request) => request.method === 'GET' ? response(original) : response({ error: 'Rejected' }, status) });
+      await rowAction(h, action === 'edit' ? 1 : 2).dispatch('click');
+      await h.element(action === 'edit' ? 'editForm' : 'deleteConfirm').dispatch(action === 'edit' ? 'submit' : 'click');
+      assert.equal(h.calls.fetch.length, 2);
+      assert.equal(h.element(action === 'edit' ? 'editDialog' : 'deleteDialog').hidden, false);
+      assert.ok(h.element(action === 'edit' ? 'editError' : 'deleteError').textContent);
+      assert.equal(h.element(action === 'edit' ? 'saveEdit' : 'deleteConfirm').disabled, false);
+      assert.doesNotMatch(h.element('statusTitle').textContent, /saved|updated|deleted/i);
+    }
+  });
+
+  test(`${action} times out stalled requests and treats an aborted write as unconfirmed`, async () => {
+    const original = editableRecord(); let signal;
+    const h = await load({ '9000000001': original }, { fetch: (url, request) => {
+      if (request.method === 'GET') return response(original);
+      signal = request.signal;
+      return new Promise((resolve, reject) => request.signal.addEventListener('abort', () => reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }))));
+    } });
+    await rowAction(h, action === 'edit' ? 1 : 2).dispatch('click');
+    const pending = h.element(action === 'edit' ? 'editForm' : 'deleteConfirm').dispatch(action === 'edit' ? 'submit' : 'click');
+    await flush(); await h.expire(); await pending;
+    assert.equal(signal.aborted, true);
+    assert.match(h.element(action === 'edit' ? 'editError' : 'deleteError').textContent, /confirm|refresh|timed out|check/i);
+    assert.equal(h.element(action === 'edit' ? 'editDialog' : 'deleteDialog').hidden, false);
+    assert.equal(h.calls.fetch.length, 2);
+  });
+}
+
+test('confirmed delete waits for acknowledgement and targets only the selected registration', async () => {
+  const original = editableRecord(); const ack = deferred();
+  const h = await load({ '9000000001': original }, { fetch: (url, request) => request.method === 'DELETE' ? ack.promise : response(original) });
+  await rowAction(h, 2).dispatch('click');
+  const pending = h.element('deleteConfirm').dispatch('click'); await flush();
+  assert.equal(h.calls.fetch.length, 2);
+  const write = h.calls.fetch[1];
+  assert.equal(write.request.method, 'DELETE'); assert.equal(write.request.headers['if-match'], '"record-v1"');
+  assert.equal(new URL(write.url).pathname, '/registrations/9000000001.json');
+  assert.equal(h.element('deleteDialog').hidden, false); assert.equal(h.element('deleteConfirm').disabled, true);
+  await h.element('deleteConfirm').dispatch('click'); assert.equal(h.calls.fetch.length, 2);
+  assert.doesNotMatch(h.element('statusTitle').textContent, /deleted/i);
+  ack.resolve(response(null)); await pending;
+  assert.equal(h.element('deleteDialog').hidden, true);
+  assert.match(h.element('statusTitle').textContent, /deleted/i);
+  assert.ok(h.calls.fetch.every(call => call.url.startsWith('https://knock-bafe3-default-rtdb.firebaseio.com/registrations/')), 'no screenshot storage calls are made');
+});
+
+test('a missing ETag prevents writes and stable key ordering does not create a false conflict', async () => {
+  const original = editableRecord(); const reversed = Object.fromEntries(Object.entries(original).reverse());
+  const h = await load({ '9000000001': original }, { fetch: () => response(reversed, 200, null) });
+  await rowAction(h, 1).dispatch('click'); await h.element('editForm').dispatch('submit');
+  assert.equal(h.calls.fetch.length, 1); assert.ok(h.element('editError').textContent);
+  assert.equal(h.model.sameRecord(original, reversed), true);
+});
+
+for (const action of ['edit', 'delete']) {
+  test(`${action} acknowledgement cannot overwrite a newer realtime record`, async () => {
+    const original = editableRecord(); const ack = deferred();
+    const h = await load({ '9000000001': original }, { fetch: (url, request) => request.method === 'GET' ? response(original) : ack.promise });
+    await rowAction(h, action === 'edit' ? 1 : 2).dispatch('click');
+    if (action === 'edit') editDraft(h, { editName: 'This write' });
+    const pending = h.element(action === 'edit' ? 'editForm' : 'deleteConfirm').dispatch(action === 'edit' ? 'submit' : 'click'); await flush();
+    const newer = { ...original, fullName: 'Newer server record' };
+    h.emit({ '9000000001': newer });
+    ack.resolve(response(action === 'delete' ? null : JSON.parse(h.calls.fetch[1].request.body))); await pending;
+    assert.deepEqual(rowNames(h), ['Newer server record']);
+  });
+
+  test(`${action} response-body timeout blocks another attempt and ignores a late success`, async () => {
+    const original = editableRecord(); const body = deferred();
+    const h = await load({ '9000000001': original }, { fetch: (url, request) => request.method === 'GET' ? response(original) : { ...response(null), json: () => body.promise } });
+    await rowAction(h, action === 'edit' ? 1 : 2).dispatch('click');
+    const pending = h.element(action === 'edit' ? 'editForm' : 'deleteConfirm').dispatch(action === 'edit' ? 'submit' : 'click'); await flush();
+    await h.expire(); await pending;
+    assert.equal(h.element(action === 'edit' ? 'saveEdit' : 'deleteConfirm').disabled, true);
+    assert.equal(h.element(action === 'edit' ? 'cancelEdit' : 'cancelDelete').disabled, false);
+    body.resolve(action === 'delete' ? null : JSON.parse(h.calls.fetch[1].request.body)); await flush();
+    assert.doesNotMatch(h.element('statusTitle').textContent, /saved|deleted/i);
+    assert.equal(h.element(action === 'edit' ? 'editDialog' : 'deleteDialog').hidden, false);
+  });
+}

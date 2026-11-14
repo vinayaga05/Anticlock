@@ -1,3 +1,14 @@
+import { identityProfileType, type PublisherIdentityLike, type PublisherProfileType } from '@/shared/publishing/publisherSelection';
+
+/** A business entry point may not silently publish through another profile. */
+export function matchesClipPublisher(identity: PublisherIdentityLike | null, profileId?: string, profileType?: PublisherProfileType) {
+  return !profileId || Boolean(identity && identity.id === profileId && (!profileType || identityProfileType(identity) === profileType));
+}
+
+export function canRestoreClipPublisherDraft(draftProfileId: string | null, requestedProfileId?: string) {
+  return !requestedProfileId || draftProfileId === requestedProfileId;
+}
+
 export function normalizeHashtags(input: string): string[] {
   const values = input
     .split(/[\s,]+/)

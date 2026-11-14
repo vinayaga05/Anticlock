@@ -40,13 +40,13 @@
 		<string>_http._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>Knock uses your camera to record Clips.</string>
+	<string>Knock uses your camera to take profile photos and record Clips.</string>
 	<key>GMSApiKey</key>
 	<string>AIzaSyClXh2xoeYlmwmndbVUTwqtzyWfcZB24GY</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Knock uses your location so you can drop the business pin where you are.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Knock uses your photo library so you can choose videos and cover images for Clips.</string>
+	<string>Knock uses your photo library to choose profile photos, videos, and cover images for Clips.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Knock uses the microphone for Genie voice input and Clip recordings.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

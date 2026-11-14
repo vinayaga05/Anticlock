@@ -2343,6 +2343,28 @@ PODS:
   - ReactNativeDependencies (0.86.0)
   - ReactNativeIncallManager (4.3.0):
     - React-Core
+  - RNCClipboard (1.16.3):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - RNFBApp (26.4.0):
     - Firebase/CoreOnly (= 12.18.0)
     - hermes-engine
@@ -2894,6 +2916,7 @@ DEPENDENCIES:
   - ReactCommon/turbomodule/core (from `../../../node_modules/react-native/ReactCommon`)
   - ReactNativeDependencies (from `../../../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec`)
   - ReactNativeIncallManager (from `../../../node_modules/react-native-incall-manager`)
+  - "RNCClipboard (from `../../../node_modules/@react-native-clipboard/clipboard`)"
   - "RNFBApp (from `../../../node_modules/@react-native-firebase/app`)"
   - "RNFBMessaging (from `../../../node_modules/@react-native-firebase/messaging`)"
   - RNGestureHandler (from `../../../node_modules/react-native-gesture-handler`)
@@ -3105,6 +3128,8 @@ EXTERNAL SOURCES:
     :podspec: "../../../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec"
   ReactNativeIncallManager:
     :path: "../../../node_modules/react-native-incall-manager"
+  RNCClipboard:
+    :path: "../../../node_modules/@react-native-clipboard/clipboard"
   RNFBApp:
     :path: "../../../node_modules/@react-native-firebase/app"
   RNFBMessaging:
@@ -3235,6 +3260,7 @@ SPEC CHECKSUMS:
   ReactCommon: d5c1bb4427bf51c443de5926aac332c89ddd9363
   ReactNativeDependencies: fa0a54b3f5319ae0e3b9aff32bfee7a424b88e66
   ReactNativeIncallManager: 4e46198f76b162ca8bdff48a4553a479b26b6d12
+  RNCClipboard: 715fa7c6c8366f17d00f05a439ee7488f390fa5f
   RNFBApp: e767823f39a9b587d3c4867bbe064bd78f4d814b
   RNFBMessaging: ac1288b4f6b68390f2ee03460f018d58bea5ca3b
   RNGestureHandler: fb2375bebca8d187e54a854cd4da9f5e0b9d5f81

@@ -1,3 +1,4 @@
+import { navigateToProvider } from '@/shared/navigation/businessNavigation';
 import React, { useMemo } from 'react';
 import { Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -90,11 +91,7 @@ export function ServiceCatalogSearchResults({ query }: { query: string }) {
               key={provider.id}
               provider={provider}
               onPress={() =>
-                navigation.navigate('UniversalDetail', {
-                  entityType: 'provider',
-                  entityId: provider.id,
-                  categoryId: provider.categoryIds[0],
-                })
+                navigateToProvider(navigation, provider.id, provider.categoryIds[0])
               }
             />
           ))}

@@ -443,7 +443,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export function CreateExploreEventScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'CreateExploreEvent'>>();
-  return <ExploreComposeScreen kind="event" challengeId={route.params?.challengeId} itemId={route.params?.itemId} />;
+  return <ExploreComposeScreen
+    kind="event"
+    challengeId={route.params?.challengeId}
+    itemId={route.params?.itemId}
+    publisherProfileId={route.params?.publisherProfileId}
+    publisherProfileType={route.params?.publisherProfileType}
+  />;
 }
 
 export function CreateExploreProductScreen() {

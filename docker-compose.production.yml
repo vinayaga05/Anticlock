@@ -108,7 +108,17 @@ services:
       # GetStream Chat (1:1 messaging) - separate from Cloudflare Stream video
       STREAM_API_KEY: ${STREAM_API_KEY:-}
       STREAM_API_SECRET: ${STREAM_API_SECRET:-}
-      OTP_DEV_WHITELIST: ${OTP_DEV_WHITELIST:-true}
+      # Only real BulkBlaster delivery is allowed in production.
+      SMS_PROVIDER: bulkblaster
+      BULKBLASTER_API_KEY: ${BULKBLASTER_API_KEY:-}
+      BULKBLASTER_BRAND_NAME: ${BULKBLASTER_BRAND_NAME:-Anticlock}
+      BULKBLASTER_SENDER_TYPE: ${BULKBLASTER_SENDER_TYPE:-DASSAM}
+      OTP_HASH_SECRET: ${OTP_HASH_SECRET:-}
+      OTP_DEV_WHITELIST: 'false'
+      OTP_TEST_LOGIN_ENABLED: 'false'
+      TEST_LOGIN_DISABLED: 'true'
+      # The API is not exposed directly; Traefik appends the client IP.
+      OTP_TRUST_PROXY: 'true'
     # Retained only for an intentional MEDIA_STORAGE=local fallback. R2 is the
     # production default so user media normally remains outside the VPS.
     volumes:

@@ -1,0 +1,11 @@
+{
+  "rules": {
+    "registrations": {
+      "$mobile": {
+        ".read": true,
+        ".write": true,
+        ".validate": "newData.hasChildren(['fullName', 'mobile', 'category', 'regId', 'createdAt', 'transactionId', 'screenshotUrl']) && $mobile.matches(/^[0-9]{10}$/) && newData.child('transactionId').isString() && newData.child('transactionId').val().length === 12 && newData.child('screenshotUrl').isString() && newData.child('screenshotUrl').val().length > 8"
+      }
+    }
+  }
+}

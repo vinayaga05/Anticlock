@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { navigateToProfile } from '@/shared/navigation/businessNavigation';
 import {
   Alert,
   Image,
@@ -134,7 +135,7 @@ export function AccountSettingsScreen() {
   const selectProfile = (identity: PublishingIdentity) => setActive(identity);
 
   const openPreview = () =>
-    navigation.navigate('Profile', { profileType: card.type, profileId: card.id });
+    navigateToProfile(navigation, { type: card.type, id: card.id });
 
   const shareProfile = () => {
     Share.share({ message: profileShareMessage(card) }).catch(() => undefined);

@@ -1,5 +1,6 @@
-import { LinkingOptions } from '@react-navigation/native';
+import { getStateFromPath, type LinkingOptions } from '@react-navigation/native';
 import { RootStackParamList } from '@/shared/navigation/types';
+import { normalizeBusinessNavigationState } from './businessNavigation';
 
 /**
  * Deep linking configuration for Knock.
@@ -13,6 +14,7 @@ import { RootStackParamList } from '@/shared/navigation/types';
  */
 
 export const linking: LinkingOptions<RootStackParamList> = {
+  getStateFromPath: (path, options) => normalizeBusinessNavigationState(getStateFromPath(path, options)),
   prefixes: [
     'anticlock://',
     'https://anticlock.online',
@@ -61,6 +63,9 @@ export const linking: LinkingOptions<RootStackParamList> = {
       },
 
       // Profile
+      BusinessProfile: { path: 'business/:providerId', alias: ['provider/:providerId'] },
+      BusinessBooking: 'business/:providerId/book',
+      BusinessManage: 'business/:providerId/manage/:section?',
       Profile: {
         path: 'profile/:userId?',
         parse: {

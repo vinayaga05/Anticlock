@@ -32,7 +32,10 @@ import {
   contentPostComments,
   contentPostLikes,
   contentPosts,
+  mediaAssets,
   mobileUsers,
+  productImages,
+  products,
   providerServiceOfferings,
   providers,
 } from "../db/schema.js";
@@ -57,6 +60,7 @@ import {
 import { canProfileViewContent, getProfilePrivacy, hasAcceptedFollow, profileConnectionCounts, profileFollowService, profilesAreBlocked } from "../social/ProfileFollowService.js";
 import { exceedsClipDuration, musicAttributionFromEdit } from "./musicTracks.js";
 import { introVideoMediaIdFromPublicProfile } from "./providerIntroClip.js";
+import { resolveBusinessClipCtas, type EligibleClipProductLink } from "./clipBusinessCta.js";
 
 export { introVideoMediaIdFromPublicProfile } from "./providerIntroClip.js";
 
@@ -755,7 +759,10 @@ export async function serializePosts(
   const uniquePublisherRefs = [
     ...new Map(publisherRefs.map(item => [publisherKey(item), item])).values(),
   ];
-  const [publishers, likedRows, relationshipEntries] = await Promise.all([
+  const businessClips = rows.filter(row => row.format === "clip" && row.mediaType === "video" && row.authorProviderId);
+  const providerIds = [...new Set(businessClips.map(row => row.authorProviderId!))];
+  const clipMediaIds = [...new Set(businessClips.flatMap(row => row.mediaIds))];
+  const [publishers, likedRows, relationshipEntries, productLinks] = await Promise.all([
     loadPublishers(publisherRefs),
     db
       .select({ contentPostId: contentPostLikes.contentPostId })
@@ -775,7 +782,22 @@ export async function serializePosts(
         await profileFollowService.relationship(viewerProfile, publisherRef),
       ] as const),
     ),
+    providerIds.length && clipMediaIds.length
+      ? db.select({ productId: products.id, providerId: products.authorProviderId, mediaId: productImages.mediaAssetId })
+          .from(productImages)
+          .innerJoin(products, eq(productImages.productId, products.id))
+          .innerJoin(mediaAssets, eq(productImages.mediaAssetId, mediaAssets.id))
+          .where(and(
+            inArray(products.authorProviderId, providerIds),
+            inArray(productImages.mediaAssetId, clipMediaIds),
+            eq(products.status, "published"), eq(products.reviewStatus, "approved"),
+            eq(products.requestedVisibility, "public"), eq(mediaAssets.kind, "video"),
+            eq(mediaAssets.processingStatus, "ready"), isNull(mediaAssets.deletedAt), isNull(mediaAssets.archivedAt),
+            inArray(mediaAssets.moderationStatus, ["approved", "not_required"]),
+          ))
+      : Promise.resolve([] as EligibleClipProductLink[]),
   ]);
+  const clipCtas = resolveBusinessClipCtas(rows, productLinks);
   const relationships = new Map(relationshipEntries);
   const liked = new Set(likedRows.map((row) => row.contentPostId));
   const items = await Promise.all(
@@ -823,6 +845,7 @@ export async function serializePosts(
         publisher,
         relationship: relationships.get(publisherKey(ref)),
         author: legacyAuthor(publisher),
+        cta: clipCtas.get(row.id) ?? null,
         viewCount: row.viewCount,
         likeCount: row.likeCount,
         commentCount: row.commentCount,

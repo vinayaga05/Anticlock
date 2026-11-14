@@ -5,6 +5,7 @@ import { readStoredSession } from '@/shared/services/auth/authService';
 import type { ApiContentPost, ApiContentPostsResponse } from '@/shared/publishing/contentPostMappers';
 import type { PublisherProfileType } from '@/shared/publishing/publisherSelection';
 import type { ReelItem } from '@/shared/types';
+import type { ReelCta } from '@anticlock/contracts';
 
 export type ApiServiceTree = {
   id: string;
@@ -114,6 +115,7 @@ export type ApiContentClipFeedItem = {
   providerId?: string | null;
   businessId?: string | null;
   serviceCategoryId?: string | null;
+  cta?: ReelCta | null;
   publisher: {
     id: string;
     type: PublisherProfileType;
@@ -166,24 +168,28 @@ function ensureAuthToken() {
   }
 }
 
-export function mapApiReelToItem(r: ApiReelFeedItem): ReelItem {
-  const bookTarget = r.cta
+function mapClipCtaToBookTarget(cta: ReelCta | null | undefined): ReelItem['bookTarget'] {
+  return cta
     ? {
         entityType:
-          r.cta.entityType === 'service_category'
+          cta.entityType === 'service_category'
             ? undefined
-            : (r.cta.entityType as 'provider' | 'event' | 'course' | 'product'),
-        entityId: r.cta.entityId,
+            : (cta.entityType as 'provider' | 'event' | 'course' | 'product'),
+        entityId: cta.entityId,
         serviceCategoryId:
-          r.cta.entityType === 'service_category' ? r.cta.entityId : undefined,
+          cta.entityType === 'service_category' ? cta.entityId : undefined,
         cta:
-          r.cta.entityType === 'product'
+          cta.entityType === 'product'
             ? ('cart' as const)
-            : r.cta.entityType === 'event'
+            : cta.entityType === 'event'
             ? ('trip' as const)
             : ('book' as const),
       }
     : undefined;
+}
+
+export function mapApiReelToItem(r: ApiReelFeedItem): ReelItem {
+  const bookTarget = mapClipCtaToBookTarget(r.cta);
 
   return {
     id: r.id,
@@ -339,6 +345,7 @@ export function mapApiContentClipToItem(
     commentCount: nonNegativeNumber(item.commentCount),
     liked: item.viewerHasLiked === true,
     viewerCanManage: item.viewerCanManage === true,
+    bookTarget: mapClipCtaToBookTarget(item.cta),
   };
 }
 
@@ -459,6 +466,7 @@ export function mapApiProfileClipToItem(item: ApiContentPost): ReelItem | null {
     commentCount: item.commentCount ?? 0,
     liked: item.viewerHasLiked === true,
     viewerCanManage: item.viewerCanManage === true,
+    bookTarget: mapClipCtaToBookTarget(item.cta),
   };
 }
 

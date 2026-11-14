@@ -1,9 +1,28 @@
 import {
   canCancelUpload,
+  canRestoreClipPublisherDraft,
+  matchesClipPublisher,
   normalizeHashtags,
   normalizeTaggedUserIds,
   uploadProgressPercent,
 } from './clipComposerUtils';
+
+describe('business Clip entry identity', () => {
+  const business = { type: 'provider' as const, id: 'business-1', name: 'Studio', avatarUrl: null };
+  const personal = { type: 'user' as const, id: 'user-1', name: 'Owner', avatarUrl: null };
+  it('keeps explicit business posts on that business even when personal is active or ownership disappears', () => {
+    expect(matchesClipPublisher(business, 'business-1', 'business')).toBe(true);
+    expect(matchesClipPublisher(personal, 'business-1', 'business')).toBe(false);
+    expect(matchesClipPublisher(null, 'business-1', 'business')).toBe(false);
+    expect(matchesClipPublisher({ ...personal, id: 'business-1' }, 'business-1', 'business')).toBe(false);
+  });
+  it('does not restore another profile’s saved draft over an explicit business entry', () => {
+    expect(canRestoreClipPublisherDraft('user-1', 'business-1')).toBe(false);
+    expect(canRestoreClipPublisherDraft('business-1', 'business-1')).toBe(true);
+    expect(canRestoreClipPublisherDraft('user-1')).toBe(true);
+    expect(matchesClipPublisher(personal)).toBe(true);
+  });
+});
 
 describe('clip composer metadata', () => {
   it('normalizes and deduplicates hashtags', () => {

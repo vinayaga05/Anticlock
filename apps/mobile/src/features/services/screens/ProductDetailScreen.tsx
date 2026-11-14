@@ -1,4 +1,5 @@
 import React from 'react';
+import { navigateToProfile } from '@/shared/navigation/businessNavigation';
 import { ActivityIndicator, Alert, Image, StyleSheet, Text, View } from 'react-native';
 import Video from 'react-native-video';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
@@ -140,10 +141,7 @@ export function ProductDetailScreen() {
             title="Contact seller"
             variant="secondary"
             icon="messages"
-            onPress={() => navigation.navigate('Profile', {
-              profileId: product.publisherProfileId,
-              profileType: product.publisherProfileType,
-            })}
+            onPress={() => navigateToProfile(navigation, { id: product.publisherProfileId!, type: product.publisherProfileType! })}
           />
         ) : null}
       </View>

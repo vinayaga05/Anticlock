@@ -156,7 +156,7 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
     const { profileFollowRoutes } = await import("./profile-follows.js");
     const { moderationAdminRoutes } = await import("./moderation.js");
     const { contentSafetyRoutes } = await import("./contentSafety.js");
-    ({ signToken } = await import("../lib/auth.js"));
+    ({ signToken } = await import('../testutils/phoneBoundToken.js'));
     const client = await import("../db/client.js");
     db = client.db;
     sqlClient = client.sql;

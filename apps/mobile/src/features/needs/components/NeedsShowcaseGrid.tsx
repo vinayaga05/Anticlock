@@ -91,7 +91,7 @@ function NeedsShowcaseCardView({ card }: { card: NeedsShowcaseCard }) {
   return (
     <PressableScale
       accessibilityLabel={card.title}
-      onPress={() => navigation.navigate('ServiceTree', { treeId: card.treeId })}
+      onPress={() => card.treeId === 'fitness' ? navigation.navigate('FitnessHome') : navigation.navigate('ServiceTree', { treeId: card.treeId })}
       style={[
         styles.card,
         {

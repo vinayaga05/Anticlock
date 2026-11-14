@@ -20,3 +20,7 @@ export * from './trips.js';
 export * from './explore.js';
 export * from './complaints.js';
 export * from './business-profile.js';
+export * from './fitness.js';
+export * from './fitness-media.js';
+
+export * from './fitness-experts.js';

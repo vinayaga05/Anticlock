@@ -263,6 +263,13 @@ export const CATEGORY_PROVIDER_FORM_SCHEMAS: ProviderFormSchemaBody[] = [
     { key: 'medical.homeVisit', type: 'boolean', label: 'Home nursing available', sectionId: 'medical' },
     { key: 'medical.shiftRate', type: 'currency', label: 'Shift rate from', sectionId: 'medical' },
   ], ['individual']),
+  ...(['wellness.nutrition_clinical', 'wellness.nutrition_sports'] as const).map(categoryId => categorySchema(categoryId, [{ id: 'nutrition', title: 'Nutrition professional', sortOrder: 10 }], [
+    { key: 'nutrition.qualification', type: 'text', label: 'Professional nutrition qualification', required: true, sectionId: 'nutrition', validation: { minLength: 3, maxLength: 500 } },
+    { key: 'nutrition.qualificationDocument', type: 'document', label: 'Qualification or professional certification evidence', required: true, sectionId: 'nutrition', helpText: 'Private evidence for Admin review. This document is never shown on your public profile.' },
+    { key: 'nutrition.experienceYears', type: 'number', label: 'Years of nutrition practice', required: true, sectionId: 'nutrition', validation: { min: 0, max: 70 } },
+    { key: 'nutrition.speciality', type: 'text', label: 'Nutrition speciality', sectionId: 'nutrition', validation: { maxLength: 150 } },
+    { key: 'nutrition.registrationNumber', type: 'text', label: 'Professional registration (if applicable)', sectionId: 'nutrition', validation: { maxLength: 100 } },
+  ], ['individual'])),
   categorySchema('fitness.gym', [{ id: 'gym', title: 'Gym details', sortOrder: 10 }], [
     { key: 'gym.equipment', type: 'textarea', label: 'Equipment & facilities', sectionId: 'gym' },
     { key: 'gym.trainersCount', type: 'number', label: 'Number of trainers', sectionId: 'gym' },

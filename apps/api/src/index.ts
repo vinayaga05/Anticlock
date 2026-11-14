@@ -43,6 +43,13 @@ import { coursesMobileRoutes, coursesAdminRoutes } from './routes/courses.js';
 import { eventRegistrationRoutes } from './routes/event-registration.js';
 import { complaintsMobileRoutes } from './routes/complaints.js';
 import { businessProfileRoutes } from './routes/business-profiles.js';
+import { fitnessMobileRoutes } from './routes/fitness.js';
+import { fitnessExpertRoutes } from './routes/fitness-experts.js';
+import { fitnessMediaRoutes } from './routes/fitness-media.js';
+import { fitnessService } from './fitness/FitnessService.js';
+import { fitnessMediaService, startFitnessMediaCleanupJob } from './fitness/FitnessMediaService.js';
+import { assertFitnessPrivacyConfigured } from './fitness/privacy.js';
+import { startFitnessReminderJob } from './fitness/FitnessReminderService.js';
 import { startAssistantLifecycleJob } from './assistant/PrivacyService.js';
 import { redisHealthCheck } from './lib/redis.js';
 import {
@@ -99,10 +106,12 @@ function corsOrigins() {
 }
 
 assertProductionConfiguration();
+logTestLoginWarning();
+assertFitnessPrivacyConfigured();
+fitnessService.setMediaPurger((userId, tx) => fitnessMediaService.purge(userId, tx));
 
 const aiConfig = loadAiProviderConfig();
 logAiProviderStartup(aiConfig);
-logTestLoginWarning();
 
 const app = new Hono();
 const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
@@ -187,6 +196,9 @@ app.route('/v1/explore', exploreMobileRoutes);
 app.route('/v1/event-registration', eventRegistrationRoutes);
 app.route('/v1/complaints', complaintsMobileRoutes);
 app.route('/v1/business-profiles', businessProfileRoutes);
+app.route('/v1/fitness', fitnessMediaRoutes);
+app.route('/v1/fitness', fitnessExpertRoutes);
+app.route('/v1/fitness', fitnessMobileRoutes);
 app.route('/v1/courses', coursesMobileRoutes);
 app.route('/admin', adminRoutes);
 app.route('/admin/courses', coursesAdminRoutes);
@@ -214,6 +226,8 @@ const server = serve({ fetch: app.fetch, port, hostname }, info => {
   console.log(`Knock API listening on http://${hostname}:${info.port}`);
   startAssistantLifecycleJob();
   startBookingReminderJob();
+  startFitnessReminderJob();
+  startFitnessMediaCleanupJob();
   void mediaService.ensureStorageReady();
 });
 injectWebSocket(server);

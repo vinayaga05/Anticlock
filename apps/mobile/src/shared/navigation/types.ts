@@ -44,6 +44,18 @@ export type RootStackParamList = {
   LabDetail: { labId: string; testId?: string };
   PhysioHub: undefined;
   FitnessFeed: undefined;
+  FitnessHome: undefined;
+  FitnessAssessment: undefined;
+  FitnessPlan: { planId?: string; version?: number } | undefined;
+  FitnessWorkout: { workoutId?: string; planId?: string; day?: number; date?: string } | undefined;
+  FitnessMeals: { date?: string; logId?: string } | undefined;
+  FitnessLog: { kind: 'water' | 'weight' | 'sleep' | 'steps' | 'habit'; date?: string; logId?: string };
+  FitnessProgress: { from?: string; to?: string } | undefined;
+  FitnessPrivacy: undefined;
+  FitnessHistory: undefined;
+  FitnessExperts: { kind?: 'trainer' | 'nutritionist' } | undefined;
+  FitnessWorkspace: { clientId?: string; providerId?: string; resourceId?: string } | undefined;
+  FitnessSharing: { providerId?: string; providerName?: string; resourceType?: 'profile' | 'workout' | 'meal' | 'progress' | 'media'; resourceId?: string } | undefined;
   ClassDetail: { classId: string };
   Schedule: {
     kind: 'doctor' | 'lab' | 'fitness' | 'appointment' | 'class';

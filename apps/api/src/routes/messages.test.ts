@@ -132,3 +132,11 @@ describe('Messages Routes', () => {
     }
   });
 });
+
+// Auth verification opens a real pool even when the route service is mocked.
+// Register last, so this file's fixture cleanup finishes before the pool closes.
+import { after as afterDatabaseTestFile } from 'node:test';
+afterDatabaseTestFile(async () => {
+  const { sql: authTestSql } = await import('../db/client.js');
+  await authTestSql.end({ timeout: 5 });
+});

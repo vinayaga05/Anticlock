@@ -1968,6 +1968,45 @@ async function migrate() {
     created_at timestamptz NOT NULL DEFAULT now(), CONSTRAINT business_profile_reports_user_provider_uidx UNIQUE(reporter_id,provider_id)
   )`;
 
+  // Fitness payloads are encrypted; public tables carry only ownership and operational metadata.
+  await sql`CREATE TABLE IF NOT EXISTS fitness_profiles (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL UNIQUE REFERENCES mobile_users(id) ON DELETE CASCADE, status text NOT NULL DEFAULT 'draft', encrypted_data text NOT NULL, completed_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())`;
+  for (const table of ['fitness_goals','workout_logs','meal_logs','water_logs','habit_logs','sleep_logs','step_logs','body_measurements']) {
+    await sql.unsafe(`CREATE TABLE IF NOT EXISTS ${table} (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE, date text NOT NULL CHECK (date ~ '^\\d{4}-\\d{2}-\\d{2}$'), encrypted_data text NOT NULL, client_request_id uuid, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())`);
+    await sql.unsafe(`CREATE INDEX IF NOT EXISTS ${table}_user_date_idx ON ${table}(user_id,date)`);
+    await sql.unsafe(`CREATE UNIQUE INDEX IF NOT EXISTS ${table}_user_request_uidx ON ${table}(user_id,client_request_id)`);
+  }
+  await sql`CREATE TABLE IF NOT EXISTS exercise_logs (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE, workout_log_id uuid NOT NULL REFERENCES workout_logs(id) ON DELETE CASCADE, encrypted_data text NOT NULL, created_at timestamptz NOT NULL DEFAULT now())`;
+  await sql`CREATE INDEX IF NOT EXISTS exercise_logs_workout_idx ON exercise_logs(workout_log_id)`;
+  await sql`CREATE TABLE IF NOT EXISTS food_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid REFERENCES mobile_users(id) ON DELETE CASCADE, source text NOT NULL DEFAULT 'custom', encrypted_data text NOT NULL, client_request_id uuid, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())`;
+  await sql`CREATE INDEX IF NOT EXISTS food_items_user_idx ON food_items(user_id)`;
+  await sql`CREATE TABLE IF NOT EXISTS fitness_recipes (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE, encrypted_data text NOT NULL, client_request_id uuid, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())`;
+  await sql`CREATE INDEX IF NOT EXISTS fitness_recipes_user_idx ON fitness_recipes(user_id)`;
+  await sql`ALTER TABLE food_items ADD COLUMN IF NOT EXISTS client_request_id uuid`;
+  await sql`ALTER TABLE fitness_recipes ADD COLUMN IF NOT EXISTS client_request_id uuid`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS food_items_user_request_uidx ON food_items(user_id,client_request_id)`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS fitness_recipes_user_request_uidx ON fitness_recipes(user_id,client_request_id)`;
+  await sql`CREATE TABLE IF NOT EXISTS workout_templates (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL, content jsonb NOT NULL, status text NOT NULL DEFAULT 'published', created_at timestamptz NOT NULL DEFAULT now())`;
+  await sql`CREATE TABLE IF NOT EXISTS fitness_plans (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE, provider_id uuid REFERENCES providers(id) ON DELETE SET NULL, title text NOT NULL, status text NOT NULL DEFAULT 'active', current_version integer NOT NULL DEFAULT 1, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())`;
+  await sql`CREATE INDEX IF NOT EXISTS fitness_plans_user_idx ON fitness_plans(user_id)`;
+  await sql`CREATE TABLE IF NOT EXISTS fitness_plan_versions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), plan_id uuid NOT NULL REFERENCES fitness_plans(id) ON DELETE CASCADE, version integer NOT NULL, author_user_id uuid REFERENCES mobile_users(id) ON DELETE SET NULL, author_provider_id uuid REFERENCES providers(id) ON DELETE SET NULL, encrypted_data text NOT NULL, created_at timestamptz NOT NULL DEFAULT now())`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS fitness_plan_versions_revision_uidx ON fitness_plan_versions(plan_id,version)`;
+  await sql`CREATE TABLE IF NOT EXISTS health_consents (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE, provider_id uuid NOT NULL REFERENCES providers(id) ON DELETE CASCADE, scopes jsonb NOT NULL DEFAULT '[]', resource_ids jsonb NOT NULL DEFAULT '[]', status text NOT NULL DEFAULT 'active', granted_at timestamptz NOT NULL DEFAULT now(), revoked_at timestamptz, updated_at timestamptz NOT NULL DEFAULT now())`;
+  await sql`CREATE INDEX IF NOT EXISTS health_consents_user_provider_idx ON health_consents(user_id,provider_id)`;
+  await sql`CREATE TABLE IF NOT EXISTS provider_client_relationships (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE, provider_id uuid NOT NULL REFERENCES providers(id) ON DELETE CASCADE, booking_id uuid REFERENCES bookings(id) ON DELETE CASCADE, status text NOT NULL DEFAULT 'active', created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())`;
+  await sql`ALTER TABLE provider_client_relationships DROP CONSTRAINT IF EXISTS provider_client_relationships_booking_id_fkey`;
+  await sql`ALTER TABLE provider_client_relationships ADD CONSTRAINT provider_client_relationships_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS provider_client_relationships_pair_uidx ON provider_client_relationships(user_id,provider_id)`;
+  await sql`CREATE TABLE IF NOT EXISTS fitness_consultations (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE, provider_id uuid NOT NULL REFERENCES providers(id) ON DELETE CASCADE, booking_id uuid UNIQUE REFERENCES bookings(id) ON DELETE SET NULL, status text NOT NULL DEFAULT 'scheduled', starts_at timestamptz, ends_at timestamptz, mode text NOT NULL DEFAULT 'audio', encrypted_data text, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())`;
+  await sql`CREATE INDEX IF NOT EXISTS fitness_consultations_user_idx ON fitness_consultations(user_id)`;
+  await sql`CREATE TABLE IF NOT EXISTS progress_media (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE, purpose text NOT NULL, kind text NOT NULL, storage_provider text NOT NULL, storage_key text NOT NULL, bucket text NOT NULL, content_type text NOT NULL, byte_size integer NOT NULL, client_request_id uuid, encrypted_data text, status text NOT NULL DEFAULT 'ready', created_at timestamptz NOT NULL DEFAULT now(), deleted_at timestamptz)`;
+  await sql`CREATE INDEX IF NOT EXISTS progress_media_user_idx ON progress_media(user_id)`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS progress_media_user_request_uidx ON progress_media(user_id,client_request_id)`;
+
+  await sql`ALTER TABLE fitness_profiles ADD COLUMN IF NOT EXISTS reminders_enabled boolean NOT NULL DEFAULT false`;
+  await sql`CREATE TABLE IF NOT EXISTS fitness_catalog_limits (id text PRIMARY KEY, count integer NOT NULL, reset_at timestamptz NOT NULL)`;
+
+  await sql`UPDATE fitness_plans SET title = 'Fitness plan' WHERE title <> 'Fitness plan'`;
+
   console.log("Migrations applied.");
   await sql.end({ timeout: 5 });
 }

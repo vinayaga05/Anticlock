@@ -69,7 +69,7 @@ describe('business Clip Buy / Book across mobile surfaces (PostgreSQL integratio
   }
 
   before(async () => {
-    const { Hono } = await import('hono'); const { contentMobileRoutes } = await import('./content.js'); const { signToken } = await import('../lib/auth.js');
+    const { Hono } = await import('hono'); const { contentMobileRoutes } = await import('./content.js'); const { signToken } = await import('../testutils/phoneBoundToken.js');
     const client = await import('../db/client.js'); db = client.db; sqlClient = client.sql; schema = await import('../db/schema.js');
     app = new Hono().route('/v1/content', contentMobileRoutes);
     await db.insert(schema.mobileUsers).values([{ id: owner, phone: `clip-owner-${run}`, displayName: 'Business owner' }, { id: viewer, phone: `clip-viewer-${run}`, displayName: 'Unrelated viewer' }, { id: otherOwner, phone: `clip-other-${run}`, displayName: 'Other owner' }]);

@@ -1,4 +1,4 @@
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import { bodyLimit } from 'hono/body-limit';
 import bcrypt from 'bcryptjs';
@@ -6,17 +6,17 @@ import {
   AdminLoginRequestSchema,
   MobileOtpSendRequestSchema,
   MobileOtpVerifyRequestSchema,
+  MobileTokenRequestSchema,
   UpdateMobileProfileRequestSchema,
   type Role,
 } from '@anticlock/contracts';
 import { db } from '../db/client.js';
-import { mobileUsers, userRoles, users } from '../db/schema.js';
-import { signToken } from '../lib/auth.js';
+import { mobileDevices, mobileUsers, userRoles, users } from '../db/schema.js';
+import { signToken, mobileAccountIdForSubject } from '../lib/auth.js';
 import { writeAudit } from '../lib/audit.js';
-import { createOtpProvider, normalizePhone, OtpError, type OtpProvider, type OtpContext } from '../lib/otp/index.js';
-import { getConnInfo } from '@hono/node-server/conninfo';
-import { isIP } from 'node:net';
-import { createMobileSession, revokeMobileSession } from '../lib/mobileSessions.js';
+import { createOtpProvider, normalizePhone, OtpError, type OtpProvider } from '../lib/otp/index.js';
+import { fitnessService } from '../fitness/FitnessService.js';
+import { fitnessHttpError } from '../fitness/fitnessHttpError.js';
 import { requireAuth, type AppEnv } from '../middleware/auth.js';
 import { getMobileUserContext } from '../lib/mobileUserContext.js';
 import { ApiError, httpError } from '../lib/httpError.js';
@@ -34,9 +34,9 @@ function displayNameFromPhone(phone: string) {
   return `User ${local}`;
 }
 
-async function issueMobileSession(user: typeof mobileUsers.$inferSelect, context: OtpContext) {
+async function issueMobileSession(user: typeof mobileUsers.$inferSelect) {
   const { roles, providerId } = await getMobileUserContext(user.id);
-  const { id: sid, expiresAt } = await createMobileSession(user.id, context);
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
   const token = await signToken(
     {
       sub: user.id,
@@ -47,7 +47,6 @@ async function issueMobileSession(user: typeof mobileUsers.$inferSelect, context
       kind: 'mobile',
       mobileRoles: roles,
       providerId,
-      sid,
     },
     '30d',
   );
@@ -257,75 +256,95 @@ authRoutes.get('/admin/me', requireAuth, async c => {
   });
 });
 
-authRoutes.post('/mobile/token', c => {
-  // A caller-selected device ID must never become a verified user identity.
-  return c.json({ error: { code: 'otp_required', message: 'Sign in with your mobile number to create a session.' } }, 410);
-});
-
-function otpContext(c: Context<AppEnv>, deviceId?: string): OtpContext {
-  let ip: string | undefined;
-  try { ip = getConnInfo(c).remote.address; } catch { /* no socket in in-process tests */ }
-  if (process.env.OTP_TRUST_PROXY === 'true') {
-    // The production API is private behind Traefik. Use its appended address,
-    // never the caller-controlled first entry in a forwarded chain.
-    const forwarded = c.req.header('x-forwarded-for')?.split(',').at(-1)?.trim();
-    if (forwarded && isIP(forwarded)) ip = forwarded;
+authRoutes.post('/mobile/token', async c => {
+  const body = MobileTokenRequestSchema.parse(await c.req.json());
+  // Device sessions stay guests; a caller-selected ID cannot impersonate a
+  // verified mobile account that already owns private information.
+  const accountId = mobileAccountIdForSubject(body.deviceId);
+  if (accountId) {
+    const [account] = await db.select({ id: mobileUsers.id }).from(mobileUsers).where(eq(mobileUsers.id, accountId)).limit(1);
+    if (account) return c.json({ error: { code: 'otp_required', message: 'Sign in with your mobile number to access this account.' } }, 410);
   }
-  return { ip: ip && isIP(ip) ? ip : undefined, deviceId };
-}
+  await db
+    .insert(mobileDevices)
+    .values({
+      id: body.deviceId,
+      displayName: body.displayName ?? 'Guest',
+    })
+    .onConflictDoUpdate({
+      target: mobileDevices.id,
+      set: { displayName: body.displayName ?? 'Guest' },
+    });
 
-function otpErrorResponse(c: Context<AppEnv>, error: unknown) {
-  if (!(error instanceof OtpError)) throw error;
-  const status = ['rate_limit_exceeded', 'max_attempts_exceeded', 'otp_locked', 'resend_cooldown'].includes(error.code) ? 429
-    : ['invalid_phone', 'invalid_otp', 'otp_expired', 'otp_invalid', 'otp_used'].includes(error.code) ? 400
-    : error.code === 'phone_not_allowed' ? 403
-    : 503;
-  const retryAfterSeconds = error.retryAfterSeconds;
-  if (retryAfterSeconds) c.header('Retry-After', String(retryAfterSeconds));
-  return c.json({ error: { code: error.code, message: error.message, ...(retryAfterSeconds ? { retryAfterSeconds } : {}) } }, status);
-}
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const token = await signToken(
+    {
+      sub: body.deviceId,
+      email: '',
+      name: body.displayName ?? 'Guest',
+      roles: [],
+      permissions: ['catalog.read', 'cms.read'],
+      kind: 'mobile',
+    },
+    '30d',
+  );
+
+  return c.json({
+    userId: body.deviceId,
+    displayName: body.displayName ?? 'Guest',
+    token,
+    expiresAt,
+  });
+});
 
 authRoutes.post('/mobile/otp/send', async c => {
   const body = MobileOtpSendRequestSchema.parse(await c.req.json());
   try {
-    const result = await otpProvider.sendOtp(body.phone, otpContext(c, body.deviceId));
+    const result = await otpProvider.sendOtp(body.phone);
     return c.json(result);
   } catch (err) {
-    return otpErrorResponse(c, err);
+    if (err instanceof OtpError) {
+      const statusCode =
+        err.code === 'rate_limit_exceeded' ? 429 :
+        err.code === 'invalid_phone' ? 400 :
+        err.code === 'phone_not_allowed' ? 403 :
+        503;
+      return c.json({ error: { code: err.code, message: err.message } }, statusCode);
+    }
+    throw err;
   }
 });
 
 authRoutes.post('/mobile/otp/verify', async c => {
   const body = MobileOtpVerifyRequestSchema.parse(await c.req.json());
   try {
-    const context = otpContext(c, body.deviceId);
-    const ok = await otpProvider.verifyOtp(body.phone, body.code, body.requestId, context);
+    const ok = await otpProvider.verifyOtp(body.phone, body.code, body.requestId);
     if (!ok) {
       return c.json(
         { error: { code: 'invalid_otp', message: 'Invalid or expired OTP' } },
-        400,
+        401,
       );
     }
 
     const normalized = normalizePhone(body.phone);
 
-    let [user] = await db
+    let [user] = await db.select().from(mobileUsers).where(eq(mobileUsers.phone, normalized));
+    if (!user) {
+      [user] = await db
         .insert(mobileUsers)
         .values({
           phone: normalized,
           displayName: displayNameFromPhone(normalized),
         })
-        .onConflictDoNothing({ target: mobileUsers.phone })
         .returning();
-    if (!user) [user] = await db.select().from(mobileUsers).where(eq(mobileUsers.phone, normalized));
-    if (!user || !user.isActive) {
+    } else if (!user.isActive) {
       return c.json(
         { error: { code: 'account_disabled', message: 'This account is disabled' } },
         403,
       );
     }
 
-    const session = await issueMobileSession(user, context);
+    const session = await issueMobileSession(user);
 
     await writeAudit({
       actorId: user.id,
@@ -337,7 +356,15 @@ authRoutes.post('/mobile/otp/verify', async c => {
 
     return c.json(session);
   } catch (err) {
-    return otpErrorResponse(c, err);
+    if (err instanceof OtpError) {
+      const statusCode =
+        err.code === 'max_attempts_exceeded' ? 429 :
+        err.code === 'rate_limit_exceeded' ? 429 :
+        err.code === 'invalid_phone' ? 400 :
+        503;
+      return c.json({ error: { code: err.code, message: err.message } }, statusCode);
+    }
+    throw err;
   }
 });
 
@@ -449,7 +476,6 @@ authRoutes.put('/mobile/profile', requireAuth, async c => {
 authRoutes.post('/mobile/logout', requireAuth, async c => {
   const auth = c.get('auth');
   if (auth.kind === 'mobile') {
-    if (auth.sid) await revokeMobileSession(auth.sub, auth.sid);
     await writeAudit({
       actorId: auth.sub,
       actorEmail: auth.email,
@@ -459,6 +485,18 @@ authRoutes.post('/mobile/logout', requireAuth, async c => {
     });
   }
   return c.json({ ok: true });
+});
+
+authRoutes.delete('/mobile/account', requireAuth, async c => {
+  c.header('Cache-Control', 'no-store');
+  const auth = c.get('auth');
+  if (auth.kind !== 'mobile') return c.json({ error: { code: 'forbidden', message: 'A mobile account is required.' } }, 403);
+  const body = await c.req.json().catch(() => null);
+  if (!body || body.confirmAccountClosure !== true) return c.json({ error: { code: 'confirmation_required', message: 'Confirm account closure and fitness data deletion.' } }, 400);
+  try {
+    await fitnessService.deleteData(auth.sub, { deactivateAccount: true });
+    return c.json({ ok: true, accountClosed: true, fitnessDataDeleted: true });
+  } catch (error) { const result = fitnessHttpError(error); return c.json(result.body, result.status); }
 });
 
 return authRoutes;

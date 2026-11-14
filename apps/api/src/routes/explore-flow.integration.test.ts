@@ -92,7 +92,7 @@ describe('Explore event and product flow (integration)', { skip: !TEST_DATABASE_
     const { Hono } = await import('hono');
     const explore = await import('./explore.js');
     const shop = await import('./shop.js');
-    const { signToken } = await import('../lib/auth.js');
+    const { signToken } = await import('../testutils/phoneBoundToken.js');
     const client = await import('../db/client.js');
     db = client.db;
     sqlClient = client.sql;

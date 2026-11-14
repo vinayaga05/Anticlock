@@ -29,6 +29,14 @@ export const NotificationTypeSchema = z.enum([
   'follow_request',
   'follow_accepted',
   'new_follower',
+  'fitness_plan_updated',
+  'fitness_support_requested',
+  'fitness_workout_reminder',
+  'fitness_meal_reminder',
+  'fitness_water_reminder',
+  'fitness_habit_reminder',
+  'fitness_weekly_summary',
+  'fitness_consultation_starting',
   'system',
 ]);
 export type NotificationType = z.infer<typeof NotificationTypeSchema>;

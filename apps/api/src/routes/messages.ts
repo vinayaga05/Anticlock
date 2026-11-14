@@ -20,8 +20,9 @@ import {
 } from '../social/ProfileFollowService.js';
 import { loadPublisher, resolveOwnedPublisher, type PublisherRef } from '../publishing/publisher.js';
 import { db } from '../db/client.js';
-import { and, eq, inArray } from 'drizzle-orm';
-import { bookings, directMessageReports, providerMemberships } from '../db/schema.js';
+import { and, eq } from 'drizzle-orm';
+import { directMessageReports } from '../db/schema.js';
+import { bookingCallIsAuthorized } from '../messages/bookingCallAuthorization.js';
 
 const messagesRoutes = new Hono<AppEnv>();
 
@@ -35,50 +36,6 @@ function requireMobileAuth(c: { get: (k: 'auth') => { kind: string; sub: string 
     });
   }
   return auth.sub;
-}
-
-async function bookingCallIsAuthorized(input: {
-  bookingId: string;
-  userId: string;
-  viewer: PublisherRef;
-  target: PublisherRef;
-}) {
-  const [booking] = await db.select().from(bookings).where(and(
-    eq(bookings.id, input.bookingId),
-    eq(bookings.status, 'confirmed'),
-    eq(bookings.serviceMode, 'online'),
-  ));
-  if (!booking?.providerId) return false;
-  const startsAt = booking.startsAt.getTime();
-  const endsAt = booking.endsAt?.getTime()
-    ?? startsAt + (booking.durationMinutes ?? 60) * 60_000;
-  const now = Date.now();
-  if (now < startsAt - 15 * 60_000 || now > endsAt + 30 * 60_000) return false;
-  if (
-    booking.mobileUserId === input.userId &&
-    input.viewer.type === 'personal' &&
-    input.viewer.id === booking.mobileUserId &&
-    input.target.type === 'business' &&
-    input.target.id === booking.providerId
-  ) {
-    return true;
-  }
-  if (
-    input.viewer.type !== 'business' ||
-    input.viewer.id !== booking.providerId ||
-    input.target.type !== 'personal' ||
-    input.target.id !== booking.mobileUserId
-  ) {
-    return false;
-  }
-  const [membership] = await db.select({ role: providerMemberships.role })
-    .from(providerMemberships)
-    .where(and(
-      eq(providerMemberships.mobileUserId, input.userId),
-      eq(providerMemberships.providerId, booking.providerId),
-      inArray(providerMemberships.role, ['owner', 'admin']),
-    ));
-  return Boolean(membership);
 }
 
 /** Revoke stale pre-policy channels before issuing a fresh client token. */

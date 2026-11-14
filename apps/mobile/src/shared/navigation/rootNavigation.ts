@@ -16,6 +16,7 @@ export function routeForNotification(
   data: Record<string, unknown> | null | undefined,
 ): NotificationRoute | null {
   if (!data) return null;
+  if (data.kind === 'fitness') return routeForFitnessNotification(data);
   const applicationId =
     typeof data.applicationId === 'string' ? data.applicationId : null;
   if (data.kind === 'provider_application' && applicationId) {
@@ -44,6 +45,28 @@ export function routeForNotification(
       params: { itemId: entityId, kind: data.entityType },
     };
   }
+  return null;
+}
+
+const fitnessUuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+const fitnessDate = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(new Date(`${value}T12:00:00Z`).getTime()) && new Date(`${value}T12:00:00Z`).toISOString().slice(0,10) === value;
+function routeForFitnessNotification(data: Record<string, unknown>): NotificationRoute | null {
+  const screen = data.screen;
+  if (screen === 'FitnessHome') return { screen };
+  if (screen === 'FitnessPlan' && fitnessUuid(data.planId)) {
+    const version = Number(data.version);
+    return { screen, params: { planId: data.planId, ...(Number.isSafeInteger(version) && version > 0 ? { version } : {}) } };
+  }
+  if (screen === 'FitnessWorkspace' && fitnessUuid(data.clientId) && fitnessUuid(data.providerId)) return { screen, params: { clientId: data.clientId, providerId: data.providerId, ...(fitnessUuid(data.resourceId) ? { resourceId: data.resourceId } : {}) } };
+  if (screen === 'FitnessWorkout') {
+    if (fitnessUuid(data.workoutId)) return { screen, params: { workoutId: data.workoutId } };
+    const day = Number(data.day);
+    if (fitnessUuid(data.planId) && Number.isInteger(day) && day >= 0 && day <= 6 && fitnessDate(data.date)) return { screen, params: { planId: data.planId, day, date: data.date } };
+  }
+  if (screen === 'FitnessMeals' && fitnessDate(data.date)) return { screen, params: { date: data.date, ...(fitnessUuid(data.logId) ? { logId: data.logId } : {}) } };
+  if (screen === 'FitnessLog' && ['water','weight','sleep','steps','habit'].includes(String(data.logKind)) && fitnessDate(data.date)) return { screen, params: { kind: data.logKind, date: data.date, ...(fitnessUuid(data.logId) ? { logId: data.logId } : {}) } };
+  if (screen === 'FitnessProgress' && fitnessDate(data.from) && fitnessDate(data.to)) return { screen, params: { from: data.from, to: data.to } };
+  if (screen === 'BookingDetail' && fitnessUuid(data.bookingId)) return { screen, params: { bookingId: data.bookingId } };
   return null;
 }
 

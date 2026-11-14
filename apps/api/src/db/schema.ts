@@ -1999,3 +1999,299 @@ export const tripBookings = pgTable(
     index("trip_bookings_number_idx").on(table.bookingNumber),
   ],
 );
+
+/** Private fitness data. Only ownership/date/state metadata is stored outside encrypted payloads. */
+export const fitnessProfiles = pgTable("fitness_profiles", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .unique()
+    .references(() => mobileUsers.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("draft"),
+  remindersEnabled: boolean("reminders_enabled").notNull().default(false),
+  encryptedData: text("encrypted_data").notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+function fitnessPrivateLogTable(name: string) {
+  return pgTable(
+    name,
+    {
+      id: uuid("id").defaultRandom().primaryKey(),
+      userId: uuid("user_id")
+        .notNull()
+        .references(() => mobileUsers.id, { onDelete: "cascade" }),
+      date: text("date").notNull(),
+      encryptedData: text("encrypted_data").notNull(),
+      clientRequestId: uuid("client_request_id"),
+      createdAt: timestamp("created_at", { withTimezone: true })
+        .notNull()
+        .defaultNow(),
+      updatedAt: timestamp("updated_at", { withTimezone: true })
+        .notNull()
+        .defaultNow(),
+    },
+    (table) => [
+      index(`${name}_user_date_idx`).on(table.userId, table.date),
+      uniqueIndex(`${name}_user_request_uidx`).on(
+        table.userId,
+        table.clientRequestId
+      ),
+    ]
+  );
+}
+export const fitnessGoals = fitnessPrivateLogTable("fitness_goals");
+export const workoutLogs = fitnessPrivateLogTable("workout_logs");
+export const mealLogs = fitnessPrivateLogTable("meal_logs");
+export const waterLogs = fitnessPrivateLogTable("water_logs");
+export const habitLogs = fitnessPrivateLogTable("habit_logs");
+export const sleepLogs = fitnessPrivateLogTable("sleep_logs");
+export const stepLogs = fitnessPrivateLogTable("step_logs");
+export const bodyMeasurements = fitnessPrivateLogTable("body_measurements");
+export const exerciseLogs = pgTable(
+  "exercise_logs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    workoutLogId: uuid("workout_log_id")
+      .notNull()
+      .references(() => workoutLogs.id, { onDelete: "cascade" }),
+    encryptedData: text("encrypted_data").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("exercise_logs_workout_idx").on(table.workoutLogId)]
+);
+export const foodItems = pgTable(
+  "food_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => mobileUsers.id, {
+      onDelete: "cascade",
+    }),
+    source: text("source").notNull().default("custom"),
+    encryptedData: text("encrypted_data").notNull(),
+    clientRequestId: uuid("client_request_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("food_items_user_idx").on(table.userId),
+    uniqueIndex("food_items_user_request_uidx").on(
+      table.userId,
+      table.clientRequestId
+    ),
+  ]
+);
+export const fitnessRecipes = pgTable(
+  "fitness_recipes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    encryptedData: text("encrypted_data").notNull(),
+    clientRequestId: uuid("client_request_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("fitness_recipes_user_idx").on(table.userId),
+    uniqueIndex("fitness_recipes_user_request_uidx").on(
+      table.userId,
+      table.clientRequestId
+    ),
+  ]
+);
+export const workoutTemplates = pgTable("workout_templates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  content: jsonb("content").$type<Record<string, unknown>>().notNull(),
+  status: text("status").notNull().default("published"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+export const fitnessPlans = pgTable(
+  "fitness_plans",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    providerId: uuid("provider_id").references(() => providers.id, {
+      onDelete: "set null",
+    }),
+    title: text("title").notNull(),
+    status: text("status").notNull().default("active"),
+    currentVersion: integer("current_version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("fitness_plans_user_idx").on(table.userId)]
+);
+export const fitnessPlanVersions = pgTable(
+  "fitness_plan_versions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => fitnessPlans.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    authorUserId: uuid("author_user_id").references(() => mobileUsers.id, {
+      onDelete: "set null",
+    }),
+    authorProviderId: uuid("author_provider_id").references(
+      () => providers.id,
+      { onDelete: "set null" }
+    ),
+    encryptedData: text("encrypted_data").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("fitness_plan_versions_revision_uidx").on(
+      table.planId,
+      table.version
+    ),
+  ]
+);
+export const healthConsents = pgTable(
+  "health_consents",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    providerId: uuid("provider_id")
+      .notNull()
+      .references(() => providers.id, { onDelete: "cascade" }),
+    scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
+    resourceIds: jsonb("resource_ids").$type<string[]>().notNull().default([]),
+    status: text("status").notNull().default("active"),
+    grantedAt: timestamp("granted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("health_consents_user_provider_idx").on(
+      table.userId,
+      table.providerId
+    ),
+  ]
+);
+export const providerClientRelationships = pgTable(
+  "provider_client_relationships",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    providerId: uuid("provider_id")
+      .notNull()
+      .references(() => providers.id, { onDelete: "cascade" }),
+    bookingId: uuid("booking_id").references(() => bookings.id, {
+      onDelete: "cascade",
+    }),
+    status: text("status").notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("provider_client_relationships_pair_uidx").on(
+      table.userId,
+      table.providerId
+    ),
+  ]
+);
+export const fitnessConsultations = pgTable(
+  "fitness_consultations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    providerId: uuid("provider_id")
+      .notNull()
+      .references(() => providers.id, { onDelete: "cascade" }),
+    bookingId: uuid("booking_id")
+      .unique()
+      .references(() => bookings.id, { onDelete: "set null" }),
+    status: text("status").notNull().default("scheduled"),
+    startsAt: timestamp("starts_at", { withTimezone: true }),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    mode: text("mode").notNull().default("audio"),
+    encryptedData: text("encrypted_data"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("fitness_consultations_user_idx").on(table.userId)]
+);
+export const progressMedia = pgTable(
+  "progress_media",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => mobileUsers.id, { onDelete: "cascade" }),
+    purpose: text("purpose").notNull(),
+    kind: text("kind").notNull(),
+    storageProvider: text("storage_provider").notNull(),
+    storageKey: text("storage_key").notNull(),
+    bucket: text("bucket").notNull(),
+    contentType: text("content_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    clientRequestId: uuid("client_request_id"),
+    encryptedData: text("encrypted_data"),
+    status: text("status").notNull().default("ready"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("progress_media_user_idx").on(table.userId),
+    uniqueIndex("progress_media_user_request_uidx").on(
+      table.userId,
+      table.clientRequestId
+    ),
+  ]
+);
+
+/** Shared external catalog request budget; contains no customer or health information. */
+export const fitnessCatalogLimits = pgTable('fitness_catalog_limits', {
+  id:text('id').primaryKey(), count:integer('count').notNull(), resetAt:timestamp('reset_at',{withTimezone:true}).notNull(),
+});

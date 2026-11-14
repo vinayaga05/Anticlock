@@ -29,9 +29,15 @@ export type OtpSendResult = {
   expiresInSeconds: number;
 };
 
+/** Optional caller guards already accepted by AuthProvider/authService. */
+export type OtpRequestOptions = {
+  signal?: AbortSignal;
+  isCurrentAttempt?: () => boolean;
+};
+
 export type OtpProvider = {
-  sendOtp(phone: string): Promise<OtpSendResult>;
-  verifyOtp(phone: string, code: string, requestId: string): Promise<AuthSession>;
+  sendOtp(phone: string, options?: OtpRequestOptions): Promise<OtpSendResult>;
+  verifyOtp(phone: string, code: string, requestId: string, options?: OtpRequestOptions): Promise<AuthSession>;
 };
 
 export class AuthError extends Error {

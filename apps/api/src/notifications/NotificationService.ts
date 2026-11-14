@@ -4,6 +4,10 @@ import { notifications, deviceTokens } from "../db/schema.js";
 import type { NotificationType } from "@anticlock/contracts";
 import type { Message } from "firebase-admin/messaging";
 import { parseCursorIso } from '../lib/cursor.js';
+import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 interface FirebaseAdmin {
   messaging: () => {
@@ -43,8 +47,9 @@ function initializeFirebase(): FirebaseAdmin | null {
     firebaseAdmin = admin as FirebaseAdmin;
     console.log("[NotificationService] Firebase Admin SDK initialized successfully");
     return firebaseAdmin;
-  } catch (err) {
-    firebaseInitError = `Failed to initialize Firebase: ${err instanceof Error ? err.message : String(err)}`;
+  } catch {
+    // A malformed service-account JSON error can echo credential contents.
+    firebaseInitError = 'Failed to initialize Firebase. Check server configuration.';
     console.error(`[NotificationService] ${firebaseInitError}`);
     return null;
   }
@@ -55,6 +60,8 @@ export interface NotifyUserPayload {
   title: string;
   body: string;
   data?: Record<string, unknown>;
+  /** Server-owned event identity; retries must not create duplicate pushes. */
+  idempotencyKey?: string;
 }
 
 class NotificationService {
@@ -67,19 +74,24 @@ class NotificationService {
     userId: string,
     payload: NotifyUserPayload
   ): Promise<{ notificationId: string; pushSent: boolean }> {
+    const digest = payload.idempotencyKey ? createHash('sha256').update(`${userId}:${payload.idempotencyKey}`).digest('hex').slice(0,32) : null;
+    const eventId = digest ? `${digest.slice(0,8)}-${digest.slice(8,12)}-4${digest.slice(13,16)}-a${digest.slice(17,20)}-${digest.slice(20)}` : undefined;
     // Create notification record
     const [notification] = await db
       .insert(notifications)
       .values({
+        ...(eventId ? { id: eventId } : {}),
         mobileUserId: userId,
         type: payload.type,
         title: payload.title,
         body: payload.body,
         data: payload.data ?? null,
       })
+      .onConflictDoNothing({ target: notifications.id })
       .returning({ id: notifications.id });
 
     if (!notification) {
+      if (eventId) return { notificationId: eventId, pushSent: false };
       throw new Error("Failed to create notification record");
     }
 

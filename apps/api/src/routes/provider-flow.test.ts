@@ -184,7 +184,7 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     const { Hono } = await import('hono');
     const provider = await import('./provider.js');
     const bookingsRoutes = await import('./bookings.js');
-    const { signToken } = await import('../lib/auth.js');
+    const { signToken } = await import('../testutils/phoneBoundToken.js');
     ({ listOwnedPublishers } = await import('../publishing/publisher.js'));
     const client = await import('../db/client.js');
     db = client.db;

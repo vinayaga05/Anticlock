@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import { DevWhitelistOtpProvider } from './devWhitelistProvider.js';
 import { OtpError } from './types.js';
 
 describe('DevWhitelistOtpProvider', () => {
   let provider: DevWhitelistOtpProvider;
-
+  let clock=Date.now();
+  afterEach(()=>mock.restoreAll());
   beforeEach(() => {
+    // The deployed implementation intentionally shares its in-memory send budget.
+    // Advance a mocked clock between independent cases instead of weakening that budget.
+    clock+=61_000;mock.method(Date,'now',()=>clock);
     provider = new DevWhitelistOtpProvider();
   });
 

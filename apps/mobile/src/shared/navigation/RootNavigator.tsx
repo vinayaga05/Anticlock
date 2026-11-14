@@ -39,7 +39,7 @@ import { DiagnosticsHubScreen } from '@/features/booking/screens/DiagnosticsHubS
 import { LabListScreen } from '@/features/booking/screens/LabListScreen';
 import { LabDetailScreen } from '@/features/booking/screens/LabDetailScreen';
 import { PhysioHubScreen } from '@/features/booking/screens/PhysioHubScreen';
-import { FitnessFeedScreen } from '@/features/booking/screens/FitnessFeedScreen';
+import { FitnessHomeRoute, FitnessAssessmentRoute, FitnessPlanRoute, FitnessWorkoutRoute, FitnessMealsRoute, FitnessLogRoute, FitnessProgressRoute, FitnessPrivacyRoute, FitnessHistoryRoute, FitnessExpertsRoute, FitnessWorkspaceRoute, FitnessSharingRoute, FitnessServiceTreeRoute } from '@/shared/navigation/fitnessRouteScreens';
 import { ClassDetailScreen } from '@/features/booking/screens/ClassDetailScreen';
 import { ScheduleScreen } from '@/features/booking/screens/ScheduleScreen';
 import { BookingConfirmScreen } from '@/features/booking/screens/BookingConfirmScreen';
@@ -281,9 +281,21 @@ export function RootNavigator() {
             />
             <Stack.Screen
               name="FitnessFeed"
-              component={FitnessFeedScreen}
-              options={{ title: 'Classes' }}
+              component={FitnessHomeRoute}
+              options={{ headerShown: false }}
             />
+            <Stack.Screen name="FitnessHome" component={FitnessHomeRoute} options={{ headerShown: false }} />
+            <Stack.Screen name="FitnessAssessment" component={FitnessAssessmentRoute} options={{ headerShown: false }} />
+            <Stack.Screen name="FitnessPlan" component={FitnessPlanRoute} options={{ headerShown: false }} />
+            <Stack.Screen name="FitnessWorkout" component={FitnessWorkoutRoute} options={{ headerShown: false }} />
+            <Stack.Screen name="FitnessMeals" component={FitnessMealsRoute} options={{ headerShown: false }} />
+            <Stack.Screen name="FitnessLog" component={FitnessLogRoute} options={{ headerShown: false }} />
+            <Stack.Screen name="FitnessProgress" component={FitnessProgressRoute} options={{ headerShown: false }} />
+            <Stack.Screen name="FitnessPrivacy" component={FitnessPrivacyRoute} options={{ headerShown: false }} />
+            <Stack.Screen name="FitnessHistory" component={FitnessHistoryRoute} options={{ headerShown: false }} />
+            <Stack.Screen name="FitnessExperts" component={FitnessExpertsRoute} options={{ headerShown: false }} />
+            <Stack.Screen name="FitnessWorkspace" component={FitnessWorkspaceRoute} options={{ headerShown: false }} />
+            <Stack.Screen name="FitnessSharing" component={FitnessSharingRoute} options={{ headerShown: false }} />
             <Stack.Screen
               name="ClassDetail"
               component={ClassDetailScreen}
@@ -331,8 +343,8 @@ export function RootNavigator() {
             />
             <Stack.Screen
               name="ServiceTree"
-              component={ServiceTreeScreen}
-              options={{ title: 'Services' }}
+              component={FitnessServiceTreeRoute}
+              options={({ route }) => ({ title: 'Services', headerShown: route.params.treeId !== 'fitness' })}
             />
             <Stack.Screen
               name="ServiceCategory"

@@ -46,7 +46,7 @@ describe('API correctness regressions (integration)', { skip: !TEST_DATABASE_URL
     const shop = await import('./shop.js');
     const trips = await import('./trips.js');
     const { moderationAdminRoutes } = await import('./moderation.js');
-    const { signToken } = await import('../testutils/phoneBoundToken.js');
+    const { signToken } = await import('../lib/auth.js');
     const client = await import('../db/client.js');
     db = client.db;
     sqlClient = client.sql;

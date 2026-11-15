@@ -2000,6 +2000,31 @@ export const tripBookings = pgTable(
   ],
 );
 
+/** Server-owned phone authentication. No plaintext phone/code is persisted here. */
+export const otpPhoneStates = pgTable('otp_phone_states', {
+  phoneHash: text('phone_hash').primaryKey(),
+  activeRequestId: uuid('active_request_id'),
+  lastSentAt: timestamp('last_sent_at', { withTimezone: true }),
+  failedAttempts: integer('failed_attempts').notNull().default(0),
+  lockedUntil: timestamp('locked_until', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+export const otpChallenges = pgTable('otp_challenges', {
+  id: uuid('id').primaryKey(), phoneHash: text('phone_hash').notNull(), codeHash: text('code_hash').notNull(),
+  deviceHash: text('device_hash'), status: text('status').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => [index('otp_challenges_phone_idx').on(table.phoneHash), index('otp_challenges_expiry_idx').on(table.expiresAt)]);
+export const otpRateLimits = pgTable('otp_rate_limits', {
+  id: text('id').primaryKey(), count: integer('count').notNull(), resetAt: timestamp('reset_at', { withTimezone: true }).notNull(),
+}, table => [index('otp_rate_limits_reset_idx').on(table.resetAt)]);
+export const mobileAuthSessions = pgTable('mobile_auth_sessions', {
+  id: uuid('id').primaryKey(), userId: uuid('user_id').notNull().references(() => mobileUsers.id, { onDelete: 'cascade' }),
+  deviceHash: text('device_hash'), ipHash: text('ip_hash'),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(), revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => [index('mobile_auth_sessions_user_idx').on(table.userId), index('mobile_auth_sessions_expiry_idx').on(table.expiresAt)]);
+
 /** Private fitness data. Only ownership/date/state metadata is stored outside encrypted payloads. */
 export const fitnessProfiles = pgTable("fitness_profiles", {
   id: uuid("id").defaultRandom().primaryKey(),

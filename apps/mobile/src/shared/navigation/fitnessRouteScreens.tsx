@@ -14,7 +14,6 @@ import { FitnessHistoryScreen } from '@/features/fitness/screens/FitnessHistoryS
 import { FitnessExpertsScreen } from '@/features/fitness/experts/screens/FitnessExpertsScreen';
 import { FitnessWorkspaceScreen } from '@/features/fitness/experts/screens/FitnessWorkspaceScreen';
 import { FitnessSharingScreen } from '@/features/fitness/experts/screens/FitnessSharingScreen';
-import { ServiceTreeScreen } from '@/features/services/screens/ServiceTreeScreen';
 
 /** Remount private forms and native media after account/token/data deletion changes. */
 export function fitnessRoute(Screen: React.ComponentType<any>) {
@@ -58,10 +57,3 @@ export const FitnessHistoryRoute = fitnessRoute(FitnessHistoryScreen);
 export const FitnessExpertsRoute = fitnessRoute(FitnessExpertsScreen);
 export const FitnessWorkspaceRoute = fitnessRoute(FitnessWorkspaceScreen);
 export const FitnessSharingRoute = fitnessRoute(FitnessSharingScreen);
-export function FitnessServiceTreeRoute(props: any) {
-  return props.route?.params?.treeId === 'fitness' ? (
-    <FitnessHomeRoute {...props} />
-  ) : (
-    <ServiceTreeScreen {...props} />
-  );
-}

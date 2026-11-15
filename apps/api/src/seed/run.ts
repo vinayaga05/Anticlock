@@ -221,6 +221,7 @@ async function seed() {
       .values({
         id: cat.id,
         treeId: cat.treeId,
+        ...(cat.treeId === 'rooms_restaurant' ? { actionType: 'service_request' } : {}),
         name: cat.name,
         sortOrder: cat.sortOrder,
         status: 'published',
@@ -228,6 +229,7 @@ async function seed() {
       .onConflictDoUpdate({
         target: serviceCategories.id,
         set: {
+          ...(cat.treeId === 'rooms_restaurant' ? { actionType: 'service_request' } : {}),
           name: cat.name,
           treeId: cat.treeId,
           sortOrder: cat.sortOrder,

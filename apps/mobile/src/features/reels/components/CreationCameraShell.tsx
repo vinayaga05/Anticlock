@@ -7,14 +7,10 @@ import { AppIcon, type IconName } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import type { ClipPreviewSource } from '@/features/reels/media/clipMediaPicker';
 
-export type CreationMode = 'post' | 'reel' | 'story' | 'instants';
+import { CREATION_MODES, type CreationMode } from '@/shared/publishing/creationNavigation';
+export type { CreationMode } from '@/shared/publishing/creationNavigation';
 
-const MODES: { id: CreationMode; label: string }[] = [
-  { id: 'post', label: 'POST' },
-  { id: 'reel', label: 'REEL' },
-  { id: 'story', label: 'STORY' },
-  { id: 'instants', label: 'INSTANTS' },
-];
+const MODES = CREATION_MODES;
 
 function CameraControl({
   icon,
@@ -81,7 +77,7 @@ export function CaptureButton({
       onPress={onCapture}
       onLongPress={onCapture}
       accessibilityLabel={
-        recording ? 'Stop recording' : 'Hold to record a Reel'
+        recording ? 'Stop recording' : 'Hold to record a Clip'
       }
       style={
         recording
@@ -127,6 +123,7 @@ export function CreationModePicker({
             key={item.id}
             onPress={() => onChange(item.id)}
             accessibilityLabel={`${item.label} mode`}
+            accessibilityState={{selected: item.id === mode}}
           >
             <Text
               style={[styles.modeLabel, item.id === mode && styles.modeActive]}

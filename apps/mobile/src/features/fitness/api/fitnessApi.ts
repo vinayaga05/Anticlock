@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getFitnessDataEpoch } from '../fitnessSession';
 import { useAuth } from '@/shared/context/AuthProvider';
 import { ApiError, getApiToken } from '@/shared/api/client';
 import { getApiBaseUrl, isApiEnabled } from '@/shared/api/config';
@@ -119,14 +120,40 @@ export async function fitnessRequest<T>(
   }
 }
 
-export function useFitnessQuery<T>(path: string, enabled = true) {
+export function useFitnessQuery<T>(
+  path: string,
+  enabled = true,
+  cacheScope?: number,
+) {
   const { user } = useAuth();
   const token = getApiToken();
   return useQuery<T, Error>({
-    queryKey: ['fitness', user?.id, token, path],
+    queryKey: [
+      'fitness',
+      user?.id,
+      token,
+      path,
+      ...(cacheScope === undefined ? [] : [cacheScope]),
+    ],
     enabled: enabled && Boolean(user && user.id !== 'temporary-guest' && token),
-    queryFn: ({ signal }) =>
-      fitnessRequest<T>(path, { signal }, fitnessSession(user?.id)),
+    queryFn: async ({ signal }) => {
+      const assertEpoch = () => {
+        if (cacheScope !== undefined && getFitnessDataEpoch() !== cacheScope)
+          throw new ApiError(
+            0,
+            'session_changed',
+            'Your fitness data changed. Reopen Fitness to continue.',
+          );
+      };
+      assertEpoch();
+      const response = await fitnessRequest<T>(
+        path,
+        { signal },
+        fitnessSession(user?.id),
+      );
+      assertEpoch();
+      return response;
+    },
     staleTime: 15_000,
     retry: 1,
   });

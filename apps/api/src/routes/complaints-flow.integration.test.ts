@@ -38,7 +38,7 @@ describe('Nexus complaints across users (PostgreSQL integration)', { skip: !test
   before(async () => {
     const { Hono } = await import('hono');
     const { complaintsMobileRoutes } = await import('./complaints.js');
-    const { signToken } = await import('../testutils/phoneBoundToken.js');
+    const { signToken } = await import('../lib/auth.js');
     const client = await import('../db/client.js');
     db = client.db;
     sqlClient = client.sql;
@@ -69,7 +69,7 @@ describe('Nexus complaints across users (PostgreSQL integration)', { skip: !test
     for (const user of [null, 'admin', inactiveUser, missingUser]) {
       for (const method of ['GET', 'POST']) {
         const result = await request(user, method, '/v1/complaints', method === 'POST' ? input('Access check') : undefined);
-        assert.equal(result.status, user === null || user === inactiveUser ? 401 : 403, `${method} for ${user}`);
+        assert.equal(result.status, user === null ? 401 : 403, `${method} for ${user}`);
       }
     }
   });

@@ -168,3 +168,54 @@ test('retry identifiers are valid UUIDs', () => {
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
   );
 });
+
+test('scoped Settings reads reject a late ACK after fitness data deletion and use an independent cache generation', async () => {
+  jest.useFakeTimers();
+  const {
+    getFitnessDataEpoch,
+    bumpFitnessDataEpoch,
+  } = require('../fitnessSession');
+  const epoch = getFitnessDataEpoch();
+  const response = deferred();
+  (fetch as jest.Mock).mockResolvedValue({
+    ok: true,
+    json: () => response.promise,
+  });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+  });
+  clients.push(client);
+  function Probe() {
+    useFitnessQuery('/summary', true, epoch);
+    return null;
+  }
+  await ReactTestRenderer.act(async () => {
+    renderers.push(
+      ReactTestRenderer.create(
+        <QueryClientProvider client={client}>
+          <Probe />
+        </QueryClientProvider>,
+      ),
+    );
+  });
+  expect(client.getQueryCache().getAll()[0].queryKey).toEqual([
+    'fitness',
+    'user-a',
+    'token-a',
+    '/summary',
+    epoch,
+  ]);
+  await ReactTestRenderer.act(async () => {
+    bumpFitnessDataEpoch();
+    response.resolve({ private: 'removed snapshot' });
+    await jest.advanceTimersByTimeAsync(1001);
+  });
+  expect(
+    client.getQueryData(['fitness', 'user-a', 'token-a', '/summary', epoch]),
+  ).toBeUndefined();
+  expect(
+    client.getQueryState(['fitness', 'user-a', 'token-a', '/summary', epoch])
+      ?.error,
+  ).toMatchObject({ code: 'session_changed' });
+  expect(fetch).toHaveBeenCalledTimes(1);
+});

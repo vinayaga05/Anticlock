@@ -1,117 +1,34 @@
 import { randomUUID } from 'node:crypto';
-import { OtpError, type OtpProvider, type OtpSendResult, normalizePhone } from './types.js';
+import { OtpError, type OtpContext, type OtpProvider, type OtpSendResult, normalizePhone } from './types.js';
 
-const DEV_OTP_WHITELIST: Record<string, string> = {
-  '+919999999999': '123456',
-  '+918888888888': '123456',
-};
-
-const CHALLENGE_TTL_MS = 10 * 60 * 1000;
-const MAX_VERIFY_ATTEMPTS = 5;
-const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-const MAX_SEND_REQUESTS_PER_WINDOW = 3;
-
-type Challenge = {
-  phone: string;
-  code: string;
-  expiresAt: number;
-  attempts: number;
-};
-
-type RateLimitEntry = {
-  count: number;
-  resetAt: number;
-};
-
-const challenges = new Map<string, Challenge>();
-const sendRateLimits = new Map<string, RateLimitEntry>();
-
-/**
- * Fixed OTP whitelist for development / staging / pre-MSG91 environments.
- * Selected only when OTP_DEV_WHITELIST=true or NODE_ENV !== 'production'.
- * 
- * These numbers (+919999999999, +918888888888) are NOT valid in production.
- */
+/** Explicit local-only test numbers. This class refuses all production calls. */
 export class DevWhitelistOtpProvider implements OtpProvider {
-  private checkSendRateLimit(phone: string): void {
-    const now = Date.now();
-    const entry = sendRateLimits.get(phone);
-
-    if (!entry || entry.resetAt < now) {
-      sendRateLimits.set(phone, {
-        count: 1,
-        resetAt: now + RATE_LIMIT_WINDOW_MS,
-      });
-      return;
-    }
-
-    if (entry.count >= MAX_SEND_REQUESTS_PER_WINDOW) {
-      throw new OtpError(
-        'rate_limit_exceeded',
-        'Too many OTP requests. Please wait a minute and try again.',
-      );
-    }
-
-    entry.count += 1;
+  private challenges = new Map<string, { phone: string; expiresAt: number; attempts: number }>();
+  private latest = new Map<string, string>();
+  constructor(
+    private readonly allowedPhones: readonly string[] = ['+919999999999', '+918888888888'],
+    private readonly enabled: () => boolean = () => process.env.OTP_DEV_WHITELIST === 'true',
+    private readonly clock: () => number = Date.now,
+  ) {}
+  private assertEnabled() {
+    if (process.env.NODE_ENV === 'production' || !this.enabled()) throw new OtpError('phone_not_allowed', 'Development sign-in is not enabled.');
   }
-
-  async sendOtp(rawPhone: string): Promise<OtpSendResult> {
-    const phone = normalizePhone(rawPhone);
-    
-    // Rate limiting applies to all numbers
-    this.checkSendRateLimit(phone);
-
-    const code = DEV_OTP_WHITELIST[phone];
-    if (!code) {
-      throw new OtpError(
-        'phone_not_allowed',
-        'This number is not enabled for development login',
-      );
-    }
-
-    const requestId = randomUUID();
-    challenges.set(requestId, {
-      phone,
-      code,
-      expiresAt: Date.now() + CHALLENGE_TTL_MS,
-      attempts: 0,
-    });
-
-    console.log(`[dev-otp] ${phone} → ${code} (requestId=${requestId})`);
-
-    return { requestId, expiresInSeconds: CHALLENGE_TTL_MS / 1000 };
+  async sendOtp(rawPhone: string, _context?: OtpContext): Promise<OtpSendResult> {
+    this.assertEnabled(); const phone = normalizePhone(rawPhone);
+    if (!this.allowedPhones.includes(phone)) throw new OtpError('phone_not_allowed', 'This number is not enabled for development login');
+    const now = this.clock(); const previousId = this.latest.get(phone); const previous = previousId ? this.challenges.get(previousId) : undefined;
+    if (previous && previous.expiresAt - 300_000 + 60_000 > now) throw new OtpError('resend_cooldown', 'Please wait before requesting another code.', Math.ceil((previous.expiresAt - 240_000 - now) / 1000));
+    if (previousId) this.challenges.delete(previousId);
+    const requestId = randomUUID(); this.latest.set(phone, requestId); this.challenges.set(requestId, { phone, expiresAt: now + 300_000, attempts: 0 });
+    return { requestId, expiresInSeconds: 300, expiresAt: new Date(now + 300_000).toISOString(), resendAvailableAt: new Date(now + 60_000).toISOString() };
   }
-
-  async verifyOtp(rawPhone: string, code: string, requestId: string): Promise<boolean> {
-    const phone = normalizePhone(rawPhone);
-    const challenge = challenges.get(requestId);
-    
-    if (!challenge) return false;
-    
-    if (challenge.expiresAt < Date.now()) {
-      challenges.delete(requestId);
-      return false;
-    }
-    
-    if (challenge.phone !== phone) return false;
-
-    // Check attempt limit
-    if (challenge.attempts >= MAX_VERIFY_ATTEMPTS) {
-      challenges.delete(requestId);
-      throw new OtpError(
-        'max_attempts_exceeded',
-        'Maximum verification attempts exceeded. Please request a new OTP.',
-      );
-    }
-
-    const ok = challenge.code === code;
-    
-    if (ok) {
-      challenges.delete(requestId);
-    } else {
-      challenge.attempts += 1;
-    }
-    
-    return ok;
+  async verifyOtp(rawPhone: string, code: string, requestId: string, _context?: OtpContext): Promise<boolean> {
+    this.assertEnabled(); const phone = normalizePhone(rawPhone); const challenge = this.challenges.get(requestId);
+    if (!challenge || challenge.phone !== phone) return false;
+    if (challenge.expiresAt <= this.clock()) { this.challenges.delete(requestId); return false; }
+    if (challenge.attempts >= 5) throw new OtpError('max_attempts_exceeded', 'Too many incorrect codes. Request another code later.');
+    challenge.attempts += 1;
+    if (code !== '123456') return false;
+    this.challenges.delete(requestId); return true;
   }
 }

@@ -1,6 +1,13 @@
 import React from 'react';
 import { LucideProps } from 'lucide-react-native';
 import {
+  Hotel,
+  BedDouble,
+  Utensils,
+  Sandwich,
+  CookingPot,
+  Coffee,
+  CakeSlice,
   Activity,
   Accessibility,
   BadgeCheck,
@@ -202,6 +209,13 @@ export const iconMap = {
   order: Package,
   package: Package,
   delivery: Truck,
+  hotel: Hotel,
+  bed: BedDouble,
+  utensils: Utensils,
+  sandwich: Sandwich,
+  'cooking-pot': CookingPot,
+  coffee: Coffee,
+  cake: CakeSlice,
   truck: Truck,
   check: Check,
   'check-circle': CheckCircle2,

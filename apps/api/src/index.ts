@@ -56,7 +56,7 @@ import {
   loadAiProviderConfig,
   logAiProviderStartup,
 } from './config/ai-provider.config.js';
-import { logTestLoginWarning } from './lib/otp/testLogin.js';
+import { assertProductionOtpConfiguration } from './lib/otp/index.js';
 import { httpError } from './lib/httpError.js';
 import { mediaService } from './media/MediaService.js';
 import { requireAuth } from './middleware/auth.js';
@@ -106,7 +106,7 @@ function corsOrigins() {
 }
 
 assertProductionConfiguration();
-logTestLoginWarning();
+assertProductionOtpConfiguration();
 assertFitnessPrivacyConfigured();
 fitnessService.setMediaPurger((userId, tx) => fitnessMediaService.purge(userId, tx));
 

@@ -1,3 +1,5 @@
+import type { RootStackParamList } from '@/shared/navigation/types';
+import { creatorRoute, finishCreation } from '@/shared/publishing/creationNavigation';
 import React, { useState } from 'react';
 import {
   Alert,
@@ -8,7 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { Button } from '@/shared/components/Button';
@@ -45,7 +47,8 @@ export function FlashComposerScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const publisher = usePublisherSelection('flash');
+  const route = useRoute<RouteProp<RootStackParamList, 'FlashComposer'>>();
+  const publisher = usePublisherSelection('flash', route.params?.publisherProfileId);
   const { identities, identity } = publisher;
   const publishContent = usePublishContentMutation();
 
@@ -85,6 +88,10 @@ export function FlashComposerScreen() {
   };
 
   const publish = async () => {
+    if (route.params?.publisherProfileId && identity?.id !== route.params.publisherProfileId) {
+      Alert.alert('Publishing profile unavailable', 'Reopen the publishing profile and try again.');
+      return;
+    }
     const hasRealMedia = pickedPhotos.length > 0 || pickedVideos.length > 0;
     if (!text.trim() && !hasRealMedia) return;
     if (!isApiEnabled) {
@@ -152,8 +159,8 @@ export function FlashComposerScreen() {
         setUploadProgress(100);
         if (result?.post.contentStatus === 'pending_review') {
           Alert.alert(
-            'Post submitted',
-            `Your post from ${identity.name} will appear once it is reviewed.`,
+            'Flash submitted',
+            `Your Flash from ${identity.name} will appear once it is reviewed.`,
           );
         }
       } catch (error) {
@@ -166,7 +173,7 @@ export function FlashComposerScreen() {
         setUploading(false);
         setUploadProgress(0);
       }
-      navigation.goBack();
+      finishCreation(navigation, 'flash');
       return;
   };
 
@@ -189,7 +196,7 @@ export function FlashComposerScreen() {
         />
 
         <PressableScale
-          onPress={() => navigation.navigate('ClipComposer')}
+          onPress={() => {const target = creatorRoute('reel', identity); navigation.navigate(target.screen, target.params);}}
           accessibilityLabel="Create a video clip"
           style={[
             styles.clipEntry,

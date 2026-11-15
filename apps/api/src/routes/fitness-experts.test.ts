@@ -213,7 +213,7 @@ describe(
       process.env.FITNESS_DATA_ENCRYPTION_KEY ??= "4".repeat(64);
       const { Hono } = await import("hono");
       const { fitnessExpertRoutes } = await import("./fitness-experts.js");
-      const { signToken } = await import('../testutils/phoneBoundToken.js');
+      const { signToken } = await import("../lib/auth.js");
       const dbModule = await import("../db/client.js");
       db = dbModule.db;
       client = dbModule.sql;
@@ -1080,7 +1080,7 @@ describe(
             `/workspace/${trainerId}/clients/${customer}`
           )
         ).status,
-        401
+        403
       );
       await db
         .update(schema.mobileUsers)
@@ -1413,11 +1413,3 @@ describe(
     });
   }
 );
-
-// Auth verification opens a real pool even when the route service is mocked.
-// Register last, so this file's fixture cleanup finishes before the pool closes.
-import { after as afterDatabaseTestFile } from 'node:test';
-afterDatabaseTestFile(async () => {
-  const { sql: authTestSql } = await import('../db/client.js');
-  await authTestSql.end({ timeout: 5 });
-});

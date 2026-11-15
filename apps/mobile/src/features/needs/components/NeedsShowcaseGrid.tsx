@@ -8,6 +8,9 @@ import {
   type NeedsShowcaseItem,
 } from '@/shared/data/services';
 import { PressableScale } from '@/shared/components/PressableScale';
+import { IconBadge } from '@/shared/components/IconBadge';
+import { getCategory } from '@/shared/data/services';
+import type { IconName } from '@/shared/components/AppIcon';
 import { Glass } from '@/shared/components/Glass';
 import { healthTheme } from '@/shared/theme/healthTheme';
 
@@ -23,26 +26,31 @@ function chunk<T>(items: T[], size: number): T[][] {
   return rows;
 }
 
-function SubIcon({
-  item,
-}: {
-  item: NeedsShowcaseItem;
-}) {
+function SubIcon({ item }: { item: NeedsShowcaseItem }) {
   const theme = useTheme();
   return (
     <View style={styles.subCol}>
       <View style={styles.iconCircle}>
-        <Image
-          source={item.image}
-          style={styles.iconImage}
-          resizeMode="cover"
-          accessible
-          accessibilityLabel={`${item.label} service image`}
-        />
+        {item.image ? (
+          <Image
+            source={item.image}
+            style={styles.iconImage}
+            resizeMode="cover"
+            accessible
+            accessibilityLabel={`${item.label} service image`}
+          />
+        ) : (
+          <IconBadge
+            name={(getCategory(item.categoryId)?.icon ?? 'home') as IconName}
+            color="#B96728"
+            size="lg"
+          />
+        )}
       </View>
       <Text
         style={[styles.subLabel, { color: theme.colors.textSecondary }]}
-        numberOfLines={2}>
+        numberOfLines={2}
+      >
         {item.label}
       </Text>
     </View>
@@ -62,15 +70,13 @@ function NeedsShowcaseCardView({ card }: { card: NeedsShowcaseCard }) {
           styles.cardTitle,
           { color: isHealth ? healthTheme.navy : theme.colors.textPrimary },
         ]}
-        numberOfLines={2}>
+        numberOfLines={2}
+      >
         {card.title}
       </Text>
       <View style={styles.iconsRow}>
         {card.items.map(item => (
-          <SubIcon
-            key={item.categoryId}
-            item={item}
-          />
+          <SubIcon key={item.categoryId} item={item} />
         ))}
       </View>
     </>
@@ -80,8 +86,17 @@ function NeedsShowcaseCardView({ card }: { card: NeedsShowcaseCard }) {
     return (
       <PressableScale
         accessibilityLabel={card.title}
-        onPress={() => navigation.navigate('ServiceTree', { treeId: card.treeId })}>
-        <Glass variant="health" intensity="heavy" radius={healthTheme.radiusMd} elevated style={styles.healthCard}>
+        onPress={() =>
+          navigation.navigate('ServiceTree', { treeId: card.treeId })
+        }
+      >
+        <Glass
+          variant="health"
+          intensity="heavy"
+          radius={healthTheme.radiusMd}
+          elevated
+          style={styles.healthCard}
+        >
           {inner}
         </Glass>
       </PressableScale>
@@ -91,7 +106,9 @@ function NeedsShowcaseCardView({ card }: { card: NeedsShowcaseCard }) {
   return (
     <PressableScale
       accessibilityLabel={card.title}
-      onPress={() => card.treeId === 'fitness' ? navigation.navigate('FitnessHome') : navigation.navigate('ServiceTree', { treeId: card.treeId })}
+      onPress={() =>
+        navigation.navigate('ServiceTree', { treeId: card.treeId })
+      }
       style={[
         styles.card,
         {
@@ -100,7 +117,8 @@ function NeedsShowcaseCardView({ card }: { card: NeedsShowcaseCard }) {
           borderRadius: theme.radius.lg,
           ...(theme.shadows.soft as object),
         },
-      ]}>
+      ]}
+    >
       {inner}
     </PressableScale>
   );

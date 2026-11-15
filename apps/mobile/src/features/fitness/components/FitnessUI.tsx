@@ -16,6 +16,8 @@ import { useNavigation } from '@react-navigation/native';
 import { AppIcon, type IconName } from '@/shared/components/AppIcon';
 import { useTheme } from '@/shared/hooks/useTheme';
 const FitnessBusyContext = React.createContext(false);
+export const FitnessPhotoTextContext = React.createContext(false);
+export const useFitnessBusy = () => React.useContext(FitnessBusyContext);
 
 export function useFitnessColors() {
   const theme = useTheme();
@@ -36,7 +38,7 @@ export function useFitnessColors() {
         background: '#F6F3EA',
         surface: '#FFFEF9',
         ink: '#192D25',
-        muted: '#65766D',
+        muted: '#566A5E',
         line: '#E0E6DA',
         soft: '#E9EEDD',
         accent: '#275D45',
@@ -52,6 +54,8 @@ export function FitnessScreen({
   back = true,
   right,
   busy = false,
+  footer,
+  onBack,
 }: {
   title: string;
   subtitle?: string;
@@ -59,6 +63,8 @@ export function FitnessScreen({
   back?: boolean;
   right?: React.ReactNode;
   busy?: boolean;
+  footer?: React.ReactNode;
+  onBack?: () => void;
 }) {
   const c = useFitnessColors();
   const insets = useSafeAreaInsets();
@@ -79,17 +85,19 @@ export function FitnessScreen({
             accessibilityRole="button"
             accessibilityLabel="Go back"
             hitSlop={8}
-            onPress={() =>
-              nav.canGoBack()
-                ? nav.goBack()
-                : nav.navigate('Main', { screen: 'Needs' })
+            onPress={
+              onBack ??
+              (() =>
+                nav.canGoBack()
+                  ? nav.goBack()
+                  : nav.navigate('Main', { screen: 'Needs' }))
             }
             style={styles.iconButton}
           >
             <AppIcon name="chevron-left" color={c.ink} size={23} />
           </Pressable>
         )}
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[styles.eyebrow, { color: c.accent }]}>
             FITNESS & WELLNESS
           </Text>
@@ -116,6 +124,23 @@ export function FitnessScreen({
           {children}
         </FitnessBusyContext.Provider>
       </ScrollView>
+      {footer && (
+        <FitnessBusyContext.Provider value={busy}>
+          <View
+            style={{
+              paddingHorizontal: 20,
+              paddingTop: 12,
+              paddingBottom: Math.max(insets.bottom, 12),
+              borderTopWidth: StyleSheet.hairlineWidth,
+              borderTopColor: c.line,
+              backgroundColor: c.background,
+              gap: 8,
+            }}
+          >
+            {footer}
+          </View>
+        </FitnessBusyContext.Provider>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -129,11 +154,12 @@ export function FitnessText({
   large?: boolean;
 }) {
   const c = useFitnessColors();
+  const onPhoto = React.useContext(FitnessPhotoTextContext);
   return (
     <Text
       style={[
         large ? styles.metric : styles.body,
-        { color: muted ? c.muted : c.ink },
+        { color: onPhoto ? '#FFFFFF' : muted ? c.muted : c.ink },
       ]}
     >
       {children}
@@ -164,16 +190,19 @@ export function FitnessSection({
   caption?: string;
 }) {
   const c = useFitnessColors();
+  const onPhoto = React.useContext(FitnessPhotoTextContext);
   return (
     <View style={{ gap: 4, marginTop: 10 }}>
       <Text
         accessibilityRole="header"
-        style={[styles.section, { color: c.ink }]}
+        style={[styles.section, { color: onPhoto ? '#FFFFFF' : c.ink }]}
       >
         {title}
       </Text>
       {caption && (
-        <Text style={[styles.body, { color: c.muted }]}>{caption}</Text>
+        <Text style={[styles.body, { color: onPhoto ? '#FFFFFF' : c.muted }]}>
+          {caption}
+        </Text>
       )}
     </View>
   );
@@ -186,6 +215,7 @@ export function FitnessAction({
   secondary,
   icon,
   destructive,
+  compact = false,
 }: {
   label: string;
   onPress: () => void;
@@ -194,6 +224,7 @@ export function FitnessAction({
   secondary?: boolean;
   icon?: IconName;
   destructive?: boolean;
+  compact?: boolean;
 }) {
   const c = useFitnessColors();
   const formBusy = React.useContext(FitnessBusyContext);
@@ -208,6 +239,7 @@ export function FitnessAction({
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
+        compact && { minHeight: 44, paddingVertical: 9, paddingHorizontal: 12 },
         {
           backgroundColor: secondary || destructive ? c.soft : c.accent,
           borderColor: c.line,

@@ -6,7 +6,7 @@ export type NeedsShowcaseItem = {
   categoryId: string;
   treeId: ServiceTreeId;
   label: string;
-  image: ImageSourcePropType;
+  image?: ImageSourcePropType;
 };
 
 export type NeedsShowcaseCard = {
@@ -23,9 +23,6 @@ function item(
   label: string,
 ): NeedsShowcaseItem {
   const image = categoryImages[categoryId];
-  if (!image) {
-    throw new Error(`Missing category image for ${categoryId}`);
-  }
   return { categoryId, treeId, label, image };
 }
 
@@ -35,12 +32,12 @@ function item(
  */
 export const needsShowcaseCards: NeedsShowcaseCard[] = [
   {
-    id: 'my-activity',
-    title: 'My Activity',
-    treeId: 'fitness',
+    id: 'rooms-restaurant',
+    title: 'Rooms and Restaurant',
+    treeId: 'rooms_restaurant',
     items: [
-      item('fitness.yoga', 'fitness', 'My Classes'),
-      item('sports.outdoor', 'sports', 'My Sports'),
+      item('rooms.hotel', 'rooms_restaurant', 'Hotel'),
+      item('rooms.veg_restaurant', 'rooms_restaurant', 'Restaurant'),
     ],
   },
   {

@@ -1,16 +1,24 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { FitnessHomeScreen } from './FitnessHomeScreen';
+import { FitnessHomeScreen, TodayNutrition } from './FitnessHomeScreen';
 import { FitnessProgressScreen } from './FitnessProgressScreen';
 import { FitnessAction } from '../components/FitnessUI';
 import { FitnessChart } from '../components/FitnessChart';
 import { FitnessDailyNutrition } from '../components/FitnessTargetCards';
+import { FitnessDatePicker } from '../components/FitnessControls';
 
+const mockWaterMutation = jest.fn();
+const mockNavigate = jest.fn();
+let mockId = 0;
 let mockSummary: any;
 let mockProgress: any;
+jest.mock(
+  'lucide-react-native',
+  () => new Proxy({}, { get: () => () => null }),
+);
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({
-    navigate: jest.fn(),
+    navigate: mockNavigate,
     goBack: jest.fn(),
     canGoBack: () => true,
   }),
@@ -42,6 +50,12 @@ jest.mock('react-native-svg', () => {
   return {
     __esModule: true,
     default: node('svg'),
+    Defs: node('defs'),
+    Path: node('path'),
+    Ellipse: node('ellipse'),
+    G: node('g'),
+    LinearGradient: node('linearGradient'),
+    Stop: node('stop'),
     Circle: node('circle'),
     Line: node('line'),
     Polyline: node('polyline'),
@@ -49,6 +63,11 @@ jest.mock('react-native-svg', () => {
   };
 });
 jest.mock('../api/fitnessApi', () => ({
+  useFitnessMutation: () => ({
+    mutateAsync: mockWaterMutation,
+    isPending: false,
+  }),
+  newFitnessRequestId: () => `request-${++mockId}`,
   useFitnessQuery: (path: string) => ({
     data: path.startsWith('/summary?')
       ? mockSummary
@@ -229,6 +248,9 @@ async function render(Component: React.ComponentType) {
   return renderer;
 }
 beforeEach(() => {
+  mockWaterMutation.mockReset().mockResolvedValue({});
+  mockNavigate.mockClear();
+  mockId = 0;
   const f = fixtures();
   mockSummary = f.summary;
   mockProgress = f.progress;
@@ -236,22 +258,21 @@ beforeEach(() => {
 afterEach(() =>
   ReactTestRenderer.act(() => renderers.splice(0).forEach(r => r.unmount())),
 );
-test('home binds saved ranges, strict scheduled completion, real latest weight date and server consistency', async () => {
+test('home shows today targets and strict scheduled completion; detail statistics stay in Progress', async () => {
   const r = await render(FitnessHomeScreen);
   const output = text(r.toJSON());
-  expect(r.root.findByType(FitnessDailyNutrition).props.targets).toBe(
+  expect(r.root.findByType(TodayNutrition).props.targets).toBe(
     mockSummary.targets,
   );
   expect(output).toContain('Daily reference · 1800–2200 kcal');
-  expect(output).toContain('0 of 1 scheduled workouts recorded complete');
-  expect(output).toContain('66.7%');
-  expect(output).toContain('2 of 3 scheduled days recorded complete');
-  expect(output).toContain('2026-11-12 · Saved weight entry');
-  expect(output).toContain('Chosen target · 70 kg');
-  expect(output).toContain('60% of your chosen change recorded');
+  expect(output).toContain('0 of 1 scheduled workouts complete');
+  expect(output).not.toContain('66.7%');
   expect(output).not.toContain('999 kg');
+  expect(output).not.toContain('Weight record');
+  expect(output).toContain('Progress');
+  expect(output).toContain('Browse experts');
 });
-test('no-plan and missing records stay explicit instead of using today as latest weight or inventing percentages', async () => {
+test('no-plan and missing entries never become zero logs or invented completion percentages', async () => {
   mockSummary = {
     ...mockSummary,
     plan: null,
@@ -264,26 +285,99 @@ test('no-plan and missing records stay explicit instead of using today as latest
   };
   const r = await render(FitnessHomeScreen);
   const output = text(r.toJSON());
-  expect(output).toContain('No meal entry yet');
-  expect(output).toContain('No weight record is available yet');
-  expect(output).toContain('Save a plan to compare your week');
+  expect(output).toContain('No meals yet');
+  expect(output).toContain('No water entry yet');
+  expect(output).toContain('Create my plan');
   expect(output).not.toContain('100%');
   expect(output).not.toContain('0 kcal logged');
 });
-test('professional review withholds current numeric targets and target progress even if an old response contains them', async () => {
+test('professional review withholds numeric targets even if an old response contains them', async () => {
   mockSummary.targetStatus = 'needs_review';
   mockSummary.targets.calories = { min: 9999, max: 9999 };
   const r = await render(FitnessHomeScreen);
   const output = text(r.toJSON());
   expect(output).toContain('Targets withheld for professional review');
-  expect(output).toContain('Weight-target comparisons are withheld');
   expect(output).not.toContain('9999');
   expect(output).not.toContain('Chosen target · 70');
   expect(output).not.toContain('66.7%');
 });
+test('quick glass retries the same request after a lost acknowledgement and creates a new ID only after success', async () => {
+  mockWaterMutation.mockRejectedValueOnce(new Error('Network interrupted'));
+  const r = await render(FitnessHomeScreen);
+  const click = async (label: string) =>
+    ReactTestRenderer.act(async () =>
+      r.root
+        .findAllByType(FitnessAction)
+        .find(a => a.props.label === label)!
+        .props.onPress(),
+    );
+  await click('Add glass · 250 ml');
+  expect(text(r.toJSON())).toContain('Network interrupted');
+  const first = mockWaterMutation.mock.calls[0][0];
+  await click('Retry glass');
+  expect(mockWaterMutation.mock.calls[1][0]).toEqual(first);
+  expect(first.body.data).toEqual({ amountMl: 250 });
+  expect(first.path).toBe('/logs/water');
+  await click('Add glass · 250 ml');
+  expect(mockWaterMutation.mock.calls[2][0].body.clientRequestId).not.toBe(
+    first.body.clientRequestId,
+  );
+});
+test('planned workout carries provider plan context and unscheduled activity stays manual', async () => {
+  mockSummary.plan.content.workouts = [
+    {
+      day: new Date(`${mockSummary.date}T12:00:00`).getDay(),
+      name: 'Saved strength session',
+      durationMinutes: 25,
+    },
+  ];
+  const r = await render(FitnessHomeScreen);
+  await ReactTestRenderer.act(async () =>
+    r.root
+      .findAllByType(FitnessAction)
+      .find(a => a.props.label === 'Start workout')!
+      .props.onPress(),
+  );
+  expect(mockNavigate).toHaveBeenLastCalledWith('FitnessWorkout', {
+    planId: 'plan-a',
+    day: 6,
+    date: '2026-11-14',
+  });
+  mockSummary.plan.content.workouts = [];
+  await ReactTestRenderer.act(async () => r.update(<FitnessHomeScreen />));
+  await ReactTestRenderer.act(async () =>
+    r.root
+      .findAllByType(FitnessAction)
+      .find(a => a.props.label === 'Log my own activity')!
+      .props.onPress(),
+  );
+  expect(mockNavigate).toHaveBeenLastCalledWith('FitnessWorkout', {
+    date: '2026-11-14',
+  });
+});
 test('progress labels current targets as comparisons and counts calorie-range matches rather than nutrition quality', async () => {
   const r = await render(FitnessProgressScreen);
   let output = text(r.toJSON());
+  expect(output).not.toContain('Current daily reference ranges');
+  await ReactTestRenderer.act(async () =>
+    r.root
+      .findAll(
+        n =>
+          n.props.accessibilityLabel === 'Explore the details' &&
+          n.props.accessibilityRole === 'button',
+      )[0]
+      .props.onPress(),
+  );
+  await ReactTestRenderer.act(async () =>
+    r.root
+      .findAll(
+        n =>
+          n.props.accessibilityLabel === 'About these comparisons' &&
+          n.props.accessibilityRole === 'button',
+      )[0]
+      .props.onPress(),
+  );
+  output = text(r.toJSON());
   expect(output).toContain(
     '1 of 2 recorded meal days within the compared calorie range · 50%',
   );
@@ -327,6 +421,16 @@ test('strength time comparison uses explicit dated loads and never plots bodywei
     },
   ];
   const r = await render(FitnessProgressScreen);
+  expect(text(r.toJSON())).not.toContain('First recorded');
+  await ReactTestRenderer.act(async () =>
+    r.root
+      .findAll(
+        n =>
+          n.props.accessibilityLabel === 'Explore the details' &&
+          n.props.accessibilityRole === 'button',
+      )[0]
+      .props.onPress(),
+  );
   const output = text(r.toJSON());
   expect(output).toContain('First recorded · 2026-11-01 · 8 kg');
   expect(output).toContain('Latest recorded · 2026-11-12 · 10 kg');
@@ -344,6 +448,15 @@ test('progress suppresses numeric comparisons when current professional review i
   mockProgress.targetStatus = 'needs_review';
   mockProgress.currentTargets.calories = { min: 9999, max: 9999 };
   const r = await render(FitnessProgressScreen);
+  await ReactTestRenderer.act(async () =>
+    r.root
+      .findAll(
+        n =>
+          n.props.accessibilityLabel === 'Explore the details' &&
+          n.props.accessibilityRole === 'button',
+      )[0]
+      .props.onPress(),
+  );
   const output = text(r.toJSON());
   expect(output).toContain('Numeric reference ranges are withheld');
   expect(output).not.toContain('9999');
@@ -353,4 +466,88 @@ test('progress suppresses numeric comparisons when current professional review i
       .findAllByType(FitnessAction)
       .some(action => action.props.label === 'Review daily target comparisons'),
   ).toBe(false);
+});
+
+test('progress uses saved scheduled completion and keeps missing measurements distinct from an explicit zero', async () => {
+  const day = mockProgress.days[0];
+  mockProgress.totals.workouts = 14;
+  mockProgress.adherence = {
+    ...mockProgress.adherence,
+    plannedWorkouts: 4,
+    completedPlannedWorkouts: 1,
+    completionPercent: 25,
+  };
+  mockProgress.days = [
+    { ...day, date: '2026-11-01', recordedKinds: [], weightKg: null },
+    { ...day, date: '2026-11-02', recordedKinds: ['weight'], weightKg: 0 },
+    { ...day, date: '2026-11-03', recordedKinds: ['weight'], weightKg: 72 },
+  ];
+  const r = await render(FitnessProgressScreen);
+  const output = text(r.toJSON());
+  expect(output).toContain('25%');
+  expect(output).toContain('1 of 4 due scheduled workouts complete');
+  expect(output).not.toContain('14 of 4');
+  expect(
+    r.root
+      .findAllByType(FitnessChart)
+      .find(chart => chart.props.title === 'Weight (kg)')!.props.values,
+  ).toEqual([null, 0, 72]);
+  expect(output).not.toContain('Current daily reference ranges');
+});
+
+test('progress custom dates use bounded pickers and keep advanced comparisons collapsed', async () => {
+  const r = await render(FitnessProgressScreen);
+  let pickers = r.root.findAllByType(FitnessDatePicker);
+  expect(pickers.map(picker => picker.props.label)).toEqual([
+    'From date',
+    'To date',
+  ]);
+  expect(pickers[0].props.maximumDate).toBe('2026-11-14');
+  expect(pickers[1].props.minimumDate).toBe('2026-11-01');
+  await ReactTestRenderer.act(async () =>
+    pickers[0].props.onChange('2026-11-05'),
+  );
+  pickers = r.root.findAllByType(FitnessDatePicker);
+  expect(pickers[0].props.value).toBe('2026-11-05');
+  expect(pickers[1].props.minimumDate).toBe('2026-11-05');
+  expect(text(r.toJSON())).not.toContain('Current daily reference ranges');
+});
+
+test('nutrition cards preserve explicit zero and withhold stale clinical targets', async () => {
+  const day = {
+    ...mockSummary.today,
+    nutrients: { ...mockSummary.today.nutrients, calories: 0 },
+  };
+  const r = await render(() => (
+    <FitnessDailyNutrition
+      day={day}
+      targets={{ ...mockSummary.targets, calories: { min: 9999, max: 9999 } }}
+      status="needs_review"
+    />
+  ));
+  expect(text(r.toJSON())).toContain('0 kcal logged');
+  expect(text(r.toJSON())).not.toContain('9999');
+  await ReactTestRenderer.act(async () =>
+    r.update(
+      <FitnessDailyNutrition
+        day={{ ...day, recordedKinds: [] }}
+        targets={null}
+        status="no_plan"
+      />,
+    ),
+  );
+  expect(text(r.toJSON())).toContain('No entry');
+  expect(text(r.toJSON())).not.toContain('0 kcal logged');
+});
+
+test('zero-valued saved reference ranges never produce invalid visual dimensions', async () => {
+  mockSummary.targets.proteinG = { min: 0, max: 50 };
+  mockSummary.targets.calories = { min: 0, max: 0 };
+  mockSummary.targets.waterMl = { min: 0, max: 0 };
+  mockSummary.today.nutrients.proteinG = 0;
+  mockSummary.today.nutrients.calories = 0;
+  mockSummary.today.waterMl = 0;
+  const r = await render(FitnessHomeScreen);
+  expect(JSON.stringify(r.toJSON())).not.toMatch(/NaN|Infinity/);
+  expect(text(r.toJSON())).toContain('kcal logged');
 });

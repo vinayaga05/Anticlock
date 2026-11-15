@@ -7,7 +7,8 @@ export type ServiceTreeId =
   | 'beauty_spa'
   | 'course_training'
   | 'home_services'
-  | 'ecommerce';
+  | 'ecommerce'
+  | 'rooms_restaurant';
 
 export type ServiceActionType =
   | 'appointment'

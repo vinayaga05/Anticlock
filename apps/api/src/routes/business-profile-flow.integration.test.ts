@@ -83,7 +83,7 @@ describe('business storefront flow (PostgreSQL)', { skip: !testDatabase }, () =>
     const { Hono } = await import('hono');
     const { businessProfileRoutes } = await import('./business-profiles.js');
     const { bookingMobileRoutes } = await import('./bookings.js');
-    const { signToken } = await import('../testutils/phoneBoundToken.js');
+    const { signToken } = await import('../lib/auth.js');
     const client = await import('../db/client.js'); db = client.db; sqlClient = client.sql;
     schema = await import('../db/schema.js');
     app = new Hono().route('/v1/business-profiles', businessProfileRoutes).route('/v1/bookings', bookingMobileRoutes);
@@ -172,7 +172,7 @@ describe('business storefront flow (PostgreSQL)', { skip: !testDatabase }, () =>
     await expectStatus(null, 'PUT', `${base}/save`, 401, { saved: true });
     await expectStatus('systemAdmin', 'GET', base, 403);
     await expectStatus('invalid', 'GET', base, 401);
-    await expectStatus('inactive', 'GET', base, 401);
+    await expectStatus('inactive', 'GET', base, 403);
     await expectStatus(null, 'GET', `${base}/analytics`, 401);
     for (const [who, flags] of Object.entries({ owner: [true, true, true], admin: [true, true, true], creator: [false, true, false], analyst: [false, false, true], customer: [false, false, false] })) {
       const { business } = await expectStatus(who, 'GET', base, 200);

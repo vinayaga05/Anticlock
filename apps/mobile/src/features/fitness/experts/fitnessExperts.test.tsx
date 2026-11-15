@@ -16,18 +16,26 @@ const providerId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
 let mockParams: any = {},
   mockData: Record<string, any> = {},
   mockErrors: Record<string, Error> = {};
+const mockQueryPaths: string[] = [];
+jest.mock(
+  'lucide-react-native',
+  () => new Proxy({}, { get: () => () => null }),
+);
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate, goBack: jest.fn() }),
   useRoute: () => ({ params: mockParams }),
 }));
 jest.mock('../api/fitnessApi', () => ({
-  useFitnessQuery: (path: string) => ({
-    data: mockData[path],
-    error: mockErrors[path],
-    isError: Boolean(mockErrors[path]),
-    isLoading: false,
-    refetch: mockRefetch,
-  }),
+  useFitnessQuery: (path: string) => (
+    mockQueryPaths.push(path),
+    {
+      data: mockData[path],
+      error: mockErrors[path],
+      isError: Boolean(mockErrors[path]),
+      isLoading: false,
+      refetch: mockRefetch,
+    }
+  ),
   useFitnessMutation: () => ({
     mutateAsync: mockMutate,
     isPending: false,
@@ -72,7 +80,7 @@ function button(label: string) {
 function field(label: string) {
   return tree.root.findAll(
     n =>
-      n.props.accessibilityLabel === label &&
+      (n.props.accessibilityLabel === label || n.props.label === label) &&
       typeof n.props.onChangeText === 'function',
   )[0];
 }
@@ -89,6 +97,7 @@ function text() {
 beforeEach(() => {
   jest.clearAllMocks();
   mockParams = {};
+  mockQueryPaths.length = 0;
   mockData = {
     '/experts': { experts: [], nextOffset: null },
     '/consents': { consents: [] },
@@ -107,7 +116,8 @@ afterEach(async () => {
 it('does not show owner workspace or publishing controls to customers', async () => {
   await render(<FitnessExpertHome />);
   expect(button('Open expert workspace')).toBeUndefined();
-  expect(button('Find a trainer or nutritionist')).toBeTruthy();
+  expect(button('Find a trainer or nutritionist')).toBeUndefined();
+  expect(tree.toJSON()).toBeNull();
   await act(async () => tree.unmount());
   await render(<FitnessWorkspaceScreen />);
   expect(text()).toContain('For approved professionals');
@@ -269,6 +279,7 @@ it('preserves the approved business identity for owner publishing entry points',
     consultations: [],
   };
   await render(<FitnessWorkspaceScreen />);
+  await act(async () => button('Manage your business').props.onPress());
   await act(async () => button('Add a Clip').props.onPress());
   expect(mockNavigate).toHaveBeenCalledWith('ClipComposer', {
     publisherProfileId: providerId,
@@ -368,9 +379,12 @@ it('loads every exercise, retains multi-day drafts and publishes the complete re
   );
   await act(async () => button('Plan section: workouts').props.onPress());
   expect(field('Exercise 1 name').props.value).toBe('Walk');
+  await act(async () => button('Exercise 2 · Mobility').props.onPress());
+  await act(async () => button('Exercise 1 timing & coaching').props.onPress());
   expect(field('Exercise 2 name').props.value).toBe('Mobility');
   expect(field('Exercise 1 rest seconds (optional)').props.value).toBe('30');
   await act(async () => button('Add another exercise').props.onPress());
+  await act(async () => button('Exercise 3 timing & coaching').props.onPress());
   await act(async () => {
     field('Exercise 3 name').props.onChangeText('Seated reset');
     field('Exercise 3 sets').props.onChangeText('2');
@@ -387,6 +401,7 @@ it('loads every exercise, retains multi-day drafts and publishes the complete re
   await act(async () => button('Workout day: Wed').props.onPress());
   expect(field('Exercise 1 name').props.value).toBe('Chair stand');
   await act(async () => button('Workout day: Mon').props.onPress());
+  await act(async () => button('Exercise 3 · Seated reset').props.onPress());
   expect(field('Exercise 3 name').props.value).toBe('Seated reset');
   await act(async () =>
     field('Explain this revision to your client').props.onChangeText(
@@ -428,6 +443,10 @@ it('publishes intentional provider target pairs and explicitly clears a previous
     />,
   );
   await act(async () => button('Plan section: nutrition').props.onPress());
+  await act(async () => button('Nutrient & water targets').props.onPress());
+  await act(async () => button('Protein').props.onPress());
+  await act(async () => button('Carbohydrate').props.onPress());
+  await act(async () => button('Drinking water').props.onPress());
   expect(field('Protein minimum (g)').props.value).toBe('60');
   expect(field('Carbohydrate minimum (g)').props.value).toBe('');
   expect(text()).toContain('Saved baseline: 180–240 g');
@@ -463,6 +482,8 @@ it('keeps partial target edits in the draft and blocks publishing incomplete pai
     />,
   );
   await act(async () => button('Plan section: nutrition').props.onPress());
+  await act(async () => button('Nutrient & water targets').props.onPress());
+  await act(async () => button('Fibre').props.onPress());
   await act(async () => {
     field('Fibre minimum (g)').props.onChangeText('25');
     field('Explain this revision to your client').props.onChangeText(
@@ -491,7 +512,9 @@ it('keeps clinical numeric targets and workout prescriptions unavailable in the 
     />,
   );
   await act(async () => button('Plan section: nutrition').props.onPress());
-  expect(field('Protein minimum (g)').props.editable).toBe(false);
+  await act(async () => button('Nutrient & water targets').props.onPress());
+  await act(async () => button('Protein').props.onPress());
+  expect(field('Protein minimum (g)').props.disabled).toBe(true);
   expect(text()).toContain(
     'Numeric nutrition targets and exercise prescriptions remain unavailable',
   );
@@ -532,4 +555,99 @@ it('prefills saved habit targets and revises sleep without introducing a duplica
     { key: 'water', label: 'Water', target: 2500, unit: 'ml' },
     { key: 'sleep', label: 'Sleep', target: 8, unit: 'hours' },
   ]);
+});
+
+it('applies directory filters only after confirmation and discards cancelled draft changes', async () => {
+  await render(<FitnessExpertsScreen />);
+  await act(async () => button('Filters').props.onPress());
+  await act(async () => button('Consultation mode: Online').props.onPress());
+  expect(mockQueryPaths.at(-1)).toBe('/experts');
+  await act(async () => button('Cancel').props.onPress());
+  await act(async () => button('Filters').props.onPress());
+  expect(
+    button('Consultation mode: Any').props.accessibilityState.selected,
+  ).toBe(true);
+  await act(async () => button('Consultation mode: Online').props.onPress());
+  await act(async () => button('Apply filters').props.onPress());
+  expect(mockQueryPaths.at(-1)).toBe('/experts?mode=online');
+  await act(async () => button('Filters · 1').props.onPress());
+  await act(async () => button('Consultation mode: At home').props.onPress());
+  await act(async () => button('Close Find your fit').props.onPress());
+  expect(mockQueryPaths.at(-1)).toBe('/experts?mode=online');
+  await act(async () => button('Filters · 1').props.onPress());
+  expect(
+    button('Consultation mode: Online').props.accessibilityState.selected,
+  ).toBe(true);
+});
+it('keeps detailed provider qualifications on the real business profile and does not invent a portrait or review', async () => {
+  mockData['/experts'] = {
+    experts: [
+      {
+        id: providerId,
+        name: 'Actual provider',
+        kind: 'trainer',
+        categoryId: 'fitness.personal_trainer',
+        qualifications: ['Long credential details'],
+        specialities: ['Strength'],
+        languages: ['English'],
+        modes: ['online'],
+        priceFrom: null,
+        rating: null,
+        reviewCount: 0,
+        city: null,
+        avatarUrl: null,
+        available: false,
+        nextAvailableAt: null,
+      },
+    ],
+    nextOffset: null,
+  };
+  await render(<FitnessExpertsScreen />);
+  expect(text()).toContain('Actual provider');
+  expect(text()).toContain('Approved provider');
+  expect(text()).toContain('No reviews yet');
+  expect(text()).not.toContain('Long credential details');
+  expect(button('Book a consultation').props.accessibilityState.disabled).toBe(
+    true,
+  );
+  expect(tree.root.findAll(n => n.props.source?.uri)).toHaveLength(0);
+});
+it('keeps numeric expert edits behind disclosures and uses stepped controls while retaining all saved exercises', async () => {
+  await render(
+    <FitnessPlanEditor
+      content={editablePlan()}
+      version={3}
+      kind="trainer"
+      onPublish={jest.fn()}
+    />,
+  );
+  await act(async () => button('Plan section: workouts').props.onPress());
+  expect(field('Exercise 2 name')).toBeUndefined();
+  await act(async () => button('Exercise 2 · Mobility').props.onPress());
+  expect(field('Exercise 2 name').props.value).toBe('Mobility');
+  await act(async () => button('Increase Exercise 2 sets').props.onPress());
+  expect(field('Exercise 2 sets').props.value).toBe('3');
+  expect(field('Exercise 1 name').props.value).toBe('Walk');
+});
+
+it('keeps real nextOffset paging and resets it when applying a custom search outside loaded options', async () => {
+  mockData['/experts'] = { experts: [], nextOffset: 50 };
+  mockData['/experts?offset=50'] = { experts: [], nextOffset: null };
+  await render(<FitnessExpertsScreen />);
+  await act(async () => button('Next results').props.onPress());
+  expect(mockQueryPaths.at(-1)).toBe('/experts?offset=50');
+  await act(async () => button('Filters').props.onPress());
+  await act(async () =>
+    button('Search another speciality or place').props.onPress(),
+  );
+  await act(async () => {
+    field('Other speciality').props.onChangeText('Postnatal mobility');
+    field('Other language').props.onChangeText('Tamil');
+    field('Other city or area').props.onChangeText('Madurai');
+  });
+  await act(async () => button('Apply filters').props.onPress());
+  expect(mockQueryPaths.at(-1)).toBe(
+    '/experts?language=Tamil&location=Madurai&speciality=Postnatal%20mobility',
+  );
+  expect(button('Next results')).toBeUndefined();
 });

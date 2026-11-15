@@ -1,13 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import type { FitnessAssessment, FitnessProfile } from '@anticlock/contracts';
-import { useFitnessMutation, useFitnessQuery } from '../api/fitnessApi';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useNavigation, usePreventRemove } from '@react-navigation/native';
 import {
-  assessmentMissing,
-  fitnessAge,
-  fitnessTimezone,
-} from '../fitnessModel';
+  Activity,
+  Armchair,
+  Beef,
+  Dumbbell,
+  Egg,
+  Flame,
+  Leaf,
+  MoreHorizontal,
+  PersonStanding,
+  Scale,
+  Sprout,
+} from 'lucide-react-native';
+import type { FitnessAssessment, FitnessProfile } from '@anticlock/contracts';
+import { useFitnessMutation } from '../api/fitnessApi';
+import { fitnessAge, localFitnessDate, numberLabel } from '../fitnessModel';
 import {
   FitnessAction,
   FitnessCard,
@@ -18,528 +27,1147 @@ import {
   FitnessScreen,
   FitnessSection,
   FitnessText,
+  useFitnessColors,
 } from '../components/FitnessUI';
+import {
+  FitnessChoiceCards,
+  FitnessDatePicker,
+  FitnessDayPicker,
+  FitnessDisclosure,
+  FitnessStepper,
+  FitnessToggle,
+} from '../components/FitnessControls';
+import {
+  FitnessIllustration,
+  FitnessPhoto,
+} from '../components/FitnessVisuals';
+import {
+  ASSESSMENT_STEPS,
+  FOOD_OPTIONS,
+  POUNDS_PER_KG,
+  PRIMARY_GOALS,
+  assessmentStepError,
+  assessmentsEqual,
+  formatHeightInches,
+  humanAssessmentValue,
+  replaceKnownChoices,
+  selectedKnownChoices,
+  setWorkoutLocation,
+  workoutLocation,
+} from '../onboarding/assessmentModel';
+import { useAssessmentDraft } from '../onboarding/useAssessmentDraft';
 
-const steps = [
-  'Your starting point',
-  'What matters to you',
-  'Movement that fits',
-  'Food & preferences',
-  'Private health context',
-  'Your everyday rhythm',
-  'Review & begin',
+const GOAL_ICONS = [Scale, Dumbbell, Activity, Flame, PersonStanding, Leaf];
+const ALLERGIES = [
+  'Peanuts',
+  'Tree nuts',
+  'Milk',
+  'Eggs',
+  'Gluten',
+  'Soy',
+  'Shellfish',
 ];
-const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const RESTRICTIONS = ['Dairy free', 'Gluten free', 'No pork', 'No beef'];
+const MOVEMENTS = [
+  'walking',
+  'strength',
+  'cycling',
+  'yoga',
+  'swimming',
+  'running',
+  'dance',
+];
+const EQUIPMENT = [
+  'bodyweight',
+  'dumbbells',
+  'resistance_bands',
+  'gym',
+  'bike',
+];
+const TIME_LABELS = ['Morning', 'Afternoon', 'Evening'];
+const STEP_HELP = [
+  'Choose what feels right for you.',
+  'A starting point, just for you.',
+  'Make movement fit your week.',
+  'Keep what works for you.',
+  'A plan shaped around your choices.',
+];
+const BODY_TYPES = [
+  { value: 'lean', label: 'Lean', kind: 'body-lean' },
+  { value: 'athletic', label: 'Athletic', kind: 'body-athletic' },
+  { value: 'broad', label: 'Broad', kind: 'body-broad' },
+] as const;
+const MAIN_GOALS: readonly string[] = PRIMARY_GOALS.map(goal => goal.value);
+
 export function FitnessAssessmentScreen() {
   const nav = useNavigation<any>();
-  const profile = useFitnessQuery<{ profile: FitnessProfile | null }>(
-    '/profile',
-  );
-  const save = useFitnessMutation<any>();
-  const hydrated = useRef(false);
+  const colors = useFitnessColors();
+  const mutation = useFitnessMutation<{ profile?: FitnessProfile }>();
+  const state = useAssessmentDraft();
+  const { draft, saver } = state;
   const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState<FitnessAssessment>({
-    units: 'metric',
-    calculationSex: 'unspecified',
-    equipment: [],
-    timezone: fitnessTimezone(),
-  });
-  const [error, setError] = useState('');
-  const [saved, setSaved] = useState('');
-  const [numericText, setNumericText] = useState<Record<string, string>>({});
-  const [listText, setListText] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [textDrafts, setTextDrafts] = useState<Record<string, string>>({});
+  const mounted = useRef(true);
+  const operation = useRef(false);
+  const allowExit = useRef(false);
+  const exitOperation = useRef(false);
+  const advancing = useRef(false);
+  const liveOwner = useRef(state.ownerKey);
+  liveOwner.current = state.ownerKey;
+  const initialAnswers = useRef<FitnessAssessment | null>(null);
+  if (state.ready && !initialAnswers.current) initialAnswers.current = draft;
   useEffect(() => {
-    if (!hydrated.current && profile.isSuccess) {
-      if (profile.data.profile) setDraft(profile.data.profile.assessment);
-      hydrated.current = true;
-    }
-  }, [profile.data, profile.isSuccess]);
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    setStep(0);
+    setError(null);
+    setCreating(false);
+    setLeaving(false);
+    setTextDrafts({});
+    initialAnswers.current = null;
+    operation.current = false;
+    exitOperation.current = false;
+    advancing.current = false;
+    allowExit.current = false;
+  }, [state.ownerKey]);
+  useEffect(() => {
+    advancing.current = false;
+  }, [step]);
+
   const put = <K extends keyof FitnessAssessment>(
     key: K,
     value: FitnessAssessment[K],
   ) => {
-    setDraft(old => ({ ...old, [key]: value }));
-    setSaved('');
+    if (operation.current || liveOwner.current !== state.ownerKey) return;
+    setError(null);
+    saver.update(key, value);
   };
-  const field = (
-    key: keyof FitnessAssessment,
+  const imperial = draft.units === 'imperial';
+  const minimumBirthDate = new Date();
+  minimumBirthDate.setFullYear(minimumBirthDate.getFullYear() - 120);
+  const savedExtraGoals = (initialAnswers.current?.goals ?? []).filter(
+    goal => !MAIN_GOALS.includes(goal),
+  );
+  const savedExtraFoods = (
+    initialAnswers.current?.foodPreferences ?? []
+  ).filter(value => !(FOOD_OPTIONS as readonly string[]).includes(value));
+  const preferredTime = draft.preferredTimes?.find(value =>
+    /^\d{2}:\d{2}$/.test(value),
+  );
+  const currentBaseline =
+    state.serverProfile?.status === 'complete' &&
+    assessmentsEqual(state.serverProfile.assessment, draft)
+      ? state.serverProfile.baseline
+      : null;
+  const optionalText = (
+    key:
+      | 'injuries'
+      | 'mobility'
+      | 'medicalConditions'
+      | 'medications'
+      | 'routine'
+      | 'bodyDescription',
     label: string,
-    numeric = false,
-    hint?: string,
   ) => (
     <FitnessField
       key={key}
-      label={
-        key === 'targetWeightKg' && draft.units === 'imperial'
-          ? 'Target weight (lb, optional)'
-          : label
-      }
-      value={
-        numeric
-          ? numericText[key] ??
-            (draft[key] === undefined
-              ? ''
-              : String(
-                  key === 'targetWeightKg' && draft.units === 'imperial'
-                    ? Math.round(Number(draft[key]) * 2.2046226 * 100) / 100
-                    : draft[key],
-                ))
-          : draft[key] === undefined
-          ? ''
-          : String(draft[key])
-      }
-      onChangeText={value => {
-        if (numeric) setNumericText(values => ({ ...values, [key]: value }));
-        put(
-          key,
-          (numeric
-            ? value.trim() === ''
-              ? undefined
-              : Number(value) /
-                (key === 'targetWeightKg' && draft.units === 'imperial'
-                  ? 2.2046226
-                  : 1)
-            : value === '' && ['dateOfBirth', 'targetDate'].includes(key)
-            ? undefined
-            : value) as any,
-        );
-      }}
-      keyboardType={numeric ? 'decimal-pad' : 'default'}
-      multiline={
-        !numeric &&
-        [
-          'routine',
-          'bodyDescription',
-          'injuries',
-          'mobility',
-          'medicalConditions',
-          'medications',
-        ].includes(key)
-      }
-      hint={hint}
-    />
-  );
-  const list = (
-    key: 'allergies' | 'restrictions' | 'preferredTimes',
-    label: string,
-  ) => (
-    <FitnessField
       label={label}
-      value={listText[key] ?? (draft[key] ?? []).join(', ')}
-      onChangeText={value => {
-        setListText(values => ({ ...values, [key]: value }));
-        put(
-          key,
-          value
-            .split(',')
-            .map(v => v.trim())
-            .filter(Boolean),
-        );
-      }}
-      hint="Separate entries with commas."
+      value={draft[key] ?? ''}
+      onChangeText={value => put(key, value === '' ? undefined : value)}
+      multiline
+      maxLength={3000}
     />
   );
-  const choices = (
-    key: keyof FitnessAssessment,
+  const customList = (
+    key: 'allergies' | 'restrictions',
     label: string,
-    options: string[],
-    multiple = false,
-  ) => (
-    <FitnessChoices
-      label={label}
-      options={options}
-      selected={(draft[key] as any) ?? (multiple ? [] : '')}
-      multiple={multiple}
-      onChange={value => {
-        if (key === 'units') setNumericText({});
-        put(key, value);
-      }}
-    />
+    common: string[],
+  ) => {
+    const custom = (draft[key] ?? []).filter(
+      value => !common.some(item => item.toLowerCase() === value.toLowerCase()),
+    );
+    return (
+      <FitnessField
+        label={label}
+        value={textDrafts[key] ?? custom.join(', ')}
+        maxLength={1500}
+        onChangeText={value => {
+          setTextDrafts(text => ({ ...text, [key]: value }));
+          put(key, [
+            ...selectedKnownChoices(draft[key], common),
+            ...value
+              .split(',')
+              .map(item => item.trim())
+              .filter(Boolean),
+          ]);
+        }}
+      />
+    );
+  };
+  async function flushSafely() {
+    const expectedOwner = state.ownerKey;
+    try {
+      await saver.flush();
+      return liveOwner.current === expectedOwner;
+    } catch (problem) {
+      if (mounted.current && liveOwner.current === expectedOwner)
+        setError((problem as Error).message);
+      return false;
+    }
+  }
+  usePreventRemove(
+    !allowExit.current && (creating || leaving || state.dirty),
+    ({ data }) => {
+      if (allowExit.current) {
+        nav.dispatch(data.action);
+        return;
+      }
+      if (operation.current || exitOperation.current) return;
+      const expectedOwner = state.ownerKey;
+      exitOperation.current = true;
+      setLeaving(true);
+      void flushSafely().then(saved => {
+        if (!mounted.current || liveOwner.current !== expectedOwner) return;
+        exitOperation.current = false;
+        setLeaving(false);
+        if (saved) {
+          allowExit.current = true;
+          nav.dispatch(data.action);
+        }
+      });
+    },
   );
-  async function persist(next?: boolean, complete?: boolean) {
-    setError('');
-    setSaved('');
-    if (complete) {
-      const missing = assessmentMissing(draft);
+  async function goBack() {
+    if (operation.current || exitOperation.current) return;
+    if (step > 0) {
+      setStep(value => value - 1);
+      setError(null);
+      return;
+    }
+    if (!state.ready) {
+      allowExit.current = true;
+      if (nav.canGoBack()) nav.goBack();
+      else nav.navigate('FitnessHome');
+      return;
+    }
+    const expectedOwner = state.ownerKey;
+    exitOperation.current = true;
+    setLeaving(true);
+    const saved = await flushSafely();
+    if (!mounted.current || liveOwner.current !== expectedOwner) return;
+    exitOperation.current = false;
+    setLeaving(false);
+    if (saved) {
+      allowExit.current = true;
+      if (nav.canGoBack()) nav.goBack();
+      else nav.navigate('FitnessHome');
+    }
+  }
+  async function next() {
+    if (operation.current || advancing.current || !state.ready) return;
+    const invalid = assessmentStepError(step, draft);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+    setError(null);
+    if (step < 4) {
+      advancing.current = true;
+      setStep(value => value + 1);
+      return;
+    }
+    for (let index = 0; index < 4; index++) {
+      const missing = assessmentStepError(index, draft);
       if (missing) {
+        setStep(index);
         setError(missing);
         return;
       }
     }
+    const expectedOwner = state.ownerKey;
+    const currentOwner = () =>
+      mounted.current && liveOwner.current === expectedOwner;
+    operation.current = true;
+    setCreating(true);
     try {
-      const body: Record<string, unknown> = { ...draft };
-      for (const key of Object.keys(profile.data?.profile?.assessment ?? {}))
-        if (draft[key as keyof FitnessAssessment] === undefined)
-          body[key] = null;
-      await save.mutateAsync({ path: '/profile', method: 'PATCH', body });
-      if (complete) {
-        await save.mutateAsync({ path: '/profile/complete', body: {} });
-        await save.mutateAsync({ path: '/plans/generate', body: {} });
-        nav.navigate('FitnessHome');
-      } else if (next) setStep(value => Math.min(value + 1, steps.length - 1));
-      else setSaved('Draft saved privately. You can return to finish it.');
-    } catch (e) {
-      setError((e as Error).message);
+      if (draft.equipment === undefined) saver.update('equipment', []);
+      await saver.flush();
+      if (!currentOwner()) return;
+      await mutation.mutateAsync({ path: '/profile/complete', body: {} });
+      if (!currentOwner()) return;
+      await mutation.mutateAsync({ path: '/plans/generate', body: {} });
+      if (currentOwner()) {
+        allowExit.current = true;
+        nav.replace('FitnessHome');
+      }
+    } catch (problem) {
+      if (currentOwner()) setError((problem as Error).message);
+    } finally {
+      if (currentOwner()) {
+        operation.current = false;
+        setCreating(false);
+      }
     }
   }
+  const status =
+    state.status === 'saving'
+      ? 'Saving privately…'
+      : state.status === 'error'
+      ? 'Answers kept here. Retry when ready.'
+      : state.status === 'waiting'
+      ? 'Changes save automatically'
+      : 'Saved privately';
+  const footer = (
+    <View style={{ gap: 8 }}>
+      <FitnessNotice error message={error ?? state.error} />
+      {state.status === 'error' && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Retry saving answers"
+          onPress={() => {
+            void flushSafely();
+          }}
+          style={styles.textAction}
+        >
+          <Text style={{ color: colors.accent, fontWeight: '600' }}>
+            Retry saving
+          </Text>
+        </Pressable>
+      )}
+      <FitnessAction
+        label={step === 4 ? 'Create My Plan' : 'Continue'}
+        onPress={() => {
+          void next();
+        }}
+        busy={creating || leaving}
+        disabled={!state.ready}
+      />
+      <Text
+        accessibilityLiveRegion="polite"
+        style={{ textAlign: 'center', color: colors.muted, fontSize: 12 }}
+      >
+        {state.ready ? status : 'Loading your saved answers…'}
+      </Text>
+    </View>
+  );
+
   return (
     <FitnessScreen
-      busy={save.isPending}
-      title={steps[step]}
-      subtitle={`STEP ${step + 1} OF ${
-        steps.length
-      } · Your pace, your starting point.`}
+      title={ASSESSMENT_STEPS[step]}
+      subtitle={STEP_HELP[step]}
+      footer={footer}
+      onBack={() => {
+        void goBack();
+      }}
+      busy={creating || leaving}
     >
-      {profile.isPending ? (
-        <FitnessLoading />
-      ) : profile.isError ? (
-        <>
-          <FitnessNotice error message={profile.error.message} />
-          <FitnessAction
-            label="Retry loading your draft"
-            onPress={() => {
-              void profile.refetch();
-            }}
-          />
-        </>
+      {!state.ready ? (
+        state.loadError ? (
+          <FitnessCard>
+            <FitnessNotice error message={state.loadError} />
+            <FitnessAction
+              label="Retry loading your answers"
+              onPress={state.retryLoad}
+            />
+          </FitnessCard>
+        ) : (
+          <FitnessLoading />
+        )
       ) : (
         <>
-          <FitnessCard tone="soft">
-            <FitnessText muted>
-              Your assessment stays private. Health questions are optional. Save
-              your draft at any point; nothing is shared with an expert until
-              you choose.
-            </FitnessText>
-          </FitnessCard>
+          <View
+            accessibilityRole="progressbar"
+            accessibilityLabel={`Step ${step + 1} of 5`}
+            accessibilityValue={{ min: 1, max: 5, now: step + 1 }}
+            style={styles.progress}
+          >
+            {ASSESSMENT_STEPS.map((name, index) => (
+              <View
+                key={name}
+                style={{
+                  height: 4,
+                  borderRadius: 4,
+                  flex: 1,
+                  backgroundColor: index <= step ? colors.accent : colors.line,
+                }}
+              />
+            ))}
+          </View>
           {step === 0 && (
             <>
-              {field(
-                'dateOfBirth',
-                'Date of birth',
-                false,
-                'YYYY-MM-DD. Used for age appropriate safety guidance.',
-              )}
-              {fitnessAge(draft.dateOfBirth) !== null && (
-                <FitnessText muted>
-                  Age: {fitnessAge(draft.dateOfBirth)}
-                </FitnessText>
-              )}
-              {field('gender', 'Gender (optional)')}
-              {field(
-                'bodyDescription',
-                'How would you describe your body? (optional)',
-              )}
-              {choices(
-                'calculationSex',
-                'Optional physiological estimate input',
-                ['unspecified', 'female', 'male'],
-              )}
-              <FitnessText muted>
-                This input is separate from gender identity. Choosing
-                unspecified gives a range where appropriate.
-              </FitnessText>
-              {choices('units', 'Preferred display units', [
-                'metric',
-                'imperial',
-              ])}
-              <FitnessField
-                label={
-                  draft.units === 'imperial' ? 'Height (inches)' : 'Height (cm)'
-                }
-                keyboardType="decimal-pad"
-                value={
-                  numericText.heightCm ??
-                  (draft.heightCm === undefined
-                    ? ''
-                    : String(
-                        Math.round(
-                          (draft.units === 'imperial'
-                            ? draft.heightCm / 2.54
-                            : draft.heightCm) * 100,
-                        ) / 100,
-                      ))
-                }
-                onChangeText={v => {
-                  setNumericText(values => ({ ...values, heightCm: v }));
+              <FitnessPhoto kind="outdoor" style={{ height: 110 }} />
+              <FitnessChoiceCards
+                options={PRIMARY_GOALS.map((goal, index) => ({
+                  ...goal,
+                  icon: GOAL_ICONS[index],
+                }))}
+                value={(draft.goals ?? []).filter(goal =>
+                  MAIN_GOALS.includes(goal),
+                )}
+                multiple
+                onChange={values =>
                   put(
-                    'heightCm',
-                    v === ''
-                      ? undefined
-                      : Number(v) * (draft.units === 'imperial' ? 2.54 : 1),
-                  );
-                }}
-              />
-              <FitnessField
-                label={
-                  draft.units === 'imperial' ? 'Weight (lb)' : 'Weight (kg)'
+                    'goals',
+                    replaceKnownChoices(
+                      draft.goals,
+                      MAIN_GOALS,
+                      values,
+                    ) as FitnessAssessment['goals'],
+                  )
                 }
-                keyboardType="decimal-pad"
-                value={
-                  numericText.weightKg ??
-                  (draft.weightKg === undefined
-                    ? ''
-                    : String(
-                        Math.round(
-                          (draft.units === 'imperial'
-                            ? draft.weightKg * 2.2046226
-                            : draft.weightKg) * 100,
-                        ) / 100,
-                      ))
-                }
-                onChangeText={v => {
-                  setNumericText(values => ({ ...values, weightKg: v }));
-                  put(
-                    'weightKg',
-                    v === ''
-                      ? undefined
-                      : Number(v) /
-                          (draft.units === 'imperial' ? 2.2046226 : 1),
-                  );
-                }}
               />
+              {!!savedExtraGoals.length && (
+                <FitnessDisclosure
+                  title="Other saved goals"
+                  defaultOpen={
+                    !(draft.goals ?? []).some(goal => MAIN_GOALS.includes(goal))
+                  }
+                >
+                  <FitnessChoices
+                    label="Keep the goals that still fit"
+                    options={savedExtraGoals.map(humanAssessmentValue)}
+                    selected={(draft.goals ?? [])
+                      .filter(goal => savedExtraGoals.includes(goal))
+                      .map(humanAssessmentValue)}
+                    multiple
+                    onChange={(labels: string[]) =>
+                      put('goals', [
+                        ...(draft.goals ?? []).filter(
+                          goal => !savedExtraGoals.includes(goal),
+                        ),
+                        ...savedExtraGoals.filter(goal =>
+                          labels.includes(humanAssessmentValue(goal)),
+                        ),
+                      ])
+                    }
+                  />
+                </FitnessDisclosure>
+              )}
+              <FitnessDisclosure
+                title="A target, if you have one"
+                subtitle="Optional"
+              >
+                <FitnessStepper
+                  label="Target weight"
+                  initialValue={imperial ? 154 : 70}
+                  value={
+                    draft.targetWeightKg === undefined
+                      ? undefined
+                      : draft.targetWeightKg * (imperial ? POUNDS_PER_KG : 1)
+                  }
+                  onChange={value =>
+                    put(
+                      'targetWeightKg',
+                      value / (imperial ? POUNDS_PER_KG : 1),
+                    )
+                  }
+                  min={15 * (imperial ? POUNDS_PER_KG : 1)}
+                  max={500 * (imperial ? POUNDS_PER_KG : 1)}
+                  step={imperial ? 1 : 0.5}
+                  unit={imperial ? 'lb' : 'kg'}
+                />
+                {draft.targetWeightKg !== undefined && (
+                  <FitnessAction
+                    label="Clear target weight"
+                    secondary
+                    onPress={() => put('targetWeightKg', undefined)}
+                  />
+                )}
+                <FitnessDatePicker
+                  label="Target date (optional)"
+                  value={draft.targetDate}
+                  onChange={value => put('targetDate', value)}
+                  minimumDate={localFitnessDate()}
+                />
+                {draft.targetDate && (
+                  <FitnessAction
+                    label="Clear target date"
+                    secondary
+                    onPress={() => put('targetDate', undefined)}
+                  />
+                )}
+              </FitnessDisclosure>
             </>
           )}
           {step === 1 && (
             <>
-              {choices(
-                'goals',
-                'Your goals',
-                [
-                  'general_wellness',
-                  'weight_loss',
-                  'muscle_gain',
-                  'fitness',
-                  'flexibility',
-                  'maintenance',
-                  'rehabilitation_support',
-                  'strength',
-                  'endurance',
-                  'mobility',
-                  'weight_management',
-                  'balanced_nutrition',
-                  'better_sleep',
-                ],
-                true,
+              <FitnessDatePicker
+                label="Date of birth"
+                value={draft.dateOfBirth}
+                onChange={value => put('dateOfBirth', value)}
+                minimumDate={minimumBirthDate}
+                maximumDate={new Date()}
+              />
+              {fitnessAge(draft.dateOfBirth) !== null && (
+                <FitnessText muted>
+                  {fitnessAge(draft.dateOfBirth)} years
+                </FitnessText>
               )}
-              {field('targetWeightKg', 'Target weight (kg, optional)', true)}
-              {field(
-                'targetDate',
-                'Target date (optional)',
-                false,
-                'YYYY-MM-DD. A preference for expert review, not a guaranteed result.',
-              )}
+              <FitnessChoices
+                label="Units"
+                options={['cm / kg', 'ft-in / lb']}
+                selected={imperial ? 'ft-in / lb' : 'cm / kg'}
+                onChange={value =>
+                  put('units', value === 'ft-in / lb' ? 'imperial' : 'metric')
+                }
+              />
+              <FitnessStepper
+                label="Height"
+                initialValue={imperial ? 67 : 170}
+                value={
+                  draft.heightCm === undefined
+                    ? undefined
+                    : draft.heightCm / (imperial ? 2.54 : 1)
+                }
+                min={50 / (imperial ? 2.54 : 1)}
+                max={260 / (imperial ? 2.54 : 1)}
+                step={imperial ? 0.5 : 1}
+                unit={imperial ? undefined : 'cm'}
+                formatValue={imperial ? formatHeightInches : undefined}
+                onChange={value =>
+                  put('heightCm', value * (imperial ? 2.54 : 1))
+                }
+              />
+              <FitnessStepper
+                label="Current weight"
+                initialValue={imperial ? 154 : 70}
+                value={
+                  draft.weightKg === undefined
+                    ? undefined
+                    : draft.weightKg * (imperial ? POUNDS_PER_KG : 1)
+                }
+                min={15 * (imperial ? POUNDS_PER_KG : 1)}
+                max={500 * (imperial ? POUNDS_PER_KG : 1)}
+                step={imperial ? 1 : 0.5}
+                unit={imperial ? 'lb' : 'kg'}
+                onChange={value =>
+                  put('weightKg', value / (imperial ? POUNDS_PER_KG : 1))
+                }
+              />
+              <FitnessDisclosure title="Gender & body type" subtitle="Optional">
+                <FitnessChoices
+                  label="Gender"
+                  options={['Woman', 'Man', 'Non-binary', 'Prefer not to say']}
+                  selected={
+                    draft.gender === undefined
+                      ? 'Prefer not to say'
+                      : /^(woman|female)$/i.test(draft.gender)
+                      ? 'Woman'
+                      : /^(man|male)$/i.test(draft.gender)
+                      ? 'Man'
+                      : /^non.?binary$/i.test(draft.gender)
+                      ? 'Non-binary'
+                      : draft.gender
+                  }
+                  onChange={value =>
+                    put(
+                      'gender',
+                      value === 'Prefer not to say' ? undefined : value,
+                    )
+                  }
+                />
+                {draft.gender &&
+                  !/^(woman|female|man|male|non.?binary)$/i.test(
+                    draft.gender,
+                  ) && <FitnessText muted>Saved: {draft.gender}</FitnessText>}
+                <FitnessSection
+                  title="Body type"
+                  caption="Choose only if it feels useful."
+                />
+                <View style={styles.bodies}>
+                  {BODY_TYPES.map(body => (
+                    <Pressable
+                      key={body.value}
+                      accessibilityRole="radio"
+                      accessibilityLabel={`${body.label} body type`}
+                      accessibilityState={{
+                        checked: draft.bodyDescription === body.value,
+                        disabled: creating || leaving,
+                      }}
+                      disabled={creating || leaving}
+                      onPress={() =>
+                        put(
+                          'bodyDescription',
+                          draft.bodyDescription === body.value
+                            ? undefined
+                            : body.value,
+                        )
+                      }
+                      style={[
+                        styles.bodyChoice,
+                        {
+                          borderColor:
+                            draft.bodyDescription === body.value
+                              ? colors.accent
+                              : colors.line,
+                          backgroundColor:
+                            draft.bodyDescription === body.value
+                              ? colors.soft
+                              : colors.surface,
+                        },
+                      ]}
+                    >
+                      <FitnessIllustration kind={body.kind} size={64} />
+                      <FitnessText>{body.label}</FitnessText>
+                    </Pressable>
+                  ))}
+                </View>
+                {draft.bodyDescription && (
+                  <FitnessAction
+                    label="Skip body type"
+                    secondary
+                    onPress={() => put('bodyDescription', undefined)}
+                  />
+                )}
+                <FitnessDisclosure title="More body details">
+                  {optionalText(
+                    'bodyDescription',
+                    'Your own description (optional)',
+                  )}
+                  <FitnessChoices
+                    label="Estimate preference (optional)"
+                    options={[
+                      'Use a range',
+                      'Female physiology',
+                      'Male physiology',
+                    ]}
+                    selected={
+                      draft.calculationSex === 'female'
+                        ? 'Female physiology'
+                        : draft.calculationSex === 'male'
+                        ? 'Male physiology'
+                        : 'Use a range'
+                    }
+                    onChange={value =>
+                      put(
+                        'calculationSex',
+                        value === 'Female physiology'
+                          ? 'female'
+                          : value === 'Male physiology'
+                          ? 'male'
+                          : 'unspecified',
+                      )
+                    }
+                  />
+                  <FitnessText muted>
+                    Separate from gender. You can leave this as a range.
+                  </FitnessText>
+                </FitnessDisclosure>
+              </FitnessDisclosure>
             </>
           )}
           {step === 2 && (
             <>
-              {choices('activityLevel', 'Usual activity', [
-                'sedentary',
-                'light',
-                'moderate',
-                'active',
-                'very_active',
-              ])}
-              {choices('experience', 'Exercise experience', [
-                'beginner',
-                'intermediate',
-                'advanced',
-              ])}
-              {choices(
-                'exercisePreferences',
-                'Movement you enjoy',
-                [
-                  'walking',
-                  'strength',
-                  'cycling',
-                  'yoga',
-                  'swimming',
-                  'running',
-                  'dance',
-                ],
-                true,
-              )}
-              {choices(
-                'equipment',
-                'Equipment available (none is okay)',
-                ['bodyweight', 'dumbbells', 'resistance_bands', 'gym', 'bike'],
-                true,
-              )}
-              <FitnessChoices
-                label="Days that work"
-                options={days}
-                selected={(draft.availableDays ?? []).map(day => days[day])}
-                multiple
-                onChange={(values: string[]) =>
+              <FitnessSection title="Usual activity" />
+              <FitnessChoiceCards
+                options={[
+                  {
+                    value: 'sedentary',
+                    label: 'Mostly sitting',
+                    icon: Armchair,
+                  },
+                  {
+                    value: 'light',
+                    label: 'Lightly active',
+                    icon: PersonStanding,
+                  },
+                  { value: 'active', label: 'Active', icon: Activity },
+                  { value: 'very_active', label: 'Very active', icon: Flame },
+                ]}
+                value={
+                  draft.activityLevel
+                    ? [
+                        draft.activityLevel === 'moderate'
+                          ? 'active'
+                          : draft.activityLevel,
+                      ]
+                    : []
+                }
+                onChange={values =>
                   put(
-                    'availableDays',
-                    values.map(value => days.indexOf(value)),
+                    'activityLevel',
+                    values[0] as FitnessAssessment['activityLevel'],
                   )
                 }
               />
-              {list('preferredTimes', 'Preferred times')}
-              {field(
-                'sessionMinutes',
-                'Time per session (minutes, optional)',
-                true,
-              )}
+              <FitnessChoices
+                label="Fitness experience"
+                options={['Beginner', 'Intermediate', 'Advanced']}
+                selected={
+                  draft.experience ? humanAssessmentValue(draft.experience) : ''
+                }
+                onChange={value =>
+                  put(
+                    'experience',
+                    value.toLowerCase() as FitnessAssessment['experience'],
+                  )
+                }
+              />
+              <FitnessChoices
+                label="Workout location"
+                options={['Home', 'Gym', 'Outdoor', 'Any']}
+                selected={
+                  workoutLocation(draft.exercisePreferences)
+                    ? humanAssessmentValue(
+                        workoutLocation(draft.exercisePreferences)!,
+                      )
+                    : ''
+                }
+                onChange={value =>
+                  put(
+                    'exercisePreferences',
+                    setWorkoutLocation(
+                      draft.exercisePreferences,
+                      value.toLowerCase(),
+                    ),
+                  )
+                }
+              />
+              <FitnessSection title="Days that work" />
+              <FitnessDayPicker
+                value={draft.availableDays ?? []}
+                onChange={value => put('availableDays', value)}
+              />
+              <FitnessChoices
+                label="Session length"
+                options={[
+                  '15 min',
+                  '30 min',
+                  '45 min',
+                  '60+ min',
+                  ...(draft.sessionMinutes !== undefined &&
+                  ![15, 30, 45, 60].includes(draft.sessionMinutes)
+                    ? [`${draft.sessionMinutes} min`]
+                    : []),
+                ]}
+                selected={
+                  draft.sessionMinutes === 60
+                    ? '60+ min'
+                    : draft.sessionMinutes
+                    ? `${draft.sessionMinutes} min`
+                    : ''
+                }
+                onChange={value =>
+                  put('sessionMinutes', Number.parseInt(value, 10))
+                }
+              />
+              <FitnessDisclosure
+                title="More about your routine"
+                subtitle="Optional"
+              >
+                <FitnessChoices
+                  label="Movement you enjoy"
+                  options={MOVEMENTS}
+                  selected={selectedKnownChoices(
+                    draft.exercisePreferences,
+                    MOVEMENTS,
+                  )}
+                  multiple
+                  onChange={(values: string[]) =>
+                    put(
+                      'exercisePreferences',
+                      replaceKnownChoices(
+                        draft.exercisePreferences,
+                        MOVEMENTS,
+                        values,
+                      ),
+                    )
+                  }
+                />
+                <FitnessChoices
+                  label="Equipment available"
+                  options={EQUIPMENT}
+                  selected={selectedKnownChoices(draft.equipment, EQUIPMENT)}
+                  multiple
+                  onChange={(values: string[]) =>
+                    put(
+                      'equipment',
+                      replaceKnownChoices(draft.equipment, EQUIPMENT, values),
+                    )
+                  }
+                />
+                <FitnessChoices
+                  label="Preferred part of the day"
+                  options={TIME_LABELS}
+                  selected={selectedKnownChoices(
+                    draft.preferredTimes,
+                    TIME_LABELS,
+                  )}
+                  multiple
+                  onChange={(values: string[]) =>
+                    put(
+                      'preferredTimes',
+                      replaceKnownChoices(
+                        draft.preferredTimes,
+                        TIME_LABELS,
+                        values,
+                      ),
+                    )
+                  }
+                />
+                <FitnessDatePicker
+                  label="Preferred time"
+                  mode="time"
+                  value={preferredTime}
+                  onChange={value =>
+                    put('preferredTimes', [
+                      ...new Set([
+                        ...(draft.preferredTimes ?? []).filter(
+                          time => time !== preferredTime,
+                        ),
+                        value,
+                      ]),
+                    ])
+                  }
+                />
+                {preferredTime && (
+                  <FitnessAction
+                    label="Clear preferred time"
+                    secondary
+                    onPress={() =>
+                      put(
+                        'preferredTimes',
+                        draft.preferredTimes?.filter(
+                          time => time !== preferredTime,
+                        ),
+                      )
+                    }
+                  />
+                )}
+                <FitnessStepper
+                  label="Sleep"
+                  initialValue={7}
+                  unit="hours"
+                  value={draft.sleepHours}
+                  min={0}
+                  max={24}
+                  step={0.5}
+                  onChange={value => put('sleepHours', value)}
+                />
+                {draft.sleepHours !== undefined && (
+                  <FitnessAction
+                    label="Skip sleep detail"
+                    secondary
+                    onPress={() => put('sleepHours', undefined)}
+                  />
+                )}
+                <FitnessStepper
+                  label="Usual water"
+                  initialValue={2000}
+                  unit="ml / day"
+                  value={draft.waterMl}
+                  min={0}
+                  max={15000}
+                  step={250}
+                  onChange={value => put('waterMl', value)}
+                />
+                {draft.waterMl !== undefined && (
+                  <FitnessAction
+                    label="Skip water detail"
+                    secondary
+                    onPress={() => put('waterMl', undefined)}
+                  />
+                )}
+                <FitnessChoices
+                  label="Typical stress"
+                  options={['Low', 'Moderate', 'High', 'Prefer not to say']}
+                  selected={
+                    draft.stressLevel
+                      ? draft.stressLevel.charAt(0).toUpperCase() +
+                        draft.stressLevel.slice(1)
+                      : 'Prefer not to say'
+                  }
+                  onChange={value =>
+                    put(
+                      'stressLevel',
+                      value === 'Prefer not to say'
+                        ? undefined
+                        : (value.toLowerCase() as FitnessAssessment['stressLevel']),
+                    )
+                  }
+                />
+                {optionalText('routine', 'Anything else about your routine?')}
+              </FitnessDisclosure>
             </>
           )}
           {step === 3 && (
             <>
-              {choices(
-                'foodPreferences',
-                'Food preferences',
-                [
-                  'no_preference',
-                  'vegetarian',
-                  'vegan',
-                  'pescatarian',
-                  'halal',
-                  'kosher',
-                ],
-                true,
+              <FitnessPhoto kind="food" style={{ height: 110 }} />
+              <FitnessChoiceCards
+                options={[
+                  { value: 'vegetarian', label: 'Vegetarian', icon: Sprout },
+                  { value: 'vegan', label: 'Vegan', icon: Leaf },
+                  { value: 'eggetarian', label: 'Eggetarian', icon: Egg },
+                  {
+                    value: 'non_vegetarian',
+                    label: 'Non-vegetarian',
+                    icon: Beef,
+                  },
+                  { value: 'other', label: 'Other', icon: MoreHorizontal },
+                ]}
+                value={(draft.foodPreferences ?? []).filter(value =>
+                  (FOOD_OPTIONS as readonly string[]).includes(value),
+                )}
+                onChange={values =>
+                  put(
+                    'foodPreferences',
+                    replaceKnownChoices(
+                      draft.foodPreferences,
+                      FOOD_OPTIONS,
+                      values,
+                    ),
+                  )
+                }
+              />
+              {!!savedExtraFoods.length && (
+                <FitnessDisclosure
+                  title="Other saved preferences"
+                  defaultOpen={
+                    !(draft.foodPreferences ?? []).some(value =>
+                      (FOOD_OPTIONS as readonly string[]).includes(value),
+                    )
+                  }
+                >
+                  <FitnessChoices
+                    label="Keep any that still apply"
+                    options={savedExtraFoods.map(humanAssessmentValue)}
+                    selected={(draft.foodPreferences ?? [])
+                      .filter(value => savedExtraFoods.includes(value))
+                      .map(humanAssessmentValue)}
+                    multiple
+                    onChange={(values: string[]) =>
+                      put('foodPreferences', [
+                        ...(draft.foodPreferences ?? []).filter(
+                          value => !savedExtraFoods.includes(value),
+                        ),
+                        ...savedExtraFoods.filter(value =>
+                          values.includes(humanAssessmentValue(value)),
+                        ),
+                      ])
+                    }
+                  />
+                </FitnessDisclosure>
               )}
-              {list('allergies', 'Food allergies (optional)')}
-              {list('restrictions', 'Restrictions or preferences (optional)')}
-              <FitnessText muted>
-                Food entries and photo estimates cannot establish allergen
-                safety. Check packaging and ask a qualified professional when
-                needed.
-              </FitnessText>
+              <FitnessDisclosure
+                title="Anything we should consider?"
+                subtitle="Optional · stays private"
+              >
+                <FitnessChoices
+                  label="Food allergies"
+                  options={ALLERGIES}
+                  selected={selectedKnownChoices(draft.allergies, ALLERGIES)}
+                  multiple
+                  onChange={(values: string[]) =>
+                    put(
+                      'allergies',
+                      replaceKnownChoices(draft.allergies, ALLERGIES, values),
+                    )
+                  }
+                />
+                {customList('allergies', 'Other allergies', ALLERGIES)}
+                <FitnessChoices
+                  label="Food restrictions"
+                  options={RESTRICTIONS}
+                  selected={selectedKnownChoices(
+                    draft.restrictions,
+                    RESTRICTIONS,
+                  )}
+                  multiple
+                  onChange={(values: string[]) =>
+                    put(
+                      'restrictions',
+                      replaceKnownChoices(
+                        draft.restrictions,
+                        RESTRICTIONS,
+                        values,
+                      ),
+                    )
+                  }
+                />
+                {customList('restrictions', 'Other restrictions', RESTRICTIONS)}
+                <FitnessDisclosure
+                  title="Injury or health concerns"
+                  subtitle="Share only what you want to save privately"
+                >
+                  {optionalText('injuries', 'Injury note')}
+                  {optionalText('mobility', 'Mobility considerations')}
+                  {optionalText('medicalConditions', 'Health concerns')}
+                  {optionalText('medications', 'Medications')}
+                  {(
+                    [
+                      'pregnant',
+                      'breastfeeding',
+                      'eatingDisorderRisk',
+                      'clinicalReviewRequired',
+                    ] as const
+                  ).map((key, index) => (
+                    <FitnessChoices
+                      key={key}
+                      label={
+                        [
+                          'Pregnancy or postpartum',
+                          'Breastfeeding',
+                          'Eating or weight concerns',
+                          'Professional review requested',
+                        ][index]
+                      }
+                      options={['Prefer not to say', 'Yes', 'No']}
+                      selected={
+                        draft[key] === undefined
+                          ? 'Prefer not to say'
+                          : draft[key]
+                          ? 'Yes'
+                          : 'No'
+                      }
+                      onChange={value =>
+                        put(
+                          key,
+                          value === 'Prefer not to say'
+                            ? undefined
+                            : value === 'Yes',
+                        )
+                      }
+                    />
+                  ))}
+                </FitnessDisclosure>
+              </FitnessDisclosure>
             </>
           )}
           {step === 4 && (
             <>
-              <FitnessSection
-                title="Only what you want to share"
-                caption="Optional and private. These details help us avoid unsuitable automatic guidance."
-              />
-              {field('injuries', 'Injuries (optional)')}
-              {field('mobility', 'Mobility considerations (optional)')}
-              {field('medicalConditions', 'Medical conditions (optional)')}
-              {field('medications', 'Medications (optional)')}
-              {(
-                [
-                  'pregnant',
-                  'breastfeeding',
-                  'eatingDisorderRisk',
-                  'clinicalReviewRequired',
-                ] as const
-              ).map((key, i) => (
-                <FitnessChoices
-                  key={key}
-                  label={
-                    [
-                      'Pregnancy or postpartum considerations',
-                      'Breastfeeding',
-                      'Eating disorder history or concerns',
-                      'Clinical or rehabilitation review needed',
-                    ][i]
-                  }
-                  options={['Prefer not to say', 'Yes', 'No']}
-                  selected={
-                    draft[key] === undefined
-                      ? 'Prefer not to say'
-                      : draft[key]
-                      ? 'Yes'
-                      : 'No'
-                  }
-                  onChange={v =>
-                    put(
-                      key,
-                      v === 'Prefer not to say' ? undefined : v === 'Yes',
-                    )
-                  }
-                />
-              ))}
-            </>
-          )}
-          {step === 5 && (
-            <>
-              {field('sleepHours', 'Usual sleep (hours)', true)}
-              {choices('stressLevel', 'Typical stress level', [
-                'low',
-                'moderate',
-                'high',
-              ])}
-              {field('waterMl', 'Usual water (ml per day)', true)}
-              {field('routine', 'Anything about your routine? (optional)')}
-            </>
-          )}
-          {step === 6 && (
-            <>
-              <FitnessCard>
-                <FitnessSection title="Wellness, with context" />
+              <FitnessCard tone="soft">
+                <FitnessSection title="A little more you" />
                 <FitnessText>
-                  This space supports general wellbeing and does not diagnose,
-                  treat, or replace professional care. Estimates are
-                  approximate. Seek professional review for medical conditions,
-                  pregnancy, eating disorders, injuries, or rehabilitation
-                  needs. For severe or urgent symptoms, contact emergency care.
+                  {(draft.goals ?? []).map(humanAssessmentValue).join(' · ')}
                 </FitnessText>
-                <FitnessText muted>
-                  For minors and higher risk situations, automatic calorie,
-                  weight loss and exercise prescriptions are withheld. Your
-                  preferences still help prepare a reviewable wellness plan.
+                <FitnessText>
+                  {numberLabel(
+                    draft.weightKg === undefined
+                      ? null
+                      : draft.weightKg * (imperial ? POUNDS_PER_KG : 1),
+                    imperial ? ' lb' : ' kg',
+                  )}{' '}
+                  now
+                  {draft.targetWeightKg === undefined
+                    ? ''
+                    : ` · ${numberLabel(
+                        draft.targetWeightKg * (imperial ? POUNDS_PER_KG : 1),
+                        imperial ? ' lb' : ' kg',
+                      )} chosen target`}
+                </FitnessText>
+                <FitnessText>
+                  {(draft.availableDays ?? [])
+                    .slice()
+                    .sort()
+                    .map(
+                      day =>
+                        ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day],
+                    )
+                    .join(' · ')}
+                  {draft.sessionMinutes ? ` · ${draft.sessionMinutes} min` : ''}
+                </FitnessText>
+                <FitnessText>
+                  {(draft.foodPreferences ?? [])
+                    .map(humanAssessmentValue)
+                    .join(' · ')}
                 </FitnessText>
               </FitnessCard>
-              <FitnessChoices
-                label="Wellness guidance"
-                options={['I have read and accept this guidance']}
-                selected={
-                  draft.disclaimerAccepted
-                    ? ['I have read and accept this guidance']
-                    : []
-                }
-                multiple
-                onChange={value => put('disclaimerAccepted', value.length > 0)}
+              {currentBaseline ? (
+                <FitnessCard>
+                  <FitnessSection title="Your saved daily estimates" />
+                  {currentBaseline.requiresProfessionalReview ? (
+                    <FitnessText muted>
+                      Your targets need appropriate professional review.
+                    </FitnessText>
+                  ) : (
+                    <>
+                      {currentBaseline.calories ? (
+                        <FitnessText>
+                          Energy · {numberLabel(currentBaseline.calories.min)}–
+                          {numberLabel(currentBaseline.calories.max)} kcal
+                        </FitnessText>
+                      ) : (
+                        <FitnessText muted>
+                          Energy targets are held for professional review.
+                        </FitnessText>
+                      )}
+                      {currentBaseline.proteinG && (
+                        <FitnessText>
+                          Protein · {numberLabel(currentBaseline.proteinG.min)}–
+                          {numberLabel(currentBaseline.proteinG.max)} g
+                        </FitnessText>
+                      )}
+                      {currentBaseline.waterMl !== null && (
+                        <FitnessText>
+                          Water · {numberLabel(currentBaseline.waterMl)} ml
+                        </FitnessText>
+                      )}
+                      <FitnessText muted>
+                        Estimates, not measurements.
+                      </FitnessText>
+                    </>
+                  )}
+                </FitnessCard>
+              ) : (
+                <FitnessCard>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 16,
+                    }}
+                  >
+                    <FitnessIllustration kind="welcome" size={72} />
+                    <View style={{ flex: 1 }}>
+                      <FitnessText>
+                        Your daily targets are personalized after review.
+                      </FitnessText>
+                    </View>
+                  </View>
+                </FitnessCard>
+              )}
+              <FitnessDisclosure title="Wellness guidance">
+                <FitnessText>
+                  For everyday wellbeing, not diagnosis or emergency care. Get
+                  qualified advice for health conditions, pregnancy, injuries,
+                  rehabilitation or eating concerns. Automatic targets may be
+                  held for professional review.
+                </FitnessText>
+                <FitnessText muted>
+                  For severe or urgent symptoms, contact emergency care.
+                </FitnessText>
+              </FitnessDisclosure>
+              <FitnessToggle
+                label="I’ve read the wellness guidance"
+                value={Boolean(draft.disclaimerAccepted)}
+                onChange={value => put('disclaimerAccepted', value)}
               />
-              <FitnessText muted>
-                Goals:{' '}
-                {(draft.goals ?? []).join(', ').replace(/_/g, ' ') ||
-                  'Choose a goal'}{' '}
-                · {draft.availableDays?.length ?? 0} days available ·{' '}
-                {draft.experience ?? 'Experience not selected'}
-              </FitnessText>
             </>
           )}
-          <FitnessNotice message={error} error />
-          <FitnessNotice message={saved} />
-          <FitnessAction
-            label={
-              step === 6
-                ? 'Save assessment & create my plan'
-                : 'Save & continue'
-            }
-            busy={save.isPending}
-            onPress={() => {
-              void persist(step !== 6, step === 6);
-            }}
-          />
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <View style={{ flex: 1 }}>
-              <FitnessAction
-                label="Save draft"
-                secondary
-                busy={save.isPending}
-                onPress={() => {
-                  void persist();
-                }}
-              />
-            </View>
-            {step > 0 && (
-              <View style={{ flex: 1 }}>
-                <FitnessAction
-                  label="Previous"
-                  secondary
-                  disabled={save.isPending}
-                  onPress={() => setStep(s => s - 1)}
-                />
-              </View>
-            )}
-          </View>
         </>
       )}
     </FitnessScreen>
   );
 }
+const styles = StyleSheet.create({
+  progress: { flexDirection: 'row', gap: 6, marginBottom: 2 },
+  textAction: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  bodies: { flexDirection: 'row', gap: 8 },
+  bodyChoice: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 116,
+    alignItems: 'center',
+    gap: 4,
+    padding: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+});

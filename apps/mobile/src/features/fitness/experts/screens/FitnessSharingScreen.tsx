@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
+import { Check } from 'lucide-react-native';
+import { FitnessDisclosure } from '../../components/FitnessControls';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type {
   FitnessConsent,
@@ -204,7 +206,8 @@ export function FitnessSharingScreen() {
     <Pressable
       accessibilityRole="checkbox"
       accessibilityLabel={label}
-      accessibilityState={{ checked }}
+      accessibilityState={{ checked, disabled: mutation.isPending }}
+      disabled={mutation.isPending}
       onPress={onPress}
       style={{
         minHeight: 48,
@@ -216,17 +219,43 @@ export function FitnessSharingScreen() {
         backgroundColor: checked ? colors.soft : colors.surface,
       }}
     >
-      <FitnessText>
-        {checked ? '✓  ' : '○  '}
-        {label}
-      </FitnessText>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <View
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 7,
+            borderWidth: 1,
+            borderColor: checked ? colors.accent : colors.line,
+            backgroundColor: checked ? colors.accent : colors.surface,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {checked && <Check size={15} color={colors.onAccent} />}
+        </View>
+        <View style={{ flex: 1 }}>
+          <FitnessText>{label}</FitnessText>
+        </View>
+      </View>
       {detail && <FitnessText muted>{detail}</FitnessText>}
     </Pressable>
   );
   return (
     <FitnessScreen
-      title="You're in control"
-      subtitle="Fitness information stays private until you choose an expert, choose the information, and confirm. A current booking or assignment is also required."
+      busy={mutation.isPending}
+      title="Your sharing choices"
+      subtitle="Private by default. Share only what feels right."
+      footer={
+        providerId && !consents.isLoading && !consents.error ? (
+          <FitnessAction
+            label="Review and confirm sharing"
+            disabled={!scopes.length || choices.isError}
+            busy={mutation.isPending}
+            onPress={save}
+          />
+        ) : undefined
+      }
     >
       {consents.isLoading ? (
         <FitnessLoading />
@@ -248,7 +277,7 @@ export function FitnessSharingScreen() {
                     active?.providerName ??
                     'Selected expert'
                   }
-                  caption="Choose each permission separately."
+                  caption={`${scopes.length} permissions · ${ids.length} selected entries`}
                 />
                 {(
                   [
@@ -263,51 +292,81 @@ export function FitnessSharingScreen() {
                       FITNESS_SCOPE_LABELS[scope],
                       scopes.includes(scope),
                       () => toggleScope(scope),
-                      DETAILS[scope],
                     )}
+                    <FitnessDisclosure
+                      title={`What’s included in ${FITNESS_SCOPE_LABELS[
+                        scope
+                      ].toLowerCase()}?`}
+                    >
+                      <FitnessText muted>{DETAILS[scope]}</FitnessText>
+                    </FitnessDisclosure>
                   </View>
                 ))}
               </FitnessCard>
-              <FitnessSection
+              <FitnessDisclosure
                 title="Choose individual entries"
-                caption="Sharing a workout or meal does not automatically share its attached photos or videos. Choose media separately."
-              />
-              {choices.isLoading ? (
-                <FitnessLoading />
-              ) : choices.error ? (
-                <FitnessEmpty
-                  title="Entries could not be loaded"
-                  message={choices.error.message}
-                  action="Try again"
-                  onPress={() => void choices.refetch()}
-                />
-              ) : choices.data?.choices.length ? (
-                <FitnessCard>
-                  {choices.data.choices.map(choice => (
-                    <View key={choice.id}>
-                      {select(
-                        `${choice.label}${
-                          choice.date ? ' · ' + choice.date : ''
-                        }`,
-                        ids.includes(choice.id) &&
-                          scopes.includes(choice.scope),
-                        () => toggleId(choice),
-                      )}
-                    </View>
-                  ))}
-                </FitnessCard>
-              ) : (
-                <FitnessEmpty
-                  title="No saved entries yet"
-                  message="Log a workout, meal or progress entry to share it individually."
-                />
-              )}
-              <FitnessAction
-                label="Review and confirm sharing"
-                disabled={!scopes.length || choices.isError}
-                busy={mutation.isPending}
-                onPress={save}
-              />
+                subtitle={`${ids.length} selected · Logs and media are shared separately`}
+                defaultOpen={Boolean(route.params?.resourceId)}
+              >
+                <FitnessText muted>
+                  A workout or meal never automatically shares its attached
+                  photos or videos.
+                </FitnessText>
+                {choices.isLoading ? (
+                  <FitnessLoading />
+                ) : choices.error ? (
+                  <FitnessEmpty
+                    title="Entries could not be loaded"
+                    message={choices.error.message}
+                    action="Try again"
+                    onPress={() => void choices.refetch()}
+                  />
+                ) : choices.data?.choices.length ? (
+                  (['workouts', 'meals', 'progress', 'media'] as const).map(
+                    scope => {
+                      const entries = choices.data!.choices.filter(
+                        choice => choice.scope === scope,
+                      );
+                      if (!entries.length) return null;
+                      return (
+                        <FitnessDisclosure
+                          key={scope}
+                          title={FITNESS_SCOPE_LABELS[scope]}
+                          subtitle={`${
+                            entries.filter(choice => ids.includes(choice.id))
+                              .length
+                          } of ${entries.length} selected`}
+                          defaultOpen={
+                            choiceScope(route.params?.resourceType) === scope
+                          }
+                        >
+                          {entries.map(choice => (
+                            <View key={choice.id}>
+                              {select(
+                                `${choice.label}${
+                                  choice.date ? ' · ' + choice.date : ''
+                                }`,
+                                ids.includes(choice.id) &&
+                                  scopes.includes(choice.scope),
+                                () => toggleId(choice),
+                              )}
+                            </View>
+                          ))}
+                        </FitnessDisclosure>
+                      );
+                    },
+                  )
+                ) : (
+                  <FitnessEmpty
+                    title="No saved entries yet"
+                    message="Save a workout, meal or progress entry to share it individually."
+                  />
+                )}
+              </FitnessDisclosure>
+              <FitnessText muted>
+                A current booking or assignment is required. Nothing is shared
+                until you confirm.
+              </FitnessText>
               {active && (
                 <FitnessAction
                   label="Revoke this expert's access"
@@ -324,46 +383,51 @@ export function FitnessSharingScreen() {
           )}
           <FitnessNotice message={mutation.error?.message} error />
           <FitnessNotice message={notice} />
-          <FitnessSection title="Your sharing permissions" />
-          {consents.data?.consents
-            .filter(
-              (c, index, all) =>
-                all.findIndex(x => x.providerId === c.providerId) === index,
-            )
-            .map(consent => (
-              <FitnessCard key={consent.id}>
-                <FitnessSection title={consent.providerName} />
-                <FitnessText muted>
-                  {consent.status === 'active'
-                    ? consent.scopes
-                        .map(s => FITNESS_SCOPE_LABELS[s])
-                        .join(' · ')
-                    : 'Access revoked'}
-                </FitnessText>
-                {consent.status === 'active' && (
-                  <>
-                    <FitnessText muted>
-                      {consent.resourceIds.length} selected entries
-                    </FitnessText>
-                    <FitnessAction
-                      secondary
-                      label="Edit permissions"
-                      onPress={() =>
-                        nav.navigate('FitnessSharing', {
-                          providerId: consent.providerId,
-                          providerName: consent.providerName,
-                        })
-                      }
-                    />
-                    <FitnessAction
-                      label="Revoke access"
-                      destructive
-                      onPress={() => revoke(consent.providerId)}
-                    />
-                  </>
-                )}
-              </FitnessCard>
-            ))}
+          <FitnessDisclosure
+            title="Your sharing permissions"
+            subtitle="Review or revoke expert access"
+            defaultOpen={!providerId}
+          >
+            {consents.data?.consents
+              .filter(
+                (c, index, all) =>
+                  all.findIndex(x => x.providerId === c.providerId) === index,
+              )
+              .map(consent => (
+                <FitnessCard key={consent.id}>
+                  <FitnessSection title={consent.providerName} />
+                  <FitnessText muted>
+                    {consent.status === 'active'
+                      ? consent.scopes
+                          .map(s => FITNESS_SCOPE_LABELS[s])
+                          .join(' · ')
+                      : 'Access revoked'}
+                  </FitnessText>
+                  {consent.status === 'active' && (
+                    <>
+                      <FitnessText muted>
+                        {consent.resourceIds.length} selected entries
+                      </FitnessText>
+                      <FitnessAction
+                        secondary
+                        label="Edit permissions"
+                        onPress={() =>
+                          nav.navigate('FitnessSharing', {
+                            providerId: consent.providerId,
+                            providerName: consent.providerName,
+                          })
+                        }
+                      />
+                      <FitnessAction
+                        label="Revoke access"
+                        destructive
+                        onPress={() => revoke(consent.providerId)}
+                      />
+                    </>
+                  )}
+                </FitnessCard>
+              ))}
+          </FitnessDisclosure>
         </>
       )}
     </FitnessScreen>

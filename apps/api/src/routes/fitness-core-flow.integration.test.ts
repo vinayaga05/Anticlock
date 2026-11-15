@@ -60,7 +60,7 @@ describe(
     before(async () => {
       const { Hono } = await import("hono");
       const { fitnessMobileRoutes } = await import("./fitness.js");
-      const { signToken } = await import('../testutils/phoneBoundToken.js');
+      const { signToken } = await import("../lib/auth.js");
       const client = await import("../db/client.js");
       db = client.db;
       sql = client.sql;
@@ -127,7 +127,7 @@ describe(
       for (const [user, status] of [
         [null, 401],
         ["admin", 403],
-        [inactive, 401],
+        [inactive, 403],
       ] as const)
         assert.equal((await request(user, "GET", "/profile")).status, status);
       const initial = await request(
@@ -784,7 +784,7 @@ describe(
         const result = await lateWrite;
         assert.equal(result.allowed, false);
         assert.equal("status" in result ? result.status : undefined, 403);
-        assert.equal((await request(closing, "GET", "/profile")).status, 401);
+        assert.equal((await request(closing, "GET", "/profile")).status, 403);
         const { eq } = await import("drizzle-orm");
         const records = await db
           .select()

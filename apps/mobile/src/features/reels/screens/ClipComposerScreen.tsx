@@ -1,3 +1,4 @@
+import { creatorRoute, finishCreation } from '@/shared/publishing/creationNavigation';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -144,7 +145,15 @@ export function ClipComposerScreen() {
   const [stage, setStage] = useState<'capture' | 'editor' | 'publish'>(
     'capture',
   );
-  const [creationMode, setCreationMode] = useState<CreationMode>('reel');
+  const creationMode: CreationMode = 'reel';
+  const changeCreationMode = (mode: CreationMode) => {
+    if (mode === 'reel') return;
+    if (requestedPublisherId && identity?.id !== requestedPublisherId) { Alert.alert('Publishing profile unavailable', 'Wait for the selected profile to load before switching.'); return; }
+    const open = () => { const target = creatorRoute(mode, identity); navigation.replace(target.screen, target.params); };
+    if (segments.length || edit) {
+      Alert.alert('Switch creator?', 'Your recorded clip takes will not be transferred. Save your clip draft before switching if you want to keep it.', [{text:'Keep editing',style:'cancel'},{text:'Switch',onPress:open}]);
+    } else open();
+  };
   /** Takes recorded in the camera (kept when returning from the editor). */
   const [segments, setSegments] = useState<ClipSource[]>([]);
   /** Current editor state; the source of truth for trim/music/volume. */
@@ -471,22 +480,13 @@ export function ClipComposerScreen() {
       if (!mountedRef.current) return;
       setUploadStatus({ phase: 'complete', progress: 100 });
       const pendingReview = result?.post.contentStatus === 'pending_review';
+      finishCreation(navigation, 'clip');
       Alert.alert(
         pendingReview ? 'Clip submitted' : 'Clip published',
         pendingReview
           ? `Your clip from ${identity.name} will appear once it is reviewed.`
           : `Your clip is live on ${identity.name}.`,
-        [
-          {
-            text: 'Done',
-            onPress: () => {
-              // Only close this composer, never a screen opened since.
-              if (mountedRef.current && navigation.isFocused()) {
-                navigation.goBack();
-              }
-            },
-          },
-        ],
+        [{ text: 'Done' }],
       );
     } catch (error) {
       if (uploadAbortRef.current === controller) uploadAbortRef.current = null;
@@ -534,7 +534,7 @@ export function ClipComposerScreen() {
     return (
       <ClipCameraScreen
         mode={creationMode}
-        onModeChange={setCreationMode}
+        onModeChange={changeCreationMode}
         onClose={() => navigation.goBack()}
         onGallery={chooseFromGallery}
         segments={segments}

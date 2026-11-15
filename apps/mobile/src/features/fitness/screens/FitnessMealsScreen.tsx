@@ -1,5 +1,26 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { launchImageLibrary } from 'react-native-image-picker';
+import { Pressable, ScrollView, View } from 'react-native';
+import { useFitnessDraftGuard } from '../logging/useFitnessDraftGuard';
+import {
+  Coffee,
+  Sun,
+  Utensils,
+  Apple,
+  Leaf,
+  Wheat,
+  Milk,
+  Bean,
+} from 'lucide-react-native';
+import {
+  FitnessChoiceCards,
+  FitnessDatePicker,
+  FitnessDisclosure,
+  FitnessStepper,
+} from '../components/FitnessControls';
+import { FitnessPhoto } from '../components/FitnessVisuals';
+import { FitnessMediaSourceSheet } from '../components/FitnessMediaSourceSheet';
+import type { PickedFitnessMedia } from '../logging/fitnessMediaPicker';
+import { useFitnessLoggingPreferences } from '../logging/fitnessLoggingPreferences';
 import { useRoute } from '@react-navigation/native';
 import type {
   FitnessFood,
@@ -25,7 +46,6 @@ import {
   FitnessAction,
   FitnessCard,
   FitnessChoices,
-  FitnessEmpty,
   FitnessField,
   FitnessLoading,
   FitnessNotice,
@@ -49,6 +69,11 @@ const nutrientLabel = {
 };
 export function FitnessMealsScreen() {
   const route = useRoute<any>();
+  const preferences = useFitnessLoggingPreferences();
+  const [mediaChooser, setMediaChooser] = useState(false),
+    [manualDetailsOpen, setManualDetailsOpen] = useState(false);
+  const recent = useFitnessQuery<{ logs: FitnessLog[] }>('/logs/meal');
+  const library = useFitnessQuery<{ foods: FitnessFood[] }>('/foods');
   const [date, setDate] = useState(route.params?.date ?? localFitnessDate());
   const [mealType, setMealType] = useState('breakfast');
   const [search, setSearch] = useState('');
@@ -109,11 +134,49 @@ export function FitnessMealsScreen() {
     `/logs/meal/${route.params?.logId ?? ''}`,
     Boolean(route.params?.logId),
   );
+  const draftState = {
+    date,
+    mealType,
+    entries,
+    notes,
+    mediaIds,
+    estimate,
+    photo,
+    manualName,
+    servingName,
+    servingGrams,
+    servings,
+    nutrients,
+    manualFoodId,
+    manualTarget,
+    recipeName,
+    recipeServings,
+    recipeIngredients,
+  };
+  const snapshot = JSON.stringify(draftState);
+  const savedSnapshot = useRef(snapshot);
+  const manualSignature = JSON.stringify({
+    manualName,
+    servings,
+    nutrients,
+    manualFoodId,
+    manualTarget,
+  });
+  const consumedManual = useRef(manualSignature);
   const hydrated = useRef(false);
   useEffect(() => {
     if (existing.data?.log && !hydrated.current) {
       const log = existing.data.log;
       const data = log.data as any;
+      savedSnapshot.current = JSON.stringify({
+        ...draftState,
+        date: log.date,
+        mealType: data.mealType,
+        entries: data.foods,
+        notes: data.notes ?? '',
+        mediaIds: data.mediaIds ?? [],
+        estimate: Boolean(data.estimate),
+      });
       setEditing(log.id);
       setDate(log.date);
       setMealType(data.mealType);
@@ -151,10 +214,12 @@ export function FitnessMealsScreen() {
           !Number.isFinite(result[key]) ||
           result[key] < 0,
       )
-    )
+    ) {
+      setManualDetailsOpen(true);
       throw new Error(
-        'Enter a valid amount for all five nutrient fields, including zero.',
+        'Add all five package values. Use zero only when the label says zero.',
       );
+    }
     return result;
   }
   function addFood(food: FitnessFood) {
@@ -201,20 +266,24 @@ export function FitnessMealsScreen() {
         ]);
       setNotice(`${food.name} added to your draft.`);
     } catch (e) {
-      setError((e as Error).message);
+      if (guard.isActive()) setError((e as Error).message);
     }
   }
   async function importFood(barcode: string) {
+    const assertActive = guard.captureOperation();
+    if (!guard.isActive()) return false;
     setError('');
     try {
+      assertActive();
       positiveServings();
       const response = await mutation.mutateAsync({
         path: '/foods/import',
         body: { barcode },
       });
+      assertActive();
       addFood(response.food);
     } catch (e) {
-      setError((e as Error).message);
+      if (guard.isActive()) setError((e as Error).message);
     }
   }
   function addManual() {
@@ -225,24 +294,31 @@ export function FitnessMealsScreen() {
           'Save this reviewed ingredient as a private custom food to use it in your recipe.',
         );
       if (!manualName.trim()) throw new Error('Name your food or estimate.');
+      const count = positiveServings();
+      const values = parsedNutrients();
       setEntries(items => [
         ...items,
         {
           ...(manualFoodId ? { foodId: manualFoodId } : {}),
           name: manualName.trim(),
-          servings: positiveServings(),
-          nutrients: parsedNutrients(),
+          servings: count,
+          nutrients: values,
         },
       ]);
+      consumedManual.current = manualSignature;
       setNotice('Food added to your meal draft.');
     } catch (e) {
-      setError((e as Error).message);
+      if (guard.isActive()) setError((e as Error).message);
     }
   }
   async function saveCustomFood() {
+    const assertActive = guard.captureOperation();
+    if (!guard.isActive()) return false;
     setError('');
     try {
+      assertActive();
       positiveServings();
+      assertActive();
       const input = {
         name: manualName,
         servingName,
@@ -260,6 +336,7 @@ export function FitnessMealsScreen() {
         path: '/foods',
         body: { ...input, clientRequestId: foodRequest.current.id },
       });
+      assertActive();
       if (manualTarget === 'recipe') {
         setRecipeIngredients(items => [
           ...items,
@@ -272,14 +349,20 @@ export function FitnessMealsScreen() {
         setMode('Recipes');
         setManualTarget('meal');
       } else addFood(response.food);
+      consumedManual.current = manualSignature;
       setNotice('Private custom food saved and added to your draft.');
     } catch (e) {
-      setError((e as Error).message);
+      if (guard.isActive()) setError((e as Error).message);
     }
   }
-  async function saveRecipe() {
+  async function saveRecipe(
+    keepDraft = false,
+    assertActive = guard.captureOperation(),
+  ) {
+    if (!guard.isActive()) return false;
     setError('');
     try {
+      assertActive();
       const input = {
         name: recipeName,
         servings: Number(recipeServings),
@@ -300,24 +383,35 @@ export function FitnessMealsScreen() {
         path: '/recipes',
         body: { ...input, clientRequestId: recipeRequest.current.id },
       });
+      assertActive();
       setNotice('Private recipe saved.');
-      setRecipeName('');
-      setRecipeIngredients([]);
-      recipeRequest.current = { id: newFitnessRequestId(), signature: '' };
+      if (!keepDraft) {
+        setRecipeName('');
+        setRecipeIngredients([]);
+        recipeRequest.current = { id: newFitnessRequestId(), signature: '' };
+      }
+      return true;
     } catch (e) {
-      setError((e as Error).message);
+      if (guard.isActive()) setError((e as Error).message);
+      return false;
     }
   }
-  async function saveMeal() {
+  async function saveMeal(
+    foods = entries,
+    selectedMediaIds = mediaIds,
+    assertActive = guard.captureOperation(),
+  ) {
+    if (!guard.isActive()) return false;
     setError('');
     setNotice('');
     try {
+      assertActive();
       if (!fitnessDateValid(date))
         throw new Error('Enter a valid date in YYYY-MM-DD format.');
-      if (!entries.length)
+      if (!foods.length)
         throw new Error('Add at least one food before saving.');
       if (
-        entries.some(
+        foods.some(
           (entry, index) =>
             !Number.isFinite(entry.servings) ||
             entry.servings <= 0 ||
@@ -335,9 +429,9 @@ export function FitnessMealsScreen() {
         );
       const data = {
         mealType,
-        foods: entries,
+        foods,
         notes,
-        ...(mediaIds.length ? { mediaIds } : {}),
+        ...(selectedMediaIds.length ? { mediaIds: selectedMediaIds } : {}),
         ...(estimate ? { estimate: true } : {}),
       };
       const signature = JSON.stringify({ date, data });
@@ -351,6 +445,15 @@ export function FitnessMealsScreen() {
           ? { data }
           : { date, clientRequestId: requestId.current, data },
       });
+      assertActive();
+      savedSnapshot.current = JSON.stringify({
+        ...draftState,
+        entries: [],
+        notes: '',
+        mediaIds: [],
+        estimate: false,
+        photo: null,
+      });
       setEntries([]);
       setEntryText({});
       setNotes('');
@@ -361,25 +464,18 @@ export function FitnessMealsScreen() {
       requestId.current = newFitnessRequestId();
       mealSignature.current = '';
       setNotice('Meal saved to your private journal.');
+      return true;
     } catch (e) {
-      setError((e as Error).message);
+      if (guard.isActive()) setError((e as Error).message);
+      return false;
     }
   }
-  async function choosePhoto() {
+  async function choosePhoto(asset: PickedFitnessMedia) {
+    if (!guard.isActive()) return;
     setError('');
-    const selected = await launchImageLibrary({
-      mediaType: 'photo',
-      selectionLimit: 1,
-    });
-    if (selected.didCancel) return;
-    const asset = selected.assets?.[0];
-    if (selected.errorCode || !asset?.uri || !asset.type) {
-      setError(selected.errorMessage || 'Choose a readable photo.');
-      return;
-    }
     setPhoto({
       uri: asset.uri,
-      name: asset.fileName ?? 'meal.jpg',
+      name: asset.name,
       type: asset.type,
       purpose: 'meal',
       clientRequestId: newFitnessRequestId(),
@@ -388,28 +484,41 @@ export function FitnessMealsScreen() {
       'Photo selected on your device. Choose whether to upload privately or request an AI estimate.',
     );
   }
-  async function processPhoto(ai: boolean) {
-    if (!photo) return;
+  async function processPhoto(
+    ai: boolean,
+    assertActive = guard.captureOperation(),
+  ) {
+    if (!guard.isActive()) return null;
+    if (!photo) return null;
     setError('');
     setUploading(true);
     try {
+      assertActive();
       const media = photo.id
         ? { id: photo.id }
         : await uploadFitnessMedia(photo);
+      assertActive();
       setPhoto(p => (p ? { ...p, id: media.id } : p));
       setMediaIds(ids => [...new Set([...ids, media.id])]);
       if (ai) {
+        assertActive();
         const response = await mutation.mutateAsync({
           path: '/meals/estimate',
           body: { mediaId: media.id, consentToAI: true },
         });
+        assertActive();
         const value = response.estimate;
         setManualTarget('meal');
         setManualFoodId(undefined);
         setManualName(value.label);
         setNutrients(
           Object.fromEntries(
-            nutrientKeys.map(key => [key, String(value[key] ?? 0)]),
+            nutrientKeys.map(key => [
+              key,
+              value[key] === undefined || value[key] === null
+                ? ''
+                : String(value[key]),
+            ]),
           ) as typeof nutrients,
         );
         setEstimate(true);
@@ -423,20 +532,190 @@ export function FitnessMealsScreen() {
         setNotice(
           'Private photo attached to your draft. Save your meal to link it.',
         );
+      return media.id;
     } catch (e) {
-      setError((e as Error).message);
+      if (guard.isActive()) setError((e as Error).message);
+      return null;
     } finally {
-      setUploading(false);
+      if (guard.isActive()) setUploading(false);
     }
+  }
+  async function saveForExit() {
+    const assertActive = guard.captureOperation();
+    if (!guard.isActive()) return false;
+    setError('');
+    try {
+      assertActive();
+      let foods = entries;
+      if (manualSignature !== consumedManual.current) {
+        if (manualTarget === 'recipe')
+          throw new Error(
+            'Save this reviewed ingredient into your recipe before leaving.',
+          );
+        if (!manualName.trim())
+          throw new Error('Name your custom food before saving.');
+        const values = parsedNutrients(),
+          count = positiveServings();
+        foods = [
+          ...foods,
+          {
+            ...(manualFoodId ? { foodId: manualFoodId } : {}),
+            name: manualName.trim(),
+            servings: count,
+            nutrients: values,
+          },
+        ];
+      }
+      const recipeDraft = Boolean(
+        recipeName.trim() || recipeIngredients.length,
+      );
+      if (recipeDraft && (!recipeName.trim() || !recipeIngredients.length))
+        throw new Error(
+          'Name your recipe and add an ingredient before saving.',
+        );
+      if ((!foods.length && !recipeDraft) || (photo && !foods.length))
+        throw new Error(
+          photo
+            ? 'Add a food before saving your meal. Your selected photo is still here.'
+            : 'Add a food before saving.',
+        );
+      if (
+        foods.some(
+          food =>
+            !Number.isFinite(food.servings) ||
+            food.servings <= 0 ||
+            nutrientKeys.some(
+              key =>
+                !Number.isFinite(food.nutrients[key]) ||
+                food.nutrients[key] < 0,
+            ),
+        )
+      )
+        throw new Error(
+          'Review the servings and package values before saving.',
+        );
+      if (recipeDraft) {
+        const saved = await saveRecipe(true, assertActive);
+        assertActive();
+        if (!saved) return false;
+      }
+      let ids = mediaIds;
+      if (photo) {
+        const id = await processPhoto(false, assertActive);
+        assertActive();
+        if (!id) return false;
+        ids = [...new Set([...ids, id])];
+      }
+      if (!foods.length) return true;
+      assertActive();
+      return saveMeal(foods, ids, assertActive);
+    } catch (problem) {
+      if (guard.isActive()) setError((problem as Error).message);
+      return false;
+    }
+  }
+  const guard = useFitnessDraftGuard({
+    dirty: snapshot !== savedSnapshot.current,
+    busy: mutation.isPending || uploading,
+    save: saveForExit,
+    detail: photo
+      ? 'Save your entries and selected photos privately. Photos are not sent to AI.'
+      : undefined,
+    onError: setError,
+  });
+  const portionOptions = ['½', '1', '1½', '2'];
+  const portionValue = (value: string) =>
+    ({ '½': 0.5, '1': 1, '1½': 1.5, '2': 2 }[value] ?? 1);
+  const portionLabel = (value: number) =>
+    value === 0.5 ? '½' : value === 1.5 ? '1½' : String(value);
+  const favourites = (library.data?.foods ?? []).filter(food =>
+    preferences.favouriteFoodIds.includes(food.id),
+  );
+  const recentMeals = (recent.data?.logs ?? [])
+    .filter(
+      (log, index, all) =>
+        index ===
+        all.findIndex(
+          other =>
+            JSON.stringify((other.data as any).foods) ===
+            JSON.stringify((log.data as any).foods),
+        ),
+    )
+    .slice(0, 4);
+  const existingBusy = Boolean(
+    route.params?.logId && (existing.isPending || existing.isError),
+  );
+  const changeNutrient = (key: keyof FitnessNutrients, value: number) =>
+    setNutrients(n => ({ ...n, [key]: String(value) }));
+  const servingControl = (
+    <>
+      <FitnessChoices
+        label="Servings"
+        options={portionOptions}
+        selected={portionLabel(Number(servings))}
+        onChange={value => setServings(String(portionValue(value)))}
+      />
+      <FitnessStepper
+        label="Portion size"
+        value={Number(servings)}
+        min={0.1}
+        max={100}
+        step={0.5}
+        unit="servings"
+        onChange={value => setServings(String(value))}
+      />
+    </>
+  );
+  function renderFood(food: FitnessFood) {
+    return (
+      <FitnessCard key={food.id}>
+        <FitnessSection
+          title={food.name}
+          caption={`${food.servingName} · ${food.servingGrams} g`}
+        />
+        <FitnessText muted>
+          {food.missingNutrients?.includes('calories')
+            ? 'Calories need review'
+            : `${numberLabel(food.nutrients.calories)} kcal per serving`}
+        </FitnessText>
+        <FitnessAction
+          label={`Add ${food.name}`}
+          secondary
+          onPress={() => addFood(food)}
+        />
+        <FitnessAction
+          label={
+            preferences.favouriteFoodIds.includes(food.id)
+              ? `Unfavourite ${food.name}`
+              : `Favourite ${food.name}`
+          }
+          icon="star"
+          secondary
+          onPress={() => preferences.toggleFavourite(food.id)}
+        />
+      </FitnessCard>
+    );
   }
   return (
     <FitnessScreen
-      busy={mutation.isPending || uploading}
-      title="Nourish, without judgement"
-      subtitle="A private record of meals, portions and how your day feels."
+      title={editing ? 'Edit your meal' : 'Add a meal'}
+      busy={mutation.isPending || uploading || guard.saving}
+      footer={
+        !existingBusy ? (
+          <FitnessAction
+            label={editing ? 'Save meal changes' : 'Save meal'}
+            busy={mutation.isPending}
+            disabled={uploading || !entries.length}
+            onPress={() => {
+              void saveMeal();
+            }}
+          />
+        ) : undefined
+      }
     >
-      {route.params?.logId && existing.isPending && <FitnessLoading />}
-      {existing.isError && (
+      {route.params?.logId && existing.isPending ? (
+        <FitnessLoading />
+      ) : existing.isError ? (
         <>
           <FitnessNotice error message={existing.error.message} />
           <FitnessAction
@@ -447,508 +726,672 @@ export function FitnessMealsScreen() {
             }}
           />
         </>
-      )}
-      <FitnessField
-        label="Journal date"
-        value={date}
-        onChangeText={setDate}
-        editable={!editing}
-        placeholder="YYYY-MM-DD"
-      />
-      <FitnessChoices
-        label="Meal"
-        options={['breakfast', 'lunch', 'dinner', 'snack']}
-        selected={mealType}
-        onChange={setMealType}
-      />
-      <FitnessChoices
-        label="Add to your journal"
-        options={['Journal', 'Manual food', 'Recipes', 'Photo']}
-        selected={mode}
-        onChange={setMode}
-      />
-      {(mode === 'Journal' || mode === 'Recipes') && (
-        <FitnessCard>
-          <FitnessSection
-            title={
-              mode === 'Recipes' ? 'Build a private recipe' : 'Find a food'
-            }
+      ) : (
+        <>
+          <FitnessPhoto kind="food" label="Food and everyday nutrition">
+            <FitnessSection
+              title="A little nourishment"
+              caption="Choose your meal, then add what you ate."
+            />
+          </FitnessPhoto>
+          <FitnessChoiceCards
+            options={[
+              { value: 'breakfast', label: 'Breakfast', icon: Coffee },
+              { value: 'lunch', label: 'Lunch', icon: Sun },
+              { value: 'dinner', label: 'Dinner', icon: Utensils },
+              { value: 'snack', label: 'Snack', icon: Apple },
+            ]}
+            value={[mealType]}
+            onChange={values => setMealType(values[0] ?? 'breakfast')}
           />
+          {!!entries.length && (
+            <>
+              <FitnessSection
+                title="Your meal"
+                caption={`${entries.length} foods · ${numberLabel(
+                  totals.calories,
+                )} kcal`}
+              />
+              {entries.map((entry, index) => (
+                <FitnessCard key={index}>
+                  <FitnessSection
+                    title={entry.name}
+                    caption={`${numberLabel(
+                      entry.nutrients.calories * entry.servings,
+                    )} kcal`}
+                  />
+                  <FitnessChoices
+                    label={`Servings for ${entry.name}`}
+                    options={portionOptions}
+                    selected={portionLabel(entry.servings)}
+                    onChange={value => {
+                      setEntryText(text => ({
+                        ...text,
+                        [`${index}:servings`]: String(portionValue(value)),
+                      }));
+                      setEntries(items =>
+                        items.map((item, i) =>
+                          i === index
+                            ? { ...item, servings: portionValue(value) }
+                            : item,
+                        ),
+                      );
+                    }}
+                  />
+                  <FitnessStepper
+                    label={`Portion for ${entry.name}`}
+                    value={entry.servings}
+                    min={0.1}
+                    max={100}
+                    step={0.5}
+                    unit="servings"
+                    onChange={value => {
+                      setEntryText(text => ({
+                        ...text,
+                        [`${index}:servings`]: String(value),
+                      }));
+                      setEntries(items =>
+                        items.map((item, i) =>
+                          i === index ? { ...item, servings: value } : item,
+                        ),
+                      );
+                    }}
+                  />
+                  <FitnessDisclosure
+                    title="Nutrition & food options"
+                    subtitle="Per-serving values"
+                  >
+                    {nutrientKeys.map(key => (
+                      <FitnessStepper
+                        key={key}
+                        label={`${entry.name}: ${nutrientLabel[key]} per serving`}
+                        value={entry.nutrients[key]}
+                        min={0}
+                        max={key === 'calories' ? 20000 : 1000}
+                        step={key === 'calories' ? 10 : 1}
+                        onChange={value => {
+                          setEntryText(text => ({
+                            ...text,
+                            [`${index}:${key}`]: String(value),
+                          }));
+                          setEntries(items =>
+                            items.map((item, i) =>
+                              i === index
+                                ? {
+                                    ...item,
+                                    nutrients: {
+                                      ...item.nutrients,
+                                      [key]: value,
+                                    },
+                                  }
+                                : item,
+                            ),
+                          );
+                        }}
+                      />
+                    ))}
+                    <FitnessAction
+                      label={`Remove ${entry.name}`}
+                      secondary
+                      onPress={() => {
+                        setEntryText({});
+                        setEntries(items =>
+                          items.filter((_, i) => i !== index),
+                        );
+                      }}
+                    />
+                  </FitnessDisclosure>
+                </FitnessCard>
+              ))}
+            </>
+          )}
+          <FitnessSection title="Find something to add" />
           <FitnessField
-            label="Food search"
+            label="Search foods"
             value={search}
             onChangeText={setSearch}
-            onSubmitEditing={() => setQueryText(search)}
+            placeholder="Search your library or a package"
             returnKeyType="search"
+            onSubmitEditing={() => setQueryText(search)}
           />
           <FitnessAction
             label="Search foods"
             secondary
             onPress={() => setQueryText(search)}
           />
-          <FitnessField
-            label="Number of servings"
-            value={servings}
-            onChangeText={setServings}
-            keyboardType="decimal-pad"
-          />
-          {foodsQuery.isPending ? (
-            <FitnessLoading />
-          ) : foodsQuery.isError ? (
+          {!queryText && (
             <>
-              <FitnessNotice error message={foodsQuery.error.message} />
-              <FitnessAction
-                label="Retry food search"
-                secondary
-                onPress={() => {
-                  void foodsQuery.refetch();
-                }}
-              />
-            </>
-          ) : foodsQuery.data?.foods.length ? (
-            foodsQuery.data.foods.map(food => (
-              <FitnessCard key={food.id}>
-                <FitnessText>
-                  {food.name} · {food.servingName} ({food.servingGrams} g)
-                </FitnessText>
-                <FitnessText muted>
-                  {food.nutrients.calories} kcal · P {food.nutrients.proteinG} g
-                  · C {food.nutrients.carbsG} g · F {food.nutrients.fatG} g ·
-                  Fibre{' '}
-                  {food.missingNutrients?.includes('fibreG')
-                    ? 'not supplied'
-                    : `${food.nutrients.fibreG} g`}{' '}
-                  per serving
-                </FitnessText>
-                <FitnessAction
-                  label={`Add ${food.name}`}
-                  secondary
-                  onPress={() => addFood(food)}
-                />
-              </FitnessCard>
-            ))
-          ) : (
-            <FitnessText muted>
-              No matching foods yet. Add a private custom food using its label.
-            </FitnessText>
-          )}
-        </FitnessCard>
-      )}
-      {(mode === 'Journal' || mode === 'Recipes') &&
-        queryText.trim().length >= 2 && (
-          <FitnessCard>
-            <FitnessSection
-              title="Food catalogue"
-              caption="Open Food Facts · Check the package label and portion size. Catalogue data cannot establish allergen safety."
-            />
-            {catalogue.isPending ? (
-              <FitnessLoading />
-            ) : catalogue.isError ? (
-              <>
-                <FitnessNotice error message={catalogue.error.message} />
-                <FitnessAction
-                  label="Retry catalogue search"
-                  secondary
+              {!!favourites.length && (
+                <FitnessDisclosure
+                  title="Your favourites"
+                  subtitle={`${favourites.length} foods · this session`}
+                  defaultOpen
+                >
+                  {favourites.map(renderFood)}
+                </FitnessDisclosure>
+              )}
+              {!!recentMeals.length && (
+                <FitnessDisclosure
+                  title="Recent meals"
+                  subtitle="Use the foods as an editable starting point"
+                  defaultOpen
+                >
+                  {recentMeals.map(log => {
+                    const data = log.data as any;
+                    return (
+                      <FitnessCard key={log.id}>
+                        <FitnessSection
+                          title={data.foods
+                            .map((food: any) => food.name)
+                            .join(', ')}
+                          caption={new Date(
+                            `${log.date}T12:00:00`,
+                          ).toLocaleDateString()}
+                        />
+                        <FitnessAction
+                          label={`Use foods from ${data.mealType}`}
+                          secondary
+                          onPress={() => {
+                            setEntries(items => [
+                              ...items,
+                              ...data.foods.map((food: FoodEntry) => ({
+                                ...food,
+                                nutrients: { ...food.nutrients },
+                              })),
+                            ]);
+                            setEstimate(
+                              current => current || Boolean(data.estimate),
+                            );
+                            setNotice(
+                              'Foods added to your draft. Adjust portions before saving.',
+                            );
+                          }}
+                        />
+                      </FitnessCard>
+                    );
+                  })}
+                </FitnessDisclosure>
+              )}
+              <FitnessSection title="Explore food categories" />
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 12, paddingBottom: 4 }}
+                accessibilityLabel="Browse food categories"
+              >
+                {(
+                  [
+                    { value: 'vegetables', label: 'Vegetables', photo: 'food' },
+                    { value: 'fruit', label: 'Fruit', photo: 'fruit' },
+                    { value: 'grains', label: 'Grains', photo: 'grains' },
+                    { value: 'protein', label: 'Protein', photo: 'protein' },
+                  ] as const
+                ).map(category => (
+                  <Pressable
+                    key={category.value}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Browse ${category.label}`}
+                    onPress={() => {
+                      setSearch(category.value);
+                      setQueryText(category.value);
+                    }}
+                    style={{ width: 100, gap: 8, minHeight: 110 }}
+                  >
+                    <FitnessPhoto
+                      kind={category.photo}
+                      style={{ height: 78, borderRadius: 18 }}
+                    />
+                    <FitnessText>{category.label}</FitnessText>
+                  </Pressable>
+                ))}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Browse Dairy"
                   onPress={() => {
-                    void catalogue.refetch();
+                    setSearch('dairy');
+                    setQueryText('dairy');
                   }}
-                />
-                <FitnessAction
-                  label="Enter food manually"
-                  secondary
-                  onPress={() => setMode('Manual food')}
-                />
-              </>
-            ) : (
-              <>
-                <FitnessNotice message={catalogue.data?.notice} />
-                {catalogue.data?.foods.length ? (
-                  catalogue.data.foods.map(food => (
-                    <FitnessCard key={food.barcode}>
-                      <FitnessSection
-                        title={food.name}
-                        caption={`${food.servingName} · ${food.servingGrams} g`}
-                      />
-                      <FitnessText muted>
-                        {numberLabel(food.nutrients.calories)} kcal · Protein{' '}
-                        {numberLabel(food.nutrients.proteinG)} g · Carbs{' '}
-                        {numberLabel(food.nutrients.carbsG)} g · Fat{' '}
-                        {numberLabel(food.nutrients.fatG)} g · Fibre{' '}
-                        {food.missingNutrients?.includes('fibreG')
-                          ? 'not supplied'
-                          : `${numberLabel(food.nutrients.fibreG)} g`}{' '}
-                        per serving
-                      </FitnessText>
+                  style={{ width: 100, gap: 8, minHeight: 110 }}
+                >
+                  <View
+                    style={{
+                      height: 78,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Milk size={32} color="#708B76" />
+                  </View>
+                  <FitnessText>Dairy</FitnessText>
+                </Pressable>
+              </ScrollView>
+            </>
+          )}
+          {!!queryText && (
+            <FitnessCard>
+              <FitnessSection title="Search results" />
+              {servingControl}
+              {foodsQuery.isPending ? (
+                <FitnessLoading />
+              ) : foodsQuery.isError ? (
+                <>
+                  <FitnessNotice error message={foodsQuery.error.message} />
+                  <FitnessAction
+                    label="Retry food search"
+                    secondary
+                    onPress={() => {
+                      void foodsQuery.refetch();
+                    }}
+                  />
+                </>
+              ) : foodsQuery.data?.foods.length ? (
+                foodsQuery.data.foods.map(renderFood)
+              ) : (
+                <FitnessText muted>No matches in your saved foods.</FitnessText>
+              )}
+              {queryText.trim().length >= 2 && (
+                <FitnessDisclosure
+                  title="Food catalogue"
+                  subtitle="Open Food Facts · check the package"
+                  defaultOpen
+                >
+                  {catalogue.isPending ? (
+                    <FitnessLoading />
+                  ) : catalogue.isError ? (
+                    <>
+                      <FitnessNotice error message={catalogue.error.message} />
                       <FitnessAction
-                        label={`Use catalogue food: ${food.name}`}
+                        label="Retry catalogue search"
                         secondary
-                        busy={mutation.isPending}
                         onPress={() => {
-                          void importFood(food.barcode);
+                          void catalogue.refetch();
                         }}
                       />
-                    </FitnessCard>
-                  ))
-                ) : (
-                  <FitnessText muted>
-                    No catalogue matches. Enter the package values as a private
-                    custom food.
-                  </FitnessText>
-                )}
-              </>
-            )}
-          </FitnessCard>
-        )}
-      {mode === 'Manual food' && (
-        <FitnessCard>
-          <FitnessSection
-            title={
-              estimate
-                ? 'Review your editable estimate'
-                : 'Use a label or your own entry'
-            }
-            caption="Values below are for one serving. No calories are inferred on your device."
-          />
-          <FitnessField
-            label="Food name"
-            value={manualName}
-            onChangeText={setManualName}
-          />
-          <FitnessField
-            label="Number of servings"
-            value={servings}
-            onChangeText={setServings}
-            keyboardType="decimal-pad"
-          />
-          {nutrientKeys.map(key => (
-            <FitnessField
-              key={key}
-              label={nutrientLabel[key]}
-              value={nutrients[key]}
-              keyboardType="decimal-pad"
-              onChangeText={value =>
-                setNutrients(n => ({ ...n, [key]: value }))
-              }
-            />
-          ))}
-          <FitnessAction
-            label={
-              estimate
-                ? 'Accept edited estimate & add to meal'
-                : 'Add manual food to meal'
-            }
-            onPress={addManual}
-          />
-          <FitnessField
-            label="Serving name (for custom food)"
-            value={servingName}
-            onChangeText={setServingName}
-          />
-          <FitnessField
-            label="Serving size (grams, for custom food)"
-            value={servingGrams}
-            onChangeText={setServingGrams}
-            keyboardType="decimal-pad"
-          />
-          <FitnessAction
-            label="Save as a private custom food"
-            secondary
-            busy={mutation.isPending}
-            onPress={() => {
-              void saveCustomFood();
-            }}
-          />
-        </FitnessCard>
-      )}
-      {mode === 'Recipes' && (
-        <>
-          <FitnessCard>
-            <FitnessField
-              label="Recipe name"
-              value={recipeName}
-              onChangeText={setRecipeName}
-            />
-            <FitnessField
-              label="Recipe yield (servings)"
-              value={recipeServings}
-              onChangeText={setRecipeServings}
-              keyboardType="decimal-pad"
-            />
-            {recipeIngredients.map((ingredient, i) => (
-              <FitnessCard key={i}>
-                <FitnessText>
-                  {ingredient.name} · {ingredient.servings} servings
-                </FitnessText>
-                <FitnessAction
-                  label={`Remove ingredient ${i + 1}`}
-                  secondary
-                  onPress={() =>
-                    setRecipeIngredients(items =>
-                      items.filter((_, index) => index !== i),
-                    )
-                  }
-                />
-              </FitnessCard>
-            ))}
-            <FitnessAction
-              label="Save private recipe"
-              disabled={!recipeIngredients.length}
-              busy={mutation.isPending}
-              onPress={() => {
-                void saveRecipe();
-              }}
-            />
-          </FitnessCard>
-          <FitnessSection title="Your recipes" />
-          {recipes.isPending ? (
-            <FitnessLoading />
-          ) : recipes.isError ? (
-            <FitnessNotice error message={recipes.error.message} />
-          ) : recipes.data?.recipes.length ? (
-            recipes.data.recipes.map(recipe => (
-              <FitnessCard key={recipe.id}>
-                <FitnessSection
-                  title={recipe.name}
-                  caption={`${recipe.servings} servings per recipe`}
-                />
-                <FitnessText muted>
-                  {numberLabel(recipe.nutrients.calories)} kcal per serving
-                </FitnessText>
-                <FitnessAction
-                  label={`Add a serving of ${recipe.name}`}
-                  secondary
-                  onPress={() => {
-                    setEntries(items => [
-                      ...items,
-                      {
-                        name: recipe.name,
-                        servings: 1,
-                        nutrients: recipe.nutrients,
-                      },
-                    ]);
-                    setNotice('Recipe serving added to your meal draft.');
-                  }}
-                />
-              </FitnessCard>
-            ))
-          ) : (
-            <FitnessText muted>
-              Your private recipes will appear here.
-            </FitnessText>
-          )}
-        </>
-      )}
-      {mode === 'Photo' && (
-        <FitnessCard>
-          <FitnessSection
-            title="A photo, if it helps"
-            caption="Optional and private. A photo cannot confirm ingredients, portion size or allergens."
-          />
-          <FitnessAction
-            label="Choose a meal photo"
-            secondary
-            icon="camera"
-            onPress={() => {
-              void choosePhoto();
-            }}
-          />
-          {photo && (
-            <>
-              <FitnessText muted>
-                Photo selected.{' '}
-                {photo.id ? 'Private upload saved.' : 'Still on this device.'}
-              </FitnessText>
-              <FitnessAction
-                label="Upload privately & attach to meal"
-                secondary
-                busy={uploading}
-                onPress={() => {
-                  void processPhoto(false);
-                }}
-              />
-              <FitnessNotice message="AI estimation sends this meal photo to the configured AI service. Its output is uncertain, can miss allergens, and must be edited and confirmed before logging. This is optional." />
-              <FitnessAction
-                label="I agree: send photo for an AI estimate"
-                busy={uploading}
-                onPress={() => {
-                  void processPhoto(true);
-                }}
-              />
-              <FitnessAction
-                label="Remove selected photo from draft"
-                secondary
-                disabled={uploading}
-                onPress={() => {
-                  setMediaIds(ids => ids.filter(id => id !== photo.id));
-                  setPhoto(null);
-                  setNotice(
-                    'Photo detached from this draft. You can delete any uploaded copy from Privacy.',
-                  );
-                }}
-              />
-            </>
-          )}
-        </FitnessCard>
-      )}
-      <FitnessSection title={editing ? 'Edit saved meal' : 'Your meal draft'} />
-      {entries.length ? (
-        entries.map((entry, index) => (
-          <FitnessCard key={index}>
-            <FitnessText>
-              {entry.name} · {entry.servings} servings
-            </FitnessText>
-            <FitnessField
-              label={`Servings for ${entry.name}`}
-              keyboardType="decimal-pad"
-              value={entryText[`${index}:servings`] ?? String(entry.servings)}
-              onChangeText={value => {
-                setEntryText(values => ({
-                  ...values,
-                  [`${index}:servings`]: value,
-                }));
-                setEntries(items =>
-                  items.map((item, i) =>
-                    i === index ? { ...item, servings: Number(value) } : item,
-                  ),
-                );
-              }}
-            />
-            {nutrientKeys.map(key => (
-              <FitnessField
-                key={key}
-                label={`${entry.name}: ${nutrientLabel[key]} per serving`}
-                keyboardType="decimal-pad"
-                value={
-                  entryText[`${index}:${key}`] ?? String(entry.nutrients[key])
-                }
-                onChangeText={value => {
-                  setEntryText(values => ({
-                    ...values,
-                    [`${index}:${key}`]: value,
-                  }));
-                  setEntries(items =>
-                    items.map((item, i) =>
-                      i === index
-                        ? {
-                            ...item,
-                            nutrients: {
-                              ...item.nutrients,
-                              [key]: Number(value),
-                            },
-                          }
-                        : item,
-                    ),
-                  );
-                }}
-              />
-            ))}
-            <FitnessAction
-              label={`Remove ${entry.name}`}
-              secondary
-              onPress={() => {
-                setEntryText({});
-                setEntries(items => items.filter((_, i) => i !== index));
-              }}
-            />
-          </FitnessCard>
-        ))
-      ) : (
-        <FitnessText muted>
-          Add a food, recipe or edited estimate to begin.
-        </FitnessText>
-      )}
-      {!!entries.length && (
-        <FitnessCard tone="soft">
-          <FitnessText>
-            {numberLabel(totals.calories)} kcal · Protein{' '}
-            {numberLabel(totals.proteinG)} g · Carbs{' '}
-            {numberLabel(totals.carbsG)} g · Fat {numberLabel(totals.fatG)} g ·
-            Fibre {numberLabel(totals.fibreG)} g
-          </FitnessText>
-          {estimate && (
-            <FitnessText muted>Contains a reviewed estimate.</FitnessText>
-          )}
-        </FitnessCard>
-      )}
-      <FitnessField
-        label="Meal notes (optional)"
-        value={notes}
-        onChangeText={setNotes}
-        multiline
-      />
-      <FitnessNotice
-        message={
-          mediaIds.length
-            ? `${mediaIds.length} private photo(s) attached.`
-            : null
-        }
-      />
-      <FitnessNotice error message={error} />
-      <FitnessNotice message={notice} />
-      {mediaIds.map(mediaId => (
-        <FitnessPrivateMedia
-          key={mediaId}
-          mediaId={mediaId}
-          compact
-          onDelete={() => setMediaIds(ids => ids.filter(id => id !== mediaId))}
-        />
-      ))}
-      <FitnessAction
-        label={editing ? 'Save meal changes' : 'Save meal'}
-        busy={mutation.isPending}
-        disabled={uploading || !entries.length}
-        onPress={() => {
-          void saveMeal();
-        }}
-      />
-      <FitnessSection title="Saved meals for this day" />
-      {logs.isPending ? (
-        <FitnessLoading />
-      ) : logs.isError ? (
-        <>
-          <FitnessNotice error message={logs.error.message} />
-          <FitnessAction
-            label="Retry saved meals"
-            secondary
-            onPress={() => {
-              void logs.refetch();
-            }}
-          />
-        </>
-      ) : logs.data?.logs.length ? (
-        logs.data.logs.map(log => {
-          const d = log.data as any;
-          return (
-            <FitnessCard key={log.id}>
-              <FitnessSection
-                title={d.mealType}
-                caption={d.foods.map((food: any) => food.name).join(', ')}
-              />
-              {d.estimate && (
-                <FitnessText muted>Contains an estimate</FitnessText>
+                    </>
+                  ) : (
+                    <>
+                      <FitnessText muted>
+                        Estimates, not verified ingredients or allergens.
+                        Missing values need your review.
+                      </FitnessText>
+                      {catalogue.data?.foods.map(food => (
+                        <FitnessCard key={food.barcode}>
+                          <FitnessSection
+                            title={food.name}
+                            caption={`${food.servingName} · ${
+                              food.missingNutrients?.includes('calories')
+                                ? 'Calories need review'
+                                : `${numberLabel(food.nutrients.calories)} kcal`
+                            }`}
+                          />
+                          <FitnessAction
+                            label={`Use catalogue food: ${food.name}`}
+                            secondary
+                            busy={mutation.isPending}
+                            onPress={() => {
+                              void importFood(food.barcode);
+                            }}
+                          />
+                        </FitnessCard>
+                      ))}
+                      {!catalogue.data?.foods.length && (
+                        <FitnessText muted>
+                          No catalogue matches. Add custom food below.
+                        </FitnessText>
+                      )}
+                      <FitnessDisclosure title="Data source">
+                        <FitnessText muted>
+                          {catalogue.data?.notice ?? 'Open Food Facts · ODbL'}
+                        </FitnessText>
+                      </FitnessDisclosure>
+                    </>
+                  )}
+                </FitnessDisclosure>
               )}
               <FitnessAction
-                label={`Edit ${d.mealType}`}
+                label="Clear search"
                 secondary
-                disabled={entries.length > 0 && editing !== log.id}
                 onPress={() => {
-                  setEditing(log.id);
-                  setEntries(d.foods);
-                  setNotes(d.notes ?? '');
-                  setMealType(d.mealType);
-                  setMediaIds(d.mediaIds ?? []);
-                  setEstimate(Boolean(d.estimate));
+                  setSearch('');
+                  setQueryText('');
                 }}
               />
             </FitnessCard>
-          );
-        })
-      ) : (
-        <FitnessEmpty
-          title="A fresh page"
-          message="No meals recorded on this date."
-        />
+          )}
+          <FitnessDisclosure
+            key={mode === 'Manual food' ? 'review-food' : 'custom-food'}
+            title={estimate ? 'Review your food estimate' : 'Add custom food'}
+            subtitle="Use your package label"
+            defaultOpen={mode === 'Manual food'}
+          >
+            {estimate && (
+              <FitnessNotice message="Review every value. Estimates cannot confirm allergens or medical suitability." />
+            )}
+            <FitnessField
+              label="Food name"
+              value={manualName}
+              onChangeText={setManualName}
+            />
+            {servingControl}
+            <FitnessStepper
+              label={nutrientLabel.calories}
+              value={
+                nutrients.calories === ''
+                  ? undefined
+                  : Number(nutrients.calories)
+              }
+              min={0}
+              max={20000}
+              step={10}
+              onChange={value => changeNutrient('calories', value)}
+            />
+            <FitnessDisclosure
+              key={String(manualDetailsOpen || estimate)}
+              title="Nutrition details"
+              subtitle="All package values are needed; nothing is filled in for you."
+              defaultOpen={manualDetailsOpen || estimate}
+            >
+              {nutrientKeys
+                .filter(key => key !== 'calories')
+                .map(key => (
+                  <FitnessStepper
+                    key={key}
+                    label={nutrientLabel[key]}
+                    value={
+                      nutrients[key] === '' ? undefined : Number(nutrients[key])
+                    }
+                    min={0}
+                    max={1000}
+                    step={1}
+                    onChange={value => changeNutrient(key, value)}
+                  />
+                ))}
+            </FitnessDisclosure>
+            <FitnessAction
+              label={
+                estimate
+                  ? 'Accept edited estimate & add to meal'
+                  : 'Add manual food to meal'
+              }
+              secondary
+              onPress={addManual}
+            />
+            <FitnessDisclosure title="Save in my food library">
+              <FitnessField
+                label="Serving name"
+                value={servingName}
+                onChangeText={setServingName}
+              />
+              <FitnessStepper
+                label="Serving weight"
+                value={servingGrams === '' ? undefined : Number(servingGrams)}
+                min={1}
+                max={10000}
+                step={5}
+                unit="g"
+                onChange={value => setServingGrams(String(value))}
+              />
+              <FitnessAction
+                label="Save as a private custom food"
+                secondary
+                busy={mutation.isPending}
+                onPress={() => {
+                  void saveCustomFood();
+                }}
+              />
+            </FitnessDisclosure>
+          </FitnessDisclosure>
+          <FitnessDisclosure
+            key={mode === 'Recipes' ? 'recipes-open' : 'recipes-closed'}
+            title="My recipes"
+            subtitle="Your own saved recipes"
+            defaultOpen={mode === 'Recipes'}
+          >
+            <FitnessAction
+              label="Create a recipe"
+              secondary
+              onPress={() => setMode('Recipes')}
+            />
+            {mode === 'Recipes' && (
+              <FitnessCard>
+                <FitnessField
+                  label="Recipe name"
+                  value={recipeName}
+                  onChangeText={setRecipeName}
+                />
+                <FitnessStepper
+                  label="Recipe yield"
+                  value={Number(recipeServings)}
+                  min={0.5}
+                  max={100}
+                  step={0.5}
+                  unit="servings"
+                  onChange={value => setRecipeServings(String(value))}
+                />
+                <FitnessText muted>
+                  Search above to add saved foods as ingredients.
+                </FitnessText>
+                {recipeIngredients.map((ingredient, i) => (
+                  <FitnessCard key={i}>
+                    <FitnessText>
+                      {ingredient.name} · {ingredient.servings} servings
+                    </FitnessText>
+                    <FitnessAction
+                      label={`Remove ingredient ${i + 1}`}
+                      secondary
+                      onPress={() =>
+                        setRecipeIngredients(items =>
+                          items.filter((_, index) => index !== i),
+                        )
+                      }
+                    />
+                  </FitnessCard>
+                ))}
+                <FitnessAction
+                  label="Save private recipe"
+                  secondary
+                  disabled={!recipeIngredients.length}
+                  busy={mutation.isPending}
+                  onPress={() => {
+                    void saveRecipe();
+                  }}
+                />
+                <FitnessAction
+                  label="Back to meal"
+                  secondary
+                  onPress={() => setMode('Journal')}
+                />
+              </FitnessCard>
+            )}
+            {recipes.isPending ? (
+              <FitnessLoading />
+            ) : recipes.isError ? (
+              <>
+                <FitnessNotice error message={recipes.error.message} />
+                <FitnessAction
+                  label="Retry recipes"
+                  secondary
+                  onPress={() => {
+                    void recipes.refetch();
+                  }}
+                />
+              </>
+            ) : recipes.data?.recipes.length ? (
+              recipes.data.recipes.map(recipe => (
+                <FitnessCard key={recipe.id}>
+                  <FitnessSection
+                    title={recipe.name}
+                    caption={`${numberLabel(
+                      recipe.nutrients.calories,
+                    )} kcal per serving`}
+                  />
+                  <FitnessAction
+                    label={`Add a serving of ${recipe.name}`}
+                    secondary
+                    onPress={() => {
+                      setEntries(items => [
+                        ...items,
+                        {
+                          name: recipe.name,
+                          servings: 1,
+                          nutrients: { ...recipe.nutrients },
+                        },
+                      ]);
+                      setNotice('Recipe serving added.');
+                    }}
+                  />
+                </FitnessCard>
+              ))
+            ) : (
+              <FitnessText muted>No saved recipes yet.</FitnessText>
+            )}
+          </FitnessDisclosure>
+          <FitnessDisclosure
+            title="Add a private meal photo"
+            subtitle="Optional · camera or gallery"
+          >
+            <FitnessAction
+              label="Choose a meal photo"
+              icon="camera"
+              secondary
+              onPress={() => setMediaChooser(true)}
+            />
+            {photo && (
+              <>
+                <FitnessText muted>
+                  {photo.id
+                    ? 'Private photo uploaded.'
+                    : 'Photo selected on this device.'}
+                </FitnessText>
+                <FitnessAction
+                  label="Upload privately & attach to meal"
+                  secondary
+                  busy={uploading}
+                  onPress={() => {
+                    void processPhoto(false);
+                  }}
+                />
+                <FitnessDisclosure title="Optional AI estimate">
+                  <FitnessNotice message="This sends your photo to the configured AI service. Estimates can miss ingredients and allergens. Review and confirm every value before logging." />
+                  <FitnessAction
+                    label="I agree: send photo for an AI estimate"
+                    secondary
+                    busy={uploading}
+                    onPress={() => {
+                      void processPhoto(true);
+                    }}
+                  />
+                </FitnessDisclosure>
+                <FitnessAction
+                  label="Remove selected photo from draft"
+                  secondary
+                  disabled={uploading}
+                  onPress={() => {
+                    setMediaIds(ids => ids.filter(id => id !== photo.id));
+                    setPhoto(null);
+                    setNotice(
+                      'Photo detached. Delete any uploaded copy in Privacy.',
+                    );
+                  }}
+                />
+              </>
+            )}
+            {mediaIds.map(mediaId => (
+              <FitnessPrivateMedia
+                key={mediaId}
+                mediaId={mediaId}
+                compact
+                onDelete={() =>
+                  setMediaIds(ids => ids.filter(id => id !== mediaId))
+                }
+              />
+            ))}
+          </FitnessDisclosure>
+          <FitnessDisclosure
+            title="Meal details"
+            subtitle={new Date(`${date}T12:00:00`).toLocaleDateString()}
+          >
+            {editing ? (
+              <FitnessText muted>Recorded {date}</FitnessText>
+            ) : (
+              <FitnessDatePicker
+                label="Meal date"
+                value={date}
+                onChange={setDate}
+                maximumDate={new Date()}
+              />
+            )}
+            <FitnessField
+              label="Meal notes · optional"
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+            />
+          </FitnessDisclosure>
+          <FitnessDisclosure
+            title="Meals saved on this date"
+            subtitle={
+              logs.data ? `${logs.data.logs.length} entries` : undefined
+            }
+          >
+            {logs.isPending ? (
+              <FitnessLoading />
+            ) : logs.isError ? (
+              <>
+                <FitnessNotice error message={logs.error.message} />
+                <FitnessAction
+                  label="Retry saved meals"
+                  secondary
+                  onPress={() => {
+                    void logs.refetch();
+                  }}
+                />
+              </>
+            ) : logs.data?.logs.length ? (
+              logs.data.logs.map(log => {
+                const d = log.data as any;
+                return (
+                  <FitnessCard key={log.id}>
+                    <FitnessSection
+                      title={d.mealType}
+                      caption={d.foods.map((food: any) => food.name).join(', ')}
+                    />
+                    <FitnessAction
+                      label={`Edit ${d.mealType}`}
+                      secondary
+                      disabled={entries.length > 0 && editing !== log.id}
+                      onPress={() => {
+                        setEditing(log.id);
+                        setEntries(
+                          d.foods.map((food: FoodEntry) => ({
+                            ...food,
+                            nutrients: { ...food.nutrients },
+                          })),
+                        );
+                        setNotes(d.notes ?? '');
+                        setMealType(d.mealType);
+                        setMediaIds(d.mediaIds ?? []);
+                        setEstimate(Boolean(d.estimate));
+                      }}
+                    />
+                  </FitnessCard>
+                );
+              })
+            ) : (
+              <FitnessText muted>No saved meals for this date.</FitnessText>
+            )}
+          </FitnessDisclosure>
+          <FitnessNotice error message={error} />
+          <FitnessNotice message={notice} />
+        </>
       )}
+      <FitnessMediaSourceSheet
+        visible={mediaChooser}
+        onClose={() => setMediaChooser(false)}
+        onChoose={asset => {
+          void choosePhoto(asset);
+        }}
+      />
     </FitnessScreen>
   );
 }

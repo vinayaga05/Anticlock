@@ -79,6 +79,7 @@ export const palette = {
 } as const;
 
 export const treeColors = {
+  rooms_restaurant: { accent: '#B96728', soft: '#FFF1E2', deep: '#703B16' },
   health: {
     accent: palette.clinical,
     soft: palette.clinicalSoft,

@@ -10,6 +10,7 @@ import type {
   FitnessWeightSnapshot,
 } from '@anticlock/contracts';
 import { dayMetric, numberLabel } from '../fitnessModel';
+import { FitnessDisclosure } from './FitnessControls';
 import {
   FitnessCard,
   FitnessNotice,
@@ -110,7 +111,7 @@ export function FitnessDailyNutrition({
               }[key]
             }
             actual={dayMetric(day, key)}
-            range={targets?.[key]}
+            range={status === 'needs_review' ? null : targets?.[key]}
             unit={key === 'calories' ? ' kcal' : ' g'}
             unavailable={unavailable}
           />
@@ -123,11 +124,13 @@ export function FitnessWeightJourney({
   snapshot,
   progress,
   current = false,
+  compact = false,
   reviewRequired = false,
 }: {
   snapshot?: FitnessWeightSnapshot | null;
   progress?: FitnessWeightProgress | null;
   current?: boolean;
+  compact?: boolean;
   reviewRequired?: boolean;
 }) {
   return (
@@ -156,7 +159,11 @@ export function FitnessWeightJourney({
         <FitnessText muted>No weight record is available yet.</FitnessText>
       )}
       {progress && (
-        <>
+        <FitnessDisclosure
+          title="Weight details"
+          subtitle="Starting record and chosen target"
+          defaultOpen={!compact}
+        >
           <FitnessText>
             Starting record · {numberLabel(progress.startWeightKg, ' kg')} ·{' '}
             {progress.startDate}
@@ -203,7 +210,7 @@ export function FitnessWeightJourney({
               </FitnessText>
             </>
           )}
-        </>
+        </FitnessDisclosure>
       )}
     </FitnessCard>
   );
@@ -315,35 +322,56 @@ export function FitnessAdherence({
   return (
     <FitnessCard>
       <FitnessSection
-        title="Your records beside your plan"
-        caption={
-          notice ?? 'Saved target comparisons use recorded entries only.'
-        }
+        title="Workouts & nutrition"
+        caption={'Compared with your saved plan'}
       />
       {status === 'needs_review' ? (
         <FitnessNotice message="Numeric target and scheduled workout comparisons are withheld for professional review." />
       ) : adherence ? (
         <>
-          <FitnessText>
-            {adherence.completedPlannedWorkouts} of {adherence.plannedWorkouts}{' '}
-            due scheduled workouts recorded complete
-            {adherence.completionPercent === null
-              ? ''
-              : ` · ${numberLabel(adherence.completionPercent, '%')}`}
-          </FitnessText>
-          <FitnessText>
-            {adherence.nutritionInRangeDays} of{' '}
-            {adherence.nutritionRecordedDays} recorded meal days within the
-            compared calorie range
-            {adherence.nutritionInRangePercent === null
-              ? ''
-              : ` · ${numberLabel(adherence.nutritionInRangePercent, '%')}`}
-          </FitnessText>
-          <FitnessText muted>
-            {adherence.nutritionInRangePercent === null
-              ? 'No recorded calorie-range comparison is available.'
-              : 'This compares logged calorie totals, including partially recorded days. It is not a nutrition quality score.'}
-          </FitnessText>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 18 }}>
+            <View style={{ flex: 1, minWidth: 120, gap: 5 }}>
+              <FitnessText large>
+                {adherence.completedPlannedWorkouts} /{' '}
+                {adherence.plannedWorkouts}
+              </FitnessText>
+              <FitnessText muted>Due workouts complete</FitnessText>
+            </View>
+            <View style={{ flex: 1, minWidth: 120, gap: 5 }}>
+              <FitnessText large>
+                {adherence.nutritionInRangeDays} /{' '}
+                {adherence.nutritionRecordedDays}
+              </FitnessText>
+              <FitnessText muted>Recorded meal days in range</FitnessText>
+            </View>
+          </View>
+          <FitnessDisclosure
+            title="About these comparisons"
+            subtitle="Recorded entries only"
+          >
+            <FitnessText>
+              {adherence.completedPlannedWorkouts} of{' '}
+              {adherence.plannedWorkouts} due scheduled workouts recorded
+              complete
+              {adherence.completionPercent === null
+                ? ''
+                : ` · ${numberLabel(adherence.completionPercent, '%')}`}
+            </FitnessText>
+            <FitnessText>
+              {adherence.nutritionInRangeDays} of{' '}
+              {adherence.nutritionRecordedDays} recorded meal days within the
+              compared calorie range
+              {adherence.nutritionInRangePercent === null
+                ? ''
+                : ` · ${numberLabel(adherence.nutritionInRangePercent, '%')}`}
+            </FitnessText>
+            {notice && <FitnessText muted>{notice}</FitnessText>}
+            <FitnessText muted>
+              {adherence.nutritionInRangePercent === null
+                ? 'No recorded calorie-range comparison is available.'
+                : 'This compares logged calorie totals, including partially recorded days. It is not a nutrition quality score.'}
+            </FitnessText>
+          </FitnessDisclosure>
         </>
       ) : (
         <FitnessText muted>

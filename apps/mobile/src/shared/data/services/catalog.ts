@@ -57,7 +57,7 @@ export function getProvidersForCategory(
   if (matched.length > 0) return matched;
 
   const category = getCategory(categoryId);
-  if (!category) return [];
+  if (!category || category.treeId === 'rooms_restaurant') return [];
 
   return marketplaceProviders.filter(p => p.actionType === category.actionType);
 }

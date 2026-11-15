@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -11,11 +12,20 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandLogo } from '@/shared/components/BrandLogo';
 import { Button } from '@/shared/components/Button';
-import { isDevEnvironment, getApiBaseUrl } from '@/shared/api/config';
 import { useAuth } from '@/shared/context/AuthProvider';
 import { useTheme } from '@/shared/hooks/useTheme';
-import { AuthError } from '@/shared/services/auth/types';
+import {
+  AuthError,
+  normalizePhone,
+  type OtpSendResult,
+} from '@/shared/services/auth/types';
 import { ApiError } from '@/shared/api/client';
+import {
+  otpDestination,
+  otpLocalTiming,
+  otpRetryAt,
+  otpSecondsUntil,
+} from '../utils/otpLoginModel';
 
 type Step = 'phone' | 'otp';
 
@@ -27,58 +37,164 @@ function authErrorMessage(err: unknown, fallback: string): string {
 export function LoginScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { requestOtp, loginWithOtp } = useAuth();
+  const { requestOtp, loginWithOtp, user } = useAuth();
 
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
-  const [requestId, setRequestId] = useState('');
+  const [challenge, setChallenge] = useState<OtpSendResult | null>(null);
+  const [destination, setDestination] = useState('');
+  const [resendAt, setResendAt] = useState<number | null>(null);
+  const [verifyBlockedUntil, setVerifyBlockedUntil] = useState<number | null>(
+    null,
+  );
+  const [now, setNow] = useState(Date.now);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const mounted = useRef(true);
+  const generation = useRef(0);
+  const busy = useRef(false);
+  const controller = useRef<AbortController | null>(null);
+  const account = useRef(user?.id);
+  account.current = user?.id;
 
-  const formattedHint = useMemo(() => {
-    const digits = phone.replace(/\D/g, '');
-    if (!digits) return '+91';
-    return digits.length <= 10 ? `+91 ${digits}` : `+${digits}`;
-  }, [phone]);
+  const cancelAttempt = () => {
+    generation.current += 1;
+    controller.current?.abort();
+    controller.current = null;
+    busy.current = false;
+  };
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      cancelAttempt();
+    };
+  }, []);
+  useEffect(() => {
+    if (step !== 'otp' && !resendAt) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [step, resendAt]);
+  const resendSeconds = otpSecondsUntil(resendAt, now);
+  const verifyBlockedSeconds = otpSecondsUntil(verifyBlockedUntil, now);
+  const expiresSeconds = otpSecondsUntil(challenge?.expiresAt ?? null, now);
+  const expired = !!challenge && expiresSeconds === 0;
+  let validPhone = false;
+  try {
+    normalizePhone(phone);
+    validPhone = true;
+  } catch {
+    /* input is still incomplete */
+  }
 
-  const handleSendOtp = async () => {
+  function startAttempt() {
+    const attempt = ++generation.current;
+    const userId = account.current;
+    const abort = new AbortController();
+    controller.current = abort;
+    busy.current = true;
+    return {
+      signal: abort.signal,
+      isCurrentAttempt: () =>
+        mounted.current &&
+        generation.current === attempt &&
+        account.current === userId,
+    };
+  }
+
+  const handleSendOtp = async (resend = false) => {
+    if (busy.current || resendSeconds > 0 || verifyBlockedSeconds > 0) return;
+    const options = startAttempt();
     setError(null);
     setLoading(true);
     try {
-      const digits = phone.replace(/\D/g, '').slice(-10);
-      if (digits.length !== 10) {
-        throw new AuthError(
-          'invalid_phone',
-          'Enter a valid 10-digit mobile number',
-        );
+      const normalized = resend ? destination : normalizePhone(phone);
+      if (resend) {
+        setChallenge(null);
+        setOtp('');
       }
-      const result = await requestOtp(digits);
-      setRequestId(result.requestId);
+      const result = await requestOtp(normalized, options);
+      if (!options.isCurrentAttempt()) return;
+      const timing = otpLocalTiming(result, Date.now());
+      setDestination(normalized);
+      setChallenge(timing);
+      setResendAt(Date.parse(timing.resendAvailableAt));
+      setVerifyBlockedUntil(null);
+      setNow(Date.now());
       setStep('otp');
     } catch (err) {
+      if (!options.isCurrentAttempt()) return;
+      const retry = otpRetryAt(err, Date.now());
+      if (retry) setResendAt(retry);
+      else if (!(err instanceof AuthError && err.code === 'invalid_phone'))
+        setResendAt(Date.now() + 60_000);
+      setNow(Date.now());
       setError(authErrorMessage(err, 'Could not send OTP. Try again.'));
     } finally {
-      setLoading(false);
+      if (options.isCurrentAttempt()) {
+        busy.current = false;
+        controller.current = null;
+        setLoading(false);
+      }
     }
   };
 
   const handleVerifyOtp = async () => {
+    if (busy.current || !challenge || expired || verifyBlockedSeconds > 0)
+      return;
+    if (!/^\d{6}$/.test(otp)) {
+      setError('Enter the six-digit code.');
+      return;
+    }
+    const options = startAttempt();
     setError(null);
     setLoading(true);
     try {
-      const digits = phone.replace(/\D/g, '').slice(-10);
-      await loginWithOtp(digits, otp.trim(), requestId);
+      await loginWithOtp(destination, otp, challenge.requestId, options);
     } catch (err) {
+      if (!options.isCurrentAttempt()) return;
+      if (
+        (err instanceof AuthError || err instanceof ApiError) &&
+        ['otp_expired', 'otp_used', 'otp_consumed'].includes(err.code)
+      ) {
+        setChallenge(null);
+        setOtp('');
+      }
+      const retry = otpRetryAt(err, Date.now());
+      if (retry) {
+        setVerifyBlockedUntil(retry);
+        setResendAt(current => Math.max(current ?? 0, retry));
+      }
+      setNow(Date.now());
       setError(authErrorMessage(err, 'Invalid OTP. Try again.'));
     } finally {
-      setLoading(false);
+      if (options.isCurrentAttempt()) {
+        busy.current = false;
+        controller.current = null;
+        setLoading(false);
+      }
     }
   };
 
   const handleBack = () => {
+    cancelAttempt();
     setStep('phone');
     setOtp('');
+    setChallenge(null);
+    setLoading(false);
+    setError(null);
+  };
+
+  const handlePhoneChange = (value: string) => {
+    cancelAttempt();
+    try {
+      setPhone(normalizePhone(value).slice(3));
+    } catch {
+      setPhone(value);
+    }
+    setLoading(false);
+    setChallenge(null);
     setError(null);
   };
 
@@ -87,8 +203,9 @@ export function LoginScreen() {
       style={[styles.root, { backgroundColor: theme.colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View
-        style={[
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[
           styles.content,
           {
             paddingTop: insets.top + 48,
@@ -103,7 +220,9 @@ export function LoginScreen() {
         <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
           {step === 'phone'
             ? 'We will send a one-time code to verify your number.'
-            : `Code sent to ${formattedHint}`}
+            : `Enter the code requested for ${otpDestination(
+                destination,
+              )}. SMS delivery may take a moment.`}
         </Text>
 
         {step === 'phone' ? (
@@ -127,10 +246,11 @@ export function LoginScreen() {
               </Text>
               <TextInput
                 value={phone}
-                onChangeText={setPhone}
+                onChangeText={handlePhoneChange}
+                accessibilityLabel="Mobile number"
                 keyboardType="phone-pad"
-                maxLength={10}
-                placeholder="9999999999"
+                maxLength={18}
+                placeholder="Mobile number"
                 placeholderTextColor={theme.colors.textTertiary}
                 style={[styles.input, { color: theme.colors.textPrimary }]}
                 autoFocus
@@ -144,10 +264,18 @@ export function LoginScreen() {
             </Text>
             <TextInput
               value={otp}
-              onChangeText={setOtp}
+              onChangeText={value =>
+                setOtp(value.replace(/\D/g, '').slice(0, 6))
+              }
+              accessibilityLabel="One-time code"
+              editable={!loading}
               keyboardType="number-pad"
               maxLength={6}
-              placeholder="123456"
+              placeholder="6-digit code"
+              textContentType="oneTimeCode"
+              autoComplete={
+                Platform.OS === 'android' ? 'sms-otp' : 'one-time-code'
+              }
               placeholderTextColor={theme.colors.textTertiary}
               style={[
                 styles.otpInput,
@@ -168,13 +296,21 @@ export function LoginScreen() {
           </Text>
         ) : null}
 
-        {__DEV__ ? (
-          <Text style={[styles.devHint, { color: theme.colors.textTertiary }]}>
-            {isDevEnvironment
-              ? 'Local API · Dev: 9999999999 or 8888888888 · OTP 123456'
-              : 'Production API · Test: 9876543210-19 · OTP 123456'}
-            {'\n'}
-            API: {getApiBaseUrl()}
+        {step === 'otp' && challenge ? (
+          <Text
+            accessibilityLiveRegion="polite"
+            style={[
+              styles.devHint,
+              {
+                color: expired ? theme.colors.error : theme.colors.textTertiary,
+              },
+            ]}
+          >
+            {expired
+              ? 'This code has expired. Request a new code.'
+              : `Code expires in ${Math.floor(expiresSeconds / 60)}:${String(
+                  expiresSeconds % 60,
+                ).padStart(2, '0')}`}
           </Text>
         ) : null}
 
@@ -184,21 +320,44 @@ export function LoginScreen() {
               title="Change number"
               variant="ghost"
               onPress={handleBack}
-              disabled={loading}
+            />
+          ) : null}
+          {step === 'otp' ? (
+            <Button
+              title={
+                resendSeconds > 0
+                  ? `Resend code in ${resendSeconds}s`
+                  : 'Resend code'
+              }
+              variant="ghost"
+              onPress={() => handleSendOtp(true)}
+              disabled={
+                loading || resendSeconds > 0 || verifyBlockedSeconds > 0
+              }
             />
           ) : null}
           <Button
-            title={step === 'phone' ? 'Continue' : 'Verify & sign in'}
-            onPress={step === 'phone' ? handleSendOtp : handleVerifyOtp}
+            title={
+              step === 'phone' && resendSeconds > 0
+                ? `Try again in ${resendSeconds}s`
+                : step === 'phone'
+                ? 'Continue'
+                : 'Verify & sign in'
+            }
+            onPress={step === 'phone' ? () => handleSendOtp() : handleVerifyOtp}
             loading={loading}
             disabled={
               step === 'phone'
-                ? phone.replace(/\D/g, '').length < 10
-                : otp.length < 6
+                ? !validPhone || resendSeconds > 0 || loading
+                : !/^\d{6}$/.test(otp) ||
+                  !challenge ||
+                  expired ||
+                  verifyBlockedSeconds > 0 ||
+                  loading
             }
           />
         </View>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -224,7 +383,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 24,
     justifyContent: 'center',
     gap: 16,

@@ -6,6 +6,9 @@ export function bumpFitnessDataEpoch() {
   epoch += 1;
   subscribers.forEach(listener => listener());
 }
+export function getFitnessDataEpoch() {
+  return epoch;
+}
 export function useFitnessDataEpoch() {
   return useSyncExternalStore(
     listener => {

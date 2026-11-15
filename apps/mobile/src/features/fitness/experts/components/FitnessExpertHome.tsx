@@ -24,17 +24,22 @@ export function FitnessExpertHome() {
         new Date(s.endsAt ?? s.startsAt).getTime() > Date.now(),
     )
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0];
+  if (!next && !workspace.data?.providers.length) return null;
   return (
-    <FitnessCard>
-      <FitnessSection
-        title="A little expert support"
-        caption="Choose a professional. Share only what you select."
-      />
+    <>
       {next && (
-        <>
-          <FitnessText>
-            {next.providerName} · {new Date(next.startsAt).toLocaleString()}
-          </FitnessText>
+        <FitnessCard>
+          <FitnessSection
+            title="Your next consultation"
+            caption={new Date(next.startsAt).toLocaleString(undefined, {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+            })}
+          />
+          <FitnessText>{next.providerName}</FitnessText>
           <FitnessAction
             secondary
             label="View consultation"
@@ -42,12 +47,8 @@ export function FitnessExpertHome() {
               nav.navigate('BookingDetail', { bookingId: next.bookingId })
             }
           />
-        </>
+        </FitnessCard>
       )}
-      <FitnessAction
-        label="Find a trainer or nutritionist"
-        onPress={() => nav.navigate('FitnessExperts')}
-      />
       {Boolean(workspace.data?.providers.length) && (
         <FitnessAction
           secondary
@@ -55,6 +56,6 @@ export function FitnessExpertHome() {
           onPress={() => nav.navigate('FitnessWorkspace')}
         />
       )}
-    </FitnessCard>
+    </>
   );
 }

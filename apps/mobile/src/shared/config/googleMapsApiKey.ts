@@ -3,4 +3,4 @@
  * to the Android package / iOS bundle and the Maps SDK + Geocoding APIs.
  */
 export const GOOGLE_MAPS_API_KEY =
-  'AIzaSyClXh2xoeYlmwmndbVUTwqtzyWfcZB24GY';
+  'AIzaSyAQsPaaGGwwWYwllKe1xoqfSdxqPnDfHYo';

@@ -3,6 +3,14 @@ import { ServiceTree } from './serviceTypes';
 
 export const serviceTrees: ServiceTree[] = [
   {
+    id: 'rooms_restaurant',
+    name: 'Rooms and Restaurant',
+    description: 'Find nearby stays, restaurants, and food spots.',
+    icon: 'utensils',
+    serviceCount: 9,
+    accent: treeColors.rooms_restaurant.accent,
+  },
+  {
     id: 'health',
     name: 'Health',
     description: 'Care for your health, all in one place.',

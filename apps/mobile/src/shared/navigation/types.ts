@@ -43,7 +43,7 @@ export type RootStackParamList = {
   LabList: { testId?: string };
   LabDetail: { labId: string; testId?: string };
   PhysioHub: undefined;
-  FitnessFeed: undefined;
+  FitnessFeed: { treeId: 'fitness' } | undefined;
   FitnessHome: undefined;
   FitnessAssessment: undefined;
   FitnessPlan: { planId?: string; version?: number } | undefined;
@@ -125,7 +125,7 @@ export type RootStackParamList = {
   MyServiceRequests: undefined;
   MyOrders: undefined;
   ComingSoon: { title: string };
-  FlashComposer: undefined;
+  FlashComposer: { publisherProfileId?: string; publisherProfileType?: 'personal' | 'business' } | undefined;
   ClipComposer: { publisherProfileId?: string; publisherProfileType?: 'personal' | 'business' } | undefined;
   ProviderClips: {
     providerId: string;
@@ -139,7 +139,7 @@ export type RootStackParamList = {
   };
   FlashComments: { postId: string };
   StoryViewer: { authorId: string };
-  StoryCreator: undefined;
+  StoryCreator: { publisherProfileId?: string; publisherProfileType?: 'personal' | 'business' } | undefined;
   SavedHub: undefined;
   ExploreCreate: undefined;
   CreateComplaint: undefined;

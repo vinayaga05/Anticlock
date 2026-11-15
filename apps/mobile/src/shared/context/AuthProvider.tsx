@@ -107,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const continueAsGuest = useCallback(() => {
     authGeneration.current += 1;
+    clearSession();
     // Intentionally in-memory only: this is a temporary way to preview the app
     // and guests return to sign-in after the app restarts.
     setUser(

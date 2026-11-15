@@ -283,7 +283,7 @@ describe(
         .route("/v1/fitness", fitnessMediaRoutes)
         .route("/v1/fitness", fitnessExpertRoutes)
         .route("/v1/fitness", fitnessMobileRoutes);
-      const { signToken } = await import('../testutils/phoneBoundToken.js');
+      const { signToken } = await import("../lib/auth.js");
       await db
         .insert(schema.mobileUsers)
         .values(

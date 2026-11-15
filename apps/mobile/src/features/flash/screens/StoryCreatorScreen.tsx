@@ -1,3 +1,4 @@
+import { finishCreation } from '@/shared/publishing/creationNavigation';
 import React, { useState } from 'react';
 import {
   Alert,
@@ -8,7 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppHeader } from '@/shared/components/AppHeader';
@@ -60,7 +61,8 @@ export function StoryCreatorScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const publishStory = useStoryStore(s => s.publishStory);
-  const publisher = usePublisherSelection('story');
+  const route = useRoute<RouteProp<RootStackParamList, 'StoryCreator'>>();
+  const publisher = usePublisherSelection('story', route.params?.publisherProfileId);
   const { identities, identity } = publisher;
   const publishContent = usePublishContentMutation();
 
@@ -96,7 +98,7 @@ export function StoryCreatorScreen() {
         `Your story from ${published.name} will appear once it is reviewed.`,
       );
     }
-    navigation.goBack();
+    finishCreation(navigation, 'story');
   };
 
   const handlePickPhoto = async () => {
@@ -130,6 +132,10 @@ export function StoryCreatorScreen() {
   };
 
   const share = async () => {
+    if (route.params?.publisherProfileId && identity?.id !== route.params.publisherProfileId) {
+      Alert.alert('Publishing profile unavailable', 'Reopen the publishing profile and try again.');
+      return;
+    }
     if (mode === 'text') {
       if (!text.trim()) return;
       if (isApiEnabled) {

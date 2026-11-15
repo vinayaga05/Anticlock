@@ -1968,6 +1968,26 @@ async function migrate() {
     created_at timestamptz NOT NULL DEFAULT now(), CONSTRAINT business_profile_reports_user_provider_uidx UNIQUE(reporter_id,provider_id)
   )`;
 
+  await sql`CREATE TABLE IF NOT EXISTS otp_phone_states (
+    phone_hash text PRIMARY KEY, active_request_id uuid, last_sent_at timestamptz,
+    failed_attempts integer NOT NULL DEFAULT 0, locked_until timestamptz, updated_at timestamptz NOT NULL DEFAULT now()
+  )`;
+  await sql`CREATE TABLE IF NOT EXISTS otp_challenges (
+    id uuid PRIMARY KEY, phone_hash text NOT NULL, code_hash text NOT NULL, device_hash text,
+    status text NOT NULL CHECK(status IN ('pending','sent','used','failed','superseded','expired')),
+    expires_at timestamptz NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS otp_challenges_phone_idx ON otp_challenges(phone_hash)`;
+  await sql`CREATE INDEX IF NOT EXISTS otp_challenges_expiry_idx ON otp_challenges(expires_at)`;
+  await sql`CREATE TABLE IF NOT EXISTS otp_rate_limits (id text PRIMARY KEY, count integer NOT NULL, reset_at timestamptz NOT NULL)`;
+  await sql`CREATE INDEX IF NOT EXISTS otp_rate_limits_reset_idx ON otp_rate_limits(reset_at)`;
+  await sql`CREATE TABLE IF NOT EXISTS mobile_auth_sessions (
+    id uuid PRIMARY KEY, user_id uuid NOT NULL REFERENCES mobile_users(id) ON DELETE CASCADE,
+    device_hash text, ip_hash text, expires_at timestamptz NOT NULL, revoked_at timestamptz, created_at timestamptz NOT NULL DEFAULT now()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS mobile_auth_sessions_user_idx ON mobile_auth_sessions(user_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS mobile_auth_sessions_expiry_idx ON mobile_auth_sessions(expires_at)`;
+
   // Fitness payloads are encrypted; public tables carry only ownership and operational metadata.
   await sql`CREATE TABLE IF NOT EXISTS fitness_profiles (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL UNIQUE REFERENCES mobile_users(id) ON DELETE CASCADE, status text NOT NULL DEFAULT 'draft', encrypted_data text NOT NULL, completed_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())`;
   for (const table of ['fitness_goals','workout_logs','meal_logs','water_logs','habit_logs','sleep_logs','step_logs','body_measurements']) {

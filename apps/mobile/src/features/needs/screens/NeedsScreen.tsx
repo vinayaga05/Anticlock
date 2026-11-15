@@ -17,7 +17,7 @@ import { useSearchScrollRestoration } from '@/shared/hooks/useSearchScrollRestor
 import { fitnessClasses, doctors } from '@/shared/data/mocks';
 import { marketplaceProviders } from '@/shared/data/services';
 import { NeedsShowcaseGrid } from '@/features/needs/components/NeedsShowcaseGrid';
-import { MyActivityHub } from '@/features/needs/components/MyActivityHub';
+import { RoomsRestaurantHub } from '@/features/needs/components/RoomsRestaurantHub';
 import { ServiceCatalogSearchResults } from '@/features/services/components/ServiceCatalogSearchResults';
 import { ProviderCard } from '@/features/services/components/ProviderCard';
 import { RootStackParamList } from '@/shared/navigation/types';
@@ -60,7 +60,9 @@ export function NeedsScreen() {
             showFilter
             value={searchQuery}
             onChangeText={onChangeText}
-            onVoicePress={() => useAssistantStore.getState().openAssistant({ voiceMode: true })}
+            onVoicePress={() =>
+              useAssistantStore.getState().openAssistant({ voiceMode: true })
+            }
           />
           <SectionHeader title="Explore Services" />
         </View>
@@ -74,7 +76,7 @@ export function NeedsScreen() {
             <NeedsShowcaseGrid />
 
             <View style={styles.padded}>
-              <MyActivityHub />
+              <RoomsRestaurantHub />
             </View>
 
             <View style={styles.padded}>
@@ -95,7 +97,8 @@ export function NeedsScreen() {
                     cta: 'Book',
                     imageUrl:
                       'https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=600&h=400&q=80',
-                    onPress: () => navigation.navigate('FitnessFeed'),
+                    onPress: () =>
+                      navigation.navigate('ServiceTree', { treeId: 'fitness' }),
                   },
                 ]}
               />

@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
-import { Alert, View } from 'react-native';
+import { Alert } from 'react-native';
+import {
+  FitnessDisclosure,
+  FitnessStepper,
+} from '../../components/FitnessControls';
 import type {
   FitnessExpertKind,
   FitnessPlanContent,
@@ -24,6 +28,46 @@ import {
   type ExerciseDraft,
 } from '../fitnessPlanDraft';
 
+function Numeric({
+  label,
+  value,
+  onChangeText,
+  min,
+  max,
+  step = 1,
+  disabled,
+  optional = false,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  min: number;
+  max: number;
+  step?: number;
+  disabled?: boolean;
+  optional?: boolean;
+}) {
+  return (
+    <>
+      <FitnessStepper
+        label={label}
+        value={value.trim() ? Number(value) : undefined}
+        onChange={number => onChangeText(String(number))}
+        min={min}
+        max={max}
+        step={step}
+        disabled={disabled}
+      />
+      {optional && value !== '' && !disabled && (
+        <FitnessAction
+          secondary
+          label={`Clear ${label}`}
+          onPress={() => onChangeText('')}
+        />
+      )}
+    </>
+  );
+}
 type TargetKey = 'proteinG' | 'carbsG' | 'fatG' | 'fibreG' | 'waterMl';
 const TARGETS: Array<{
   key: TargetKey;
@@ -250,12 +294,14 @@ export function FitnessPlanEditor({
         selected={section}
         onChange={setSection}
       />
-      <FitnessField
-        label="Plan title"
-        value={title}
-        onChangeText={setTitle}
-        maxLength={160}
-      />
+      <FitnessDisclosure title="Plan title" subtitle={title}>
+        <FitnessField
+          label="Plan title"
+          value={title}
+          onChangeText={setTitle}
+          maxLength={160}
+        />
+      </FitnessDisclosure>
       {section === 'nutrition' ? (
         <>
           <FitnessField
@@ -264,68 +310,106 @@ export function FitnessPlanEditor({
             value={guidance}
             onChangeText={setGuidance}
           />
-          <FitnessField
-            label="Daily calorie range minimum (optional)"
-            editable={!content.requiresProfessionalReview}
-            keyboardType="numeric"
-            value={minCalories}
-            onChangeText={setMinCalories}
-          />
-          <FitnessField
-            label="Daily calorie range maximum (optional)"
-            editable={!content.requiresProfessionalReview}
-            keyboardType="numeric"
-            value={maxCalories}
-            onChangeText={setMaxCalories}
-          />
+          <FitnessDisclosure
+            title="Energy range"
+            subtitle={
+              minCalories && maxCalories
+                ? `${minCalories}–${maxCalories} kcal`
+                : 'Optional · no numeric range'
+            }
+          >
+            <Numeric
+              label="Daily calorie range minimum (optional)"
+              disabled={content.requiresProfessionalReview}
+              value={minCalories}
+              onChangeText={setMinCalories}
+              min={1200}
+              max={5000}
+              step={50}
+              optional
+            />
+            <Numeric
+              label="Daily calorie range maximum (optional)"
+              disabled={content.requiresProfessionalReview}
+              value={maxCalories}
+              onChangeText={setMaxCalories}
+              min={1200}
+              max={5000}
+              step={50}
+              optional
+            />
+          </FitnessDisclosure>
           {content.requiresProfessionalReview && (
             <FitnessNotice message="Clinical review is required. Numeric nutrition targets and exercise prescriptions remain unavailable; general guidance can still be revised." />
           )}
-          <FitnessText muted>
-            Only completed pairs become expert targets. Clear both values to
-            return that target to the saved baseline estimate. Targets need
-            individual professional judgment.
-          </FitnessText>
-          {TARGETS.map(target => {
-            const baseline = content.requiresProfessionalReview
-              ? undefined
-              : content.baselineTargets?.[target.key];
-            return (
-              <FitnessCard key={target.key}>
-                <FitnessSection
-                  title={`${target.label} (${target.unit}/day)`}
-                  caption={`Saved baseline: ${rangeLabel(
+          <FitnessDisclosure
+            title="Nutrient & water targets"
+            subtitle="Optional expert ranges · saved estimates remain separate"
+          >
+            <FitnessText muted>
+              Set both limits to save an expert range. Clear both to return to
+              the saved estimate.
+            </FitnessText>
+            {TARGETS.map(target => {
+              const baseline = content.requiresProfessionalReview
+                ? undefined
+                : content.baselineTargets?.[target.key];
+              const bounds =
+                target.key === 'waterMl'
+                  ? [500, 5000]
+                  : [
+                      0,
+                      { proteinG: 250, carbsG: 800, fatG: 200, fibreG: 70 }[
+                        target.key
+                      ],
+                    ];
+              return (
+                <FitnessDisclosure
+                  key={target.key}
+                  title={target.label}
+                  subtitle={`Saved baseline: ${rangeLabel(
                     baseline,
                     target.unit,
-                  )}. Supported range ${target.bounds} ${target.unit}.`}
-                />
-                <FitnessField
-                  label={`${target.label} minimum (${target.unit})`}
-                  editable={!content.requiresProfessionalReview}
-                  value={targets[target.key].min}
-                  keyboardType="numeric"
-                  onChangeText={value =>
-                    setTargets(current => ({
-                      ...current,
-                      [target.key]: { ...current[target.key], min: value },
-                    }))
-                  }
-                />
-                <FitnessField
-                  label={`${target.label} maximum (${target.unit})`}
-                  editable={!content.requiresProfessionalReview}
-                  value={targets[target.key].max}
-                  keyboardType="numeric"
-                  onChangeText={value =>
-                    setTargets(current => ({
-                      ...current,
-                      [target.key]: { ...current[target.key], max: value },
-                    }))
-                  }
-                />
-              </FitnessCard>
-            );
-          })}
+                  )} · ${
+                    targets[target.key].min && targets[target.key].max
+                      ? 'Expert range set'
+                      : 'No expert range'
+                  }`}
+                >
+                  <Numeric
+                    label={`${target.label} minimum (${target.unit})`}
+                    disabled={content.requiresProfessionalReview}
+                    value={targets[target.key].min}
+                    min={bounds[0]}
+                    max={bounds[1]}
+                    step={target.key === 'waterMl' ? 100 : 5}
+                    optional
+                    onChangeText={value =>
+                      setTargets(current => ({
+                        ...current,
+                        [target.key]: { ...current[target.key], min: value },
+                      }))
+                    }
+                  />
+                  <Numeric
+                    label={`${target.label} maximum (${target.unit})`}
+                    disabled={content.requiresProfessionalReview}
+                    value={targets[target.key].max}
+                    min={bounds[0]}
+                    max={bounds[1]}
+                    step={target.key === 'waterMl' ? 100 : 5}
+                    optional
+                    onChangeText={value =>
+                      setTargets(current => ({
+                        ...current,
+                        [target.key]: { ...current[target.key], max: value },
+                      }))
+                    }
+                  />
+                </FitnessDisclosure>
+              );
+            })}
+          </FitnessDisclosure>
         </>
       ) : section === 'workouts' ? (
         <>
@@ -343,95 +427,125 @@ export function FitnessPlanEditor({
             }
             maxLength={160}
           />
-          <FitnessField
+          <Numeric
             label="Duration in minutes"
-            keyboardType="numeric"
             value={current.durationMinutes}
+            min={1}
+            max={180}
+            step={5}
             onChangeText={value =>
               updateDay(workout => ({ ...workout, durationMinutes: value }))
             }
           />
           <FitnessText muted>
-            {current.exercises.length} exercise(s) in this workout. All saved
-            exercises and other days remain in the draft until you explicitly
-            change them.
+            {current.exercises.length} exercises · Other days stay in your
+            draft.
           </FitnessText>
           {current.exercises.map((exercise, index) => (
-            <FitnessCard key={`${day}-${index}`}>
-              <FitnessSection title={`Exercise ${index + 1}`} />
+            <FitnessDisclosure
+              key={`${day}-${index}`}
+              title={`Exercise ${index + 1} · ${
+                exercise.name || 'New exercise'
+              }`}
+              subtitle={`${exercise.sets || '—'} sets${
+                exercise.reps ? ` × ${exercise.reps}` : ''
+              }${
+                exercise.durationSeconds
+                  ? ` · ${exercise.durationSeconds}s`
+                  : ''
+              }`}
+              defaultOpen={index === 0 || !exercise.name}
+            >
               <FitnessField
                 label={`Exercise ${index + 1} name`}
                 value={exercise.name}
                 onChangeText={value => updateExercise(index, { name: value })}
                 maxLength={150}
               />
-              <FitnessField
+              <Numeric
                 label={`Exercise ${index + 1} sets`}
                 value={exercise.sets}
-                keyboardType="numeric"
+                min={1}
+                max={20}
                 onChangeText={value => updateExercise(index, { sets: value })}
               />
-              <FitnessField
+              <Numeric
                 label={`Exercise ${index + 1} reps per set (optional)`}
                 value={exercise.reps}
-                keyboardType="numeric"
+                min={1}
+                max={100}
+                optional
                 onChangeText={value => updateExercise(index, { reps: value })}
               />
-              <FitnessField
-                label={`Exercise ${index + 1} duration seconds (optional)`}
-                value={exercise.durationSeconds}
-                keyboardType="numeric"
-                onChangeText={value =>
-                  updateExercise(index, { durationSeconds: value })
-                }
-              />
-              <FitnessField
-                label={`Exercise ${index + 1} rest seconds (optional)`}
-                value={exercise.restSeconds}
-                keyboardType="numeric"
-                onChangeText={value =>
-                  updateExercise(index, { restSeconds: value })
-                }
-              />
-              <FitnessField
-                label={`Exercise ${index + 1} instructions`}
-                value={exercise.instructions}
-                multiline
-                onChangeText={value =>
-                  updateExercise(index, { instructions: value })
-                }
-                maxLength={3000}
-              />
-              <FitnessField
-                label={`Exercise ${index + 1} substitutions (one per line)`}
-                value={exercise.substitutions}
-                multiline
-                onChangeText={value =>
-                  updateExercise(index, { substitutions: value })
-                }
-              />
-              <FitnessField
-                label={`Exercise ${index + 1} notes (optional)`}
-                value={exercise.notes}
-                multiline
-                onChangeText={value => updateExercise(index, { notes: value })}
-                maxLength={1000}
-              />
-              {exercise.mediaId && (
-                <>
-                  <FitnessText muted>
-                    An existing private media reference stays attached. Viewing
-                    it still requires the client's separate media permission.
-                  </FitnessText>
-                  <FitnessAction
-                    secondary
-                    label={`Remove media from exercise ${index + 1}`}
-                    onPress={() =>
-                      updateExercise(index, { mediaId: undefined })
-                    }
-                  />
-                </>
-              )}
+              <FitnessDisclosure
+                title={`Exercise ${index + 1} timing & coaching`}
+                subtitle="Duration, rest, instructions and alternatives"
+              >
+                <Numeric
+                  label={`Exercise ${index + 1} duration seconds (optional)`}
+                  value={exercise.durationSeconds}
+                  min={1}
+                  max={7200}
+                  step={15}
+                  optional
+                  onChangeText={value =>
+                    updateExercise(index, { durationSeconds: value })
+                  }
+                />
+                <Numeric
+                  label={`Exercise ${index + 1} rest seconds (optional)`}
+                  value={exercise.restSeconds}
+                  min={0}
+                  max={600}
+                  step={15}
+                  optional
+                  onChangeText={value =>
+                    updateExercise(index, { restSeconds: value })
+                  }
+                />
+                <FitnessField
+                  label={`Exercise ${index + 1} instructions`}
+                  value={exercise.instructions}
+                  multiline
+                  onChangeText={value =>
+                    updateExercise(index, { instructions: value })
+                  }
+                  maxLength={3000}
+                />
+                <FitnessField
+                  label={`Exercise ${index + 1} substitutions (one per line)`}
+                  value={exercise.substitutions}
+                  multiline
+                  onChangeText={value =>
+                    updateExercise(index, { substitutions: value })
+                  }
+                />
+                <FitnessField
+                  label={`Exercise ${index + 1} notes (optional)`}
+                  value={exercise.notes}
+                  multiline
+                  onChangeText={value =>
+                    updateExercise(index, { notes: value })
+                  }
+                  maxLength={1000}
+                />
+                {exercise.mediaId && (
+                  <>
+                    <FitnessText muted>
+                      An existing private media reference stays attached.
+                      Viewing it still requires the client's separate media
+                      permission.
+                    </FitnessText>
+                    <FitnessAction
+                      secondary
+                      label={`Remove media from exercise ${index + 1}`}
+                      onPress={() =>
+                        updateExercise(index, { mediaId: undefined })
+                      }
+                    />
+                  </>
+                )}
+              </FitnessDisclosure>
               <FitnessAction
                 destructive
                 label={`Remove exercise ${index + 1}`}
@@ -442,7 +556,7 @@ export function FitnessPlanEditor({
                   }))
                 }
               />
-            </FitnessCard>
+            </FitnessDisclosure>
           ))}
           <FitnessAction
             secondary
@@ -475,13 +589,15 @@ export function FitnessPlanEditor({
               setHabitTarget(habitValue(value));
             }}
           />
-          <FitnessField
+          <Numeric
             label={`Daily ${habit} target (${
               habit === 'water' ? 'ml' : habit === 'steps' ? 'steps' : 'hours'
             })`}
-            keyboardType="numeric"
             value={habitTarget}
             onChangeText={setHabitTarget}
+            min={habit === 'sleep' ? 4 : habit === 'water' ? 500 : 0}
+            max={habit === 'water' ? 5000 : habit === 'steps' ? 30000 : 12}
+            step={habit === 'water' ? 250 : habit === 'steps' ? 500 : 0.5}
           />
         </>
       )}

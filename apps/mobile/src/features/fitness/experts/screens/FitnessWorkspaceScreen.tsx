@@ -24,6 +24,7 @@ import {
   FitnessSection,
   FitnessText,
 } from '../../components/FitnessUI';
+import { FitnessDisclosure } from '../../components/FitnessControls';
 import { FitnessPrivateMedia } from '../../components/FitnessPrivateMedia';
 import { FitnessPlanEditor } from '../components/FitnessPlanEditor';
 import { FITNESS_SCOPE_LABELS } from './FitnessSharingScreen';
@@ -278,8 +279,8 @@ export function FitnessWorkspaceScreen() {
   return (
     <FitnessScreen
       busy={mutation.isPending || chatBusy}
-      title="Your expert workspace"
-      subtitle="Only your booked or assigned clients with active, explicit consent appear here."
+      title="Your workspace"
+      subtitle="Client support, with their permission."
     >
       {workspace.isLoading ? (
         <FitnessLoading />
@@ -307,51 +308,56 @@ export function FitnessWorkspaceScreen() {
                   p.kind === 'trainer' ? 'Fitness trainer' : 'Nutritionist'
                 }
               />
-              <FitnessAction
-                secondary
-                label="Business profile & services"
-                onPress={() =>
-                  nav.navigate('BusinessProfile', { providerId: p.id })
-                }
-              />
-              <FitnessAction
-                secondary
-                label="Bookings and classes"
-                onPress={() => nav.navigate('MyBookings')}
-              />
-              {p.canPublish && (
-                <>
-                  <FitnessAction
-                    label="Add a Clip"
-                    onPress={() =>
-                      nav.navigate('ClipComposer', {
-                        publisherProfileId: p.id,
-                        publisherProfileType: 'business',
-                      })
-                    }
-                  />
-                  <FitnessAction
-                    secondary
-                    label="Add a product"
-                    onPress={() =>
-                      nav.navigate('CreateExploreProduct', {
-                        publisherProfileId: p.id,
-                        publisherProfileType: 'business',
-                      })
-                    }
-                  />
-                  <FitnessAction
-                    secondary
-                    label="Add an event or class"
-                    onPress={() =>
-                      nav.navigate('CreateExploreEvent', {
-                        publisherProfileId: p.id,
-                        publisherProfileType: 'business',
-                      })
-                    }
-                  />
-                </>
-              )}
+              <FitnessDisclosure
+                title="Manage your business"
+                subtitle="Profile, bookings and publishing"
+              >
+                <FitnessAction
+                  secondary
+                  label="Business profile & services"
+                  onPress={() =>
+                    nav.navigate('BusinessProfile', { providerId: p.id })
+                  }
+                />
+                <FitnessAction
+                  secondary
+                  label="Bookings and classes"
+                  onPress={() => nav.navigate('MyBookings')}
+                />
+                {p.canPublish && (
+                  <>
+                    <FitnessAction
+                      label="Add a Clip"
+                      onPress={() =>
+                        nav.navigate('ClipComposer', {
+                          publisherProfileId: p.id,
+                          publisherProfileType: 'business',
+                        })
+                      }
+                    />
+                    <FitnessAction
+                      secondary
+                      label="Add a product"
+                      onPress={() =>
+                        nav.navigate('CreateExploreProduct', {
+                          publisherProfileId: p.id,
+                          publisherProfileType: 'business',
+                        })
+                      }
+                    />
+                    <FitnessAction
+                      secondary
+                      label="Add an event or class"
+                      onPress={() =>
+                        nav.navigate('CreateExploreEvent', {
+                          publisherProfileId: p.id,
+                          publisherProfileType: 'business',
+                        })
+                      }
+                    />
+                  </>
+                )}
+              </FitnessDisclosure>
             </FitnessCard>
           ))}
           <FitnessSection
@@ -368,9 +374,12 @@ export function FitnessWorkspaceScreen() {
               <FitnessCard key={`${c.providerId}-${c.userId}`}>
                 <FitnessSection title={c.displayName} />
                 <FitnessText muted>
-                  {c.scopes.map(s => FITNESS_SCOPE_LABELS[s]).join(' · ')}
+                  {c.scopes.length} shared permissions
+                  {c.plan ? ` · Plan v${c.plan.version}` : ''}
                 </FitnessText>
                 <FitnessAction
+                  secondary
+                  compact
                   label="View shared information"
                   onPress={() => {
                     setSelected(c);
@@ -413,16 +422,18 @@ export function FitnessWorkspaceScreen() {
                   <>
                     {detail.data.shared.length ? (
                       detail.data.shared.map((entry, index) => (
-                        <FitnessCard
+                        <FitnessDisclosure
                           key={`${entry.scope}-${entry.id ?? index}`}
+                          defaultOpen={Boolean(
+                            route.params?.resourceId &&
+                              route.params.resourceId === entry.id,
+                          )}
+                          title={
+                            FITNESS_SCOPE_LABELS[
+                              entry.scope as keyof typeof FITNESS_SCOPE_LABELS
+                            ] ?? human(entry.scope)
+                          }
                         >
-                          <FitnessSection
-                            title={
-                              FITNESS_SCOPE_LABELS[
-                                entry.scope as keyof typeof FITNESS_SCOPE_LABELS
-                              ] ?? human(entry.scope)
-                            }
-                          />
                           <SharedEntry scope={entry.scope} value={entry.data} />
                           {entry.scope === 'media' && entry.id && (
                             <FitnessPrivateMedia
@@ -430,7 +441,7 @@ export function FitnessWorkspaceScreen() {
                               providerId={selected.providerId}
                             />
                           )}
-                        </FitnessCard>
+                        </FitnessDisclosure>
                       ))
                     ) : (
                       <FitnessEmpty

@@ -94,20 +94,24 @@ export type UpdateMobileProfileRequest = z.infer<
 >;
 
 export const MobileOtpSendRequestSchema = z.object({
-  phone: z.string().min(8),
+  phone: z.string().regex(/^\+91[6-9]\d{9}$/, 'Enter an Indian mobile number in +91 format.'),
+  deviceId: z.string().trim().min(8).max(128).optional(),
 });
 export type MobileOtpSendRequest = z.infer<typeof MobileOtpSendRequestSchema>;
 
 export const MobileOtpSendResponseSchema = z.object({
   requestId: z.string().uuid(),
   expiresInSeconds: z.number().int().positive(),
+  expiresAt: z.string().datetime(),
+  resendAvailableAt: z.string().datetime(),
 });
 export type MobileOtpSendResponse = z.infer<typeof MobileOtpSendResponseSchema>;
 
 export const MobileOtpVerifyRequestSchema = z.object({
-  phone: z.string().min(8),
-  code: z.string().length(6),
+  phone: z.string().regex(/^\+91[6-9]\d{9}$/, 'Enter an Indian mobile number in +91 format.'),
+  code: z.string().regex(/^\d{6}$/, 'Enter the six-digit code.'),
   requestId: z.string().uuid(),
+  deviceId: z.string().trim().min(8).max(128).optional(),
 });
 export type MobileOtpVerifyRequest = z.infer<typeof MobileOtpVerifyRequestSchema>;
 

@@ -1,29 +1,31 @@
 import { DevWhitelistOtpProvider } from './devWhitelistProvider.js';
-import { Msg91OtpProvider } from './msg91Provider.js';
 import { TestAccountWrapperProvider } from './testAccountWrapper.js';
+import { isTestLoginEnabled } from './testLogin.js';
+import { DurableOtpProvider } from './durableOtpProvider.js';
+import { BulkBlasterDelivery, isBulkBlasterConfigured } from './bulkBlasterDelivery.js';
 import type { OtpProvider } from './types.js';
 
 export * from './types.js';
 export * from './testLogin.js';
+export { DurableOtpProvider } from './durableOtpProvider.js';
+export { PostgresOtpStore } from './postgresOtpStore.js';
+
+export function assertProductionOtpConfiguration(): void {
+  if (process.env.NODE_ENV !== 'production') return;
+  if (process.env.OTP_DEV_WHITELIST === 'true' || process.env.OTP_TEST_LOGIN_ENABLED === 'true' || process.env.TEST_LOGIN_DISABLED === 'false') {
+    throw new Error('Development OTP and test accounts are forbidden in production');
+  }
+  if (process.env.SMS_PROVIDER !== 'bulkblaster' || !isBulkBlasterConfigured() || (process.env.OTP_HASH_SECRET?.trim().length ?? 0) < 32) {
+    throw new Error('Production OTP requires BulkBlaster API key, approved brand/sender and OTP_HASH_SECRET (at least 32 characters)');
+  }
+}
 
 export function createOtpProvider(): OtpProvider {
-  // First, select the base provider based on environment
-  let baseProvider: OtpProvider;
-  
-  const devWhitelist =
-    process.env.OTP_DEV_WHITELIST === 'true' ||
-    process.env.NODE_ENV !== 'production';
-  
-  if (devWhitelist) {
-    // Dev/staging: use whitelist provider (+919999999999, +918888888888)
-    baseProvider = new DevWhitelistOtpProvider();
-  } else {
-    // Production: use MSG91 provider (when configured)
-    // Future: return new Msg91OtpProvider() when MSG91_AUTH_KEY is set.
-    baseProvider = new Msg91OtpProvider();
+  // Production never activates a static fallback, even for known test numbers.
+  let provider: OtpProvider = new DurableOtpProvider({ delivery: new BulkBlasterDelivery() });
+  if (process.env.NODE_ENV !== 'production') {
+    if (process.env.OTP_DEV_WHITELIST === 'true') provider = new DevWhitelistOtpProvider();
+    if (isTestLoginEnabled()) provider = new TestAccountWrapperProvider(provider);
   }
-
-  // Wrap the base provider to handle test login accounts (testLogin.ts)
-  // Test accounts work in all environments (enabled by default, disable via TEST_LOGIN_DISABLED=true)
-  return new TestAccountWrapperProvider(baseProvider);
+  return provider;
 }

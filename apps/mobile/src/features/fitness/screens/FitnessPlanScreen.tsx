@@ -8,6 +8,7 @@ import type {
 import { useFitnessMutation, useFitnessQuery } from '../api/fitnessApi';
 import { FITNESS_REVIEW_GUIDANCE } from '../fitnessModel';
 import { fitnessRangeLabel } from '../components/FitnessTargetCards';
+import { FitnessDisclosure } from '../components/FitnessControls';
 import {
   FitnessAction,
   FitnessCard,
@@ -54,6 +55,20 @@ export function FitnessPlanScreen() {
         : undefined
       : currentPlan);
   const baseline = profile.data?.profile?.baseline;
+  const isHistorical =
+    selectedVersion !== undefined &&
+    selectedVersion !== currentPlan?.currentVersion;
+  const reviewRequired =
+    plan?.status === 'needs_review' ||
+    plan?.content.requiresProfessionalReview ||
+    baseline?.requiresProfessionalReview;
+  const nextWorkout = plan?.content.workouts
+    .slice()
+    .sort(
+      (a, b) =>
+        ((a.day - new Date().getDay() + 7) % 7) -
+        ((b.day - new Date().getDay() + 7) % 7),
+    )[0];
   async function generate() {
     try {
       setError('');
@@ -65,8 +80,35 @@ export function FitnessPlanScreen() {
   return (
     <FitnessScreen
       busy={mutation.isPending}
-      title="Made for your rhythm"
-      subtitle="A saved, versioned starting point. Review it with a qualified professional when needed."
+      title="Your plan"
+      subtitle="A clear path for your week."
+      footer={
+        plan ? (
+          <FitnessAction
+            label={
+              isHistorical
+                ? 'Open latest plan'
+                : reviewRequired
+                ? 'Review with an expert'
+                : nextWorkout
+                ? 'Start workout'
+                : 'Log a meal'
+            }
+            onPress={() =>
+              isHistorical
+                ? setSelectedVersion(undefined)
+                : reviewRequired
+                ? nav.navigate('FitnessExperts')
+                : nextWorkout
+                ? nav.navigate('FitnessWorkout', {
+                    planId: plan.id,
+                    day: nextWorkout.day,
+                  })
+                : nav.navigate('FitnessMeals')
+            }
+          />
+        ) : undefined
+      }
     >
       {query.isPending || (selectedVersion && versions.isPending) ? (
         <FitnessLoading />
@@ -113,7 +155,7 @@ export function FitnessPlanScreen() {
         <>
           <FitnessCard tone="soft">
             <FitnessSection
-              title={plan.title}
+              title={plan.content.name || plan.title}
               caption={`Version ${plan.currentVersion} · ${
                 plan.providerId ? 'Expert authored' : 'Starter wellness plan'
               }`}
@@ -145,66 +187,8 @@ export function FitnessPlanScreen() {
               </FitnessText>
             </FitnessCard>
           )}
-          {baseline && (
-            <FitnessCard>
-              <FitnessSection
-                title="Your baseline estimates"
-                caption="These are estimates, not measurements or medical advice."
-              />
-              <FitnessText>
-                Age {baseline.age} · BMI{' '}
-                {baseline.bmi === null ? 'withheld' : baseline.bmi.toFixed(1)}
-              </FitnessText>
-              {(
-                [
-                  'bmr',
-                  'tdee',
-                  'calories',
-                  'proteinG',
-                  'carbsG',
-                  'fatG',
-                ] as const
-              ).map(key => (
-                <FitnessText key={key}>
-                  {
-                    {
-                      bmr: 'Resting energy',
-                      tdee: 'Daily energy',
-                      calories: 'Calorie range',
-                      proteinG: 'Protein (g)',
-                      carbsG: 'Carbs (g)',
-                      fatG: 'Fat (g)',
-                    }[key]
-                  }{' '}
-                  ·{' '}
-                  {baseline[key]
-                    ? `${Math.round(baseline[key]!.min)}–${Math.round(
-                        baseline[key]!.max,
-                      )}`
-                    : 'Withheld for professional review'}
-                </FitnessText>
-              ))}
-              <FitnessText>
-                Fibre ·{' '}
-                {baseline.fibreG === null ? 'Withheld' : `${baseline.fibreG} g`}{' '}
-                · Water ·{' '}
-                {baseline.waterMl === null
-                  ? 'Withheld'
-                  : `${baseline.waterMl} ml`}
-              </FitnessText>
-              {[...baseline.assumptions, ...baseline.guidance].map(
-                (line, i) => (
-                  <FitnessText key={i} muted>
-                    {line}
-                  </FitnessText>
-                ),
-              )}
-            </FitnessCard>
-          )}
           <FitnessSection title="Movement" />
-          {(plan.status === 'needs_review' ||
-            plan.content.requiresProfessionalReview) &&
-          !selectedVersion ? (
+          {reviewRequired && !selectedVersion ? (
             <FitnessNotice message="Review this plan with an appropriately qualified professional before using exercise guidance. Your own activity journal remains available." />
           ) : plan.content.workouts.length ? (
             plan.content.workouts.map((workout, index) => (
@@ -223,32 +207,34 @@ export function FitnessPlanScreen() {
                     ][workout.day]
                   } · ${workout.durationMinutes} minutes`}
                 />
-                {workout.exercises.map((exercise, i) => (
-                  <FitnessText key={i}>
-                    {exercise.name} · {exercise.sets} sets
-                    {exercise.reps ? ` × ${exercise.reps} reps` : ''}
-                    {exercise.durationSeconds
-                      ? ` · ${exercise.durationSeconds} sec`
-                      : ''}
-                    {exercise.restSeconds
-                      ? ` · rest ${exercise.restSeconds}s`
-                      : ''}
-                    {exercise.instructions ? `\n${exercise.instructions}` : ''}
-                    {exercise.notes ? `\n${exercise.notes}` : ''}
-                    {exercise.substitutions?.length
-                      ? `\nAlternatives: ${exercise.substitutions.join(', ')}`
-                      : ''}
-                  </FitnessText>
-                ))}
+                <FitnessDisclosure
+                  title="View exercises"
+                  subtitle={`${workout.exercises.length} exercises`}
+                >
+                  {workout.exercises.map((exercise, i) => (
+                    <FitnessText key={i}>
+                      {exercise.name} · {exercise.sets} sets
+                      {exercise.reps ? ` × ${exercise.reps} reps` : ''}
+                      {exercise.durationSeconds
+                        ? ` · ${exercise.durationSeconds} sec`
+                        : ''}
+                      {exercise.restSeconds
+                        ? ` · rest ${exercise.restSeconds}s`
+                        : ''}
+                      {exercise.instructions
+                        ? `\n${exercise.instructions}`
+                        : ''}
+                      {exercise.notes ? `\n${exercise.notes}` : ''}
+                      {exercise.substitutions?.length
+                        ? `\nAlternatives: ${exercise.substitutions.join(', ')}`
+                        : ''}
+                    </FitnessText>
+                  ))}
+                </FitnessDisclosure>
                 <FitnessAction
                   label="Open workout log"
                   secondary
-                  disabled={
-                    plan.status === 'needs_review' ||
-                    plan.content.requiresProfessionalReview ||
-                    (selectedVersion !== undefined &&
-                      selectedVersion !== currentPlan?.currentVersion)
-                  }
+                  disabled={reviewRequired || isHistorical}
                   onPress={() =>
                     nav.navigate('FitnessWorkout', {
                       planId: plan.id,
@@ -269,9 +255,14 @@ export function FitnessPlanScreen() {
             {plan.status === 'needs_review' && !selectedVersion ? (
               <FitnessNotice message="Nutrition guidance is awaiting review of your updated assessment." />
             ) : (
-              plan.content.nutrition.guidance.map((line, i) => (
-                <FitnessText key={i}>{line}</FitnessText>
-              ))
+              <FitnessDisclosure
+                title="Nutrition guidance"
+                subtitle={`${plan.content.nutrition.guidance.length} saved notes`}
+              >
+                {plan.content.nutrition.guidance.map((line, i) => (
+                  <FitnessText key={i}>{line}</FitnessText>
+                ))}
+              </FitnessDisclosure>
             )}
             <FitnessAction
               label="Open meal journal"
@@ -279,7 +270,10 @@ export function FitnessPlanScreen() {
               onPress={() => nav.navigate('FitnessMeals')}
             />
           </FitnessCard>
-          <FitnessCard>
+          <FitnessDisclosure
+            title="Saved nutrition ranges"
+            subtitle="Targets in this plan version"
+          >
             <FitnessSection
               title="This version’s saved nutrition ranges"
               caption="Explicit ranges saved with this plan version. Baseline estimates above remain separate."
@@ -322,7 +316,7 @@ export function FitnessPlanScreen() {
                 })}
               </>
             )}
-          </FitnessCard>
+          </FitnessDisclosure>
           <FitnessCard>
             <FitnessSection title="Everyday anchors" />
             {plan.content.habits.map(habit => (
@@ -330,12 +324,85 @@ export function FitnessPlanScreen() {
                 {habit.label} · {habit.target} {habit.unit}
               </FitnessText>
             ))}
-            {plan.content.assumptions.map((line, i) => (
-              <FitnessText key={i} muted>
-                {line}
-              </FitnessText>
-            ))}
+            {!!plan.content.assumptions.length && (
+              <FitnessDisclosure title="Plan notes">
+                {plan.content.assumptions.map((line, i) => (
+                  <FitnessText key={i} muted>
+                    {line}
+                  </FitnessText>
+                ))}
+              </FitnessDisclosure>
+            )}
           </FitnessCard>
+          {baseline && (
+            <FitnessDisclosure
+              title="Baseline estimates"
+              subtitle="How your starting point was calculated"
+            >
+              {reviewRequired || baseline.requiresProfessionalReview ? (
+                <FitnessNotice message="Numeric estimates are withheld for appropriate professional review." />
+              ) : (
+                <>
+                  <FitnessSection
+                    title="Your baseline estimates"
+                    caption="These are estimates, not measurements or medical advice."
+                  />
+                  <FitnessText>
+                    Age {baseline.age} · BMI{' '}
+                    {baseline.bmi === null
+                      ? 'withheld'
+                      : baseline.bmi.toFixed(1)}
+                  </FitnessText>
+                  {(
+                    [
+                      'bmr',
+                      'tdee',
+                      'calories',
+                      'proteinG',
+                      'carbsG',
+                      'fatG',
+                    ] as const
+                  ).map(key => (
+                    <FitnessText key={key}>
+                      {
+                        {
+                          bmr: 'Resting energy',
+                          tdee: 'Daily energy',
+                          calories: 'Calorie range',
+                          proteinG: 'Protein (g)',
+                          carbsG: 'Carbs (g)',
+                          fatG: 'Fat (g)',
+                        }[key]
+                      }{' '}
+                      ·{' '}
+                      {baseline[key]
+                        ? `${Math.round(baseline[key]!.min)}–${Math.round(
+                            baseline[key]!.max,
+                          )}`
+                        : 'Withheld for professional review'}
+                    </FitnessText>
+                  ))}
+                  <FitnessText>
+                    Fibre ·{' '}
+                    {baseline.fibreG === null
+                      ? 'Withheld'
+                      : `${baseline.fibreG} g`}{' '}
+                    · Water ·{' '}
+                    {baseline.waterMl === null
+                      ? 'Withheld'
+                      : `${baseline.waterMl} ml`}
+                  </FitnessText>
+                  {[...baseline.assumptions, ...baseline.guidance].map(
+                    (line, i) => (
+                      <FitnessText key={i} muted>
+                        {line}
+                      </FitnessText>
+                    ),
+                  )}
+                </>
+              )}
+            </FitnessDisclosure>
+          )}
           <FitnessAction
             label={
               showVersions ? 'Hide plan history' : 'View plan version history'
@@ -369,10 +436,7 @@ export function FitnessPlanScreen() {
                 </FitnessCard>
               ))
             ))}
-          <FitnessAction
-            label="Review with an expert"
-            onPress={() => nav.navigate('FitnessExperts')}
-          />
+
           <FitnessAction
             label="Update my assessment"
             secondary

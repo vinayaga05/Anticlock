@@ -39,7 +39,7 @@ import { DiagnosticsHubScreen } from '@/features/booking/screens/DiagnosticsHubS
 import { LabListScreen } from '@/features/booking/screens/LabListScreen';
 import { LabDetailScreen } from '@/features/booking/screens/LabDetailScreen';
 import { PhysioHubScreen } from '@/features/booking/screens/PhysioHubScreen';
-import { FitnessHomeRoute, FitnessAssessmentRoute, FitnessPlanRoute, FitnessWorkoutRoute, FitnessMealsRoute, FitnessLogRoute, FitnessProgressRoute, FitnessPrivacyRoute, FitnessHistoryRoute, FitnessExpertsRoute, FitnessWorkspaceRoute, FitnessSharingRoute, FitnessServiceTreeRoute } from '@/shared/navigation/fitnessRouteScreens';
+import { FitnessHomeRoute, FitnessAssessmentRoute, FitnessPlanRoute, FitnessWorkoutRoute, FitnessMealsRoute, FitnessLogRoute, FitnessProgressRoute, FitnessPrivacyRoute, FitnessHistoryRoute, FitnessExpertsRoute, FitnessWorkspaceRoute, FitnessSharingRoute } from '@/shared/navigation/fitnessRouteScreens';
 import { ClassDetailScreen } from '@/features/booking/screens/ClassDetailScreen';
 import { ScheduleScreen } from '@/features/booking/screens/ScheduleScreen';
 import { BookingConfirmScreen } from '@/features/booking/screens/BookingConfirmScreen';
@@ -281,8 +281,9 @@ export function RootNavigator() {
             />
             <Stack.Screen
               name="FitnessFeed"
-              component={FitnessHomeRoute}
-              options={{ headerShown: false }}
+              component={ServiceTreeScreen}
+              initialParams={{treeId: 'fitness'}}
+              options={{ title: 'Fitness' }}
             />
             <Stack.Screen name="FitnessHome" component={FitnessHomeRoute} options={{ headerShown: false }} />
             <Stack.Screen name="FitnessAssessment" component={FitnessAssessmentRoute} options={{ headerShown: false }} />
@@ -343,8 +344,8 @@ export function RootNavigator() {
             />
             <Stack.Screen
               name="ServiceTree"
-              component={FitnessServiceTreeRoute}
-              options={({ route }) => ({ title: 'Services', headerShown: route.params.treeId !== 'fitness' })}
+              component={ServiceTreeScreen}
+              options={{ title: 'Services' }}
             />
             <Stack.Screen
               name="ServiceCategory"
@@ -409,7 +410,7 @@ export function RootNavigator() {
             <Stack.Screen
               name="FlashComposer"
               component={FlashComposerScreen}
-              options={{ title: 'Create post' }}
+              options={{ title: 'Create Flash' }}
             />
             <Stack.Screen
               name="ClipComposer"

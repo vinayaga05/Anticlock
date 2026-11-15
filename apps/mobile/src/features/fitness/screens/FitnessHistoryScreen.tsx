@@ -6,38 +6,64 @@ import { useFitnessMutation, useFitnessQuery } from '../api/fitnessApi';
 import {
   fitnessDateValid,
   fitnessRange,
+  localFitnessDate,
   logKinds,
   logTitle,
 } from '../fitnessModel';
+import {
+  FitnessDatePicker,
+  FitnessDisclosure,
+} from '../components/FitnessControls';
+import { FitnessIllustration } from '../components/FitnessVisuals';
 import {
   FitnessAction,
   FitnessCard,
   FitnessChoices,
   FitnessEmpty,
-  FitnessField,
   FitnessLoading,
   FitnessNotice,
   FitnessScreen,
   FitnessSection,
   FitnessText,
 } from '../components/FitnessUI';
-
 export function FitnessHistoryScreen() {
-  const nav = useNavigation<any>();
-  const [kind, setKind] = useState<FitnessLogKind>('workout');
-  const [range, setRange] = useState(fitnessRange('month'));
-  const query = useFitnessQuery<{ logs: FitnessLog[] }>(
-    `/logs/${kind}?from=${range.from}&to=${range.to}`,
+  const nav = useNavigation<any>(),
+    [kind, setKind] = useState<FitnessLogKind>('workout'),
+    [period, setPeriod] = useState('Month'),
+    [range, setRange] = useState(fitnessRange('month')),
+    [error, setError] = useState('');
+  const valid =
     fitnessDateValid(range.from) &&
-      fitnessDateValid(range.to) &&
-      range.from <= range.to,
-  );
-  const mutation = useFitnessMutation();
-  const [error, setError] = useState('');
+    fitnessDateValid(range.to) &&
+    range.from <= range.to;
+  const query = useFitnessQuery<{ logs: FitnessLog[] }>(
+      `/logs/${kind}?from=${range.from}&to=${range.to}`,
+      valid,
+    ),
+    mutation = useFitnessMutation();
+  function open(log?: FitnessLog) {
+    nav.navigate(
+      (log?.kind ?? kind) === 'workout'
+        ? 'FitnessWorkout'
+        : (log?.kind ?? kind) === 'meal'
+        ? 'FitnessMeals'
+        : 'FitnessLog',
+      {
+        kind: log?.kind ?? kind,
+        date: log?.date ?? localFitnessDate(),
+        ...(log
+          ? {
+              logId: log.id,
+              ...(log.kind === 'workout' ? { workoutId: log.id } : {}),
+            }
+          : {}),
+      },
+    );
+  }
   function remove(log: FitnessLog) {
     Alert.alert(
-      'Delete this private entry?',
-      'This entry will be removed from your journal and progress totals.',
+      'Delete this entry?',
+      'It will be removed from your private journal and progress totals.',
       [
         { text: 'Keep entry', style: 'cancel' },
         {
@@ -60,37 +86,53 @@ export function FitnessHistoryScreen() {
   }
   return (
     <FitnessScreen
+      title="Your journal"
       busy={mutation.isPending}
-      title="Your journal, over time"
-      subtitle="Every entry below comes from your saved records."
+      footer={<FitnessAction label="Log an entry" onPress={() => open()} />}
     >
       <FitnessChoices
-        label="Journal"
+        label="Entry type"
         options={logKinds}
         selected={kind}
         onChange={setKind}
       />
-      <FitnessField
-        label="From date"
-        value={range.from}
-        onChangeText={from => setRange(r => ({ ...r, from }))}
-        placeholder="YYYY-MM-DD"
+      <FitnessChoices
+        label="Period"
+        options={['Week', 'Month', 'Custom']}
+        selected={period}
+        onChange={v => {
+          setPeriod(v);
+          if (v !== 'Custom')
+            setRange(fitnessRange(v === 'Week' ? 'week' : 'month'));
+        }}
       />
-      <FitnessField
-        label="To date"
-        value={range.to}
-        onChangeText={to => setRange(r => ({ ...r, to }))}
-        placeholder="YYYY-MM-DD"
-      />
-      {!fitnessDateValid(range.from) ||
-      !fitnessDateValid(range.to) ||
-      range.from > range.to ? (
-        <FitnessNotice error message="Choose a valid date range." />
+      {period === 'Custom' && (
+        <FitnessCard>
+          <FitnessDatePicker
+            label="From"
+            value={range.from}
+            onChange={from => setRange(r => ({ ...r, from }))}
+            maximumDate={range.to}
+          />
+          <FitnessDatePicker
+            label="To"
+            value={range.to}
+            onChange={to => setRange(r => ({ ...r, to }))}
+            minimumDate={range.from}
+            maximumDate={new Date()}
+          />
+        </FitnessCard>
+      )}
+      {!valid ? (
+        <FitnessNotice
+          error
+          message="Choose an end date after the start date."
+        />
       ) : query.isPending ? (
         <FitnessLoading />
       ) : query.isError ? (
         <FitnessEmpty
-          title="History could not be loaded"
+          title="Journal unavailable"
           message={query.error.message}
           action="Retry"
           onPress={() => {
@@ -102,43 +144,37 @@ export function FitnessHistoryScreen() {
           <FitnessCard key={log.id}>
             <FitnessSection
               title={logTitle(log)}
-              caption={new Date(`${log.date}T12:00:00`).toLocaleDateString()}
+              caption={new Date(`${log.date}T12:00:00`).toLocaleDateString(
+                undefined,
+                { weekday: 'short', month: 'short', day: 'numeric' },
+              )}
             />
-            {(log.data as any).notes && (
-              <FitnessText muted>{(log.data as any).notes}</FitnessText>
-            )}
             <FitnessAction
-              label="Open or edit entry"
+              label="Open entry"
               secondary
-              onPress={() =>
-                nav.navigate(
-                  log.kind === 'workout'
-                    ? 'FitnessWorkout'
-                    : log.kind === 'meal'
-                    ? 'FitnessMeals'
-                    : 'FitnessLog',
-                  {
-                    kind: log.kind,
-                    date: log.date,
-                    logId: log.id,
-                    ...(log.kind === 'workout' ? { workoutId: log.id } : {}),
-                  },
-                )
-              }
+              onPress={() => open(log)}
             />
-            <FitnessAction
-              label="Delete entry"
-              destructive
-              disabled={mutation.isPending}
-              onPress={() => remove(log)}
-            />
+            <FitnessDisclosure title="Entry options">
+              {(log.data as any).notes && (
+                <FitnessText muted>{(log.data as any).notes}</FitnessText>
+              )}
+              <FitnessAction
+                label="Delete entry"
+                destructive
+                disabled={mutation.isPending}
+                onPress={() => remove(log)}
+              />
+            </FitnessDisclosure>
           </FitnessCard>
         ))
       ) : (
-        <FitnessEmpty
-          title="No entries in this period"
-          message="Your saved entries will appear here as you build your rhythm."
-        />
+        <>
+          <FitnessIllustration kind="empty" />
+          <FitnessEmpty
+            title="A fresh page"
+            message="Your saved entries will appear here."
+          />
+        </>
       )}
       <FitnessNotice error message={error} />
     </FitnessScreen>

@@ -148,7 +148,9 @@ export function ServiceCategoryScreen() {
     );
   }
 
-  if (isHealth && childCategories.length) {
+  // Doctors opens the shared provider list directly. Keep legacy specialty
+  // categories available for existing provider classifications and links.
+  if (isHealth && categoryId !== 'health.doctors' && childCategories.length) {
     return (
       <Shell
         scrollable

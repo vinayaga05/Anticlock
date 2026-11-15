@@ -17,6 +17,24 @@ import { ensureUserAvatar } from './avatar';
 
 const otpProvider = createOtpProvider();
 
+async function sessionRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      apiRequest<T>(path, { ...init, signal: controller.signal }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new ApiError(0, 'request_timeout', 'The session request timed out.'));
+        }, 20_000);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 export async function sendOtp(phone: string, options?: OtpRequestOptions): Promise<OtpSendResult> {
   return otpProvider.sendOtp(phone, options);
 }
@@ -72,7 +90,7 @@ export async function validateSession(session: AuthSession): Promise<MobileUser 
   }
 
   try {
-    const res = await apiRequest<{ user: MobileUser }>('/auth/mobile/me');
+    const res = await sessionRequest<{ user: MobileUser }>('/auth/mobile/me');
     if (!isCurrent()) return null;
     if (res.user.id !== session.user.id) {
       clearSession();
@@ -92,7 +110,7 @@ export async function validateSession(session: AuthSession): Promise<MobileUser 
 
 export async function logoutRemote(): Promise<void> {
   try {
-    await apiRequest('/auth/mobile/logout', { method: 'POST' });
+    await sessionRequest('/auth/mobile/logout', { method: 'POST' });
   } catch {
     /* ignore */
   }

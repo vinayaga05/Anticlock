@@ -11,6 +11,7 @@ export const ServiceTreeIdSchema = z.enum([
   "course_training",
   "home_services",
   "ecommerce",
+  "rooms_restaurant",
 ]);
 export type ServiceTreeId = z.infer<typeof ServiceTreeIdSchema>;
 

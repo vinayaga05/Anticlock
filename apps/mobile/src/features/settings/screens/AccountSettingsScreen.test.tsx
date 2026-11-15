@@ -10,9 +10,14 @@ jest.mock('@/shared/components/PressableScale', () => require('@/test/componentM
 jest.mock('react-native-reanimated', () => require('@/test/componentMocks').reanimatedModule);
 jest.mock('react-native-safe-area-context', () => require('@/test/componentMocks').safeAreaModule);
 
+jest.mock('@/features/fitness/api/fitnessApi', () => ({
+  useFitnessQuery: () => ({ data: undefined, isPending: false, isError: false, refetch: jest.fn() }),
+}));
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate, goBack: jest.fn() }),
+  useFocusEffect: jest.fn(),
+  useIsFocused: () => true,
 }));
 jest.mock('@/shared/store/themeStore', () => ({
   useThemeStore: (selector: (state: unknown) => unknown) =>
@@ -91,11 +96,13 @@ jest.mock('@/shared/api/profileFollows', () => ({
   useFollowRequestAction: () => ({ mutate: jest.fn(), isPending: false }),
 }));
 
+const renderers: ReactTestRenderer.ReactTestRenderer[] = [];
 function render() {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     renderer = ReactTestRenderer.create(<AccountSettingsScreen />);
   });
+  renderers.push(renderer);
   const texts = () =>
     renderer.root.findAllByType(Text).map(node => [node.props.children].flat().join(''));
   return { renderer, texts };
@@ -105,6 +112,10 @@ beforeEach(() => {
   mockNavigate.mockClear();
   mockSetActive.mockClear();
   mockActive = personal;
+});
+
+afterEach(() => {
+  ReactTestRenderer.act(() => renderers.splice(0).forEach(renderer => renderer.unmount()));
 });
 
 describe('AccountSettingsScreen (profile hub)', () => {
@@ -175,3 +186,5 @@ describe('AccountSettingsScreen (profile hub)', () => {
     expect(mockNavigate).toHaveBeenCalledWith('ProviderApplicationKind');
   });
 });
+
+it.each(['personal','business'])('opens personal Fitness from Settings with %s publishing active',type=>{mockActive=type==='business'?lotus:personal;const {renderer,texts}=render();expect(texts()).toContain('Fitness Space');expect(texts()).toContain("Today's Focus");expect(texts()).toContain('Key Stats');ReactTestRenderer.act(()=>byTestId(renderer,'settings-open-fitness').props.onPress());expect(mockNavigate).toHaveBeenCalledWith('FitnessHome');});

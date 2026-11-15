@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import { bodyLimit } from 'hono/body-limit';
 import bcrypt from 'bcryptjs';
@@ -6,15 +6,17 @@ import {
   AdminLoginRequestSchema,
   MobileOtpSendRequestSchema,
   MobileOtpVerifyRequestSchema,
-  MobileTokenRequestSchema,
   UpdateMobileProfileRequestSchema,
   type Role,
 } from '@anticlock/contracts';
 import { db } from '../db/client.js';
-import { mobileDevices, mobileUsers, userRoles, users } from '../db/schema.js';
-import { signToken, mobileAccountIdForSubject } from '../lib/auth.js';
+import { mobileUsers, userRoles, users } from '../db/schema.js';
+import { signToken } from '../lib/auth.js';
 import { writeAudit } from '../lib/audit.js';
-import { createOtpProvider, normalizePhone, OtpError, type OtpProvider } from '../lib/otp/index.js';
+import { createOtpProvider, normalizePhone, OtpError, type OtpProvider, type OtpContext } from '../lib/otp/index.js';
+import { getConnInfo } from '@hono/node-server/conninfo';
+import { isIP } from 'node:net';
+import { createMobileSession, revokeMobileSession, revokeAllMobileSessions } from '../lib/mobileSessions.js';
 import { fitnessService } from '../fitness/FitnessService.js';
 import { fitnessHttpError } from '../fitness/fitnessHttpError.js';
 import { requireAuth, type AppEnv } from '../middleware/auth.js';
@@ -26,6 +28,10 @@ import { MAX_AVATAR_BYTES } from '../media/validateAvatarUpload.js';
 export function createAuthRoutes(options: { otpProvider?: OtpProvider } = {}) {
 const authRoutes = new Hono<AppEnv>();
 const otpProvider = options.otpProvider ?? createOtpProvider();
+authRoutes.use('/mobile/otp/*', bodyLimit({
+  maxSize: 2048,
+  onError: c => c.json({ error: { code: 'request_too_large', message: 'The sign-in request is too large.' } }, 413),
+}));
 const secureCookie = process.env.NODE_ENV === 'production' ? '; Secure' : '';
 
 function displayNameFromPhone(phone: string) {
@@ -34,9 +40,9 @@ function displayNameFromPhone(phone: string) {
   return `User ${local}`;
 }
 
-async function issueMobileSession(user: typeof mobileUsers.$inferSelect) {
+async function issueMobileSession(user: typeof mobileUsers.$inferSelect, context: OtpContext) {
   const { roles, providerId } = await getMobileUserContext(user.id);
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { id: sid, expiresAt } = await createMobileSession(user.id, context);
   const token = await signToken(
     {
       sub: user.id,
@@ -47,6 +53,7 @@ async function issueMobileSession(user: typeof mobileUsers.$inferSelect) {
       kind: 'mobile',
       mobileRoles: roles,
       providerId,
+      sid,
     },
     '30d',
   );
@@ -256,95 +263,84 @@ authRoutes.get('/admin/me', requireAuth, async c => {
   });
 });
 
-authRoutes.post('/mobile/token', async c => {
-  const body = MobileTokenRequestSchema.parse(await c.req.json());
-  // Device sessions stay guests; a caller-selected ID cannot impersonate a
-  // verified mobile account that already owns private information.
-  const accountId = mobileAccountIdForSubject(body.deviceId);
-  if (accountId) {
-    const [account] = await db.select({ id: mobileUsers.id }).from(mobileUsers).where(eq(mobileUsers.id, accountId)).limit(1);
-    if (account) return c.json({ error: { code: 'otp_required', message: 'Sign in with your mobile number to access this account.' } }, 410);
-  }
-  await db
-    .insert(mobileDevices)
-    .values({
-      id: body.deviceId,
-      displayName: body.displayName ?? 'Guest',
-    })
-    .onConflictDoUpdate({
-      target: mobileDevices.id,
-      set: { displayName: body.displayName ?? 'Guest' },
-    });
-
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-  const token = await signToken(
-    {
-      sub: body.deviceId,
-      email: '',
-      name: body.displayName ?? 'Guest',
-      roles: [],
-      permissions: ['catalog.read', 'cms.read'],
-      kind: 'mobile',
-    },
-    '30d',
-  );
-
-  return c.json({
-    userId: body.deviceId,
-    displayName: body.displayName ?? 'Guest',
-    token,
-    expiresAt,
-  });
+authRoutes.post('/mobile/token', c => {
+  // A caller-selected device ID must never become a verified user identity.
+  return c.json({ error: { code: 'otp_required', message: 'Sign in with your mobile number to create a session.' } }, 410);
 });
 
+function otpContext(c: Context<AppEnv>, deviceId?: string): OtpContext {
+  let ip: string | undefined;
+  try { ip = getConnInfo(c).remote.address; } catch { /* no socket in in-process tests */ }
+  if (process.env.OTP_TRUST_PROXY === 'true') {
+    // The production API is private behind Traefik. Use its appended address,
+    // never the caller-controlled first entry in a forwarded chain.
+    const forwarded = c.req.header('x-forwarded-for')?.split(',').at(-1)?.trim();
+    if (forwarded && isIP(forwarded)) ip = forwarded;
+  }
+  return { ip: ip && isIP(ip) ? ip : undefined, deviceId };
+}
+
+function otpErrorResponse(c: Context<AppEnv>, error: unknown) {
+  if (!(error instanceof OtpError)) {
+    // Database exceptions can include bound challenge hashes. Keep them out
+    // of generic error logging as well as client responses.
+    console.error('[otp]', JSON.stringify({ event: 'failed', reason: 'otp_unavailable' }));
+    return c.json({ error: { code: 'otp_unavailable', message: 'Sign-in is temporarily unavailable. Please try again.' } }, 503);
+  }
+  const status = ['rate_limit_exceeded', 'max_attempts_exceeded', 'otp_locked', 'resend_cooldown'].includes(error.code) ? 429
+    : ['invalid_phone', 'invalid_otp', 'otp_expired', 'otp_invalid', 'otp_used'].includes(error.code) ? 400
+    : error.code === 'phone_not_allowed' ? 403
+    : 503;
+  const retryAfterSeconds = error.retryAfterSeconds;
+  if (retryAfterSeconds) c.header('Retry-After', String(retryAfterSeconds));
+  return c.json({ error: { code: error.code, message: error.message, ...(retryAfterSeconds ? { retryAfterSeconds } : {}) } }, status);
+}
+
 authRoutes.post('/mobile/otp/send', async c => {
-  const body = MobileOtpSendRequestSchema.parse(await c.req.json());
+  const parsed = MobileOtpSendRequestSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: { code: 'invalid_phone', message: 'Enter a valid Indian mobile number.' } }, 400);
+  const body = parsed.data;
   try {
-    const result = await otpProvider.sendOtp(body.phone);
+    const result = await otpProvider.sendOtp(body.phone, otpContext(c, body.deviceId));
     return c.json(result);
   } catch (err) {
-    if (err instanceof OtpError) {
-      const statusCode =
-        err.code === 'rate_limit_exceeded' ? 429 :
-        err.code === 'invalid_phone' ? 400 :
-        err.code === 'phone_not_allowed' ? 403 :
-        503;
-      return c.json({ error: { code: err.code, message: err.message } }, statusCode);
-    }
-    throw err;
+    return otpErrorResponse(c, err);
   }
 });
 
 authRoutes.post('/mobile/otp/verify', async c => {
-  const body = MobileOtpVerifyRequestSchema.parse(await c.req.json());
+  const parsed = MobileOtpVerifyRequestSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: { code: 'invalid_otp', message: 'Enter a valid mobile number and six-digit code.' } }, 400);
+  const body = parsed.data;
   try {
-    const ok = await otpProvider.verifyOtp(body.phone, body.code, body.requestId);
+    const context = otpContext(c, body.deviceId);
+    const ok = await otpProvider.verifyOtp(body.phone, body.code, body.requestId, context);
     if (!ok) {
       return c.json(
         { error: { code: 'invalid_otp', message: 'Invalid or expired OTP' } },
-        401,
+        400,
       );
     }
 
     const normalized = normalizePhone(body.phone);
 
-    let [user] = await db.select().from(mobileUsers).where(eq(mobileUsers.phone, normalized));
-    if (!user) {
-      [user] = await db
+    let [user] = await db
         .insert(mobileUsers)
         .values({
           phone: normalized,
           displayName: displayNameFromPhone(normalized),
         })
+        .onConflictDoNothing({ target: mobileUsers.phone })
         .returning();
-    } else if (!user.isActive) {
+    if (!user) [user] = await db.select().from(mobileUsers).where(eq(mobileUsers.phone, normalized));
+    if (!user || !user.isActive) {
       return c.json(
         { error: { code: 'account_disabled', message: 'This account is disabled' } },
         403,
       );
     }
 
-    const session = await issueMobileSession(user);
+    const session = await issueMobileSession(user, context);
 
     await writeAudit({
       actorId: user.id,
@@ -356,15 +352,7 @@ authRoutes.post('/mobile/otp/verify', async c => {
 
     return c.json(session);
   } catch (err) {
-    if (err instanceof OtpError) {
-      const statusCode =
-        err.code === 'max_attempts_exceeded' ? 429 :
-        err.code === 'rate_limit_exceeded' ? 429 :
-        err.code === 'invalid_phone' ? 400 :
-        503;
-      return c.json({ error: { code: err.code, message: err.message } }, statusCode);
-    }
-    throw err;
+    return otpErrorResponse(c, err);
   }
 });
 
@@ -476,6 +464,7 @@ authRoutes.put('/mobile/profile', requireAuth, async c => {
 authRoutes.post('/mobile/logout', requireAuth, async c => {
   const auth = c.get('auth');
   if (auth.kind === 'mobile') {
+    if (auth.sid) await revokeMobileSession(auth.sub, auth.sid);
     await writeAudit({
       actorId: auth.sub,
       actorEmail: auth.email,
@@ -495,6 +484,7 @@ authRoutes.delete('/mobile/account', requireAuth, async c => {
   if (!body || body.confirmAccountClosure !== true) return c.json({ error: { code: 'confirmation_required', message: 'Confirm account closure and fitness data deletion.' } }, 400);
   try {
     await fitnessService.deleteData(auth.sub, { deactivateAccount: true });
+    await revokeAllMobileSessions(auth.sub);
     return c.json({ ok: true, accountClosed: true, fitnessDataDeleted: true });
   } catch (error) { const result = fitnessHttpError(error); return c.json(result.body, result.status); }
 });

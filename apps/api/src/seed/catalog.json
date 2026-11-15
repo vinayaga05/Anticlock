@@ -71,6 +71,14 @@
       "accentColor": "#F59E0B",
       "sortOrder": 8,
       "description": "Shop health, fitness, and lifestyle products."
+    },
+    {
+      "id": "rooms_restaurant",
+      "name": "Rooms and Restaurant",
+      "description": "Find nearby stays, restaurants, and food spots.",
+      "icon": "utensils",
+      "accentColor": "#B96728",
+      "sortOrder": 9
     }
   ],
   "categories": [
@@ -553,6 +561,60 @@
       "treeId": "ecommerce",
       "sortOrder": 81,
       "name": "Electronics and Gadgets"
+    },
+    {
+      "id": "rooms.hotel",
+      "treeId": "rooms_restaurant",
+      "name": "Hotel",
+      "sortOrder": 1
+    },
+    {
+      "id": "rooms.lodge",
+      "treeId": "rooms_restaurant",
+      "name": "Lodge",
+      "sortOrder": 2
+    },
+    {
+      "id": "rooms.veg_restaurant",
+      "treeId": "rooms_restaurant",
+      "name": "Veg Restaurant",
+      "sortOrder": 3
+    },
+    {
+      "id": "rooms.non_veg_restaurant",
+      "treeId": "rooms_restaurant",
+      "name": "Non-Veg Restaurant",
+      "sortOrder": 4
+    },
+    {
+      "id": "rooms.fast_food",
+      "treeId": "rooms_restaurant",
+      "name": "Fast Food",
+      "sortOrder": 5
+    },
+    {
+      "id": "rooms.cloud_kitchen",
+      "treeId": "rooms_restaurant",
+      "name": "Cloud Kitchen",
+      "sortOrder": 6
+    },
+    {
+      "id": "rooms.food_truck",
+      "treeId": "rooms_restaurant",
+      "name": "Food Truck",
+      "sortOrder": 7
+    },
+    {
+      "id": "rooms.cafe_juice_bar",
+      "treeId": "rooms_restaurant",
+      "name": "Café & Juice Bar",
+      "sortOrder": 8
+    },
+    {
+      "id": "rooms.cake_sweet_stall",
+      "treeId": "rooms_restaurant",
+      "name": "Cake & Sweet Stall",
+      "sortOrder": 9
     }
   ]
 }

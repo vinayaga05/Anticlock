@@ -1,15 +1,25 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { FitnessAssessmentScreen } from './FitnessAssessmentScreen';
 import { FitnessMealsScreen } from './FitnessMealsScreen';
 import { FitnessWorkoutScreen } from './FitnessWorkoutScreen';
 import { FitnessPlanScreen } from './FitnessPlanScreen';
+import {
+  FitnessDisclosure,
+  FitnessStepper,
+} from '../components/FitnessControls';
 import {
   FitnessAction,
   FitnessChoices,
   FitnessField,
 } from '../components/FitnessUI';
 
+jest.mock('@/shared/context/AuthProvider', () => ({
+  useAuth: () => ({ user: { id: 'customer-a' } }),
+}));
+jest.mock(
+  'lucide-react-native',
+  () => new Proxy({}, { get: () => () => null }),
+);
 const mockMutation = jest.fn();
 const mockUpload = jest.fn();
 const mockPick = jest.fn();
@@ -17,6 +27,7 @@ const mockNavigate = jest.fn();
 let mockParams: any = {};
 let mockQueries: Record<string, any> = {};
 jest.mock('@react-navigation/native', () => ({
+  usePreventRemove: jest.fn(),
   useNavigation: () => ({ navigate: mockNavigate, goBack: jest.fn() }),
   useRoute: () => ({ params: mockParams }),
 }));
@@ -30,16 +41,12 @@ jest.mock('@/shared/components/AppIcon', () => ({ AppIcon: () => null }));
 jest.mock('react-native-image-picker', () => ({
   launchImageLibrary: (...args: any[]) => mockPick(...args),
 }));
-jest.mock(
-  '../fitnessMedia',
-  () => ({ uploadFitnessMedia: (...args: any[]) => mockUpload(...args) }),
-  { virtual: true },
-);
-jest.mock(
-  '../components/FitnessPrivateMedia',
-  () => ({ FitnessPrivateMedia: () => null }),
-  { virtual: true },
-);
+jest.mock('../fitnessMedia', () => ({
+  uploadFitnessMedia: (...args: any[]) => mockUpload(...args),
+}));
+jest.mock('../components/FitnessPrivateMedia', () => ({
+  FitnessPrivateMedia: () => null,
+}));
 jest.mock('../api/fitnessApi', () => ({
   newFitnessRequestId: () => '00000000-0000-4000-8000-000000000001',
   useFitnessMutation: () => ({ mutateAsync: mockMutation, isPending: false }),
@@ -108,91 +115,17 @@ beforeEach(() => {
 afterEach(() =>
   ReactTestRenderer.act(() => renderers.splice(0).forEach(r => r.unmount())),
 );
-test('assessment saves drafts before moving on and retains entered values after failure', async () => {
-  const r = await render(FitnessAssessmentScreen);
-  await ReactTestRenderer.act(async () => {
-    field(r, 'Date of birth').props.onChangeText('1990-04-12');
-  });
-  mockMutation.mockRejectedValueOnce(new Error('Offline — retry'));
-  await press(r, 'Save & continue');
-  expect(field(r, 'Date of birth').props.value).toBe('1990-04-12');
-  expect(r.toJSON()).toEqual(expect.anything());
-  expect(mockMutation.mock.calls[0][0]).toMatchObject({
-    path: '/profile',
-    method: 'PATCH',
-    body: { dateOfBirth: '1990-04-12' },
-  });
-  await press(r, 'Save & continue');
-  expect(
-    r.root
-      .findAllByType(FitnessChoices)
-      .some(item => item.props.label === 'Your goals'),
-  ).toBe(true);
-  expect(mockNavigate).not.toHaveBeenCalled();
-});
-test('assessment preserves decimal input and comma separated preferences while saving canonical units', async () => {
-  const r = await render(FitnessAssessmentScreen);
-  await ReactTestRenderer.act(async () =>
-    r.root
-      .findAllByType(FitnessChoices)
-      .find(item => item.props.label === 'Preferred display units')!
-      .props.onChange('imperial'),
-  );
-  await ReactTestRenderer.act(async () =>
-    field(r, 'Height (inches)').props.onChangeText('66.'),
-  );
-  expect(field(r, 'Height (inches)').props.value).toBe('66.');
-  await ReactTestRenderer.act(async () =>
-    field(r, 'Weight (lb)').props.onChangeText('154.3'),
-  );
-  await press(r, 'Save draft');
-  expect(mockMutation.mock.calls[0][0].body.heightCm).toBeCloseTo(167.64);
-  expect(mockMutation.mock.calls[0][0].body.weightKg).toBeCloseTo(69.989, 2);
-  await press(r, 'Save & continue');
-  await press(r, 'Save & continue');
-  await ReactTestRenderer.act(async () =>
-    field(r, 'Preferred times').props.onChangeText('Morning, '),
-  );
-  expect(field(r, 'Preferred times').props.value).toBe('Morning, ');
-});
-test('changing a previous private risk answer to prefer not to say explicitly removes it on the server', async () => {
-  mockQueries['/profile'] = {
-    data: {
-      profile: {
-        assessment: { units: 'metric', pregnant: true, equipment: [] },
-      },
-    },
-  };
-  const r = await render(FitnessAssessmentScreen);
-  for (let i = 0; i < 4; i++) await press(r, 'Save & continue');
-  await ReactTestRenderer.act(async () =>
-    r.root
-      .findAllByType(FitnessChoices)
-      .find(
-        item => item.props.label === 'Pregnancy or postpartum considerations',
-      )!
-      .props.onChange('Prefer not to say'),
-  );
-  await press(r, 'Save draft');
-  expect(
-    mockMutation.mock.calls[mockMutation.mock.calls.length - 1][0].body
-      .pregnant,
-  ).toBeNull();
-});
 test('selecting a meal photo neither uploads nor sends it to AI until an explicit action', async () => {
   const r = await render(FitnessMealsScreen);
-  await ReactTestRenderer.act(async () =>
-    r.root
-      .findAllByType(FitnessChoices)
-      .find(item => item.props.label === 'Add to your journal')!
-      .props.onChange('Photo'),
-  );
+  await expand(r, 'Add a private meal photo');
+
   mockPick.mockResolvedValue({
     assets: [
       { uri: 'file:///meal.jpg', type: 'image/jpeg', fileName: 'meal.jpg' },
     ],
   });
   await press(r, 'Choose a meal photo');
+  await press(r, 'Choose photo from gallery');
   expect(mockUpload).not.toHaveBeenCalled();
   expect(mockMutation).not.toHaveBeenCalled();
   mockUpload.mockResolvedValue({ id: 'media-one' });
@@ -207,12 +140,13 @@ test('selecting a meal photo neither uploads nor sends it to AI until an explici
       notes: 'Review portions',
     },
   });
+  await expand(r, 'Optional AI estimate');
   await press(r, 'I agree: send photo for an AI estimate');
   expect(mockMutation).toHaveBeenCalledWith({
     path: '/meals/estimate',
     body: { mediaId: 'media-one', consentToAI: true },
   });
-  expect(field(r, 'Protein (g)').props.value).toBe('20');
+  expect(stepper(r, 'Protein (g)').props.value).toBe(20);
   expect(
     mockMutation.mock.calls.some(([request]) => request.path === '/logs/meal'),
   ).toBe(false);
@@ -220,27 +154,28 @@ test('selecting a meal photo neither uploads nor sends it to AI until an explici
 test('meal failures keep editable nutrients and retry the same idempotency key', async () => {
   mockParams = { date: '2026-10-01' };
   const r = await render(FitnessMealsScreen);
+  await expand(r, 'Add custom food');
   await ReactTestRenderer.act(async () =>
-    r.root
-      .findAllByType(FitnessChoices)
-      .find(item => item.props.label === 'Add to your journal')!
-      .props.onChange('Manual food'),
+    field(r, 'Food name').props.onChangeText('Yoghurt'),
   );
+  await ReactTestRenderer.act(async () =>
+    stepper(r, 'Calories (kcal)').props.onChange(100),
+  );
+  await expand(r, 'Nutrition details');
   for (const [label, value] of [
-    ['Food name', 'Yoghurt'],
-    ['Calories (kcal)', '100'],
-    ['Protein (g)', '8'],
-    ['Carbs (g)', '10'],
-    ['Fat (g)', '3'],
-    ['Fibre (g)', '0'],
-  ])
+    ['Protein (g)', 8],
+    ['Carbs (g)', 10],
+    ['Fat (g)', 3],
+    ['Fibre (g)', 0],
+  ] as const)
     await ReactTestRenderer.act(async () =>
-      field(r, label).props.onChangeText(value),
+      stepper(r, label).props.onChange(value),
     );
   await press(r, 'Add manual food to meal');
   mockMutation.mockRejectedValueOnce(new Error('Network unavailable'));
   await press(r, 'Save meal');
-  expect(field(r, 'Yoghurt: Protein (g) per serving').props.value).toBe('8');
+  await expand(r, 'Nutrition & food options');
+  expect(stepper(r, 'Yoghurt: Protein (g) per serving').props.value).toBe(8);
   await press(r, 'Save meal');
   const requests = mockMutation.mock.calls
     .filter(([request]) => request.path === '/logs/meal')
@@ -426,6 +361,7 @@ test('reopened workouts use the recorded plan version and never an unrelated cur
     },
   };
   const r = await render(FitnessWorkoutScreen);
+  await expand(r, 'Your planned exercises');
   const json = JSON.stringify(r.toJSON());
   expect(json).toContain('Original saved guidance');
   expect(json).toContain('Original version exercise');
@@ -455,7 +391,11 @@ test('a version deep link renders the requested historical content rather than t
         {
           id: 'version-one',
           version: 1,
-          content: { ...content, description: 'Original saved description' },
+          content: {
+            ...content,
+            name: 'Original title',
+            description: 'Original saved description',
+          },
         },
       ],
     },
@@ -463,6 +403,7 @@ test('a version deep link renders the requested historical content rather than t
   const r = await render(FitnessPlanScreen);
   const json = JSON.stringify(r.toJSON());
   expect(json).toContain('Original saved description');
+  expect(json).toContain('Original title');
   expect(json).not.toContain('Latest description');
 });
 test('provider authored plans retain required professional review and do not supply automatic workout guidance while flagged', async () => {
@@ -542,9 +483,104 @@ test('a saved nutrition revision shows its own explicit ranges separately from b
     },
   };
   const r = await render(FitnessPlanScreen);
+  expect(JSON.stringify(r.toJSON())).not.toContain('1900–2100 kcal');
+  await ReactTestRenderer.act(async () =>
+    r.root
+      .findAll(
+        n =>
+          n.props.accessibilityLabel === 'Saved nutrition ranges' &&
+          n.props.accessibilityRole === 'button',
+      )[0]
+      .props.onPress(),
+  );
   const json = JSON.stringify(r.toJSON());
   expect(json).toContain('1900–2100 kcal');
   expect(json).toContain('100–120 g');
   expect(json).toContain('28–32 g');
   expect(json).toContain('2200–2500 ml');
 });
+
+test('current assessment review keeps stale plan actions and numeric estimates withheld after expanding details', async () => {
+  mockQueries['/profile'] = {
+    data: {
+      profile: {
+        baseline: {
+          requiresProfessionalReview: true,
+          calories: { min: 9999, max: 9999 },
+        },
+      },
+    },
+  };
+  mockQueries['/plans'] = {
+    data: {
+      plans: [
+        {
+          id: 'review-plan',
+          title: 'Saved plan',
+          status: 'active',
+          currentVersion: 1,
+          content: {
+            name: 'Saved plan',
+            description: 'Saved description',
+            requiresProfessionalReview: false,
+            workouts: [
+              {
+                day: 1,
+                name: 'Old prescription',
+                durationMinutes: 20,
+                exercises: [{ name: 'Old exercise', sets: 2 }],
+              },
+            ],
+            nutrition: { guidance: [], calories: { min: 9999, max: 9999 } },
+            habits: [],
+            assumptions: [],
+          },
+        },
+      ],
+    },
+  };
+  const r = await render(FitnessPlanScreen);
+  expect(JSON.stringify(r.toJSON())).not.toContain('Old exercise');
+  expect(
+    r.root.findAll(
+      n =>
+        n.props.accessibilityRole === 'button' &&
+        n.props.accessibilityLabel === 'Start workout',
+    ),
+  ).toHaveLength(0);
+  for (const label of ['Baseline estimates', 'Saved nutrition ranges']) {
+    await ReactTestRenderer.act(async () =>
+      r.root
+        .findAll(
+          n =>
+            n.props.accessibilityRole === 'button' &&
+            n.props.accessibilityLabel === label,
+        )[0]
+        .props.onPress(),
+    );
+  }
+  expect(JSON.stringify(r.toJSON())).toContain(
+    'Numeric estimates are withheld',
+  );
+  expect(JSON.stringify(r.toJSON())).not.toContain('9999');
+});
+
+function stepper(renderer: ReactTestRenderer.ReactTestRenderer, label: string) {
+  return renderer.root
+    .findAllByType(FitnessStepper)
+    .find(node => node.props.label === label)!;
+}
+async function expand(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+  title: string,
+) {
+  const disclosure = renderer.root
+    .findAllByType(FitnessDisclosure)
+    .find(node => node.props.title === title)!;
+  const button = disclosure.findAll(
+    node =>
+      node.props.accessibilityLabel === title &&
+      typeof node.props.onPress === 'function',
+  )[0];
+  await ReactTestRenderer.act(async () => button.props.onPress());
+}

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { FitnessSettingsCard } from '../components/FitnessSettingsCard';
 import { navigateToProfile } from '@/shared/navigation/businessNavigation';
 import {
   Alert,
@@ -211,6 +212,7 @@ export function AccountSettingsScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}>
         <ActiveProfileCard profile={card} onPress={() => setSwitcherOpen(true)} />
+        <FitnessSettingsCard onPress={() => navigation.navigate(isGuest ? 'Login' : 'FitnessHome')} />
 
         <SettingsSection label="Profile" testID="section-profile">
           {!isBusiness && !isGuest ? (

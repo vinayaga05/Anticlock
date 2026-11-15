@@ -42,7 +42,7 @@ describe('profile photo upload and save (PostgreSQL + local media)', { skip: !te
     const { Hono } = await import('hono');
     const { authRoutes } = await import('./auth.js');
     const { mediaPublicRoutes } = await import('./media.js');
-    const { signToken } = await import('../testutils/phoneBoundToken.js');
+    const { signToken } = await import('../lib/auth.js');
     const client = await import('../db/client.js');
     db = client.db; sqlClient = client.sql; schema = await import('../db/schema.js');
     app = new Hono().route('/auth', authRoutes).route('/v1/media', mediaPublicRoutes);
@@ -66,7 +66,7 @@ describe('profile photo upload and save (PostgreSQL + local media)', { skip: !te
   it('requires an active mobile account for uploading', async () => {
     for (const id of [null, 'admin', inactive]) {
       const response = await app.request('/auth/mobile/avatar', { method: 'POST', headers: headers(id), body: form() });
-      assert.equal(response.status, id === null || id === inactive ? 401 : 403);
+      assert.equal(response.status, id === null ? 401 : 403);
     }
   });
 
@@ -150,7 +150,7 @@ describe('profile photo upload and save (PostgreSQL + local media)', { skip: !te
 
   it('never updates the profile of an inactive account', async () => {
     const response = await app.request('/auth/mobile/profile', { method: 'PUT', headers: { ...headers(inactive), 'Content-Type': 'application/json' }, body: JSON.stringify(profile(null)) });
-    assert.equal(response.status, 401);
+    assert.equal(response.status, 404);
     assert.equal((await user(inactive)).displayName, 'Inactive user');
   });
 });

@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { httpError } from "../lib/httpError.js";
 import { Hono } from "hono";
 import { asc, desc, eq } from "drizzle-orm";
 import {
@@ -99,6 +101,49 @@ catalogRoutes.get("/search", async (c) => {
 export const adminRoutes = new Hono<AppEnv>();
 
 adminRoutes.use("*", requireAuth);
+
+const appUserQuery = z.object({
+  q: z.string().trim().max(100).default(''),
+  status: z.enum(['all', 'active', 'inactive']).default('all'),
+  page: z.coerce.number().int().min(1).max(100000).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+});
+
+adminRoutes.get('/app-users', requirePermission('users.read'), async c => {
+  if (c.get('auth').kind !== 'admin') return c.json({ error: { code: 'forbidden', message: 'Admin session required' } }, 403);
+  try {
+    const query = appUserQuery.parse(c.req.query());
+    const { and, or, ilike, sql, count } = await import('drizzle-orm');
+    const conditions = [];
+    if (query.status !== 'all') conditions.push(eq(mobileUsers.isActive, query.status === 'active'));
+    if (query.q) {
+      const pattern = `%${query.q.replace(/[\\%_]/g, '\\$&')}%`;
+      conditions.push(or(ilike(mobileUsers.displayName, pattern), ilike(mobileUsers.phone, pattern), sql`${mobileUsers.id}::text ilike ${pattern}`)!);
+    }
+    const where = and(...conditions);
+    // Explicit projection: do not expose authentication/session or fitness data.
+    const fields = { id: mobileUsers.id, displayName: mobileUsers.displayName,
+      phone: mobileUsers.phone, avatarUrl: mobileUsers.avatarUrl,
+      bio: mobileUsers.bio, location: mobileUsers.location, website: mobileUsers.website,
+      isActive: mobileUsers.isActive, isPrivate: mobileUsers.isPrivate,
+      allowMessages: mobileUsers.allowMessages, allowFollowRequests: mobileUsers.allowFollowRequests,
+      showFollowerLists: mobileUsers.showFollowerLists,
+      interestsCompletedAt: mobileUsers.interestsCompletedAt,
+      createdAt: mobileUsers.createdAt, updatedAt: mobileUsers.updatedAt };
+    const [rows, totals] = await Promise.all([
+      db.select(fields).from(mobileUsers).where(where)
+        .orderBy(desc(mobileUsers.createdAt), desc(mobileUsers.id))
+        .limit(query.limit).offset((query.page - 1) * query.limit),
+      db.select({ total: count() }).from(mobileUsers).where(where),
+    ]);
+    const total = totals[0]?.total ?? 0;
+    return c.json({ data: rows, meta: { total, page: query.page, limit: query.limit,
+      totalPages: Math.ceil(total / query.limit) } });
+  } catch (error) {
+    const { status, body } = httpError(error, 'admin-app-users');
+    return c.json(body, status);
+  }
+});
 
 adminRoutes.get("/users", requirePermission("users.read"), async (c) => {
   const allUsers = await db.select().from(users).orderBy(asc(users.createdAt));

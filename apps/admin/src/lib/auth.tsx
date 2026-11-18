@@ -113,7 +113,8 @@ export const NAV_ITEMS: NavItem[] = [
     permission: 'catalog.read',
   },
   { href: '/interests', label: 'Interests', permission: 'catalog.read' },
-  { href: '/users', label: 'Users & roles', permission: 'users.read' },
+  { href: '/app-users', label: 'App users', permission: 'users.read' },
+  { href: '/users', label: 'Admin users & roles', permission: 'users.read' },
   { href: '/audit', label: 'Audit log', permission: 'audit.read' },
   { href: '/providers', label: 'Providers', permission: 'provider.read' },
   {

@@ -1,3 +1,5 @@
+import type { StoryStyle } from '@/shared/data/flash/storyTypes';
+import { publishDraftProtocol } from '@/shared/publishing/publishDraftProtocol';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest, getApiToken, ApiError } from './client';
 import { getApiBaseUrl, isApiEnabled } from './config';
@@ -48,6 +50,7 @@ type ContentContainerInput = {
   visibility: 'public' | 'followers' | 'friends' | 'community' | 'only_me';
   /** On-device edit decisions for Clips (trim, segments, music mix). */
   edit?: ClipEditMetadata;
+  storyStyle?: StoryStyle;
   identity: PublishingIdentity;
 };
 
@@ -407,7 +410,7 @@ const OPEN_DRAFT_STATUSES = new Set([
 
 type DraftSeed = Pick<
   ContentContainerInput,
-  'format' | 'mediaType' | 'caption' | 'visibility' | 'identity'
+  'format' | 'mediaType' | 'caption' | 'visibility' | 'identity' | 'storyStyle'
 >;
 
 /**
@@ -451,6 +454,7 @@ export async function ensureContentDraft(seed: DraftSeed): Promise<string> {
       metadata: {
         mediaType: seed.mediaType,
         caption: seed.caption,
+        ...(seed.storyStyle ? { storyStyle: seed.storyStyle } : {}),
       },
     }),
   });
@@ -479,8 +483,6 @@ export async function discardContentDraft(
 }
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-const MEDIA_PROCESSING_RETRY_COUNT = 20;
-const MEDIA_PROCESSING_RETRY_MS = 1_500;
 
 export type PublishContentInput = ContentContainerInput & {
   /** Draft created by `ensureContentDraft` before uploading media. */
@@ -496,47 +498,37 @@ async function publishViaDraft(
 ): Promise<NonNullable<PublishContentResult>> {
   const { identity, draftId: givenDraftId, ...body } = input;
   const draftId = givenDraftId ?? (await ensureContentDraft(input));
-  await apiRequest<DraftResponse>(`/v1/content/drafts/${draftId}`, {
-    method: 'PATCH',
-    body: JSON.stringify({
-      mediaIds: body.mediaIds ?? [],
-      thumbnailMediaId: body.thumbnailMediaId ?? null,
-      visibility: body.visibility,
-      metadata: {
-        mediaType: body.mediaType,
-        caption: body.caption,
-        hashtags: body.hashtags ?? [],
-        taggedUserIds: body.taggedUserIds ?? [],
-        location: body.location ?? null,
-        ...(body.edit ? { edit: body.edit } : {}),
-      },
-    }),
-  });
-  // Media is usually READY by the time the upload completes; a short wait
-  // covers a transcoding/processing window without dropping the draft.
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      const published = await apiRequest<NonNullable<PublishContentResult>>(
+  return publishDraftProtocol({
+    update: () =>
+      apiRequest<DraftResponse>(`/v1/content/drafts/${draftId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          mediaIds: body.mediaIds ?? [],
+          thumbnailMediaId: body.thumbnailMediaId ?? null,
+          visibility: body.visibility,
+          metadata: {
+            mediaType: body.mediaType,
+            caption: body.caption,
+            hashtags: body.hashtags ?? [],
+            taggedUserIds: body.taggedUserIds ?? [],
+            location: body.location ?? null,
+            ...(body.edit ? { edit: body.edit } : {}),
+            ...(body.storyStyle ? { storyStyle: body.storyStyle } : {}),
+          },
+        }),
+      }),
+    publish: () =>
+      apiRequest<NonNullable<PublishContentResult>>(
         `/v1/content/drafts/${draftId}/publish`,
         {
           method: 'POST',
           body: JSON.stringify({ publisherProfileId: identity.id }),
         },
-      );
-      publisherSelectionStore.clearDraft(input.format, draftId);
-      return published;
-    } catch (error) {
-      if (
-        error instanceof ApiError &&
-        error.code === 'media_processing' &&
-        attempt < MEDIA_PROCESSING_RETRY_COUNT
-      ) {
-        await sleep(MEDIA_PROCESSING_RETRY_MS);
-        continue;
-      }
-      throw error;
-    }
-  }
+      ),
+    acknowledged: () =>
+      publisherSelectionStore.clearDraft(input.format, draftId),
+    wait: sleep,
+  });
 }
 
 /**

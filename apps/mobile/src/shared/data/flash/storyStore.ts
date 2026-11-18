@@ -16,15 +16,28 @@ import {
 } from '@/shared/data/flash/storyTypes';
 import { isApiEnabled } from '@/shared/api/config';
 
+export type StoryViewerProfile = {
+  id: string;
+  type: 'personal' | 'business';
+  name?: string;
+  avatarUrl?: string | null;
+};
+
 type PublishStoryInput = {
   type: StoryItem['type'];
   mediaUrl?: string | number;
   textContent?: string;
   backgroundColor?: string;
+  storyStyle?: StoryItem['storyStyle'];
+  locationName?: string;
+  durationMs?: number;
   audience?: StoryAudience;
 };
 
 type StoryState = {
+  viewerProfile: StoryViewerProfile | null;
+  setViewerProfile: (profile: StoryViewerProfile | null) => void;
+  removeStoryItem: (itemId: string) => void;
   stories: UserStory[];
   viewedByAuthor: Record<string, string[]>;
   archive: StoryArchiveEntry[];
@@ -54,7 +67,10 @@ function activeItems(story: UserStory) {
 function buildTrayEntries(
   stories: UserStory[],
   viewedByAuthor: Record<string, string[]>,
+  viewerProfile: StoryViewerProfile | null,
 ): StoryTrayEntry[] {
+  const ownId =
+    viewerProfile?.id ?? (!isApiEnabled ? CURRENT_USER.id : undefined);
   const entries: StoryTrayEntry[] = stories
     .map(story => {
       const items = activeItems(story);
@@ -64,13 +80,34 @@ function buildTrayEntries(
         authorId: story.authorId,
         author: story.author,
         items,
-        isOwn: story.authorId === CURRENT_USER.id,
+        isOwn:
+          story.authorId === ownId &&
+          (!viewerProfile ||
+            (story.author.profileType ??
+              (story.author.isProvider ? 'business' : 'personal')) ===
+              viewerProfile.type),
         hasActiveStory: items.length > 0,
         hasUnread,
       };
     })
     .filter(entry => entry.isOwn || entry.hasActiveStory);
 
+  if (viewerProfile && !entries.some(entry => entry.isOwn)) {
+    entries.unshift({
+      authorId: viewerProfile.id,
+      author: {
+        id: viewerProfile.id,
+        name: viewerProfile.name ?? 'Your story',
+        avatarUrl: viewerProfile.avatarUrl ?? '',
+        profileType: viewerProfile.type,
+        isProvider: viewerProfile.type === 'business',
+      },
+      items: [],
+      isOwn: true,
+      hasActiveStory: false,
+      hasUnread: false,
+    });
+  }
   entries.sort((a, b) => {
     if (a.isOwn) return -1;
     if (b.isOwn) return 1;
@@ -82,50 +119,83 @@ function buildTrayEntries(
 }
 
 export const useStoryStore = create<StoryState>((set, get) => ({
-  stories: seedStories.map(s => ({ ...s, items: [...s.items] })),
-  viewedByAuthor: { ...seedViewedStoryItems },
+  viewerProfile: null,
+  setViewerProfile: profile =>
+    set(state => {
+      if (
+        state.viewerProfile?.id === profile?.id &&
+        state.viewerProfile?.type === profile?.type &&
+        state.viewerProfile?.name === profile?.name &&
+        state.viewerProfile?.avatarUrl === profile?.avatarUrl
+      )
+        return state;
+      const identityChanged =
+        state.viewerProfile?.id !== profile?.id ||
+        state.viewerProfile?.type !== profile?.type;
+      return {
+        viewerProfile: profile,
+        ...(isApiEnabled && identityChanged
+          ? {
+              stories: [],
+              viewedByAuthor: {},
+              archive: [],
+              trayVisibleCount: STORY_TRAY_PAGE_SIZE,
+            }
+          : {}),
+      };
+    }),
+  removeStoryItem: itemId =>
+    set(state => ({
+      stories: state.stories.map(story => ({
+        ...story,
+        items: story.items.filter(item => item.id !== itemId),
+      })),
+      archive: state.archive.filter(item => item.id !== itemId),
+    })),
+  stories: isApiEnabled
+    ? []
+    : seedStories.map(s => ({ ...s, items: [...s.items] })),
+  viewedByAuthor: isApiEnabled ? {} : { ...seedViewedStoryItems },
   archive: [],
   trayVisibleCount: STORY_TRAY_PAGE_SIZE,
 
   setApiStories: (apiStories: UserStory[]) => {
     if (!isApiEnabled) return;
-    // Replace the previous API snapshot entirely (so expired or removed
-    // server stories disappear, including when the list becomes empty) and
-    // keep local-only stories for authors the server did not return.
-    set(state => {
-      const apiAuthorIds = new Set(apiStories.map(s => s.authorId));
-      const localStories = state.stories.filter(
-        story => story.source !== 'api' && !apiAuthorIds.has(story.authorId),
-      );
-      return { stories: [...apiStories, ...localStories] };
-    });
+    // An API snapshot is authoritative. Demo/local items must never appear
+    // beside real stories or survive a viewer profile change.
+    set({ stories: apiStories.map(story => ({ ...story, source: 'api' })) });
   },
 
   getTrayEntries: () => {
-    get().pruneExpired();
     const { stories, viewedByAuthor, trayVisibleCount } = get();
-    const all = buildTrayEntries(stories, viewedByAuthor);
+    const all = buildTrayEntries(stories, viewedByAuthor, get().viewerProfile);
     return all.slice(0, Math.min(trayVisibleCount, all.length));
   },
 
   getAllTrayEntries: () => {
-    get().pruneExpired();
     const { stories, viewedByAuthor } = get();
-    return buildTrayEntries(stories, viewedByAuthor);
+    return buildTrayEntries(stories, viewedByAuthor, get().viewerProfile);
   },
 
   hasMoreTrayStories: () => {
     const { stories, viewedByAuthor, trayVisibleCount } = get();
-    const all = buildTrayEntries(stories, viewedByAuthor);
+    const all = buildTrayEntries(stories, viewedByAuthor, get().viewerProfile);
     return trayVisibleCount < all.length;
   },
 
   loadMoreTrayStories: () => {
     const { stories, viewedByAuthor, trayVisibleCount } = get();
-    const total = buildTrayEntries(stories, viewedByAuthor).length;
+    const total = buildTrayEntries(
+      stories,
+      viewedByAuthor,
+      get().viewerProfile,
+    ).length;
     if (trayVisibleCount >= total) return;
     set({
-      trayVisibleCount: Math.min(trayVisibleCount + STORY_TRAY_PAGE_SIZE, total),
+      trayVisibleCount: Math.min(
+        trayVisibleCount + STORY_TRAY_PAGE_SIZE,
+        total,
+      ),
     });
   },
 
@@ -169,16 +239,46 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       type: input.type,
       mediaUrl: input.mediaUrl,
       textContent: input.textContent,
+      storyStyle: input.storyStyle,
+      locationName: input.locationName,
+      viewerCanManage: true,
       backgroundColor: input.backgroundColor ?? '#0F766E',
       createdAt,
       expiresAt: new Date(Date.now() + STORY_LIFETIME_MS).toISOString(),
-      durationMs: 5000,
+      durationMs:
+        input.type === 'video' &&
+        Number.isFinite(input.durationMs) &&
+        (input.durationMs ?? 0) > 0
+          ? input.durationMs
+          : 5000,
     };
 
     set(state => {
-      const meId = CURRENT_USER.id;
+      const meId = state.viewerProfile?.id ?? CURRENT_USER.id;
       const idx = state.stories.findIndex(s => s.authorId === meId);
-      if (idx < 0) return state;
+      if (idx < 0) {
+        const profile = state.viewerProfile;
+        return {
+          stories: [
+            {
+              authorId: meId,
+              author: profile
+                ? {
+                    id: meId,
+                    name: profile.name ?? 'Your story',
+                    avatarUrl: profile.avatarUrl ?? '',
+                    profileType: profile.type,
+                    isProvider: profile.type === 'business',
+                  }
+                : CURRENT_USER,
+              items: [item],
+              audience: input.audience ?? 'public',
+              source: 'local',
+            },
+            ...state.stories,
+          ],
+        };
+      }
 
       const next = [...state.stories];
       const current = next[idx];
@@ -201,7 +301,12 @@ export const useStoryStore = create<StoryState>((set, get) => ({
         for (const item of story.items) {
           if (isActive(item)) {
             kept.push(item);
-          } else {
+          } else if (
+            story.source !== 'api' &&
+            story.authorId === (state.viewerProfile?.id ?? CURRENT_USER.id)
+          ) {
+            // A private archive may only contain this creator's own local
+            // stories; viewing a remote story must not save someone else's media.
             archiveAdds.push({
               ...item,
               authorId: story.authorId,
@@ -212,7 +317,14 @@ export const useStoryStore = create<StoryState>((set, get) => ({
         return { ...story, items: kept };
       });
 
-      if (!archiveAdds.length) return state;
+      if (
+        !archiveAdds.length &&
+        stories.every(
+          (story, index) =>
+            story.items.length === state.stories[index]?.items.length,
+        )
+      )
+        return state;
       return {
         stories,
         archive: [...archiveAdds, ...state.archive],

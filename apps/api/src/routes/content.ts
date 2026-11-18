@@ -601,7 +601,7 @@ contentMobileRoutes.post("/containers", async (c) => {
         taggedMobileUserIds: [...new Set(body.taggedUserIds)],
         location: body.location ?? null,
         visibility: body.visibility,
-        edit: body.format === "clip" ? body.edit ?? null : null,
+        edit: body.format === "clip" ? body.edit ?? null : body.format === "story" && body.storyStyle ? { storyStyle: body.storyStyle } : null,
         status: "ready_to_publish",
       })
       .returning();

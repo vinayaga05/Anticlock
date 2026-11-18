@@ -38,7 +38,9 @@ const result = (id = 'first') => ({
 let renderer: ReactTestRenderer.ReactTestRenderer;
 function button(title: string) {
   return renderer.root.findAll(
-    node => node.props.title === title && node.props.onPress,
+    node =>
+      (node.props.title === title || node.props.accessibilityLabel === title) &&
+      node.props.onPress,
   )[0];
 }
 function field(label: string) {
@@ -77,11 +79,11 @@ afterEach(() => {
 
 test('submits pasted E.164 input unchanged and never truncates an unsupported country number', async () => {
   fill('Mobile number', '449876543210');
-  expect(button('Continue').props.disabled).toBe(true);
-  await press('Continue');
+  expect(button('Get OTP').props.disabled).toBe(true);
+  await press('Get OTP');
   expect(mockSend).not.toHaveBeenCalled();
   fill('Mobile number', '+91 98765 43210');
-  await press('Continue');
+  await press('Get OTP');
   expect(mockSend.mock.calls[0][0]).toBe('+919876543210');
   expect(text()).toContain('+91 98••••3210');
   expect(text()).not.toContain('OTP 123456');
@@ -89,7 +91,7 @@ test('submits pasted E.164 input unchanged and never truncates an unsupported co
 
 test('server cooldown gates resend and a successful resend replaces the verification challenge', async () => {
   fill('Mobile number', '9876543210');
-  await press('Continue');
+  await press('Get OTP');
   expect(button('Resend code in 60s').props.disabled).toBe(true);
   await press('Resend code in 60s');
   expect(mockSend).toHaveBeenCalledTimes(1);
@@ -97,7 +99,7 @@ test('server cooldown gates resend and a successful resend replaces the verifica
   mockSend.mockImplementationOnce(async () => result('replacement'));
   await press('Resend code');
   fill('One-time code', '765432');
-  await press('Verify & sign in');
+  await press('Verify & continue');
   expect(mockVerify.mock.calls[0].slice(0, 3)).toEqual([
     '+919876543210',
     '765432',
@@ -107,37 +109,37 @@ test('server cooldown gates resend and a successful resend replaces the verifica
 
 test('code expiry disables verification while leaving resend available', async () => {
   fill('Mobile number', '9876543210');
-  await press('Continue');
+  await press('Get OTP');
   fill('One-time code', '765432');
   ReactTestRenderer.act(() => jest.advanceTimersByTime(300_000));
   expect(text()).toContain('This code has expired.');
-  expect(button('Verify & sign in').props.disabled).toBe(true);
-  await press('Verify & sign in');
+  expect(button('Verify & continue').props.disabled).toBe(true);
+  await press('Verify & continue');
   expect(mockVerify).not.toHaveBeenCalled();
   expect(button('Resend code').props.disabled).toBe(false);
 });
 
 test('a rejected code preserves input and server lockout timing disables verification/resend', async () => {
   fill('Mobile number', '9876543210');
-  await press('Continue');
+  await press('Get OTP');
   fill('One-time code', '765432');
   mockVerify.mockRejectedValueOnce(
     new ApiError(400, 'invalid_otp', 'The code is incorrect.'),
   );
-  await press('Verify & sign in');
+  await press('Verify & continue');
   expect(field('One-time code').props.value).toBe('765432');
   expect(text()).toContain('The code is incorrect.');
   mockVerify.mockRejectedValueOnce(
     new ApiError(429, 'otp_locked', 'Try again in 15 minutes.', 900),
   );
-  await press('Verify & sign in');
-  expect(button('Verify & sign in').props.disabled).toBe(true);
+  await press('Verify & continue');
+  expect(button('Verify & continue').props.disabled).toBe(true);
   expect(button('Resend code in 900s').props.disabled).toBe(true);
 });
 
 test('an authoritative server-expired code cannot be submitted again despite the display timer', async () => {
   fill('Mobile number', '9876543210');
-  await press('Continue');
+  await press('Get OTP');
   fill('One-time code', '765432');
   mockVerify.mockRejectedValueOnce(
     new ApiError(
@@ -146,8 +148,8 @@ test('an authoritative server-expired code cannot be submitted again despite the
       'This code has expired. Request another code.',
     ),
   );
-  await press('Verify & sign in');
-  expect(button('Verify & sign in').props.disabled).toBe(true);
+  await press('Verify & continue');
+  expect(button('Verify & continue').props.disabled).toBe(true);
   expect(field('One-time code').props.value).toBe('');
   expect(text()).toContain('This code has expired.');
 });
@@ -161,7 +163,7 @@ test('rapid repeat presses send once and changing number cancels a pending resul
   );
   fill('Mobile number', '9876543210');
   await ReactTestRenderer.act(async () => {
-    const send = button('Continue').props.onPress;
+    const send = button('Get OTP').props.onPress;
     send();
     send();
   });
@@ -182,7 +184,7 @@ test('rapid repeat presses send once and changing number cancels a pending resul
 
 test('change-number and unmount invalidate an in-flight verification before session persistence', async () => {
   fill('Mobile number', '9876543210');
-  await press('Continue');
+  await press('Get OTP');
   fill('One-time code', '765432');
   let resolve!: () => void;
   mockVerify.mockReturnValue(
@@ -190,7 +192,7 @@ test('change-number and unmount invalidate an in-flight verification before sess
       resolve = yes;
     }),
   );
-  await press('Verify & sign in');
+  await press('Verify & continue');
   const options = mockVerify.mock.calls[0][3];
   await press('Change number');
   expect(options.isCurrentAttempt()).toBe(false);
@@ -209,10 +211,10 @@ test('a send failure restores controls and uses the server retry interval', asyn
     ),
   );
   fill('Mobile number', '9876543210');
-  await press('Continue');
+  await press('Get OTP');
   expect(text()).toContain('Please wait before trying again.');
   expect(button('Try again in 45s').props.loading).toBe(false);
   expect(button('Try again in 45s').props.disabled).toBe(true);
   ReactTestRenderer.act(() => jest.advanceTimersByTime(45_000));
-  expect(button('Continue').props.disabled).toBe(false);
+  expect(button('Get OTP').props.disabled).toBe(false);
 });

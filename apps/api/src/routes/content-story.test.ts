@@ -218,3 +218,17 @@ describe("Story authorization and expiry", () => {
     assert.ok(true);
   });
 });
+
+describe("Story presentation validation", () => {
+  it("accepts normalized style on Stories and rejects style on other formats", () => {
+    const value = { format: "story", mediaType: "text", caption: "Little moments", storyStyle: { backgroundColor: "#102030", textColor: "#ffffff", textX: 0.5, textY: 0.3, textScale: 1.5, sticker: "✨" } };
+    assert.equal(CreateContentContainerRequestSchema.safeParse(value).success, true);
+    assert.equal(CreateContentContainerRequestSchema.safeParse({ ...value, format: "flash" }).success, false);
+  });
+  it("rejects out-of-bounds presentation and arbitrary style properties", () => {
+    const value = { format: "story", mediaType: "text", caption: "Hello" };
+    for (const storyStyle of [{ textX: -1 }, { textY: 2 }, { textScale: 100 }, { backgroundColor: "url(https://example.com)" }, { arbitrary: "bad" }]) {
+      assert.equal(CreateContentContainerRequestSchema.safeParse({ ...value, storyStyle }).success, false);
+    }
+  });
+});

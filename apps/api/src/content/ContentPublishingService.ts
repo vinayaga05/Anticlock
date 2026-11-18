@@ -16,6 +16,7 @@ import { postEvent, publishContentEvent } from "../realtime/contentEvents.js";
 import { z } from "zod";
 import {
   ClipEditMetadataSchema,
+  StoryStyleSchema,
   ContentFormatSchema,
   ContentMediaTypeSchema,
   refineContentShape,
@@ -93,6 +94,7 @@ const ContentShapeSchema = z
     caption: z.string().max(2_200),
     mediaIds: z.array(z.string().uuid()).max(10),
     edit: ClipEditMetadataSchema.nullable().optional(),
+    storyStyle: StoryStyleSchema.nullable().optional(),
   })
   .superRefine((value, ctx) => refineContentShape(value, ctx));
 
@@ -258,6 +260,7 @@ export async function createDraft(
   if (meta.edit && format !== "clip") {
     throw appError("Edit metadata is only supported for Clips", "validation_error", 400);
   }
+  if (meta.storyStyle && format !== "story") throw appError("Story style is only supported for Stories", "validation_error", 400);
   const [container] = await db
     .insert(contentContainers)
     .values({
@@ -271,7 +274,7 @@ export async function createDraft(
       taggedMobileUserIds: [...new Set(meta.taggedUserIds ?? [])],
       location: meta.location ?? null,
       visibility: body.visibility,
-      edit: format === "clip" ? meta.edit ?? null : null,
+      edit: format === "clip" ? meta.edit ?? null : format === "story" && meta.storyStyle ? { storyStyle: meta.storyStyle } : null,
       status: "draft",
     })
     .returning();
@@ -295,6 +298,10 @@ export async function updateDraft(
   if (meta) {
     if (meta.edit !== undefined && container.format !== "clip" && meta.edit) {
       throw appError("Edit metadata is only supported for Clips", "validation_error", 400);
+    }
+    if (meta.storyStyle !== undefined) {
+      if (container.format !== "story" && meta.storyStyle) throw appError("Story style is only supported for Stories", "validation_error", 400);
+      if (container.format === "story") next.edit = meta.storyStyle ? { storyStyle: meta.storyStyle } : null;
     }
     if (meta.mediaType !== undefined) next.mediaType = meta.mediaType;
     if (meta.caption !== undefined) next.caption = meta.caption;
@@ -444,7 +451,8 @@ export async function publishContainer(
     mediaType: container.mediaType,
     caption: container.caption,
     mediaIds: container.mediaIds,
-    edit: container.edit ?? null,
+    edit: container.edit && "music" in container.edit ? container.edit : null,
+    storyStyle: container.edit && "storyStyle" in container.edit ? container.edit.storyStyle : null,
   });
 
   const allMedia = [
@@ -532,7 +540,7 @@ export async function publishContainer(
         duplicateClusterId,
         visibility: container.visibility,
         edit: container.edit ?? null,
-        musicTrackId: container.edit?.music?.trackId ?? null,
+        musicTrackId: container.edit && "music" in container.edit ? container.edit.music?.trackId ?? null : null,
         status,
         expiresAt:
           container.format === "story"
@@ -824,6 +832,7 @@ export async function serializePosts(
         contentStatus: contentStatusOf(null, row),
         status: row.status,
         caption: row.caption,
+        storyStyle: row.format === "story" && row.edit && "storyStyle" in row.edit ? row.edit.storyStyle : null,
         mediaIds: row.mediaIds,
         media: deliverable,
         thumbnailMediaId: row.thumbnailMediaId,
@@ -1186,6 +1195,7 @@ export async function listMine(
         publisher,
         mediaType: row.mediaType,
         caption: row.caption,
+        storyStyle: row.format === "story" && row.edit && "storyStyle" in row.edit ? row.edit.storyStyle : null,
         failureReason: container?.failureReason ?? null,
         createdAt: row.createdAt.toISOString(),
         publishedAt: post?.publishedAt.toISOString() ?? null,

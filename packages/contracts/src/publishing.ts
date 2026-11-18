@@ -183,6 +183,19 @@ export const ClipEditMetadataSchema = z
   });
 export type ClipEditMetadata = z.infer<typeof ClipEditMetadataSchema>;
 
+/** Normalized canvas presentation; safe for text and media Stories. */
+export const StoryStyleSchema = z.object({
+  backgroundColor: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
+  textColor: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
+  textX: z.number().min(0).max(1).optional(),
+  textY: z.number().min(0).max(1).optional(),
+  textScale: z.number().min(0.5).max(2).optional(),
+  sticker: z.string().max(16).optional(),
+}).strict();
+export type StoryStyle = z.infer<typeof StoryStyleSchema>;
+export type ContentEditMetadata = ClipEditMetadata | { storyStyle: StoryStyle };
+
+
 /** Display-only attribution returned with feed items. */
 export const ClipMusicAttributionSchema = z.object({
   trackId: z.string(),
@@ -220,10 +233,14 @@ type ContentShape = {
   caption: string;
   mediaIds: string[];
   edit?: ClipEditMetadata | null;
+  storyStyle?: StoryStyle | null;
 };
 
 /** Shared create/publish validation for every content format. */
 export function refineContentShape(value: ContentShape, ctx: z.RefinementCtx) {
+  if (value.storyStyle && value.format !== "story") {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["storyStyle"], message: "Story style is only supported for Stories" });
+  }
   if (value.edit && value.format !== "clip") {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -268,6 +285,7 @@ export const CreateContentContainerRequestSchema = z
     visibility: ContentVisibilityInputSchema.default("public"),
     /** Optional on-device edit metadata; only accepted for Clips. */
     edit: ClipEditMetadataSchema.nullable().optional(),
+    storyStyle: StoryStyleSchema.nullable().optional(),
     /**
      * Explicit publishing profile. Older clients send the
      * `X-Anticlock-Context-*` headers instead; the body wins when both exist.
@@ -349,6 +367,7 @@ export const ContentPostSchema = z.object({
   format: ContentFormatSchema,
   mediaType: ContentMediaTypeSchema,
   caption: z.string(),
+  storyStyle: StoryStyleSchema.nullable().optional(),
   mediaIds: z.array(z.string().uuid()),
   thumbnailMediaId: z.string().uuid().nullable(),
   hashtags: z.array(ContentHashtagSchema),
@@ -456,6 +475,7 @@ export const ContentDraftMetadataSchema = z
     taggedUserIds: z.array(z.string().uuid()).max(20).optional(),
     location: ContentLocationSchema.nullable().optional(),
     edit: ClipEditMetadataSchema.nullable().optional(),
+    storyStyle: StoryStyleSchema.nullable().optional(),
   })
   .strict();
 export type ContentDraftMetadata = z.infer<typeof ContentDraftMetadataSchema>;
@@ -536,6 +556,7 @@ export const ContentPostViewSchema = z.object({
   mediaType: ContentMediaTypeSchema,
   contentStatus: ContentLifecycleStatusSchema,
   caption: z.string(),
+  storyStyle: StoryStyleSchema.nullable().optional(),
   mediaIds: z.array(z.string().uuid()),
   media: z.array(ContentMediaItemSchema),
   posterUrl: z.string().url().nullable(),

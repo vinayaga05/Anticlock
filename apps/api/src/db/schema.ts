@@ -13,7 +13,7 @@ import {
   doublePrecision,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import type { ClipEditMetadata } from "@anticlock/contracts";
+import type { ContentEditMetadata } from "@anticlock/contracts";
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -663,8 +663,8 @@ export const contentContainers = pgTable(
       longitude?: number;
     }>(),
     visibility: text("visibility").notNull().default("public"),
-    /** On-device Clip edit metadata (trim/music/volume); null for other formats. */
-    edit: jsonb("edit").$type<ClipEditMetadata>(),
+    /** Clip edit metadata or Story canvas presentation, validated by format. */
+    edit: jsonb("edit").$type<ContentEditMetadata>(),
     /**
      * draft | uploading | processing | ready_to_publish (legacy) |
      * pending_review | published | rejected | failed | discarded
@@ -753,8 +753,8 @@ export const contentPosts = pgTable(
     /** Exact-media checksum (or media id when no checksum exists) used for feed de-duplication. */
     duplicateClusterId: text("duplicate_cluster_id").notNull(),
     visibility: text("visibility").notNull().default("public"),
-    /** On-device Clip edit metadata copied from the container at publish time. */
-    edit: jsonb("edit").$type<ClipEditMetadata>(),
+    /** Clip edit metadata or Story style copied from the draft at publish time. */
+    edit: jsonb("edit").$type<ContentEditMetadata>(),
     /** Denormalized music track id for future "uses this audio" surfaces. */
     musicTrackId: text("music_track_id"),
     /** published | pending_review | rejected | removed */

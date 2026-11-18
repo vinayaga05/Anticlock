@@ -1,6 +1,6 @@
 import React from 'react';
 import Renderer from 'react-test-renderer';
-import { TextInput, Text, Alert } from 'react-native';
+import { TextInput, Alert } from 'react-native';
 import { ClipComposerScreen } from '@/features/reels/screens/ClipComposerScreen';
 import { FlashComposerScreen } from '@/features/flash/screens/FlashComposerScreen';
 import { StoryCreatorScreen } from '@/features/flash/screens/StoryCreatorScreen';
@@ -101,6 +101,19 @@ jest.mock('@/features/reels/components/ReelEditor', () => ({
   ReelEditor: (props: any) =>
     require('react').createElement('clip-editor', props),
 }));
+jest.mock('@/features/flash/media/storyMediaPicker', () => ({
+  pickStoryMedia: jest.fn(),
+  captureStoryMedia: jest.fn(),
+  storyUploadFile: jest.fn(),
+  STORY_MAX_SELECTION: 10,
+}));
+jest.mock('@/shared/publishing/ProfileAvatar', () => ({
+  ProfileAvatar: () => null,
+}));
+jest.mock('@/shared/publishing/ProfileSwitcherSheet', () => ({
+  ProfileSwitcherSheet: () => null,
+  identityAvatarUrl: () => null,
+}));
 jest.mock('@/shared/data/flash/storyStore', () => ({
   useStoryStore: (s: any) => s({ publishStory: jest.fn() }),
 }));
@@ -194,16 +207,23 @@ test('Flash submits format flash and returns to Flash only after acknowledgement
 });
 test('Story submits format story and returns to the Flash story tray', async () => {
   await render(StoryCreatorScreen);
-  const label = tree.root
-    .findAllByType(Text)
-    .find(node => node.props.children === 'Text Story')!;
-  let tab = label;
-  while (!tab.props.onPress && tab.parent) tab = tab.parent;
-  await Renderer.act(async () => tab.props.onPress());
+  const createText = tree.root.findAll(
+    n => n.props.accessibilityLabel === 'Create text story' && n.props.onPress,
+  )[0];
+  await Renderer.act(async () => createText.props.onPress());
   await Renderer.act(async () =>
-    tree.root.findAllByType(TextInput)[0].props.onChangeText('New story'),
+    tree.root
+      .findAllByType(TextInput)
+      .find(n => n.props.accessibilityLabel === 'Story text')!
+      .props.onChangeText('New story'),
   );
-  await action('Share Story');
+  const share = tree.root.findAll(
+    n => n.props.accessibilityLabel === 'Share story' && n.props.onPress,
+  )[0];
+  await Renderer.act(async () => {
+    share.props.onPress();
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  });
   expect(mockPublish).toHaveBeenCalledWith(
     expect.objectContaining({ format: 'story' }),
   );
@@ -268,8 +288,15 @@ test('a completed background upload does not redirect a different screen', () =>
 });
 
 test('opening Clips from Flash preserves the selected publisher and keeps Back available', async () => {
- await render(FlashComposerScreen);
- const entry=tree.root.findAll(n=>n.props.accessibilityLabel==='Create a video clip' && typeof n.props.onPress==='function')[0];
- await Renderer.act(async()=>entry.props.onPress());
- expect(mockNavigation.navigate).toHaveBeenCalledWith('ClipComposer',{publisherProfileId:'business-1',publisherProfileType:'business'});
+  await render(FlashComposerScreen);
+  const entry = tree.root.findAll(
+    n =>
+      n.props.accessibilityLabel === 'Create a video clip' &&
+      typeof n.props.onPress === 'function',
+  )[0];
+  await Renderer.act(async () => entry.props.onPress());
+  expect(mockNavigation.navigate).toHaveBeenCalledWith('ClipComposer', {
+    publisherProfileId: 'business-1',
+    publisherProfileType: 'business',
+  });
 });

@@ -1,4 +1,8 @@
-import type { UserStory, StoryItem } from '@/shared/data/flash/storyTypes';
+import type {
+  UserStory,
+  StoryItem,
+  StoryStyle,
+} from '@/shared/data/flash/storyTypes';
 import type {
   FlashPost,
   PostAuthor,
@@ -65,6 +69,8 @@ export type ApiContentPost = {
   createdAt: string;
   publishedAt?: string;
   expiresAt: string | null;
+  storyStyle?: StoryStyle | null;
+  location?: { name: string } | null;
 };
 
 export type ApiContentPostsResponse = {
@@ -119,7 +125,10 @@ export function publisherToAuthor(
 }
 
 export function relativeTimeLabel(iso: string, now = Date.now()): string {
-  const seconds = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000));
+  const seconds = Math.max(
+    0,
+    Math.round((now - new Date(iso).getTime()) / 1000),
+  );
   if (seconds < 60) return 'now';
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m`;
@@ -144,7 +153,10 @@ function postMedia(post: ApiContentPost): PostMedia[] {
     }));
 }
 
-export function mapApiFlashPost(post: ApiContentPost, now = Date.now()): FlashPost {
+export function mapApiFlashPost(
+  post: ApiContentPost,
+  now = Date.now(),
+): FlashPost {
   const publisher = publisherOf(post);
   const publishedAt = post.publishedAt ?? post.createdAt;
   return {
@@ -177,19 +189,34 @@ export function mapApiFlashPost(post: ApiContentPost, now = Date.now()): FlashPo
 function storyItem(post: ApiContentPost): StoryItem {
   const first = postMedia(post)[0];
   const type: StoryItem['type'] =
-    post.mediaType === 'text' ? 'text' : first?.type === 'video' ? 'video' : 'photo';
+    post.mediaType === 'text'
+      ? 'text'
+      : first?.type === 'video'
+      ? 'video'
+      : 'photo';
   return {
     id: post.id,
     type,
     mediaUrl: first?.url,
     posterUrl: post.posterUrl ?? undefined,
-    textContent: post.mediaType === 'text' ? post.caption : undefined,
-    backgroundColor: post.mediaType === 'text' ? TEXT_STORY_BACKGROUND : undefined,
+    textContent: post.caption || undefined,
+    storyStyle: post.storyStyle ?? undefined,
+    locationName: post.location?.name,
+    viewerCanManage: post.viewerCanManage,
+    viewerHasLiked: post.viewerHasLiked,
+    backgroundColor:
+      post.storyStyle?.backgroundColor ??
+      (post.mediaType === 'text' ? TEXT_STORY_BACKGROUND : undefined),
     createdAt: post.publishedAt ?? post.createdAt,
     expiresAt:
       post.expiresAt ??
-      new Date(Date.parse(post.publishedAt ?? post.createdAt) + 86_400_000).toISOString(),
-    durationMs: STORY_DURATION_MS,
+      new Date(
+        Date.parse(post.publishedAt ?? post.createdAt) + 86_400_000,
+      ).toISOString(),
+    durationMs:
+      type === 'video'
+        ? Math.max(1_000, post.media?.[0]?.durationMs ?? STORY_DURATION_MS)
+        : STORY_DURATION_MS,
   };
 }
 
@@ -205,8 +232,13 @@ export function mapApiStoriesToUserStories(
   const groups = new Map<string, UserStory>();
   for (const post of posts) {
     if (post.format !== 'story') continue;
-    if (post.expiresAt && Date.parse(post.expiresAt) <= now) continue;
+    if (post.contentStatus && post.contentStatus !== 'published') continue;
     const item = storyItem(post);
+    if (
+      !Number.isFinite(Date.parse(item.expiresAt)) ||
+      Date.parse(item.expiresAt) <= now
+    )
+      continue;
     if (item.type !== 'text' && !item.mediaUrl) continue;
     const publisher = publisherOf(post);
     const key = `${publisher.type}:${publisher.id}`;
@@ -217,8 +249,8 @@ export function mapApiStoriesToUserStories(
         post.visibility === 'public'
           ? ('public' as const)
           : post.visibility === 'friends'
-            ? ('close_friends' as const)
-            : ('followers' as const),
+          ? ('close_friends' as const)
+          : ('followers' as const),
       items: [],
       source: 'api' as const,
     };
@@ -227,6 +259,8 @@ export function mapApiStoriesToUserStories(
   }
   return [...groups.values()].map(group => ({
     ...group,
-    items: [...group.items].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    items: [...group.items].sort((a, b) =>
+      a.createdAt.localeCompare(b.createdAt),
+    ),
   }));
 }

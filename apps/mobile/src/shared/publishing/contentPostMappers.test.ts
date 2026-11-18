@@ -31,7 +31,12 @@ function post(overrides: Partial<ApiContentPost>): ApiContentPost {
     publisherProfileType: 'business',
     publisher: business,
     // Legacy author block mirrors the publisher, never the owner user.
-    author: { type: 'provider', id: business.id, name: business.displayName, avatarUrl: business.avatarUrl },
+    author: {
+      type: 'provider',
+      id: business.id,
+      name: business.displayName,
+      avatarUrl: business.avatarUrl,
+    },
     likeCount: 3,
     commentCount: 1,
     shareCount: 0,
@@ -59,23 +64,33 @@ describe('mapApiFlashPost', () => {
     expect(mapped.publisherProfileType).toBe('business');
     expect(mapped.viewerReaction).toBe('like');
     expect(mapped.reactionCounts.like).toBe(3);
-    expect(mapped.media[0]).toMatchObject({ type: 'image', url: 'https://cdn.example/a.jpg' });
+    expect(mapped.media[0]).toMatchObject({
+      type: 'image',
+      url: 'https://cdn.example/a.jpg',
+    });
     expect(mapped.timeLabel).toBe('2h');
   });
 
   it('maps text posts without media', () => {
-    const mapped = mapApiFlashPost(post({ mediaType: 'text', media: [], mediaIds: [] }), now);
+    const mapped = mapApiFlashPost(
+      post({ mediaType: 'text', media: [], mediaIds: [] }),
+      now,
+    );
     expect(mapped.media).toEqual([]);
     expect(mapped.text).toBe('Morning class');
   });
 
   it('puts a followed publisher into the Following feed only', () => {
     const following = mapApiFlashPost(
-      post({ relationship: { isFollowing: true } as ApiContentPost['relationship'] }),
+      post({
+        relationship: { isFollowing: true } as ApiContentPost['relationship'],
+      }),
       now,
     );
     const notFollowing = mapApiFlashPost(
-      post({ relationship: { isFollowing: false } as ApiContentPost['relationship'] }),
+      post({
+        relationship: { isFollowing: false } as ApiContentPost['relationship'],
+      }),
       now,
     );
 
@@ -88,9 +103,23 @@ describe('mapApiStoriesToUserStories', () => {
   it('groups live stories per publisher and drops expired ones', () => {
     const stories = mapApiStoriesToUserStories(
       [
-        post({ id: 's2', format: 'story', publishedAt: '2026-10-08T11:00:00.000Z', expiresAt: '2026-10-09T11:00:00.000Z' }),
-        post({ id: 's1', format: 'story', publishedAt: '2026-10-08T09:00:00.000Z', expiresAt: '2026-10-09T09:00:00.000Z' }),
-        post({ id: 'old', format: 'story', expiresAt: '2026-10-08T11:59:00.000Z' }),
+        post({
+          id: 's2',
+          format: 'story',
+          publishedAt: '2026-10-08T11:00:00.000Z',
+          expiresAt: '2026-10-09T11:00:00.000Z',
+        }),
+        post({
+          id: 's1',
+          format: 'story',
+          publishedAt: '2026-10-08T09:00:00.000Z',
+          expiresAt: '2026-10-09T09:00:00.000Z',
+        }),
+        post({
+          id: 'old',
+          format: 'story',
+          expiresAt: '2026-10-08T11:59:00.000Z',
+        }),
       ],
       now,
     );
@@ -108,5 +137,70 @@ describe('relativeTimeLabel', () => {
     expect(relativeTimeLabel('2026-10-08T11:59:30.000Z', now)).toBe('now');
     expect(relativeTimeLabel('2026-10-08T11:15:00.000Z', now)).toBe('45m');
     expect(relativeTimeLabel('2026-10-05T12:00:00.000Z', now)).toBe('3d');
+  });
+});
+
+describe('Story canvas and lifecycle mapping', () => {
+  it('preserves published media overlays, location and actual video duration', () => {
+    const [story] = mapApiStoriesToUserStories(
+      [
+        post({
+          format: 'story',
+          mediaType: 'video',
+          caption: 'Little moments',
+          media: [
+            {
+              id: 'v1',
+              kind: 'video',
+              url: 'https://cdn.example/a.mp4',
+              durationMs: 12_000,
+            },
+          ],
+          storyStyle: {
+            textX: 0.4,
+            textY: 0.3,
+            textColor: '#ffffff',
+            textScale: 1.5,
+            sticker: '✨',
+          },
+          location: { name: 'Pondicherry' },
+          viewerCanManage: true,
+          viewerHasLiked: true,
+          expiresAt: '2026-10-09T10:00:00.000Z',
+        }),
+      ],
+      now,
+    );
+    expect(story?.items[0]).toMatchObject({
+      type: 'video',
+      textContent: 'Little moments',
+      durationMs: 12_000,
+      locationName: 'Pondicherry',
+      viewerCanManage: true,
+      viewerHasLiked: true,
+      storyStyle: { textX: 0.4, textY: 0.3, sticker: '✨' },
+    });
+  });
+
+  it('drops old legacy stories without expiry, invalid expiry and unpublished stories', () => {
+    const stories = mapApiStoriesToUserStories(
+      [
+        post({
+          id: 'old',
+          format: 'story',
+          publishedAt: '2026-10-06T10:00:00.000Z',
+          expiresAt: null,
+        }),
+        post({ id: 'invalid', format: 'story', expiresAt: 'bad-date' }),
+        post({
+          id: 'review',
+          format: 'story',
+          contentStatus: 'pending_review',
+          expiresAt: '2026-10-09T10:00:00.000Z',
+        }),
+      ],
+      now,
+    );
+    expect(stories).toEqual([]);
   });
 });

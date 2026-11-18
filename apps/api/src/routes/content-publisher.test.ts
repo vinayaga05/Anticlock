@@ -114,6 +114,7 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
       visibility?: string;
       mediaType?: "text" | "image" | "video" | "hybrid";
       caption?: string;
+      storyStyle?: { backgroundColor?: string; textColor?: string; textX?: number; textY?: number; textScale?: number; sticker?: string };
       media?: ("video" | "image")[];
     }
   ) {
@@ -127,6 +128,7 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
       metadata: {
         mediaType: input.mediaType ?? (input.media?.length ? input.media[0] : "text"),
         caption: input.caption ?? `post ${randomUUID().slice(0, 6)}`,
+        ...(input.storyStyle ? { storyStyle: input.storyStyle } : {}),
       },
     });
     assert.equal(created.status, 201, JSON.stringify(created.json));
@@ -370,6 +372,16 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
       .where(eq(schema.contentPosts.id, postId));
     const after = await call("B", "GET", "/v1/content/posts?format=story");
     assert.ok(!ids(after.json.items).includes(postId), "expired story is gone");
+  });
+
+  it("preserves the Story canvas presentation through draft, publish and viewer feed", async () => {
+    const storyStyle = { backgroundColor: "#112244", textColor: "#ffffff", textX: 0.4, textY: 0.2, textScale: 1.5, sticker: "✨" };
+    const { postId } = await publish("A", { contentType: "story", publisherProfileId: A, mediaType: "text", caption: "Little moments", storyStyle });
+    const tray = await call("B", "GET", "/v1/content/posts?format=story");
+    const story = (tray.json.items as Json[]).find(item => item.id === postId);
+    assert.ok(story, "published Story appears in an eligible viewer's tray");
+    assert.equal(story.caption, "Little moments");
+    assert.deepEqual(story.storyStyle, storyStyle);
   });
 
   it("6) draft/uploading/processing/pending_review/rejected content is only visible in A's management view", async () => {

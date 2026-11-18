@@ -1,6 +1,19 @@
 import type { PostAuthor } from './types';
 
-export type StoryAudience = 'public' | 'followers' | 'close_friends' | 'selected';
+export type StoryAudience =
+  | 'public'
+  | 'followers'
+  | 'close_friends'
+  | 'selected';
+
+export type StoryStyle = {
+  backgroundColor?: string;
+  textColor?: string;
+  textX?: number;
+  textY?: number;
+  textScale?: number;
+  sticker?: string;
+};
 
 export type StoryMediaType = 'photo' | 'video' | 'text';
 
@@ -20,6 +33,10 @@ export interface StoryItem {
   posterUrl?: string;
   textContent?: string;
   backgroundColor?: string;
+  storyStyle?: StoryStyle;
+  locationName?: string;
+  viewerCanManage?: boolean;
+  viewerHasLiked?: boolean;
   shareKind?: StoryShareKind;
   shareTitle?: string;
   shareSubtitle?: string;

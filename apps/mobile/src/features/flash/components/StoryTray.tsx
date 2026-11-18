@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import {
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -23,19 +23,35 @@ export function StoryTray() {
   const theme = useTheme();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const stories = useStoryStore(s => s.stories);
-  const viewedByAuthor = useStoryStore(s => s.viewedByAuthor);
-  const trayVisibleCount = useStoryStore(s => s.trayVisibleCount);
-  const getTrayEntries = useStoryStore(s => s.getTrayEntries);
-  const loadMoreTrayStories = useStoryStore(s => s.loadMoreTrayStories);
-  const hasMoreTrayStories = useStoryStore(s => s.hasMoreTrayStories);
-  const setApiStories = useStoryStore(s => s.setApiStories);
+  const {
+    getTrayEntries,
+    loadMoreTrayStories,
+    hasMoreTrayStories,
+    setApiStories,
+    setViewerProfile,
+  } = useStoryStore();
   const loadingMoreRef = useRef(false);
   const { active: activeViewerProfile } = useActiveProfile();
   const viewerProfile = activeViewerProfile
-    ? { id: activeViewerProfile.id, type: identityProfileType(activeViewerProfile) }
+    ? {
+        id: activeViewerProfile.id,
+        type: identityProfileType(activeViewerProfile),
+      }
     : null;
   const { data: apiStories, refetch } = useStoriesQuery(viewerProfile);
+
+  useEffect(() => {
+    setViewerProfile(
+      activeViewerProfile
+        ? {
+            id: activeViewerProfile.id,
+            type: identityProfileType(activeViewerProfile),
+            name: activeViewerProfile.name,
+            avatarUrl: activeViewerProfile.avatarUrl,
+          }
+        : null,
+    );
+  }, [activeViewerProfile, setViewerProfile]);
 
   useEffect(() => {
     if (isApiEnabled && apiStories) {
@@ -50,16 +66,25 @@ export function StoryTray() {
     }, [refetch]),
   );
 
-  const entries = useMemo(
-    () => getTrayEntries(),
-    [getTrayEntries, stories, viewedByAuthor, trayVisibleCount],
-  );
+  useEffect(() => {
+    const timer = setInterval(
+      () => useStoryStore.getState().pruneExpired(),
+      30_000,
+    );
+    return () => clearInterval(timer);
+  }, []);
+
+  const entries = getTrayEntries();
 
   const openCreator = () => navigation.navigate('StoryCreator');
   const openViewer = (authorId: string) =>
     navigation.navigate('StoryViewer', { authorId });
 
-  const onPressEntry = (authorId: string, isOwn: boolean, hasActive: boolean) => {
+  const onPressEntry = (
+    authorId: string,
+    isOwn: boolean,
+    hasActive: boolean,
+  ) => {
     if (isOwn && !hasActive) {
       openCreator();
       return;
@@ -72,7 +97,8 @@ export function StoryTray() {
       if (!hasMoreTrayStories() || loadingMoreRef.current) return;
       const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
       const nearEnd =
-        contentOffset.x + layoutMeasurement.width >= contentSize.width - LOAD_THRESHOLD;
+        contentOffset.x + layoutMeasurement.width >=
+        contentSize.width - LOAD_THRESHOLD;
       if (!nearEnd) return;
       loadingMoreRef.current = true;
       loadMoreTrayStories();
@@ -90,7 +116,8 @@ export function StoryTray() {
         showsHorizontalScrollIndicator={false}
         scrollEventThrottle={16}
         onScroll={maybeLoadMore}
-        contentContainerStyle={styles.row}>
+        contentContainerStyle={styles.row}
+      >
         {entries.map(entry => (
           <StoryRing
             key={entry.authorId}
@@ -102,7 +129,9 @@ export function StoryTray() {
           />
         ))}
       </ScrollView>
-      <View style={[styles.divider, { backgroundColor: theme.colors.borderSoft }]} />
+      <View
+        style={[styles.divider, { backgroundColor: theme.colors.borderSoft }]}
+      />
     </View>
   );
 }

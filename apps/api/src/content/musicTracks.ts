@@ -1,7 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import {
   MAX_CLIP_DURATION_MS,
-  type ClipEditMetadata,
+  type ContentEditMetadata,
   type ClipMusicAttribution,
   type MusicTrack,
 } from "@anticlock/contracts";
@@ -56,9 +56,9 @@ export function mapMusicTrackRow(
 
 /** Display attribution for a published Clip, derived from its edit metadata. */
 export function musicAttributionFromEdit(
-  edit: ClipEditMetadata | null | undefined
+  edit: ContentEditMetadata | null | undefined
 ): ClipMusicAttribution | null {
-  const music = edit?.music;
+  const music = edit && "music" in edit ? edit.music : null;
   if (!music) return null;
   return {
     trackId: music.trackId,

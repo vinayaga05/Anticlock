@@ -12,7 +12,7 @@ type Props = {
 /** Simple colorful SVG illustrations — not emoji, not third-party art. */
 export function SoftIllustration({
   variant = 'empty',
-  accent = '#14B8A6',
+  accent = '#0047AB',
   width = 160,
   height = 120,
 }: Props) {

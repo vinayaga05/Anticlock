@@ -76,7 +76,7 @@ export function SavedHubScreen() {
       id: `server-product-${product.id}`,
       kind: 'product' as const,
       title: product.name,
-      subtitle: product.publisher?.displayName ?? 'Anticlock Shop',
+      subtitle: product.publisher?.displayName ?? 'Knock Shop',
       imageUrl: product.images[0]?.thumbnailUrl ?? product.images[0]?.url,
       refId: product.id,
       savedAt: product.updatedAt,

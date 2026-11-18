@@ -8,7 +8,7 @@ async function ensureLocationPermission() {
   if (await PermissionsAndroid.check(fine)) return true;
   const result = await PermissionsAndroid.request(fine, {
     title: 'Location access',
-    message: 'Anticlock uses your location to drop the map pin at your business.',
+    message: 'Knock uses your location to drop the map pin at your business.',
     buttonPositive: 'Allow',
     buttonNegative: 'Not now',
   });

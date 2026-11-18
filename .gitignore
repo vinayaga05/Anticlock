@@ -3,6 +3,7 @@
 
 # Android build artifacts
 *.apk
+*.aab
 
 # Xcode / iOS
 build/

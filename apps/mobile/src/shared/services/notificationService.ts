@@ -10,9 +10,7 @@ import {
   requestPermission,
   AuthorizationStatus,
   type RemoteMessage,
-  type AuthorizationStatus as AuthorizationStatusType,
 } from '@react-native-firebase/messaging';
-import type { Messaging } from '@react-native-firebase/messaging/dist/typescript/lib/types/messaging';
 
 export type NotificationData = {
   notificationId?: string;
@@ -22,7 +20,7 @@ export type NotificationData = {
 
 export type NotificationHandler = (
   data: NotificationData,
-  notification?: RemoteMessage['notification']
+  notification?: RemoteMessage['notification'],
 ) => void;
 
 let foregroundHandler: NotificationHandler | null = null;
@@ -50,7 +48,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
       // Android
       if (typeof Platform.Version === 'number' && Platform.Version >= 33) {
         const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
         );
         return granted === PermissionsAndroid.RESULTS.GRANTED;
       }
@@ -80,7 +78,7 @@ export async function checkNotificationPermission(): Promise<boolean> {
     } else {
       if (typeof Platform.Version === 'number' && Platform.Version >= 33) {
         const result = await PermissionsAndroid.check(
-          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
         );
         return result;
       }
@@ -123,7 +121,10 @@ export function setForegroundNotificationHandler(handler: NotificationHandler) {
 
   // Register Firebase foreground listener
   const unsubscribe = onMessage(messaging, (remoteMessage: RemoteMessage) => {
-    console.log('[Notifications] Foreground notification received:', remoteMessage);
+    console.log(
+      '[Notifications] Foreground notification received:',
+      remoteMessage,
+    );
 
     const data = (remoteMessage.data as NotificationData) || {};
     const notification = remoteMessage.notification;
@@ -136,7 +137,7 @@ export function setForegroundNotificationHandler(handler: NotificationHandler) {
         Alert.alert(
           notification.title || 'Notification',
           notification.body || '',
-          [{ text: 'OK' }]
+          [{ text: 'OK' }],
         );
       }
     }
@@ -150,25 +151,19 @@ export function setForegroundNotificationHandler(handler: NotificationHandler) {
  */
 export function setBackgroundNotificationHandler(handler: NotificationHandler) {
   backgroundHandler = handler;
+  let active = true;
 
   const messaging = getMessaging();
 
   // Background handler (app in background)
-  onNotificationOpenedApp(messaging, (remoteMessage: RemoteMessage) => {
-    console.log('[Notifications] Background notification opened:', remoteMessage);
-
-    const data = (remoteMessage.data as NotificationData) || {};
-    const notification = remoteMessage.notification;
-
-    if (backgroundHandler) {
-      backgroundHandler(data, notification);
-    }
-  });
-
-  // Quit handler (app was completely closed)
-  getInitialNotification(messaging).then((remoteMessage: RemoteMessage | null) => {
-    if (remoteMessage) {
-      console.log('[Notifications] Quit notification opened:', remoteMessage);
+  const unsubscribe = onNotificationOpenedApp(
+    messaging,
+    (remoteMessage: RemoteMessage) => {
+      if (!active) return;
+      console.log(
+        '[Notifications] Background notification opened:',
+        remoteMessage,
+      );
 
       const data = (remoteMessage.data as NotificationData) || {};
       const notification = remoteMessage.notification;
@@ -176,8 +171,30 @@ export function setBackgroundNotificationHandler(handler: NotificationHandler) {
       if (backgroundHandler) {
         backgroundHandler(data, notification);
       }
-    }
-  });
+    },
+  );
+
+  // Quit handler (app was completely closed)
+  getInitialNotification(messaging).then(
+    (remoteMessage: RemoteMessage | null) => {
+      if (active && remoteMessage) {
+        console.log('[Notifications] Quit notification opened:', remoteMessage);
+
+        const data = (remoteMessage.data as NotificationData) || {};
+        const notification = remoteMessage.notification;
+
+        if (backgroundHandler) {
+          backgroundHandler(data, notification);
+        }
+      }
+    },
+  );
+
+  return () => {
+    active = false;
+    unsubscribe();
+    if (backgroundHandler === handler) backgroundHandler = null;
+  };
 }
 
 /**

@@ -32,6 +32,10 @@ export function StoryTray() {
   } = useStoryStore();
   const loadingMoreRef = useRef(false);
   const { active: activeViewerProfile } = useActiveProfile();
+  const activeAvatar =
+    activeViewerProfile?.publisher?.avatarUrl?.trim() ||
+    activeViewerProfile?.avatarUrl?.trim() ||
+    null;
   const viewerProfile = activeViewerProfile
     ? {
         id: activeViewerProfile.id,
@@ -47,11 +51,11 @@ export function StoryTray() {
             id: activeViewerProfile.id,
             type: identityProfileType(activeViewerProfile),
             name: activeViewerProfile.name,
-            avatarUrl: activeViewerProfile.avatarUrl,
+            avatarUrl: activeAvatar,
           }
         : null,
     );
-  }, [activeViewerProfile, setViewerProfile]);
+  }, [activeViewerProfile, activeAvatar, setViewerProfile]);
 
   useEffect(() => {
     if (isApiEnabled && apiStories) {
@@ -120,8 +124,19 @@ export function StoryTray() {
       >
         {entries.map(entry => (
           <StoryRing
-            key={entry.authorId}
-            entry={entry}
+            key={`${entry.author.profileType ?? 'personal'}:${entry.authorId}`}
+            entry={
+              entry.isOwn && activeViewerProfile
+                ? {
+                    ...entry,
+                    author: {
+                      ...entry.author,
+                      name: activeViewerProfile.name,
+                      avatarUrl: activeAvatar ?? '',
+                    },
+                  }
+                : entry
+            }
             onPress={() =>
               onPressEntry(entry.authorId, entry.isOwn, entry.hasActiveStory)
             }

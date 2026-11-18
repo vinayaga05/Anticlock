@@ -1,0 +1,27 @@
+import React from 'react';
+import Renderer from 'react-test-renderer';
+import { Alert } from 'react-native';
+import { TeamPhotosEditor } from './TeamPhotosEditor';
+import { Button } from '@/shared/components/Button';
+import { pickProfilePhoto, uploadProfilePhoto } from '@/features/profile/utils/profilePhoto';
+jest.mock('@/shared/components/Button', () => ({ Button: () => null }));
+jest.mock('@/shared/hooks/useTheme', () => require('@/test/componentMocks').themeModule);
+jest.mock('@/features/profile/utils/profilePhoto', () => ({ pickProfilePhoto: jest.fn(), uploadProfilePhoto: jest.fn() }));
+it('uploads the selected cover without replacing the profile photo; cancellation does not write', async () => {
+  const onChange = jest.fn(); let view!: Renderer.ReactTestRenderer;
+  const photo = { uri: 'file:///cover.jpg' };
+  (pickProfilePhoto as jest.Mock).mockResolvedValue(photo);
+  (uploadProfilePhoto as jest.Mock).mockResolvedValue('https://cdn.example/cover.jpg');
+  Renderer.act(() => { view = Renderer.create(<TeamPhotosEditor photos={{ logoUrl: 'https://cdn.example/logo.jpg' }} onChange={onChange} />); });
+  await Renderer.act(async () => { view.root.findAllByType(Button)[1].props.onPress(); });
+  expect(onChange).toHaveBeenCalledWith({ coverUrl: 'https://cdn.example/cover.jpg' });
+  onChange.mockClear(); (pickProfilePhoto as jest.Mock).mockResolvedValue(null);
+  await Renderer.act(async () => { view.root.findAllByType(Button)[0].props.onPress(); });
+  expect(onChange).not.toHaveBeenCalled();
+  expect(uploadProfilePhoto).toHaveBeenCalledTimes(1);
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  (pickProfilePhoto as jest.Mock).mockRejectedValue(new Error('Permission denied'));
+  await Renderer.act(async () => { view.root.findAllByType(Button)[0].props.onPress(); });
+  expect(onChange).not.toHaveBeenCalled(); expect(alert).toHaveBeenCalled();
+  Renderer.act(() => view.unmount()); alert.mockRestore();
+});

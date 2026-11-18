@@ -1,3 +1,4 @@
+import { storage } from '@/shared/services/storage';
 import { create } from 'zustand';
 import {
   seedChallenges,
@@ -47,7 +48,10 @@ type CommunityState = {
 
   joinTeam: (teamId: string) => 'joined' | 'requested' | 'already';
   resolveJoinRequest: (requestId: string, accept: boolean) => void;
+  updateTeamPhotos: (teamId: string, photos: { logoUrl?: string; coverUrl?: string }) => void;
   createTeam: (input: {
+    logoUrl?: string;
+    coverUrl?: string;
     name: string;
     sport: string;
     location: string;
@@ -88,8 +92,12 @@ function sportMatches(team: Team, challenge: Challenge): boolean {
   return challengeTags.some(ct => tags.includes(ct));
 }
 
+function savedTeams(): Team[] {
+  try { const saved = JSON.parse(storage.getString('nexus_teams_v1') ?? 'null'); return Array.isArray(saved) ? saved : [...seedTeams]; } catch { return [...seedTeams]; }
+}
+
 export const useCommunityStore = create<CommunityState>((set, get) => ({
-  teams: [...seedTeams],
+  teams: savedTeams(),
   players: [...seedPlayers],
   challenges: [...seedChallenges],
   participations: [...seedParticipations],
@@ -252,12 +260,18 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
     }));
   },
 
+  updateTeamPhotos: (teamId, photos) => {
+    if (!get().isTeamAdmin(teamId)) return;
+    set(state => ({ teams: state.teams.map(team => team.id === teamId ? { ...team, ...photos } : team) }));
+    storage.set('nexus_teams_v1', JSON.stringify(get().teams));
+  },
+
   createTeam: input => {
     const team: Team = {
       id: uid('team'),
       name: input.name,
-      logoUrl: seedTeams[0].logoUrl,
-      coverUrl: seedTeams[0].coverUrl,
+      logoUrl: input.logoUrl ?? '',
+      coverUrl: input.coverUrl ?? '',
       sport: input.sport,
       sportTags: [input.sport],
       location: input.location,
@@ -271,6 +285,7 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
       memberCount: 1,
     };
     set(state => ({ teams: [team, ...state.teams] }));
+    storage.set('nexus_teams_v1', JSON.stringify(get().teams));
     return team;
   },
 

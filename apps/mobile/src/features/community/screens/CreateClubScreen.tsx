@@ -1,3 +1,4 @@
+import { TeamPhotosEditor } from '../components/TeamPhotosEditor';
 import React, { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -13,6 +14,8 @@ export function CreateClubScreen() {
   const navigation = useNavigation<any>();
   const createTeam = useCommunityStore(s => s.createTeam);
 
+  const [photos, setPhotos] = useState<{ logoUrl?: string; coverUrl?: string }>({});
+  const [uploading, setUploading] = useState(false);
   const [name, setName] = useState('');
   const [sport, setSport] = useState('');
   const [location, setLocation] = useState('');
@@ -33,7 +36,9 @@ export function CreateClubScreen() {
       Alert.alert('Missing details', 'Name, sport, and location are required.');
       return;
     }
+    if (uploading) return;
     const team = createTeam({
+      ...photos,
       name: name.trim(),
       sport: sport.trim(),
       location: location.trim(),
@@ -43,10 +48,11 @@ export function CreateClubScreen() {
   };
 
   return (
-    <ScreenContainer scrollable tabAware={false}>
+    <ScreenContainer scrollable edges={['top', 'left', 'right']} tabAware={false}>
       <AppHeader title="Create team" showBrand={false} showActions={false} />
 
       <Card style={{ gap: 12 }}>
+        <TeamPhotosEditor photos={photos} onChange={patch => setPhotos(previous => ({ ...previous, ...patch }))} onBusyChange={setUploading} />
         <Field label="Team name">
           <TextInput
             value={name}
@@ -87,7 +93,7 @@ export function CreateClubScreen() {
       </Card>
 
       <View style={{ marginTop: 4 }}>
-        <Button title="Create team" icon="plus" onPress={onCreate} />
+        <Button title="Create team" icon="plus" disabled={uploading} onPress={onCreate} />
       </View>
     </ScreenContainer>
   );

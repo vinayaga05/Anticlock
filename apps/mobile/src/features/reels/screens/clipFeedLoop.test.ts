@@ -4,6 +4,7 @@ import {
   loopCompleteClipsFeedWhenExhausted,
   mergeLoadedReelPages,
   nextClipFeedIndex,
+  visibleClipFeedPage,
 } from './clipFeedLoop';
 import type { ReelItem } from '@/shared/types';
 
@@ -59,14 +60,50 @@ describe('temporary Clips feed loop', () => {
     expect(nextClipFeedIndex(0, 1)).toBe(0);
   });
 
-  it('keeps no more than previous, current and next native players', () => {
+  it('keeps exactly one native player and releases both neighbouring pages', () => {
     const states = Array.from({ length: 20 }, (_, index) =>
       clipPlayerWindowState(index, 8),
     );
-    expect(states.filter(Boolean)).toHaveLength(3);
-    expect(states[7]).toBe('preload');
+    expect(states.filter(Boolean)).toHaveLength(1);
+    expect(states[7]).toBeNull();
     expect(states[8]).toBe('active');
-    expect(states[9]).toBe('preload');
+    expect(states[9]).toBeNull();
     expect(states[10]).toBeNull();
+  });
+
+  it('clears the active page in the threshold gap during a quick swipe', () => {
+    const entries = buildLoopedClipFeed([reel('1'), reel('2')]);
+    expect(visibleClipFeedPage(entries, [
+      { index: 0, key: entries[0].key, isViewable: true },
+    ])).toEqual({ index: 0, key: entries[0].key });
+    expect(visibleClipFeedPage(entries, [])).toBeNull();
+    expect(visibleClipFeedPage(entries, [
+      { index: 0, key: entries[0].key, isViewable: false },
+    ])).toBeNull();
+    expect(visibleClipFeedPage(entries, [
+      { index: 1, key: entries[1].key, isViewable: true },
+    ])).toEqual({ index: 1, key: entries[1].key });
+  });
+
+  it('rejects stale row tokens after refresh, reorder or removal', () => {
+    const entries = buildLoopedClipFeed([reel('new'), reel('1'), reel('2')]);
+    const oldFirstRow = { index: 0, key: 'clip:1', isViewable: true };
+    expect(visibleClipFeedPage(entries, [oldFirstRow])).toBeNull();
+    expect(visibleClipFeedPage([], [oldFirstRow])).toBeNull();
+    expect(visibleClipFeedPage(entries, [
+      { index: null, key: entries[0].key },
+      { index: 20, key: 'clip:removed' },
+      { index: 1, key: entries[1].key },
+    ])).toEqual({ index: 1, key: entries[1].key });
+  });
+
+  it('distinguishes the visible loop sentinel from its off-screen canonical row', () => {
+    const entries = buildLoopedClipFeed([reel('1'), reel('2')]);
+    expect(visibleClipFeedPage(entries, [
+      { index: 2, key: entries[2].key, isViewable: true },
+    ])).toEqual({ index: 2, key: 'clip:1:loop-sentinel' });
+    expect(visibleClipFeedPage(entries, [
+      { index: 2, key: entries[0].key, isViewable: true },
+    ])).toBeNull();
   });
 });

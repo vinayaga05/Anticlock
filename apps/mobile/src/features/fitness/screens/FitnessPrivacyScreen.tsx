@@ -211,7 +211,7 @@ export function FitnessPrivacyScreen() {
   }
   function closeAccount() {
     Alert.alert(
-      'Close your Anticlock account?',
+      'Close your Knock account?',
       'This closes your account, signs you out and deletes your Fitness assessment, plans, journal, private Fitness media and sharing permissions. Booking, chat and other records may be retained by those services. Account closure cannot be undone.',
       [
         { text: 'Keep my account', style: 'cancel' },
@@ -473,7 +473,7 @@ export function FitnessPrivacyScreen() {
           onPress={deleteData}
         />
         <FitnessAction
-          label="Close my Anticlock account"
+          label="Close my Knock account"
           destructive
           disabled={busy || mutation.isPending}
           onPress={closeAccount}

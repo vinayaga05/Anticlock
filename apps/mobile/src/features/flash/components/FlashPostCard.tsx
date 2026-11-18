@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { navigateToProfile } from '@/shared/navigation/businessNavigation';
 import {
   Alert,
+  type AlertButton,
   Image,
   Pressable,
   StyleSheet,
@@ -37,9 +38,22 @@ const VISIBILITY_LABEL: Record<PostVisibility, string> = {
 
 type Props = {
   post: FlashPost;
+  playbackActive?: boolean;
+  preparationEnabled?: boolean;
+  onMediaLayout?: (
+    postId: string,
+    bounds: { y: number; height: number },
+  ) => void;
+  onOverlayChange?: (postId: string, open: boolean) => void;
 };
 
-export function FlashPostCard({ post }: Props) {
+export function FlashPostCard({
+  post,
+  playbackActive = false,
+  preparationEnabled = false,
+  onMediaLayout,
+  onOverlayChange,
+}: Props) {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const toggleLike = useEngagementStore(s => s.toggleLike);
@@ -61,27 +75,79 @@ export function FlashPostCard({ post }: Props) {
   const [reactionsOpen, setReactionsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
 
-  const total = Object.values(post.reactionCounts).reduce((a, b) => a + (b ?? 0), 0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const alertGeneration = useRef(0);
+  const overlayOpen = reactionsOpen || shareOpen || menuOpen;
+  useEffect(() => {
+    onOverlayChange?.(post.id, overlayOpen);
+  }, [post.id, overlayOpen, onOverlayChange]);
+  useEffect(
+    () => () => onOverlayChange?.(post.id, false),
+    [post.id, onOverlayChange],
+  );
+  const showPostAlert = (
+    title: string,
+    message?: string,
+    buttons?: AlertButton[],
+  ) => {
+    const ticket = ++alertGeneration.current;
+    setMenuOpen(true);
+    const dismiss = () => {
+      if (alertGeneration.current === ticket) setMenuOpen(false);
+    };
+    Alert.alert(
+      title,
+      message,
+      (buttons ?? [{ text: 'OK' }]).map(button => ({
+        ...button,
+        onPress: () => {
+          button.onPress?.();
+          dismiss();
+        },
+      })),
+      { cancelable: true, onDismiss: dismiss },
+    );
+  };
+
+  const total = Object.values(post.reactionCounts).reduce(
+    (a, b) => a + (b ?? 0),
+    0,
+  );
   const longText = (post.text?.length ?? 0) > 160;
   const displayText =
     longText && !expanded ? `${post.text!.slice(0, 160)}…` : post.text;
 
   const openMenu = () => {
     if (post.isOwn) {
-      Alert.alert('Post options', undefined, [
+      showPostAlert('Post options', undefined, [
         {
           text: 'Edit visibility',
           onPress: () =>
-            Alert.alert('Visibility', undefined, [
-              { text: 'Public', onPress: () => setPostVisibility(post.id, 'public') },
-              { text: 'Followers', onPress: () => setPostVisibility(post.id, 'followers') },
-              { text: 'Friends', onPress: () => setPostVisibility(post.id, 'friends') },
-              { text: 'Only me', onPress: () => setPostVisibility(post.id, 'only_me') },
+            showPostAlert('Visibility', undefined, [
+              {
+                text: 'Public',
+                onPress: () => setPostVisibility(post.id, 'public'),
+              },
+              {
+                text: 'Followers',
+                onPress: () => setPostVisibility(post.id, 'followers'),
+              },
+              {
+                text: 'Friends',
+                onPress: () => setPostVisibility(post.id, 'friends'),
+              },
+              {
+                text: 'Only me',
+                onPress: () => setPostVisibility(post.id, 'only_me'),
+              },
               { text: 'Cancel', style: 'cancel' },
             ]),
         },
         {
-          text: post.commentsEnabled === false ? 'Turn comments on' : 'Turn comments off',
+          text:
+            post.commentsEnabled === false
+              ? 'Turn comments on'
+              : 'Turn comments off',
           onPress: () => toggleComments(post.id),
         },
         { text: 'Save post', onPress: () => toggleSavePost(post.id) },
@@ -97,7 +163,7 @@ export function FlashPostCard({ post }: Props) {
         { text: 'Cancel', style: 'cancel' },
       ]);
     } else {
-      Alert.alert('Post options', undefined, [
+      showPostAlert('Post options', undefined, [
         { text: 'Save post', onPress: () => toggleSavePost(post.id) },
         { text: 'Hide post', onPress: () => hidePost(post.id) },
         {
@@ -109,11 +175,13 @@ export function FlashPostCard({ post }: Props) {
         },
         {
           text: 'Mute user',
-          onPress: () => Alert.alert('Muted', `${post.author.name} muted (mock).`),
+          onPress: () =>
+            showPostAlert('Muted', `${post.author.name} muted (mock).`),
         },
         {
           text: 'Report post',
-          onPress: () => Alert.alert('Reported', 'Thanks — we will review this (mock).'),
+          onPress: () =>
+            showPostAlert('Reported', 'Thanks — we will review this (mock).'),
         },
         {
           text: 'Copy link',
@@ -122,7 +190,8 @@ export function FlashPostCard({ post }: Props) {
         {
           text: 'Block user',
           style: 'destructive',
-          onPress: () => Alert.alert('Blocked', `${post.author.name} blocked (mock).`),
+          onPress: () =>
+            showPostAlert('Blocked', `${post.author.name} blocked (mock).`),
         },
         { text: 'Cancel', style: 'cancel' },
       ]);
@@ -130,8 +199,15 @@ export function FlashPostCard({ post }: Props) {
   };
 
   const openAuthorProfile = () => {
-    if (post.source === 'api' && post.publisherProfileId && post.publisherProfileType) {
-      navigateToProfile(navigation, { type: post.publisherProfileType, id: post.publisherProfileId });
+    if (
+      post.source === 'api' &&
+      post.publisherProfileId &&
+      post.publisherProfileType
+    ) {
+      navigateToProfile(navigation, {
+        type: post.publisherProfileType,
+        id: post.publisherProfileId,
+      });
     } else navigation.navigate('Profile', { userId: post.author.id });
   };
 
@@ -139,33 +215,57 @@ export function FlashPostCard({ post }: Props) {
     <View style={[styles.post, { backgroundColor: theme.colors.background }]}>
       <View style={styles.contentPad}>
         <View style={styles.header}>
-          <PressableScale onPress={openAuthorProfile} accessibilityLabel={`Open ${post.author.name} profile`}>
-            <Image source={{ uri: post.author.avatarUrl }} style={styles.avatar} />
+          <PressableScale
+            onPress={openAuthorProfile}
+            accessibilityLabel={`Open ${post.author.name} profile`}
+          >
+            <Image
+              source={{ uri: post.author.avatarUrl }}
+              style={styles.avatar}
+            />
           </PressableScale>
           <View style={styles.headerMeta}>
-            <PressableScale onPress={openAuthorProfile} accessibilityLabel={`Open ${post.author.name} profile`}>
+            <PressableScale
+              onPress={openAuthorProfile}
+              accessibilityLabel={`Open ${post.author.name} profile`}
+            >
               <View style={styles.nameRow}>
                 <Text
-                  style={[styles.authorName, { color: theme.colors.textPrimary }]}
-                  numberOfLines={1}>
+                  style={[
+                    styles.authorName,
+                    { color: theme.colors.textPrimary },
+                  ]}
+                  numberOfLines={1}
+                >
                   {post.author.name}
                 </Text>
                 {post.author.verified ? (
-                  <AppIcon name="verified" size={14} color={theme.colors.primary} strokeWidth={2} />
+                  <AppIcon
+                    name="verified"
+                    size={14}
+                    color={theme.colors.primary}
+                    strokeWidth={2}
+                  />
                 ) : null}
               </View>
             </PressableScale>
             <Text
               style={[styles.metaText, { color: theme.colors.textTertiary }]}
-              numberOfLines={1}>
+              numberOfLines={1}
+            >
               {post.timeLabel} · {VISIBILITY_LABEL[post.visibility]}
               {post.pinned ? ' · Pinned' : ''}
             </Text>
             {post.communityName ? (
               <PressableScale
-                onPress={() => navigation.navigate('Main', { screen: 'Community' })}
-                accessibilityLabel={`Open ${post.communityName}`}>
-                <Text style={[styles.metaText, { color: theme.colors.primary }]}>
+                onPress={() =>
+                  navigation.navigate('Main', { screen: 'Community' })
+                }
+                accessibilityLabel={`Open ${post.communityName}`}
+              >
+                <Text
+                  style={[styles.metaText, { color: theme.colors.primary }]}
+                >
                   {post.communityName}
                 </Text>
               </PressableScale>
@@ -185,8 +285,13 @@ export function FlashPostCard({ post }: Props) {
                   borderColor: theme.colors.primary,
                   borderRadius: theme.radius.pill,
                 },
-              ]}>
-              <Text style={[styles.followLabel, { color: theme.colors.primary }]}>Follow</Text>
+              ]}
+            >
+              <Text
+                style={[styles.followLabel, { color: theme.colors.primary }]}
+              >
+                Follow
+              </Text>
             </PressableScale>
           ) : null}
           {post.isOwn ? null : (
@@ -201,14 +306,28 @@ export function FlashPostCard({ post }: Props) {
             onPress={openMenu}
             accessibilityLabel="Post menu"
             scaleTo={0.96}
-            style={styles.menuHit}>
-            <AppIcon name="more" size={20} color={theme.colors.textTertiary} strokeWidth={2} />
+            style={styles.menuHit}
+          >
+            <AppIcon
+              name="more"
+              size={20}
+              color={theme.colors.textTertiary}
+              strokeWidth={2}
+            />
           </PressableScale>
         </View>
 
         {displayText ? (
-          <Pressable onPress={() => longText && setExpanded(e => !e)} style={styles.bodyBlock}>
-            <Text style={[theme.typography.body, { color: theme.colors.textPrimary }]}>
+          <Pressable
+            onPress={() => longText && setExpanded(e => !e)}
+            style={styles.bodyBlock}
+          >
+            <Text
+              style={[
+                theme.typography.body,
+                { color: theme.colors.textPrimary },
+              ]}
+            >
               {displayText}
             </Text>
             {longText ? (
@@ -227,36 +346,71 @@ export function FlashPostCard({ post }: Props) {
                 backgroundColor: theme.colors.surfaceMuted,
                 borderRadius: 8,
               },
-            ]}>
-            <AppIcon name="reels" size={18} color={theme.colors.primary} strokeWidth={2} />
+            ]}
+          >
+            <AppIcon
+              name="reels"
+              size={18}
+              color={theme.colors.primary}
+              strokeWidth={2}
+            />
             <Text
-              style={[theme.typography.bodySmall, { color: theme.colors.textPrimary, flex: 1 }]}
-              numberOfLines={1}>
+              style={[
+                theme.typography.bodySmall,
+                { color: theme.colors.textPrimary, flex: 1 },
+              ]}
+              numberOfLines={1}
+            >
               {post.sharedClipTitle}
             </Text>
           </View>
         ) : null}
       </View>
 
-      {post.media.length > 0 ? <FlashMediaCarousel media={post.media} /> : null}
+      {post.media.length > 0 ? (
+        <View
+          onLayout={event => onMediaLayout?.(post.id, event.nativeEvent.layout)}
+        >
+          <FlashMediaCarousel
+            postId={post.id}
+            preparationEnabled={preparationEnabled && !overlayOpen}
+            media={post.media}
+            playbackActive={playbackActive && !overlayOpen}
+          />
+        </View>
+      ) : null}
 
       {post.linkPreview ? (
         <View style={[styles.link, { borderColor: theme.colors.border }]}>
           {post.linkPreview.imageUrl ? (
-            <Image source={{ uri: post.linkPreview.imageUrl }} style={styles.linkImage} />
+            <Image
+              source={{ uri: post.linkPreview.imageUrl }}
+              style={styles.linkImage}
+            />
           ) : null}
           <View style={[styles.linkBody, styles.contentPad]}>
-            <Text style={[styles.metaText, { color: theme.colors.textTertiary }]} numberOfLines={1}>
+            <Text
+              style={[styles.metaText, { color: theme.colors.textTertiary }]}
+              numberOfLines={1}
+            >
               {post.linkPreview.url.replace(/^https?:\/\//, '')}
             </Text>
             <Text
-              style={[theme.typography.body, { color: theme.colors.textPrimary, fontWeight: '600' }]}
-              numberOfLines={2}>
+              style={[
+                theme.typography.body,
+                { color: theme.colors.textPrimary, fontWeight: '600' },
+              ]}
+              numberOfLines={2}
+            >
               {post.linkPreview.title}
             </Text>
             <Text
-              style={[theme.typography.caption, { color: theme.colors.textSecondary }]}
-              numberOfLines={2}>
+              style={[
+                theme.typography.caption,
+                { color: theme.colors.textSecondary },
+              ]}
+              numberOfLines={2}
+            >
               {post.linkPreview.description}
             </Text>
           </View>
@@ -294,6 +448,7 @@ export function FlashPostCard({ post }: Props) {
       <FlashShareSheet
         postId={post.id}
         visible={shareOpen}
+        showAlert={showPostAlert}
         onClose={() => setShareOpen(false)}
         onSendKnock={() =>
           navigation.navigate('Thread', {

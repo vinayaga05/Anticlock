@@ -88,7 +88,7 @@ function productItem(product: Product): ExploreItem {
     id: product.id,
     title: product.name,
     imageUrl: product.images[0]?.thumbnailUrl ?? product.images[0]?.url ?? '',
-    seller: product.publisher?.displayName ?? 'Anticlock Shop',
+    seller: product.publisher?.displayName ?? 'Knock Shop',
     price: Math.round(product.price / 100),
     compareAtPrice: product.compareAtPrice == null
       ? undefined : Math.round(product.compareAtPrice / 100),
@@ -98,7 +98,7 @@ function productItem(product: Product): ExploreItem {
     meta: {
       reviewStatus: product.reviewStatus,
       visibility: product.requestedVisibility,
-      submittedBy: product.publisher?.displayName ?? 'Anticlock Shop',
+      submittedBy: product.publisher?.displayName ?? 'Knock Shop',
       submittedAt: product.createdAt,
       reviewNote: product.reviewReason ?? undefined,
     },

@@ -30,7 +30,7 @@ const ACTIONS: {
     title: 'List Service',
     subtitle: 'Offer a professional service',
     icon: 'clipboard',
-    color: '#14B8A6',
+    color: '#0047AB',
     onPress: nav => nav.navigate('ComingSoon', { title: 'List Service' }),
   },
   {

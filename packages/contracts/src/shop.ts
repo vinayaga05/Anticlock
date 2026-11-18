@@ -20,6 +20,16 @@ export const ProductCategorySchema = z.object({
 });
 export type ProductCategory = z.infer<typeof ProductCategorySchema>;
 
+export const CreateProductCategoryRequestSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  slug: z.string().trim().min(1).max(150).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  description: z.string().max(2000).optional(),
+  imageUrl: z.string().url().optional(),
+  sortOrder: z.number().int().default(0),
+  status: z.enum(['draft', 'published', 'archived']).default('published'),
+}).strict();
+export const UpdateProductCategoryRequestSchema = CreateProductCategoryRequestSchema.partial();
+
 export const ProductImageSchema = z.object({
   id: z.string().uuid(),
   url: z.string().url(),

@@ -11,6 +11,7 @@ type Props = {
   onClose: () => void;
   onSelect: (asset: MediaAsset) => void;
   kind?: 'image' | 'document' | 'video';
+  publicOnly?: boolean;
   multiple?: boolean;
   selectedIds?: string[];
   onConfirm?: () => void;
@@ -22,6 +23,7 @@ export function MediaPicker({
   onClose,
   onSelect,
   kind = 'image',
+  publicOnly = false,
   multiple = false,
   selectedIds = [],
   onConfirm,
@@ -29,7 +31,7 @@ export function MediaPicker({
 }: Props) {
   const [q, setQ] = useState('');
   const { data, isLoading } = useQuery({
-    queryKey: ['admin', 'media', 'picker', kind, q],
+    queryKey: ['admin', 'media', 'picker', kind, q, publicOnly],
     enabled: open,
     queryFn: () => {
       const params = new URLSearchParams({
@@ -39,7 +41,7 @@ export function MediaPicker({
       });
       // A Reel is public only after an explicit publish action, but its media
       // must already have a public delivery route when it is published.
-      if (kind === 'video') params.set('accessLevel', 'public');
+      if (kind === 'video' || publicOnly) params.set('accessLevel', 'public');
       if (q) params.set('q', q);
       return apiFetch<{ data: MediaAsset[] }>(`/admin/media?${params}`);
     },

@@ -18,7 +18,7 @@ import type { Booking, ProviderBookingActionRequest } from '@anticlock/contracts
 
 function ensureAuthToken() {
   if (!isApiEnabled) {
-    throw new Error('Service provider features require a connection to Anticlock.');
+    throw new Error('Service provider features require a connection to Knock.');
   }
   const session = readStoredSession();
   if (!session?.token) {

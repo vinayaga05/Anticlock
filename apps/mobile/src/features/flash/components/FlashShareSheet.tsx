@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
 } from 'react-native';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { PressableScale } from '@/shared/components/PressableScale';
@@ -19,9 +18,10 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   onSendKnock?: () => void;
+  showAlert?: typeof Alert.alert;
 };
 
-export function FlashShareSheet({ postId, visible, onClose, onSendKnock }: Props) {
+export function FlashShareSheet({ postId, visible, onClose, onSendKnock, showAlert = Alert.alert }: Props) {
   const theme = useTheme();
   const shareContent = useEngagementStore(s => s.shareContent);
   const [quote, setQuote] = useState('');
@@ -79,7 +79,7 @@ export function FlashShareSheet({ postId, visible, onClose, onSendKnock }: Props
                 key: 'community',
                 label: 'Share to a Community',
                 onPress: () => {
-                  Alert.alert('Coming soon', 'Community share will land in a later pass.');
+                  showAlert('Coming soon', 'Community share will land in a later pass.');
                   close();
                 },
               },

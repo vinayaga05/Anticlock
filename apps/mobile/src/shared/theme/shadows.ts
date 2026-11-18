@@ -35,7 +35,7 @@ export const shadows = {
   }),
   glowTeal: Platform.select({
     ios: {
-      shadowColor: palette.aqua,
+      shadowColor: palette.cobalt,
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.28,
       shadowRadius: 12,

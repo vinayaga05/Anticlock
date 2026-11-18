@@ -189,7 +189,7 @@ const baseReels: ReelItem[] = [
     title: 'Morning mobility',
     author: 'coach.sathish',
     authorAvatarUrl: reelAvatar('photo-1507003211169-0a1dd7228f2d'),
-    caption: '5-minute warm-up before sports training #anticlock #fitness',
+    caption: '5-minute warm-up before sports training #knock #fitness',
     videoUrl: require('../assets/videos/clip-fitness.mp4'),
     posterUrl: '',
     likeCount: 1280,
@@ -253,7 +253,7 @@ const baseReels: ReelItem[] = [
   {
     id: 'reel-6',
     title: 'Whey restock',
-    author: 'shop.anticlock',
+    author: 'shop.knock',
     authorAvatarUrl: reelAvatar('photo-1527980965255-d3b416303d12'),
     caption: 'Clean protein for post-workout recovery #products',
     videoUrl: require('../assets/videos/clip-health.mp4'),

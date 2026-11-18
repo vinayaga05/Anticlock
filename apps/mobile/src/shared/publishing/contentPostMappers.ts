@@ -142,13 +142,20 @@ export function relativeTimeLabel(iso: string, now = Date.now()): string {
 function postMedia(post: ApiContentPost): PostMedia[] {
   return (post.media ?? [])
     .filter(item => typeof item.url === 'string' && item.url.length > 0)
-    .map(item => ({
+    .map((item, index) => ({
       id: item.id,
-      type: item.kind === 'video' ? ('video' as const) : ('image' as const),
+      type:
+        item.kind === 'video'
+          ? ('video' as const)
+          : item.kind === 'audio'
+          ? ('audio' as const)
+          : ('image' as const),
       url: item.url,
       posterUrl:
         item.kind === 'video'
-          ? post.posterUrl ?? item.posterUrl ?? undefined
+          ? item.posterUrl ??
+            (index === 0 ? post.posterUrl : undefined) ??
+            undefined
           : undefined,
     }));
 }

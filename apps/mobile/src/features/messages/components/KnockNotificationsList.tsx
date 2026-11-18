@@ -104,7 +104,7 @@ export function KnockNotificationsList() {
       <View style={[styles.wrap, styles.centerContent]}>
         <AppIcon name="bell-off" size={48} color={theme.colors.textTertiary} />
         <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-          {apiEnabled ? 'Sign in to view notifications' : 'Connect to the Anticlock API to view notifications'}
+          {apiEnabled ? 'Sign in to view notifications' : 'Connect to the Knock API to view notifications'}
         </Text>
       </View>
     );

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, ilike, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, isNull, inArray, lt, or, sql } from 'drizzle-orm';
 import type {
   CreateProductRequest,
   CreateUserProductRequest,
@@ -52,9 +52,9 @@ const REVIEW_ALLOWED: Record<ExploreReviewRequest['action'], string[]> = {
 };
 
 export class ProductService {
-  async listCategories() {
+  async listCategories(includeUnpublished = false) {
     const rows = await db.select().from(productCategories)
-      .where(eq(productCategories.status, 'published'))
+      .where(includeUnpublished ? undefined : eq(productCategories.status, 'published'))
       .orderBy(productCategories.sortOrder, productCategories.name);
     return rows.map(row => ({
       id: row.id,
@@ -63,14 +63,40 @@ export class ProductService {
       description: row.description ?? undefined,
       imageUrl: row.imageUrl ?? undefined,
       sortOrder: row.sortOrder,
-      status: row.status as 'published',
+      status: row.status as 'draft' | 'published' | 'archived',
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     }));
   }
 
+  async saveCategory(input: { name?: string; slug?: string; description?: string; imageUrl?: string; sortOrder?: number; status?: string }, id?: string) {
+    let row;
+    try {
+    [row] = id
+      ? await db.update(productCategories).set({ ...input, updatedAt: new Date() }).where(eq(productCategories.id, id)).returning()
+      : await db.insert(productCategories).values(input as typeof productCategories.$inferInsert).returning();
+    } catch (error) {
+      const cause = error as { code?: string; cause?: { code?: string } };
+      if ((cause.cause?.code ?? cause.code) === '23505') throw appError('A Shop category with this slug already exists', 'duplicate_category', 409);
+      throw error;
+    }
+    if (!row) throw appError('Category not found', 'not_found', 404);
+    return { ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() };
+  }
+
+  private async validateCatalogProduct(categoryId: string, imageIds: string[], published: boolean) {
+    const [category] = await db.select().from(productCategories).where(eq(productCategories.id, categoryId));
+    if (!category || (published && category.status !== 'published')) throw appError('Choose a published Shop category before publishing', 'invalid_category', 400);
+    if (published && imageIds.length === 0) throw appError('Add a product image before publishing', 'invalid_media', 400);
+    if (!imageIds.length) return;
+    const assets = await db.select().from(mediaAssets).where(inArray(mediaAssets.id, imageIds));
+    if (new Set(imageIds).size !== imageIds.length || assets.length !== imageIds.length || assets.some(asset => asset.kind !== 'image' || asset.accessLevel !== 'public' || asset.processingStatus !== 'ready' || asset.deletedAt || asset.archivedAt || !['approved', 'not_required'].includes(asset.moderationStatus))) throw appError('Select ready, approved public images from Media Library', 'invalid_media', 400);
+  }
+
   async createProduct(request: CreateProductRequest): Promise<Product> {
-    const [row] = await db.insert(products).values({
+    await this.validateCatalogProduct(request.categoryId, request.imageIds ?? [], request.status === 'published');
+    const row = await db.transaction(async tx => {
+    const [created] = await tx.insert(products).values({
       categoryId: request.categoryId,
       slug: request.slug,
       name: request.name,
@@ -79,16 +105,19 @@ export class ProductService {
       compareAtPrice: request.compareAtPrice ?? null,
       inventory: request.inventory,
       status: request.status ?? 'draft',
+      requestedVisibility: 'public',
       reviewStatus: request.status === 'published' ? 'approved' : 'draft',
       approvedAt: request.status === 'published' ? new Date() : null,
       metadata: request.metadata ?? null,
     }).returning();
     if (request.imageIds?.length) {
-      await db.insert(productImages).values(request.imageIds.map((mediaAssetId, index) => ({
-        productId: row!.id, mediaAssetId, sortOrder: index,
+      await tx.insert(productImages).values(request.imageIds.map((mediaAssetId, index) => ({
+        productId: created!.id, mediaAssetId, sortOrder: index,
       })));
     }
-    return this.getProductById(row!.id);
+    return created!;
+    });
+    return this.getProductById(row.id);
   }
 
   async createUserProduct(ownerUserId: string, request: CreateUserProductRequest) {
@@ -236,6 +265,7 @@ export class ProductService {
 
   async listProducts(options: {
     categoryId?: string;
+    operatorOnly?: boolean;
     status?: string;
     reviewStatus?: string;
     ownerMobileUserId?: string;
@@ -246,6 +276,7 @@ export class ProductService {
   } = {}): Promise<{ products: Product[]; nextCursor: string | null }> {
     const limit = Math.min(options.limit ?? 20, 100);
     const conditions = [];
+    if (options.operatorOnly) conditions.push(isNull(products.ownerMobileUserId));
     if (options.categoryId) conditions.push(eq(products.categoryId, options.categoryId));
     if (options.status) conditions.push(eq(products.status, options.status));
     if (options.reviewStatus) conditions.push(eq(products.reviewStatus, options.reviewStatus));
@@ -495,9 +526,16 @@ export class ProductService {
   }
 
   async updateProduct(productId: string, request: UpdateProductRequest): Promise<Product> {
+    const existing = await this.getProductById(productId);
+    if (existing.ownerMobileUserId) throw appError('Use the review workflow for seller products', 'invalid_product', 409);
+    await this.validateCatalogProduct(request.categoryId ?? existing.categoryId, request.imageIds ?? existing.images.map(image => image.id), (request.status ?? existing.status) === 'published');
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     for (const key of ['categoryId', 'slug', 'name', 'description', 'price', 'compareAtPrice', 'inventory', 'status', 'metadata'] as const) {
       if (request[key] !== undefined) updateData[key] = request[key];
+    }
+    if (request.status) {
+      updateData.reviewStatus = request.status === 'published' ? 'approved' : request.status === 'archived' ? 'archived' : 'draft';
+      if (request.status === 'published') updateData.approvedAt = new Date();
     }
     const [row] = await db.update(products).set(updateData).where(eq(products.id, productId)).returning();
     if (!row) throw appError('Product not found', 'not_found', 404);

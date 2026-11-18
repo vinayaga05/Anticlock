@@ -76,7 +76,7 @@ export function buildClipsReelsFromManifest(
   const template = templates[0] ?? {
     id: 'reel-template',
     title: 'Clip',
-    author: 'anticlock',
+    author: 'knock',
     caption: '',
     videoUrl: '',
     posterUrl: '',
@@ -101,7 +101,7 @@ export function buildClipsReelsFromManifest(
       ...meta,
       id: String(entry.id || `r2-reel-${index + 1}`),
       title: String(entry.title || meta.title || 'Video'),
-      author: String(meta.author || 'anticlock'),
+      author: String(meta.author || 'knock'),
       caption: String(meta.caption || ''),
       videoUrl,
       posterUrl: entry.thumbnailUrl ?? meta.posterUrl ?? '',

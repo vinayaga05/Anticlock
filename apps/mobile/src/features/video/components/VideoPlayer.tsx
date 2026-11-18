@@ -15,9 +15,12 @@ import {
   StyleSheet,
   Text,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import Video, {
+  ViewType,
   OnLoadData,
   OnProgressData,
   VideoRef,
@@ -29,8 +32,16 @@ export type VideoSource = string | number;
 interface VideoPlayerProps {
   uri: VideoSource;
   paused?: boolean;
+  /** Persist user pause intent outside recycled feed cells. */
+  onPausedChange?: (paused: boolean) => void;
+  /** Restore the saved position once this source loads after a remount. */
+  initialPositionSeconds?: number;
+  mediaKind?: 'video' | 'audio';
   /** When true, playback has no audio. Clips/Reels should pass false. */
   muted?: boolean;
+  /** When provided, muted is controlled by the caller. */
+  onMutedChange?: (muted: boolean) => void;
+  muteControlStyle?: StyleProp<ViewStyle>;
   poster?: string;
   /** ID used by an external full-screen Clip playback controller. */
   seekControllerId?: string;
@@ -81,7 +92,7 @@ const ANDROID_CLIP_BUFFER_CONFIG = {
   cacheSizeMB: ANDROID_VIDEO_CACHE_MB,
 } as const;
 
-function toSource(playbackUri: string) {
+function toSource(playbackUri: string, mediaKind: 'video' | 'audio') {
   if (!playbackUri) return undefined;
   const bufferConfig =
     Platform.OS === 'android' ? ANDROID_CLIP_BUFFER_CONFIG : undefined;
@@ -91,7 +102,10 @@ function toSource(playbackUri: string) {
   ) {
     return { uri: playbackUri, type: 'm3u8' as const, bufferConfig };
   }
-  if (/\.mp4(\?|$)/i.test(playbackUri) || playbackUri.startsWith('file://')) {
+  if (
+    mediaKind === 'video' &&
+    (/\.mp4(\?|$)/i.test(playbackUri) || playbackUri.startsWith('file://'))
+  ) {
     return { uri: playbackUri, type: 'mp4' as const, bufferConfig };
   }
   // Metro asset URIs: http://localhost:8081/assets/...
@@ -102,6 +116,11 @@ export function VideoPlayer({
   uri,
   paused = false,
   muted = true,
+  onMutedChange,
+  muteControlStyle,
+  onPausedChange,
+  initialPositionSeconds = 0,
+  mediaKind = 'video',
   poster,
   seekControllerId,
   onSeekControllerChange,
@@ -119,7 +138,12 @@ export function VideoPlayer({
     () => AppState.currentState === 'active',
   );
   const [localPaused, setLocalPaused] = useState(false);
-  const [isMuted, setIsMuted] = useState(muted);
+  const [localMuted, setLocalMuted] = useState(muted);
+  const [interrupted, setInterrupted] = useState(false);
+  const restoredPosition = useRef(false);
+  const isMuted = onMutedChange ? muted : localMuted;
+  const userPaused = onPausedChange ? paused : localPaused;
+  const [attempt, setAttempt] = useState(0);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -130,12 +154,42 @@ export function VideoPlayer({
   const firstFrameReportedRef = useRef(false);
 
   const playbackUri = useMemo(() => resolvePlaybackUri(uri), [uri]);
+  const attemptKey = `${playbackUri}:${attempt}`;
+  const currentAttempt = useRef(attemptKey);
+  currentAttempt.current = attemptKey;
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const isCurrentAttempt = () =>
+    mounted.current && currentAttempt.current === attemptKey;
   // Playback state must not recreate the source: the adjacent preloaded
   // player is promoted by toggling `paused`, not by reloading its manifest.
-  const source = useMemo(() => toSource(playbackUri), [playbackUri]);
+  const source = useMemo(
+    () => toSource(playbackUri, mediaKind),
+    [playbackUri, mediaKind],
+  );
   // Pause on tab blur / navigation away / app background so audio does not
   // keep playing under other screens.
-  const isPaused = preloading || localPaused || paused || !isFocused || !appActive;
+  const isPaused =
+    preloading ||
+    failed ||
+    interrupted ||
+    userPaused ||
+    paused ||
+    !isFocused ||
+    !appActive;
+
+  const latestPaused = useRef(isPaused);
+  latestPaused.current = isPaused;
+
+  // Native commands close the small update window during a visibility/focus change.
+  useEffect(() => {
+    if (isPaused) ref.current?.pause?.();
+  }, [isPaused]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', next => {
@@ -149,27 +203,63 @@ export function VideoPlayer({
     setFailed(false);
     setErrorMsg(null);
     setLocalPaused(false);
-    setIsMuted(muted);
+    setLocalMuted(muted);
+    setInterrupted(false);
+    restoredPosition.current = false;
     durationRef.current = 0;
     setDuration(0);
     setShowLoading(false);
+    posterOpacity.stopAnimation();
     posterOpacity.setValue(1);
     loadStartedAtRef.current = Date.now();
     firstFrameReportedRef.current = false;
     // Reset mute to the caller's default only when the clip source changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- muted is an initial value per uri
-  }, [playbackUri, posterOpacity]);
+  }, [playbackUri, posterOpacity, attempt]);
 
   useEffect(() => {
-    if (ready || failed || preloading) {
+    if (ready || failed || preloading || userPaused || paused) {
       setShowLoading(false);
       return;
     }
-    const timer = setTimeout(() => setShowLoading(true), 180);
+    const timer = setTimeout(() => setShowLoading(true), 700);
     return () => clearTimeout(timer);
-  }, [failed, preloading, ready]);
+  }, [failed, preloading, ready, userPaused, paused]);
+
+  useEffect(() => {
+    if (
+      ready ||
+      failed ||
+      preloading ||
+      userPaused ||
+      paused ||
+      !isFocused ||
+      !appActive
+    )
+      return;
+    const deadline = setTimeout(() => {
+      setFailed(true);
+      setShowLoading(false);
+      posterOpacity.stopAnimation();
+      posterOpacity.setValue(1);
+      setErrorMsg('Loading took too long. Try again.');
+    }, 20_000);
+    return () => clearTimeout(deadline);
+  }, [
+    ready,
+    failed,
+    userPaused,
+    paused,
+    preloading,
+    isFocused,
+    appActive,
+    attempt,
+    playbackUri,
+    posterOpacity,
+  ]);
 
   const handleReadyForDisplay = useCallback(() => {
+    if (failed) return;
     setReady(true);
     setShowLoading(false);
     Animated.timing(posterOpacity, {
@@ -181,7 +271,7 @@ export function VideoPlayer({
       firstFrameReportedRef.current = true;
       onPlaybackReady?.(Math.max(0, Date.now() - loadStartedAtRef.current));
     }
-  }, [onPlaybackReady, posterOpacity, preloading]);
+  }, [onPlaybackReady, posterOpacity, preloading, failed]);
 
   useEffect(() => {
     if (preloading || !ready || firstFrameReportedRef.current) return;
@@ -197,12 +287,24 @@ export function VideoPlayer({
     setDuration(mediaDuration);
     setFailed(false);
     setErrorMsg(null);
+    if (!restoredPosition.current && mediaDuration > 0) {
+      restoredPosition.current = true;
+      const position = Number.isFinite(initialPositionSeconds)
+        ? Math.min(
+            Math.max(0, initialPositionSeconds),
+            Math.max(0, mediaDuration - 0.05),
+          )
+        : 0;
+      if (position > 0) ref.current?.seek(position);
+    }
+    // An audio source has no video frame to emit onReadyForDisplay.
+    if (mediaKind === 'audio') handleReadyForDisplay();
   };
 
   const handleProgress = (data: OnProgressData) => {
     const mediaDuration = Math.max(0, durationRef.current);
     const currentTime = Math.min(Math.max(0, data.currentTime), mediaDuration);
-    if (isPaused) return;
+    if (!isCurrentAttempt() || latestPaused.current) return;
     onPlaybackProgress?.(currentTime, mediaDuration);
   };
 
@@ -220,15 +322,20 @@ export function VideoPlayer({
   }, [duration, onSeekControllerChange, seekControllerId, seekToTime]);
 
   return (
-    <View style={styles.container}>
-      {source ? (
+    <View style={[styles.container, poster ? styles.transparent : null]}>
+      {source && !failed ? (
         <Video
-          key={playbackUri}
+          key={`${playbackUri}:${attempt}`}
           ref={ref}
           source={source}
-          style={styles.video}
+          style={[
+            styles.video,
+            !ready && poster ? styles.transparentFrame : null,
+          ]}
           resizeMode="cover"
           controls={false}
+          viewType={Platform.OS === 'android' ? ViewType.TEXTURE : undefined}
+          hideShutterView
           repeat
           paused={isPaused}
           muted={preloading || isMuted}
@@ -243,15 +350,27 @@ export function VideoPlayer({
             loadStartedAtRef.current = Date.now();
             firstFrameReportedRef.current = false;
           }}
-          onLoad={handleLoad}
+          onLoad={data => {
+            if (isCurrentAttempt()) handleLoad(data);
+          }}
+          onAudioFocusChanged={({ hasAudioFocus }) => {
+            if (isCurrentAttempt() && !preloading)
+              setInterrupted(!hasAudioFocus);
+          }}
+          onAudioBecomingNoisy={() => {
+            if (onPausedChange) onPausedChange(true);
+            else setLocalPaused(true);
+          }}
           onBuffer={({ isBuffering }) => {
             if (ready) onBufferingChange?.(isBuffering);
           }}
           onProgress={handleProgress}
           onEnd={() => {
+            if (!isCurrentAttempt() || latestPaused.current) return;
             onPlaybackComplete?.(Math.max(0, durationRef.current));
           }}
           onError={e => {
+            if (!isCurrentAttempt()) return;
             const msg =
               e?.error?.errorString ||
               e?.error?.localizedDescription ||
@@ -265,14 +384,18 @@ export function VideoPlayer({
               );
             }
             onPlaybackError?.(msg);
+            posterOpacity.stopAnimation();
+            posterOpacity.setValue(1);
             setFailed(true);
             setReady(false);
             setErrorMsg(msg);
           }}
-          onReadyForDisplay={handleReadyForDisplay}
+          onReadyForDisplay={() => {
+            if (isCurrentAttempt()) handleReadyForDisplay();
+          }}
         />
       ) : null}
-      {poster && !failed ? (
+      {poster ? (
         <Animated.Image
           testID="video-poster"
           source={{ uri: poster }}
@@ -280,26 +403,49 @@ export function VideoPlayer({
           style={[styles.poster, { opacity: posterOpacity }]}
         />
       ) : null}
+      {mediaKind === 'audio' ? (
+        <View style={styles.audioPresentation} pointerEvents="none">
+          <AppIcon name="music" size={48} color="#fff" />
+          <Text style={styles.audioLabel}>Audio</Text>
+        </View>
+      ) : null}
       <Pressable
         testID="video-playback-toggle"
         style={styles.playbackToggle}
         onPress={() => {
           if (failed || preloading) return;
-          setLocalPaused(value => !value);
+          // Permanent Android focus loss abandons its request, so it may not
+          // emit a future gain event. An explicit Play can request focus again.
+          if (interrupted) {
+            setInterrupted(false);
+            if (onPausedChange) onPausedChange(false);
+            else setLocalPaused(false);
+            return;
+          }
+          if (onPausedChange) onPausedChange(!userPaused);
+          else setLocalPaused(value => !value);
         }}
         accessibilityRole="button"
-        accessibilityLabel={isPaused ? 'Play video' : 'Pause video'}
+        accessibilityLabel={`${isPaused ? 'Play' : 'Pause'} ${mediaKind}`}
+        accessibilityState={{ disabled: failed || preloading }}
       />
       {showLoading && !ready && !failed ? (
-        <View
-          style={[styles.loading, poster ? styles.loadingOverPoster : null]}
-          pointerEvents="none">
+        <View style={styles.loadingBadge} pointerEvents="none">
           <ActivityIndicator color="#fff" />
         </View>
       ) : null}
       {failed ? (
-        <View style={styles.loading} pointerEvents="none">
-          <Text style={styles.failText}>Video unavailable</Text>
+        <View style={styles.recovery}>
+          <Text style={styles.failText}>Unable to load this {mediaKind}</Text>
+          <Pressable
+            testID="media-retry"
+            accessibilityRole="button"
+            accessibilityLabel="Retry media"
+            onPress={() => setAttempt(value => value + 1)}
+            style={styles.retryButton}
+          >
+            <Text style={styles.failText}>Try again</Text>
+          </Pressable>
           {__DEV__ && errorMsg ? (
             <Text style={styles.failHint} numberOfLines={2}>
               {errorMsg}
@@ -307,43 +453,72 @@ export function VideoPlayer({
           ) : null}
         </View>
       ) : null}
-      {!preloading && localPaused && ready ? (
-        <View style={styles.pauseOverlay} pointerEvents="box-none">
-          <View style={styles.pauseControls} pointerEvents="box-none">
-            <Pressable
-              style={styles.muteButton}
-              onPress={event => {
-                event.stopPropagation?.();
-                setIsMuted(m => !m);
-              }}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel={isMuted ? 'Unmute audio' : 'Mute audio'}
-            >
-              <AppIcon
-                name={isMuted ? 'mute' : 'volume'}
-                size={18}
-                color="#fff"
-                strokeWidth={2.1}
-              />
-            </Pressable>
-            <View style={styles.pauseButton} pointerEvents="none">
-              <AppIcon
-                name="play"
-                size={36}
-                color="#fff"
-                fill="#fff"
-                strokeWidth={0}
-              />
-            </View>
+      {!preloading && userPaused && ready ? (
+        <View style={styles.pauseOverlay} pointerEvents="none">
+          <View style={styles.pauseButton}>
+            <AppIcon
+              name="play"
+              size={36}
+              color="#fff"
+              fill="#fff"
+              strokeWidth={0}
+            />
           </View>
         </View>
+      ) : null}
+      {!preloading && source && !failed ? (
+        <Pressable
+          testID="media-mute-toggle"
+          style={[styles.muteButton, muteControlStyle]}
+          onPress={event => {
+            event.stopPropagation?.();
+            if (onMutedChange) onMutedChange(!isMuted);
+            else setLocalMuted(value => !value);
+          }}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={isMuted ? 'Unmute audio' : 'Mute audio'}
+          accessibilityState={{ selected: isMuted }}
+        >
+          <AppIcon
+            name={isMuted ? 'mute' : 'volume'}
+            size={20}
+            color="#fff"
+            strokeWidth={2.1}
+          />
+        </Pressable>
       ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  loadingBadge: {
+    position: 'absolute',
+    left: 16,
+    bottom: 16,
+    padding: 10,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  recovery: {
+    position: 'absolute',
+    bottom: 24,
+    alignSelf: 'center',
+    padding: 16,
+    gap: 10,
+    alignItems: 'center',
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+  },
+  retryButton: {
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
+  transparent: { backgroundColor: 'transparent' },
+  transparentFrame: { opacity: 0 },
   // A video surface is rendered by a native AVPlayer layer on iOS. Give that
   // layer one explicit, clipped viewport so its intrinsic video size can
   // never participate in the Reel cell's layout as playback starts/stops.
@@ -388,15 +563,26 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
   },
   muteButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    position: 'absolute',
+    right: 12,
+    bottom: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.28)',
   },
+  audioPresentation: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#171d37',
+    gap: 12,
+  },
+  audioLabel: { color: '#fff', fontSize: 16, fontWeight: '600' },
   loading: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',

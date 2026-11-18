@@ -29,7 +29,7 @@ type Props = {
   onClose: () => void;
 };
 
-const ART_TINTS = ['#6d4aff', '#ff4d7d', '#14b8a6', '#f59e0b', '#3b82f6', '#a855f7'];
+const ART_TINTS = ['#6d4aff', '#ff4d7d', '#0047AB', '#f59e0b', '#3b82f6', '#a855f7'];
 
 function tintFor(id: string) {
   let hash = 0;

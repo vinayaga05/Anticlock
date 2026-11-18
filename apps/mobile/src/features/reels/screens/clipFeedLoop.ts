@@ -14,14 +14,31 @@ export type LoopedClipFeedEntry = {
   loopSentinel: boolean;
 };
 
-/** Bounded native-player window: previous, current and next only. */
+/** Only the visible page may own a native player. Neighbours retain artwork. */
 export function clipPlayerWindowState(
   index: number,
   currentIndex: number,
-): 'active' | 'preload' | null {
-  const distance = index - currentIndex;
-  if (distance === 0) return 'active';
-  return Math.abs(distance) === 1 ? 'preload' : null;
+): 'active' | null {
+  return index === currentIndex ? 'active' : null;
+}
+
+/** Ignore viewability callbacks from rows removed/reordered by a feed update. */
+export function visibleClipFeedPage(
+  entries: ReadonlyArray<LoopedClipFeedEntry>,
+  tokens: ReadonlyArray<{
+    index: number | null;
+    key: string;
+    isViewable?: boolean;
+  }>,
+): { index: number; key: string } | null {
+  for (const token of tokens) {
+    if (token.isViewable === false || token.index == null) continue;
+    const entry = entries[token.index];
+    if (entry?.key === token.key) {
+      return { index: token.index, key: entry.key };
+    }
+  }
+  return null;
 }
 
 export function mergeLoadedReelPages(pages: ReadonlyArray<ReadonlyArray<ReelItem>>): ReelItem[] {

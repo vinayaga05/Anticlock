@@ -14,6 +14,7 @@ import {
   StyleSheet,
   Text,
   Alert,
+  AppState,
   ActivityIndicator,
   Share,
   useWindowDimensions,
@@ -23,11 +24,14 @@ import {
 import {
   useNavigation,
   useRoute,
+  useIsFocused,
   type RouteProp,
 } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { VideoPlayer } from '@/features/video/components/VideoPlayer';
+import { feedMediaMemory } from '@/features/video/playback/feedMediaMemory';
+import { useAssistantStore } from '@/features/assistant/store/assistantStore';
 import {
   ClipMoreAction,
   ClipMoreSheet,
@@ -82,6 +86,7 @@ import { identityProfileType } from '@/shared/publishing/publisherSelection';
 import {
   buildLoopedClipFeed,
   clipPlayerWindowState,
+  visibleClipFeedPage,
   mergeLoadedReelPages,
   type LoopedClipFeedEntry,
 } from './clipFeedLoop';
@@ -161,7 +166,13 @@ function TopChromeButton({
  * Social actions stay on the Clip itself, so viewers can follow or start a
  * profile-scoped conversation without first opening the profile tab.
  */
-function ClipCreatorActions({ item }: { item: ReelItem }) {
+function ClipCreatorActions({
+  item,
+  showAlert,
+}: {
+  item: ReelItem;
+  showAlert: typeof Alert.alert;
+}) {
   const navigation = useNavigation<any>();
   const { active } = useActiveProfile();
   const { isReady: chatReady } = useStreamChat();
@@ -190,7 +201,7 @@ function ClipCreatorActions({ item }: { item: ReelItem }) {
   const updateFollow = (action: 'follow' | 'unfollow') => {
     followMutation.mutate(action, {
       onError: error => {
-        Alert.alert('Couldn’t update follow', error instanceof Error ? error.message : 'Please try again.');
+        showAlert('Couldn’t update follow', error instanceof Error ? error.message : 'Please try again.');
       },
     });
   };
@@ -198,7 +209,7 @@ function ClipCreatorActions({ item }: { item: ReelItem }) {
   const onFollowPress = () => {
     if (!relationship?.canFollow || followMutation.isPending) return;
     if (status === 'following' || status === 'requested') {
-      Alert.alert(label, undefined, [
+      showAlert(label, undefined, [
         { text: status === 'requested' ? 'Cancel request' : 'Unfollow', style: 'destructive', onPress: () => updateFollow('unfollow') },
         { text: 'Cancel', style: 'cancel' },
       ]);
@@ -218,7 +229,7 @@ function ClipCreatorActions({ item }: { item: ReelItem }) {
         profile: result.profile,
       });
     } catch (error) {
-      Alert.alert('Couldn’t open chat', error instanceof Error ? error.message : 'Please try again.');
+      showAlert('Couldn’t open chat', error instanceof Error ? error.message : 'Please try again.');
     } finally {
       setOpeningChat(false);
     }
@@ -297,6 +308,9 @@ function VerticalFade({
 export function ReelFeedScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
+  const isFocused = useIsFocused();
+  const [appActive, setAppActive] = useState(() => AppState.currentState === 'active');
+  const assistantOpen = useAssistantStore(s => s.open);
   const route = useRoute<
     | RouteProp<MainTabParamList, 'PlayFeed'>
     | RouteProp<RootStackParamList, 'ProviderClips'>
@@ -324,6 +338,44 @@ export function ReelFeedScreen() {
   const pageWidth = Math.max(1, Math.round(windowWidth));
   const pageHeight = Math.max(1, Math.round(windowHeight));
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [visibleEntryKey, setVisibleEntryKey] = useState<string | null>(null);
+  const visibleEntryKeyRef = useRef<string | null>(null);
+  const updateVisibleEntryKey = useCallback((key: string | null) => {
+    visibleEntryKeyRef.current = key;
+    setVisibleEntryKey(key);
+  }, []);
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 80 }).current;
+  const [, setMediaStateVersion] = useState(0);
+  const [blockingAlertCount, setBlockingAlertCount] = useState(0);
+  const [shareOpen, setShareOpen] = useState(false);
+  const showBlockingAlert = useCallback<typeof Alert.alert>((title, message, buttons, options) => {
+    setBlockingAlertCount(count => count + 1);
+    let dismissed = false;
+    const dismiss = () => {
+      if (dismissed) return;
+      dismissed = true;
+      setBlockingAlertCount(count => Math.max(0, count - 1));
+    };
+    Alert.alert(title, message, (buttons ?? [{ text: 'OK' }]).map(button => ({
+      ...button,
+      onPress: () => {
+        dismiss();
+        button.onPress?.();
+      },
+    })), {
+      ...options,
+      onDismiss: () => {
+        dismiss();
+        options?.onDismiss?.();
+      },
+    });
+  }, []);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', state => {
+      setAppActive(state === 'active');
+    });
+    return () => subscription.remove();
+  }, []);
   const [liked, setLiked] = useState<Record<string, boolean>>({});
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
@@ -365,9 +417,12 @@ export function ReelFeedScreen() {
     analyticsSessionId.current = createAnalyticsEventId();
   }
   const commentsOpen = useCommentsSheetStore(
-    s => (s.open || s.closing) && s.sourceType === 'clip',
+    s => s.open || s.closing,
   );
-  const playbackActive = useCommentsSheetStore(s => s.playbackActive);
+  const playbackAllowed = isFocused && appActive && !commentsOpen && !assistantOpen &&
+    !menuReelId && !reportTarget && !shareOpen && blockingAlertCount === 0 && !isPullRefreshing;
+  const playbackAllowedRef = useRef(playbackAllowed);
+  playbackAllowedRef.current = playbackAllowed;
   const openComments = useCommentsSheetStore(s => s.openComments);
   const commentCounts = useEngagementStore(s => s.commentCounts);
   const setActiveClip = useClipPlaybackStore(s => s.setActiveClip);
@@ -569,6 +624,11 @@ export function ReelFeedScreen() {
     const jumpToTop = jumpToTopRef.current;
     jumpToTopRef.current = false;
     const nextIndex = !jumpToTop && retainedIndex >= 0 ? retainedIndex : 0;
+    // A previous viewability token is no longer evidence that this row is on
+    // screen after an insertion, removal or refresh changes its page offset.
+    if (nextIndex !== currentIndexRef.current || reels[nextIndex]?.id !== activeReelIdRef.current) {
+      updateVisibleEntryKey(null);
+    }
     currentIndexRef.current = nextIndex;
     activeReelIdRef.current = reels[nextIndex]?.id ?? null;
     setCurrentIndex(nextIndex);
@@ -577,13 +637,13 @@ export function ReelFeedScreen() {
         listRef.current?.scrollToIndex({ index: nextIndex, animated: false });
       }
     });
-  }, [reels]);
+  }, [reels, updateVisibleEntryKey]);
 
   useEffect(() => {
     const activeEntry = loopedReels[currentIndex];
     activeReelIdRef.current = activeEntry?.reel.id ?? null;
-    setActiveClip(activeEntry?.reel.id ?? null);
-  }, [currentIndex, loopedReels, setActiveClip]);
+    setActiveClip(playbackAllowed && activeEntry?.key === visibleEntryKey ? activeEntry.reel.id : null);
+  }, [currentIndex, loopedReels, playbackAllowed, setActiveClip, visibleEntryKey]);
 
   useEffect(() => clearClipPlayback, [clearClipPlayback]);
 
@@ -612,6 +672,7 @@ export function ReelFeedScreen() {
       return;
     }
     if (idx >= 0) {
+      if (idx !== currentIndexRef.current) updateVisibleEntryKey(null);
       currentIndexRef.current = idx;
       setCurrentIndex(idx);
       requestAnimationFrame(() => {
@@ -647,7 +708,7 @@ export function ReelFeedScreen() {
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [pageHeight, pageWidth]);
+  }, [pageHeight, pageWidth, updateVisibleEntryKey]);
 
   const trackPlayback = useCallback(
     (reel: ReelItem, watchedMs: number, completed: boolean) => {
@@ -785,8 +846,10 @@ export function ReelFeedScreen() {
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      if (viewableItems[0]?.index == null) return;
-      const nextIndex = viewableItems[0].index;
+      const visiblePage = visibleClipFeedPage(loopedFeedRef.current, viewableItems);
+      updateVisibleEntryKey(visiblePage?.key ?? null);
+      if (!visiblePage) return;
+      const nextIndex = visiblePage.index;
       const entry = loopedFeedRef.current[nextIndex];
       if (!entry) return;
       currentIndexRef.current = nextIndex;
@@ -804,8 +867,9 @@ export function ReelFeedScreen() {
       if (!entry.loopSentinel || loopJumpPendingRef.current) return;
       loopJumpPendingRef.current = true;
       // The sentinel renders clip 1, then swaps to its canonical row without a
-      // visible transition. The bounded player window will prepare that row.
+      // visible transition. No off-screen cell retains a native player.
       requestAnimationFrame(() => {
+        updateVisibleEntryKey(null);
         currentIndexRef.current = 0;
         activeReelIdRef.current = loopedFeedRef.current[0]?.reel.id ?? null;
         listRef.current?.scrollToIndex({ index: 0, animated: false });
@@ -825,6 +889,7 @@ export function ReelFeedScreen() {
       await refetch();
       // A refresh starts the next cycle from the newest server page. The
       // incoming pages are reconciled by stable Reel id above.
+      if (currentIndexRef.current !== 0) updateVisibleEntryKey(null);
       currentIndexRef.current = 0;
       activeReelIdRef.current = null;
       setCurrentIndex(0);
@@ -839,15 +904,22 @@ export function ReelFeedScreen() {
     } finally {
       setIsPullRefreshing(false);
     }
-  }, [refetch]);
+  }, [refetch, updateVisibleEntryKey]);
 
-  const shareClip = useCallback((item: ReelItem) => {
+  const shareClip = useCallback(async (item: ReelItem) => {
     const url = clipShareUrl(item.id);
-    Share.share(
-      Platform.OS === 'ios'
-        ? { url, message: item.caption || item.author }
-        : { message: url, title: item.author },
-    ).catch(() => undefined);
+    setShareOpen(true);
+    try {
+      await Share.share(
+        Platform.OS === 'ios'
+          ? { url, message: item.caption || item.author }
+          : { message: url, title: item.author },
+      );
+    } catch {
+      // Dismissing the platform share sheet does not change playback intent.
+    } finally {
+      setShareOpen(false);
+    }
   }, []);
 
   const showNewClips = useCallback(() => {
@@ -876,7 +948,7 @@ export function ReelFeedScreen() {
         // the server apply the same block to future pages and devices.
         await refetch();
       } catch (error) {
-        Alert.alert(
+        showBlockingAlert(
           'Couldn’t block profile',
           error instanceof Error
             ? error.message
@@ -884,7 +956,7 @@ export function ReelFeedScreen() {
         );
       }
     },
-    [refetch],
+    [refetch, showBlockingAlert],
   );
 
   const menuReel = useMemo(
@@ -905,11 +977,11 @@ export function ReelFeedScreen() {
           break;
         case 'interested':
           setMenuReelId(null);
-          Alert.alert('Thanks', 'We’ll show you more clips like this.');
+          showBlockingAlert('Thanks', 'We’ll show you more clips like this.');
           break;
         case 'not_interested':
           setMenuReelId(null);
-          Alert.alert('Got it', 'We’ll show fewer clips like this.');
+          showBlockingAlert('Got it', 'We’ll show fewer clips like this.');
           break;
         case 'report':
           setMenuReelId(null);
@@ -922,7 +994,7 @@ export function ReelFeedScreen() {
           setMenuReelId(null);
           if (!profile) break;
           const profileKind = profile.type === 'business' ? 'business' : 'user';
-          Alert.alert(
+          showBlockingAlert(
             `Block ${reel?.author ?? profileKind}?`,
             `You will no longer see videos from this ${profileKind}. You can unblock it later from your settings.`,
             [
@@ -939,7 +1011,7 @@ export function ReelFeedScreen() {
         case 'delete': {
           setMenuReelId(null);
           if (!reel || !canDeleteClip(reel)) break;
-          Alert.alert(
+          showBlockingAlert(
             'Delete this clip?',
             'It will be removed from your profile and everyone’s feed.',
             [
@@ -951,7 +1023,7 @@ export function ReelFeedScreen() {
                   deleteContentClip(reel.id)
                     .then(() => hideReel(reel.id))
                     .catch(error =>
-                      Alert.alert(
+                      showBlockingAlert(
                         'Couldn’t delete clip',
                         error instanceof Error
                           ? error.message
@@ -966,7 +1038,7 @@ export function ReelFeedScreen() {
         }
         case 'caption':
           setMenuReelId(null);
-          Alert.alert(
+          showBlockingAlert(
             'Caption',
             reel?.caption?.trim() || 'No caption for this clip.',
           );
@@ -979,38 +1051,51 @@ export function ReelFeedScreen() {
           break;
       }
     },
-    [blockClipAuthor, hideReel, menuReelId, reels],
+    [blockClipAuthor, hideReel, menuReelId, reels, showBlockingAlert],
   );
 
   const goToNextReel = useCallback(() => {
     if (reels.length <= 1) return;
     const next = Math.min(currentIndexRef.current + 1, loopedFeedRef.current.length - 1);
+    updateVisibleEntryKey(null);
     currentIndexRef.current = next;
     listRef.current?.scrollToIndex({ index: next, animated: true });
     setCurrentIndex(next);
-  }, [reels.length]);
+  }, [reels.length, updateVisibleEntryKey]);
 
   const renderItem = ({ item: entry, index }: { item: LoopedClipFeedEntry; index: number }) => {
     const item = entry.reel;
     const playerWindowState = clipPlayerWindowState(index, currentIndex);
-    const isActivePlayer = playerWindowState === 'active';
-    // Retain one player on either side. The next cell prepares its first
-    // segment while paused; the previous cell is briefly reusable on a back
-    // swipe. FlatList's small window keeps this bounded at three players.
-    const shouldMountPlayer = playerWindowState !== null;
+    const isActivePlayer = playbackAllowed && playerWindowState === 'active' && entry.key === visibleEntryKey;
+    const mediaKey = `clip:${item.id}`;
+    const mediaState = feedMediaMemory.get(mediaKey);
+    const isCurrentPlayback = () => playbackAllowedRef.current &&
+      visibleEntryKeyRef.current === entry.key &&
+      loopedFeedRef.current[currentIndexRef.current]?.reel.videoUrl === item.videoUrl;
     const isLiked = liked[item.id] ?? !!item.liked;
     const action = resolveClipCommerceAction(item);
     const musicLabel = item.title ? `♪ ${item.title}` : '♪ Original audio';
 
     return (
       <View style={[styles.reel, { height: pageHeight, width: pageWidth }]}>
-        {shouldMountPlayer ? (
+        {item.posterUrl ? <Image source={{ uri: item.posterUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
+        {isActivePlayer ? (
           <VideoPlayer
+            key={item.id}
             uri={item.videoUrl}
             poster={item.posterUrl || undefined}
-            muted={false}
-            preloading={!isActivePlayer}
-            paused={!isActivePlayer || (commentsOpen && !playbackActive)}
+            muted={mediaState.muted}
+            muteControlStyle={{ top: insets.top + 80, bottom: undefined }}
+            paused={mediaState.paused}
+            initialPositionSeconds={mediaState.position}
+            onMutedChange={muted => {
+              feedMediaMemory.update(mediaKey, { muted });
+              setMediaStateVersion(version => version + 1);
+            }}
+            onPausedChange={paused => {
+              feedMediaMemory.update(mediaKey, { paused });
+              setMediaStateVersion(version => version + 1);
+            }}
             onPlaybackReady={isActivePlayer ? startupMs => {
               if (item.reportTarget?.kind !== 'content_post') return;
               recordClipPlaybackPerformance(item.reportTarget.id, {
@@ -1060,14 +1145,16 @@ export function ReelFeedScreen() {
             seekControllerId={isActivePlayer ? item.id : undefined}
             onSeekControllerChange={isActivePlayer ? registerClipSeekController : undefined}
             onPlaybackProgress={isActivePlayer ? (currentTime, _duration) => {
-              if (commentsOpen && !playbackActive) return;
+              if (!isCurrentPlayback()) return;
+              feedMediaMemory.update(mediaKey, { position: currentTime });
               updateClipProgress(item.id, currentTime, _duration);
               trackPlayback(item, currentTime * 1_000, false);
             } : undefined}
             onPlaybackComplete={isActivePlayer ? duration => {
-              if ((commentsOpen && !playbackActive) || duration <= 0) {
+              if (!isCurrentPlayback() || duration <= 0) {
                 return;
               }
+              feedMediaMemory.update(mediaKey, { position: 0 });
               trackPlayback(item, duration * 1_000, true);
               if (autoScroll) {
                 goToNextReel();
@@ -1184,7 +1271,7 @@ export function ReelFeedScreen() {
             />
             <Text style={styles.creator}>@{item.author}</Text>
           </PressableScale>
-          <ClipCreatorActions item={item} />
+          <ClipCreatorActions item={item} showAlert={showBlockingAlert} />
           <Text style={styles.caption} numberOfLines={3}>
             {item.caption}
           </Text>
@@ -1240,9 +1327,8 @@ export function ReelFeedScreen() {
         data={loopedReels}
         keyExtractor={entry => entry.key}
         renderItem={renderItem}
-        // Each retained feed row owns a native video player. Keep Android's
-        // render window small so long feeds do not accumulate dozens of
-        // player and view trees in the activity's limited Java heap.
+        // Keep retained view trees small; only the viewable active row owns
+        // a native player, independent of FlatList's virtualization window.
         {...(Platform.OS === 'android'
           ? {
               initialNumToRender: 1,
@@ -1270,7 +1356,7 @@ export function ReelFeedScreen() {
             animated: false,
           });
         }}
-        viewabilityConfig={{ itemVisiblePercentThreshold: 80 }}
+        viewabilityConfig={viewabilityConfig}
         // iOS safe-area inset auto-adjust shrinks the scroll viewport after mount
         // and makes full-screen pages drift downward under the tab bar.
         contentInsetAdjustmentBehavior="never"
@@ -1590,7 +1676,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
   },
-  creatorActionPrimary: { backgroundColor: '#14B8A6' },
+  creatorActionPrimary: { backgroundColor: '#0047AB' },
   creatorActionSecondary: {
     backgroundColor: 'rgba(0,0,0,0.40)',
     borderWidth: StyleSheet.hairlineWidth,

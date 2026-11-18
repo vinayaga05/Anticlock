@@ -21,8 +21,9 @@ import {
  */
 export function useNotificationSetup(isAuthenticated: boolean) {
   const queryClient = useQueryClient();
-  const registerToken = useRegisterDeviceToken();
-  const unregisterToken = useUnregisterDeviceToken();
+  // Mutation result objects change on every render; their mutate functions are stable.
+  const { mutate: registerToken } = useRegisterDeviceToken();
+  const { mutate: unregisterToken } = useUnregisterDeviceToken();
   const currentTokenRef = useRef<string | null>(null);
   const hasRequestedPermissionRef = useRef(false);
 
@@ -30,7 +31,7 @@ export function useNotificationSetup(isAuthenticated: boolean) {
     if (!isAuthenticated) {
       // Clean up when user logs out
       if (currentTokenRef.current) {
-        unregisterToken.mutate(currentTokenRef.current);
+        unregisterToken(currentTokenRef.current);
         deleteDeviceToken();
         currentTokenRef.current = null;
       }
@@ -39,10 +40,13 @@ export function useNotificationSetup(isAuthenticated: boolean) {
     }
 
     // User is authenticated, set up notifications
+    let cancelled = false;
     let unsubscribeForeground: (() => void) | undefined;
+    let unsubscribeBackground: (() => void) | undefined;
     let unsubscribeTokenRefresh: (() => void) | undefined;
+    let navigationRetry: ReturnType<typeof setTimeout> | undefined;
     const appStateSubscription = AppState.addEventListener('change', state => {
-      if (state === 'active') {
+      if (!cancelled && state === 'active') {
         void queryClient.invalidateQueries({ queryKey: ['notifications'] });
       }
     });
@@ -51,6 +55,7 @@ export function useNotificationSetup(isAuthenticated: boolean) {
       // Request permission if not already requested
       if (!hasRequestedPermissionRef.current) {
         const granted = await requestNotificationPermission();
+        if (cancelled) return;
         hasRequestedPermissionRef.current = true;
 
         if (!granted) {
@@ -61,46 +66,67 @@ export function useNotificationSetup(isAuthenticated: boolean) {
 
       // Get and register device token
       const token = await getDeviceToken();
+      if (cancelled) return;
       if (token) {
         currentTokenRef.current = token;
-        registerToken.mutate({
+        registerToken({
           token,
           platform: Platform.OS as 'android' | 'ios',
         });
       }
 
       // Set up foreground handler
-      unsubscribeForeground = setForegroundNotificationHandler((data, notification) => {
-        console.log('[Notifications] Foreground:', notification?.title, data);
-        // Keep the in-app list and any open application status fresh.
-        void queryClient.invalidateQueries({ queryKey: ['notifications'] });
-        if ((data as Record<string, unknown>)?.kind === 'provider_application') {
-          void queryClient.invalidateQueries({ queryKey: ['provider'] });
-        }
-        if ((data as Record<string, unknown>)?.kind === 'booking') {
-          void queryClient.invalidateQueries({ queryKey: ['bookings'] });
-          void queryClient.invalidateQueries({ queryKey: ['provider', 'business'] });
-        }
-        // TODO: Show in-app notification banner or update badge
-      });
+      unsubscribeForeground = setForegroundNotificationHandler(
+        (data, notification) => {
+          if (cancelled) return;
+          console.log('[Notifications] Foreground:', notification?.title, data);
+          // Keep the in-app list and any open application status fresh.
+          void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+          if (
+            (data as Record<string, unknown>)?.kind === 'provider_application'
+          ) {
+            void queryClient.invalidateQueries({ queryKey: ['provider'] });
+          }
+          if ((data as Record<string, unknown>)?.kind === 'booking') {
+            void queryClient.invalidateQueries({ queryKey: ['bookings'] });
+            void queryClient.invalidateQueries({
+              queryKey: ['provider', 'business'],
+            });
+          }
+          // TODO: Show in-app notification banner or update badge
+        },
+      );
 
       // Set up background/quit handler
-      setBackgroundNotificationHandler((data, notification) => {
-        console.log('[Notifications] Background/quit tap:', notification?.title, data);
-        // Cold start: the navigator may not be mounted yet, so retry briefly.
-        let attempts = 0;
-        const tryNavigate = () => {
-          if (navigateFromNotification(data as Record<string, unknown>) || attempts >= 10) return;
-          attempts += 1;
-          setTimeout(tryNavigate, 300);
-        };
-        tryNavigate();
-      });
+      unsubscribeBackground = setBackgroundNotificationHandler(
+        (data, notification) => {
+          if (cancelled) return;
+          console.log(
+            '[Notifications] Background/quit tap:',
+            notification?.title,
+            data,
+          );
+          // Cold start: the navigator may not be mounted yet, so retry briefly.
+          let attempts = 0;
+          const tryNavigate = () => {
+            if (cancelled) return;
+            if (
+              navigateFromNotification(data as Record<string, unknown>) ||
+              attempts >= 10
+            )
+              return;
+            attempts += 1;
+            navigationRetry = setTimeout(tryNavigate, 300);
+          };
+          tryNavigate();
+        },
+      );
 
       // Set up token refresh handler
-      unsubscribeTokenRefresh = setTokenRefreshHandler((newToken) => {
+      unsubscribeTokenRefresh = setTokenRefreshHandler(newToken => {
+        if (cancelled) return;
         currentTokenRef.current = newToken;
-        registerToken.mutate({
+        registerToken({
           token: newToken,
           platform: Platform.OS as 'android' | 'ios',
         });
@@ -110,8 +136,11 @@ export function useNotificationSetup(isAuthenticated: boolean) {
     setupNotifications();
 
     return () => {
+      cancelled = true;
       unsubscribeForeground?.();
+      unsubscribeBackground?.();
       unsubscribeTokenRefresh?.();
+      if (navigationRetry) clearTimeout(navigationRetry);
       appStateSubscription.remove();
     };
   }, [isAuthenticated, queryClient, registerToken, unregisterToken]);

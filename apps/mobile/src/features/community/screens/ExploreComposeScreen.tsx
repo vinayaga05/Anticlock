@@ -351,8 +351,8 @@ export function ExploreComposeScreen({ kind, challengeId, itemId, publisherProfi
       Alert.alert(
         shouldSubmit ? 'Submitted for review' : 'Draft saved',
         shouldSubmit
-          ? `${title.trim()} is stored in Anticlock and waiting for Admin review.`
-          : `Draft ${savedId} is stored in Anticlock.`,
+          ? `${title.trim()} is stored in Knock and waiting for Admin review.`
+          : `Draft ${savedId} is stored in Knock.`,
         shouldSubmit ? [{ text: 'Done', onPress: () => navigation.popToTop() }] : undefined,
       );
     } catch (caught) {

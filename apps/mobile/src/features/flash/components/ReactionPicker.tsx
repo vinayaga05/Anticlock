@@ -13,7 +13,7 @@ export const REACTION_META: {
 }[] = [
   { id: 'like', label: 'Like', icon: 'heart', color: '#FB7185' },
   { id: 'love', label: 'Love', icon: 'love', color: '#F43F5E' },
-  { id: 'support', label: 'Support', icon: 'support', color: '#14B8A6' },
+  { id: 'support', label: 'Support', icon: 'support', color: '#0047AB' },
   { id: 'useful', label: 'Useful', icon: 'useful', color: '#F59E0B' },
   { id: 'inspiring', label: 'Inspiring', icon: 'inspiring', color: '#818CF8' },
   { id: 'celebrate', label: 'Celebrate', icon: 'celebrate', color: '#F97316' },

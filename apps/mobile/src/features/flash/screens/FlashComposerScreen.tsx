@@ -95,7 +95,7 @@ export function FlashComposerScreen() {
     const hasRealMedia = pickedPhotos.length > 0 || pickedVideos.length > 0;
     if (!text.trim() && !hasRealMedia) return;
     if (!isApiEnabled) {
-      Alert.alert('Publishing unavailable', 'Connect to the Anticlock service to publish this post.');
+      Alert.alert('Publishing unavailable', 'Connect to the Knock service to publish this post.');
       return;
     }
 

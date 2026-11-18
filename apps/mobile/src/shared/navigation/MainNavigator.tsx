@@ -73,7 +73,7 @@ export function MainNavigator() {
       <Tab.Screen
         name="PlayFeed"
         component={PlayFeedTab}
-        options={{ tabBarAccessibilityLabel: 'Clips' }}
+        options={{ tabBarAccessibilityLabel: 'Clips', sceneStyle: { backgroundColor: '#000' }, animation: 'none' }}
       />
       <Tab.Screen
         name="Flash"

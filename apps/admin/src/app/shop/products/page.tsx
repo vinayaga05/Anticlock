@@ -5,6 +5,7 @@ import type { ExploreReviewRequest, Product } from '@anticlock/contracts';
 import { useState } from 'react';
 import { AdminShell } from '@/components/AdminShell';
 import { apiFetch } from '@/lib/api';
+import { CatalogManager } from './CatalogManager';
 import { useAuth } from '@/lib/auth';
 
 const FILTERS = ['pending_review', 'changes_requested', 'approved', 'rejected', 'suspended', 'archived'] as const;
@@ -47,7 +48,9 @@ export default function ProductsPage() {
 
   return (
     <AdminShell>
-      <h1 className="page-title">Product review</h1>
+      <h1 className="page-title">Shop products & categories</h1>
+      <CatalogManager canWrite={hasPermission('catalog.write')} />
+      <h2>Product review</h2>
       <p className="page-sub">Review products submitted from the mobile app. Approval updates Explore and search immediately; the creator is notified.</p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
         {FILTERS.map(item => <button key={item} type="button" className={status === item ? 'btn' : 'btn secondary'} onClick={() => setStatus(item)}>{item.replaceAll('_', ' ')}</button>)}

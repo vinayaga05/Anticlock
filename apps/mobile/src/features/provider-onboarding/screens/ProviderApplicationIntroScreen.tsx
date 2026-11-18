@@ -20,7 +20,7 @@ export function ProviderApplicationIntroScreen() {
             <AppIcon name="shop" size={26} color="#FFFFFF" />
           </View>
           <View style={styles.heroCopy}>
-            <Text style={[styles.eyebrow, { color: theme.colors.primaryMuted }]}>GROW WITH ANTICLOCK</Text>
+            <Text style={[styles.eyebrow, { color: theme.colors.primaryMuted }]}>GROW WITH KNOCK</Text>
             <Text style={[styles.title, { color: theme.colors.textPrimary }]}>Become a service provider</Text>
           </View>
         </View>

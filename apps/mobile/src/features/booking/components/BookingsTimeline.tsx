@@ -146,7 +146,7 @@ export function BookingsTimeline({
         title="Bookings unavailable"
         description={
           authenticated
-            ? 'Connect to the Anticlock API to load your bookings.'
+            ? 'Connect to the Knock API to load your bookings.'
             : 'Sign in to view your bookings.'
         }
       />

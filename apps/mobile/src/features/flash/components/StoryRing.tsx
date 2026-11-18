@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { useTheme } from '@/shared/hooks/useTheme';
@@ -23,6 +23,17 @@ export function StoryRing({ entry, onPress, onAddPress }: Props) {
   const showGradient = entry.hasActiveStory && entry.hasUnread;
   const ringColor =
     entry.hasActiveStory && !entry.hasUnread ? theme.colors.border : undefined;
+  const avatarUrl = entry.author.avatarUrl?.trim();
+  const avatarIdentity = `${entry.author.profileType ?? 'personal'}:${
+    entry.authorId
+  }:${avatarUrl ?? ''}`;
+  const [failedAvatar, setFailedAvatar] = useState<string | null>(null);
+  useEffect(() => setFailedAvatar(null), [avatarIdentity]);
+  const showAvatar = Boolean(avatarUrl) && failedAvatar !== avatarIdentity;
+  const initial = getStoryAuthorName(entry.author)
+    .trim()
+    .slice(0, 1)
+    .toUpperCase();
 
   return (
     <PressableScale
@@ -68,10 +79,22 @@ export function StoryRing({ entry, onPress, onAddPress }: Props) {
             { backgroundColor: theme.colors.background },
           ]}
         >
-          <Image
-            source={{ uri: entry.author.avatarUrl }}
-            style={styles.avatar}
-          />
+          {showAvatar ? (
+            <Image
+              source={{ uri: avatarUrl }}
+              accessibilityLabel={`${label} profile photo`}
+              style={styles.avatar}
+              onError={() => setFailedAvatar(avatarIdentity)}
+            />
+          ) : (
+            <View style={styles.avatarFallback} testID="story-avatar-fallback">
+              {initial ? (
+                <Text style={styles.avatarInitial}>{initial}</Text>
+              ) : (
+                <AppIcon name="user" size={28} color="#164bff" />
+              )}
+            </View>
+          )}
         </View>
         {entry.isOwn ? (
           <PressableScale

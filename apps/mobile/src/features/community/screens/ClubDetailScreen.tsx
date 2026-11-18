@@ -1,3 +1,4 @@
+import { TeamPhotosEditor } from '../components/TeamPhotosEditor';
 import React, { useMemo } from 'react';
 import { Alert, Image, StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
@@ -33,6 +34,7 @@ export function ClubDetailScreen() {
   const challenges = useCommunityStore(useShallow(s => s.getChallengesForTeam(teamId)));
   const isMember = useCommunityStore(s => s.isMember(teamId));
   const isAdmin = useCommunityStore(s => s.isTeamAdmin(teamId));
+  const updateTeamPhotos = useCommunityStore(s => s.updateTeamPhotos);
   const joinTeam = useCommunityStore(s => s.joinTeam);
   const joinRequests = useCommunityStore(s => s.joinRequests);
 
@@ -87,13 +89,15 @@ export function ClubDetailScreen() {
         : 'Join team';
 
   return (
-    <ScreenContainer scrollable tabAware={false} contentStyle={{ gap: 14 }}>
+    <ScreenContainer scrollable edges={['top', 'left', 'right']} tabAware={false} contentStyle={{ gap: 14 }}>
       <AppHeader title={team.name} showBrand={false} showActions={false} />
 
       <View style={styles.heroWrap}>
-        <Image source={{ uri: team.coverUrl }} style={styles.cover} />
-        <Image source={{ uri: team.logoUrl }} style={styles.logo} />
+        {team.coverUrl ? <Image source={{ uri: team.coverUrl }} style={styles.cover} /> : <View style={styles.cover} />}
+        {team.logoUrl ? <Image source={{ uri: team.logoUrl }} style={styles.logo} /> : <View style={styles.logo} />}
       </View>
+
+      {isAdmin ? <Card><TeamPhotosEditor showPreviews={false} key={teamId} photos={team} onChange={photos => updateTeamPhotos(teamId, photos)} /></Card> : null}
 
       <View style={{ gap: 4 }}>
         <Text style={[theme.typography.largeTitle, { color: theme.colors.textPrimary }]}>

@@ -80,6 +80,20 @@ describe('mapApiFlashPost', () => {
     expect(mapped.text).toBe('Morning class');
   });
 
+  it('keeps audio attachments playable instead of treating them as images', () => {
+    const mapped = mapApiFlashPost(
+      post({
+        media: [{ id: 'audio1', kind: 'audio', url: 'https://cdn.example/voice.m4a' }],
+      }),
+      now,
+    );
+    expect(mapped.media[0]).toMatchObject({
+      id: 'audio1',
+      type: 'audio',
+      url: 'https://cdn.example/voice.m4a',
+    });
+  });
+
   it('puts a followed publisher into the Following feed only', () => {
     const following = mapApiFlashPost(
       post({

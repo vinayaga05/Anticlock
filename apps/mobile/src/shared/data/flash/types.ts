@@ -62,7 +62,7 @@ export interface UserProfileMeta {
 
 export interface PostMedia {
   id: string;
-  type: 'image' | 'video';
+  type: 'image' | 'video' | 'audio';
   /** Remote URL or Metro `require()` asset id for bundled Canva / Stream clips. */
   url: string | number;
   posterUrl?: string;

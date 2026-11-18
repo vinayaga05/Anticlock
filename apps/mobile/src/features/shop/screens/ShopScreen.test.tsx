@@ -65,7 +65,7 @@ jest.mock('@/shared/components/SectionHeader', () => ({
 }));
 jest.mock('@/shared/components/IconBadge', () => ({ IconBadge: () => null }));
 jest.mock('@/features/services/components/ProductCard', () => ({
-  ProductCard: () => null,
+  ProductCard: (props: any) => require('react').createElement('shop-product-card', props),
 }));
 jest.mock('@/shared/navigation/tabBarInset', () => ({
   useTabBarBottomInset: () => 100,
@@ -75,8 +75,10 @@ jest.mock('@/shared/store/cartStore', () => ({
 }));
 const categoryId = '11111111-1111-4111-8111-111111111111';
 const customId = '22222222-2222-4222-8222-222222222222';
+const mockRefetchProducts = jest.fn();
 const mockUseProductsQuery = jest.fn((..._args: any[]) => ({
   data: { products: [] },
+  refetch: mockRefetchProducts,
   isLoading: false,
 }));
 let mockApiEnabled = true;
@@ -101,6 +103,7 @@ jest.mock('@/shared/data/services', () => ({
 
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
+  useFocusEffect: (effect: any) => require('react').useEffect(effect, [effect]),
   useNavigation: () => ({ navigate: mockNavigate }),
   useRoute: () => ({ params: mockRouteParams }),
 }));
@@ -125,6 +128,7 @@ function render() {
 
 beforeEach(() => {
   mockNavigate.mockClear();
+  mockRefetchProducts.mockClear();
   mockUseProductsQuery.mockClear();
   mockApiEnabled = true;
   mockRouteParams = {};
@@ -417,4 +421,17 @@ describe('Shop category resolution', () => {
       { status: 'unavailable' },
     );
   });
+});
+
+it('refreshes Shop on focus and renders newly published admin products with rupee pricing and detail navigation', () => {
+  mockUseProductsQuery.mockReturnValueOnce({data:{products:[{id:'product-admin',name:'Resistance Band Set',price:99900,inventory:3,images:[{url:'https://cdn.example/band.png'}]}]},refetch:mockRefetchProducts,isLoading:false} as any);
+  const renderer=render();
+  expect(mockCategoryQuery.refetch).toHaveBeenCalled(); expect(mockRefetchProducts).toHaveBeenCalled();
+  const product=renderer.root.findByType('shop-product-card' as any);
+  expect(product.props.product.name).toBe('Resistance Band Set');
+  expect(product.props.product.price).toBe(999);
+  expect(product.props.product.imageUrl).toBe('https://cdn.example/band.png');
+  ReactTestRenderer.act(()=>product.props.onPress());
+  expect(mockNavigate).toHaveBeenCalledWith('ProductDetail',{productId:'product-admin'});
+  ReactTestRenderer.act(()=>renderer.unmount());
 });

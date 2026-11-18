@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import type { ImageSourcePropType } from 'react-native';
-import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { AppHeader } from '@/shared/components/AppHeader';
 import { SearchBar } from '@/shared/components/SearchBar';
@@ -108,11 +108,19 @@ export function ShopScreen() {
 
   const {
     data: apiData,
+    refetch: refetchProducts,
     isLoading,
     error,
   } = useProductsQuery(isApiEnabled ? categoryFilter.categoryId : undefined, {
     enabled: canLoadProducts,
   });
+
+  const refetchCategories = categoryQuery.refetch;
+  useFocusEffect(useCallback(() => {
+    if (!isApiEnabled) return;
+    void refetchCategories();
+    if (canLoadProducts) void refetchProducts();
+  }, [refetchCategories, refetchProducts, canLoadProducts]));
 
   const products = useMemo(() => {
     if (!isApiEnabled) {

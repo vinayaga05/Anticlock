@@ -1,5 +1,8 @@
 import { Hono } from 'hono';
 import {
+  ProductCategorySchema,
+  CreateProductCategoryRequestSchema,
+  UpdateProductCategoryRequestSchema,
   CreateOrderRequestSchema,
   CancelOrderRequestSchema,
   OrderListQuerySchema,
@@ -267,6 +270,23 @@ shopMobileRoutes.post('/orders/:id/cancel', async (c) => {
 export const shopAdminRoutes = new Hono<AppEnv>();
 shopAdminRoutes.use('*', requireAuth, requirePermission('catalog.read'));
 
+shopAdminRoutes.get('/categories', async c => {
+  try { return c.json({ categories: await productService.listCategories(true) }); }
+  catch (err) { const { status, body } = httpError(err, 'shop'); return c.json(body, status); }
+});
+shopAdminRoutes.post('/categories', requirePermission('catalog.write'), async c => {
+  try {
+    const input = CreateProductCategoryRequestSchema.parse(await c.req.json());
+    return c.json({ category: await productService.saveCategory(input) }, 201);
+  } catch (err) { const { status, body } = httpError(err, 'shop'); return c.json(body, status); }
+});
+shopAdminRoutes.patch('/categories/:id', requirePermission('catalog.write'), async c => {
+  try {
+    const input = UpdateProductCategoryRequestSchema.parse(await c.req.json());
+    return c.json({ category: await productService.saveCategory(input, ProductCategorySchema.shape.id.parse(c.req.param('id'))) });
+  } catch (err) { const { status, body } = httpError(err, 'shop'); return c.json(body, status); }
+});
+
 shopAdminRoutes.get('/products', async (c) => {
   try {
     const query = {
@@ -278,7 +298,7 @@ shopAdminRoutes.get('/products', async (c) => {
       cursor: c.req.query('cursor'),
     };
     const validated = ProductListQuerySchema.parse(query);
-    const result = await productService.listProducts(validated);
+    const result = await productService.listProducts({ ...validated, operatorOnly: c.req.query('catalogOnly') === 'true' });
     return c.json(result);
   } catch (err) {
     const { status, body } = httpError(err, 'shop');

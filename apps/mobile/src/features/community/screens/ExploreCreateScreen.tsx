@@ -58,10 +58,10 @@ export function ExploreCreateScreen() {
         </View>
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>
-            Post Product
+            Post used product
           </Text>
           <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>
-            Sell gear, wellness products, and more
+            Find a new home for your pre-owned items
           </Text>
         </View>
         <AppIcon name="chevron-right" size={18} color={theme.colors.textTertiary} />

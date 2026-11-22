@@ -35,7 +35,7 @@ import {
   useMyProductsQuery,
 } from '@/shared/api/shopHooks';
 
-type HubFilter = 'all' | 'events' | 'products';
+type HubFilter = 'all' | 'events' | 'products' | 'news';
 type ModeTab = 'feed' | 'teams' | 'challenges' | 'complaints';
 type TeamTab = 'mine' | 'discover';
 
@@ -112,6 +112,9 @@ export function CommunitiesScreen() {
   const [teamTab, setTeamTab] = useState<TeamTab>('mine');
   const [sportTag, setSportTag] = useState<string | null>(null);
   const [filter, setFilter] = useState<HubFilter>('all');
+  const showEvents = filter === 'all' || filter === 'events';
+  const showProducts = filter === 'all' || filter === 'products';
+  const exploreHeading = filter === 'news' ? 'News' : filter === 'products' ? 'Used products' : 'Events';
   const [quick, setQuick] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const { active } = useActiveProfile();
@@ -145,8 +148,7 @@ export function CommunitiesScreen() {
   );
 
   const quickPills = useMemo(
-    () =>
-      QUICK_FILTERS.filter(
+    () => filter === 'news' ? [] : QUICK_FILTERS.filter(
         q => q.appliesTo === 'all' || q.appliesTo === filter,
       ),
     [filter],
@@ -187,20 +189,20 @@ export function CommunitiesScreen() {
     );
 
   const events = useMemo(
-    () => filter === 'products' ? [] : (eventQuery.data?.events ?? []).map(eventItem),
-    [eventQuery.data?.events, filter],
+    () => showEvents ? (eventQuery.data?.events ?? []).map(eventItem) : [],
+    [eventQuery.data?.events, showEvents],
   );
   const products = useMemo(
-    () => filter === 'events' ? [] : (productQuery.data?.products ?? []).map(productItem),
-    [productQuery.data?.products, filter],
+    () => showProducts ? (productQuery.data?.products ?? []).map(productItem) : [],
+    [productQuery.data?.products, showProducts],
   );
   const searchResults = useMemo(() => [...events, ...products], [events, products]);
   const mine = useMemo(() => [
-    ...(filter === 'products' ? [] : (myEventsQuery.data?.events ?? []).map(eventItem)),
-    ...(filter === 'events' ? [] : (myProductsQuery.data?.products ?? []).map(productItem)),
-  ], [filter, myEventsQuery.data?.events, myProductsQuery.data?.products]);
-  const feedLoading = eventQuery.isLoading || productQuery.isLoading;
-  const feedError = eventQuery.error ?? productQuery.error;
+    ...(showEvents ? (myEventsQuery.data?.events ?? []).map(eventItem) : []),
+    ...(showProducts ? (myProductsQuery.data?.products ?? []).map(productItem) : []),
+  ], [showEvents, showProducts, myEventsQuery.data?.events, myProductsQuery.data?.products]);
+  const feedLoading = (showEvents && eventQuery.isLoading) || (showProducts && productQuery.isLoading);
+  const feedError = (showEvents && eventQuery.error) || (showProducts && productQuery.error);
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
@@ -453,12 +455,14 @@ export function CommunitiesScreen() {
           <View style={{ gap: 20, marginTop: 12, paddingBottom: 24 }}>
             <View style={[styles.padded, { gap: 12 }]}>
               <View style={styles.eventsHeading}>
-                <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>Events</Text>
-                <PressableScale accessibilityLabel="Create event" testID="nexus-create-event" onPress={() => navigation.navigate('CreateExploreEvent')} style={[styles.createEvent, { backgroundColor: theme.colors.primary }]}>
-                  <AppIcon name="plus" size={24} color="#fff" />
-                </PressableScale>
+                <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>{exploreHeading}</Text>
+                {showEvents ? (
+                  <PressableScale accessibilityLabel="Create event" testID="nexus-create-event" onPress={() => navigation.navigate('CreateExploreEvent')} style={[styles.createEvent, { backgroundColor: theme.colors.primary }]}>
+                    <AppIcon name="plus" size={24} color="#fff" />
+                  </PressableScale>
+                ) : null}
               </View>
-              <View
+              {filter !== 'news' ? <View
                 style={[
                   styles.search,
                   {
@@ -476,14 +480,14 @@ export function CommunitiesScreen() {
                 <TextInput
                   value={query}
                   onChangeText={setQuery}
-                  placeholder="Search events, products..."
+                  placeholder="Search events, used products..."
                   placeholderTextColor={theme.colors.textTertiary}
                   style={[
                     styles.searchInput,
                     { color: theme.colors.textPrimary },
                   ]}
                 />
-              </View>
+              </View> : null}
 
               <FilterPills
                 activeId={filter}
@@ -494,11 +498,12 @@ export function CommunitiesScreen() {
                 pills={[
                   { id: 'all', label: 'All' },
                   { id: 'events', label: 'Events' },
-                  { id: 'products', label: 'Products' },
+                  { id: 'products', label: 'Used products' },
+                  { id: 'news', label: 'News' },
                 ]}
               />
 
-              {filter !== 'events' ? <Button title="Create product" icon="plus" variant="ghost" onPress={() => navigation.navigate('CreateExploreProduct')} /> : null}
+              {showProducts ? <Button title="Create used product" icon="plus" variant="ghost" onPress={() => navigation.navigate('CreateExploreProduct')} /> : null}
 
               {quickPills.length > 0 ? (
                 <ScrollView
@@ -538,7 +543,12 @@ export function CommunitiesScreen() {
               ) : null}
             </View>
 
-            {feedLoading ? (
+            {filter === 'news' ? (
+              <View style={[styles.padded, { gap: 8 }]} testID="nexus-news-empty-state">
+                <SectionHeader title="No news yet" />
+                <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>There are no news updates to show yet.</Text>
+              </View>
+            ) : feedLoading ? (
               <View style={[styles.padded, { gap: 12 }]}>
                 <Text style={[theme.typography.bodySmall, { color: theme.colors.textSecondary }]}>Loading Explore…</Text>
               </View>
@@ -546,8 +556,8 @@ export function CommunitiesScreen() {
               <View style={[styles.padded, { gap: 12 }]}>
                 <Text style={[theme.typography.bodySmall, { color: theme.colors.error }]}>Could not load Explore.</Text>
                 <Button title="Retry" variant="secondary" onPress={() => {
-                  void eventQuery.refetch();
-                  void productQuery.refetch();
+                  if (showEvents) void eventQuery.refetch();
+                  if (showProducts) void productQuery.refetch();
                 }} />
               </View>
             ) : query.trim() ? (
@@ -604,7 +614,7 @@ export function CommunitiesScreen() {
                 {products.length > 0 ? (
                   <View style={{ gap: 12 }}>
                     <View style={styles.padded}>
-                      <SectionHeader title={followingOnly ? 'Products from people you follow' : 'Products'} />
+                      <SectionHeader title={followingOnly ? 'Used products from people you follow' : 'Used products'} />
                     </View>
                     <ScrollView
                       horizontal

@@ -1,0 +1,108 @@
+{
+  "tool": "built-in image_gen",
+  "style": "Square realistic editorial photographs, centered subject in a nearly full circular vignette, warm natural light, pale powder-blue surround and white corners; no text, logos, watermarks, icons or UI.",
+  "subjects": [
+    [
+      "rooms.hotel",
+      "Hotel",
+      "White double bed with blue cushions in a warm modern Indian hotel room."
+    ],
+    [
+      "rooms.lodge",
+      "Lodge",
+      "A modest impeccably clean Indian lodge guest room with two simple single beds, crisp white linen, folded towels, pale blue accent wall and warm wood furniture. Clearly affordable comfortable lodging rather than luxury hotel."
+    ],
+    [
+      "rooms.veg_restaurant",
+      "Veg Restaurant",
+      "A smiling Indian vegetarian restaurant host in a clean dining room presenting a stainless steel South Indian vegetarian thali with rice, colorful vegetable curries, dal and papad. Strictly no meat or fish."
+    ],
+    [
+      "rooms.non_veg_restaurant",
+      "Non-Veg Restaurant",
+      "A neatly presented appetizing chicken biryani in a copper serving bowl with a roasted chicken leg, raita and warm Indian restaurant background. Food in foreground, clearly readable."
+    ],
+    [
+      "rooms.fast_food",
+      "Fast Food",
+      "An appetizing freshly made burger, crisp golden french fries and a toasted sandwich on a clean wooden cafe counter, inviting bright quick service eatery blurred behind."
+    ],
+    [
+      "rooms.cloud_kitchen",
+      "Cloud Kitchen",
+      "An Indian professional chef in clean navy apron packing a freshly prepared meal into plain unbranded kraft delivery containers in a hygienic commercial kitchen. The packing action and meal are central."
+    ],
+    [
+      "rooms.food_truck",
+      "Food Truck",
+      "A compact elegant blue mobile food truck with an open serving hatch and smiling Indian food vendor handing a plain food tray across its counter. Welcoming clean outdoor Indian streetscape, no signage or writing."
+    ],
+    [
+      "rooms.cafe_juice_bar",
+      "Café & Juice Bar",
+      "A ceramic cup of latte with beautiful foam art beside a clear glass of fresh orange juice and fresh oranges on a cozy sunlit Indian cafe table. Coffee and juice equally readable in foreground."
+    ],
+    [
+      "rooms.cake_sweet_stall",
+      "Cake & Sweet Stall",
+      "An inviting Indian bakery counter featuring a small elegant cream celebration cake with strawberries and a neat plate of golden ladoos and diamond shaped kaju katli. No candles shaped as numbers or writing."
+    ],
+    [
+      "rooms_restaurant",
+      "Rooms and Restaurant main category",
+      "A welcoming Indian boutique hotel dining terrace, one neatly set dining table with appetizing food in foreground, tasteful hotel building and a sunlit balcony guest room entrance softly behind. One coherent photographic scene communicating stays and dining together, no collage."
+    ]
+  ],
+  "assets": [
+    {
+      "id": "rooms.hotel",
+      "file": "rooms-hotel.png",
+      "source": "/Users/vinay.c/.codex/generated_images/01a161b3-2222-7d31-8499-1ca387d1f691/exec-717a2c69-535a-4fc4-ba58-90f62b557b87.png"
+    },
+    {
+      "id": "rooms.lodge",
+      "file": "rooms-lodge.png",
+      "source": "/Users/vinay.c/.codex/generated_images/01a161b3-2222-7d31-8499-1ca387d1f691/exec-b5ae9605-5c4b-4b6c-bd36-970c32ed3706.png"
+    },
+    {
+      "id": "rooms.veg_restaurant",
+      "file": "rooms-veg-restaurant.png",
+      "source": "/Users/vinay.c/.codex/generated_images/01a161b3-2222-7d31-8499-1ca387d1f691/exec-ceb37e97-644a-4002-ba07-ff43db785af3.png"
+    },
+    {
+      "id": "rooms.non_veg_restaurant",
+      "file": "rooms-non-veg-restaurant.png",
+      "source": "/Users/vinay.c/.codex/generated_images/01a161b3-2222-7d31-8499-1ca387d1f691/exec-b53f5af3-bf8c-47ca-a944-2ec4fa7a4bbe.png"
+    },
+    {
+      "id": "rooms.fast_food",
+      "file": "rooms-fast-food.png",
+      "source": "/Users/vinay.c/.codex/generated_images/01a161b3-2222-7d31-8499-1ca387d1f691/exec-4d6eac09-8ba5-4cec-b646-8c168113f35c.png"
+    },
+    {
+      "id": "rooms.cloud_kitchen",
+      "file": "rooms-cloud-kitchen.png",
+      "source": "/Users/vinay.c/.codex/generated_images/01a161b3-2222-7d31-8499-1ca387d1f691/exec-8ec51aa9-6c3b-49bc-af29-d17bab87caf7.png"
+    },
+    {
+      "id": "rooms.food_truck",
+      "file": "rooms-food-truck.png",
+      "source": "/Users/vinay.c/.codex/generated_images/01a161b3-2222-7d31-8499-1ca387d1f691/exec-0206d089-0fc2-45b1-be02-4bec79dcca0b.png"
+    },
+    {
+      "id": "rooms.cafe_juice_bar",
+      "file": "rooms-cafe-juice-bar.png",
+      "source": "/Users/vinay.c/.codex/generated_images/01a161b3-2222-7d31-8499-1ca387d1f691/exec-ba724733-a483-4c73-b85d-ef9b370ddd42.png"
+    },
+    {
+      "id": "rooms.cake_sweet_stall",
+      "file": "rooms-cake-sweet-stall.png",
+      "source": "/Users/vinay.c/.codex/generated_images/01a161b3-2222-7d31-8499-1ca387d1f691/exec-8df01e97-9323-43bd-82a3-c7719f39d632.png"
+    },
+    {
+      "id": "rooms_restaurant",
+      "file": "rooms-restaurant.png",
+      "source": "/Users/vinay.c/.codex/generated_images/01a161b3-2222-7d31-8499-1ca387d1f691/exec-e4b04e6b-a70b-44b1-8a32-19de6dcf8b6c.png"
+    }
+  ]
+}

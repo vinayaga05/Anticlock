@@ -5,6 +5,16 @@ import type { ImageSourcePropType } from 'react-native';
  * Every catalog category has a local image so no service falls back to an icon badge.
  */
 export const categoryImages: Record<string, ImageSourcePropType> = {
+  'rooms.hotel': require('../../assets/categories/rooms-hotel.png'),
+  'rooms.lodge': require('../../assets/categories/rooms-lodge.png'),
+  'rooms.veg_restaurant': require('../../assets/categories/rooms-veg-restaurant.png'),
+  'rooms.non_veg_restaurant': require('../../assets/categories/rooms-non-veg-restaurant.png'),
+  'rooms.fast_food': require('../../assets/categories/rooms-fast-food.png'),
+  'rooms.cloud_kitchen': require('../../assets/categories/rooms-cloud-kitchen.png'),
+  'rooms.food_truck': require('../../assets/categories/rooms-food-truck.png'),
+  'rooms.cafe_juice_bar': require('../../assets/categories/rooms-cafe-juice-bar.png'),
+  'rooms.cake_sweet_stall': require('../../assets/categories/rooms-cake-sweet-stall.png'),
+
   'health.hospitals': require('../../assets/categories/health-hospitals.png'),
   'health.doctors': require('../../assets/categories/health-doctor-consultation.png'),
   'health.special_educator': require('../../assets/categories/wellness-therapy-mental.png'),
@@ -98,6 +108,7 @@ export const categoryImages: Record<string, ImageSourcePropType> = {
 
 /** Featured cover image per service tree (Needs home tiles). */
 export const treeImages: Partial<Record<string, ImageSourcePropType>> = {
+  rooms_restaurant: require('../../assets/categories/rooms-restaurant.png'),
   health: require('../../assets/categories/health-doctor-consultation.png'),
   fitness: require('../../assets/categories/fitness-gym.png'),
   sports: require('../../assets/categories/sports-outdoor.png'),

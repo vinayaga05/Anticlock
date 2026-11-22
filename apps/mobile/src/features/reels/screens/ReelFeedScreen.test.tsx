@@ -123,15 +123,20 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-it('mounts one visible player and none in the gap during a fast swipe', async () => {
+it('retains a paused decoder through visibility gaps and replaces it on a new page', async () => {
   await render();
   expect(players()).toHaveLength(0);
   view(0);
   expect(players()).toHaveLength(1);
   expect(players()[0].props.uri).toBe(mockReels[0].videoUrl);
+  const decoder = players()[0];
   const staleProgress = players()[0].props.onPlaybackProgress;
   view(null);
-  expect(players()).toHaveLength(0);
+  expect(players()).toHaveLength(1);
+  expect(players()[0].props.paused).toBe(true);
+  view(0);
+  expect(players()[0]).toBe(decoder);
+  expect(players()[0].props.paused).toBe(false);
   view(1);
   expect(players()).toHaveLength(1);
   expect(players()[0].props.uri).toBe(mockReels[1].videoUrl);
@@ -156,33 +161,42 @@ it('restores each clip mute, manual pause and position after cell recycling', as
   expect(players()[0].props.initialPositionSeconds).toBe(3);
 });
 
-it('releases playback for tab blur, app background, comments and the assistant', async () => {
+it('pauses the retained player for tab blur, app background, comments and the assistant', async () => {
   await render();
   view(0);
+  const decoder = players()[0];
   mockFocused = false;
   update();
-  expect(players()).toHaveLength(0);
+  expect(players()).toHaveLength(1);
+  expect(players()[0].props.paused).toBe(true);
   mockFocused = true;
   update();
   expect(players()).toHaveLength(1);
   Renderer.act(() => appStateChanged('background'));
-  expect(players()).toHaveLength(0);
+  expect(players()).toHaveLength(1);
+  expect(players()[0].props.paused).toBe(true);
   Renderer.act(() => appStateChanged('active'));
   expect(players()).toHaveLength(1);
+  expect(players()[0]).toBe(decoder);
   mockComments.open = true; // Even partial comments with playbackActive=true cover the feed.
   update();
-  expect(players()).toHaveLength(0);
+  expect(players()).toHaveLength(1);
+  expect(players()[0].props.paused).toBe(true);
   mockComments.open = false;
   mockComments.closing = true;
   update();
-  expect(players()).toHaveLength(0);
+  expect(players()).toHaveLength(1);
+  expect(players()[0].props.paused).toBe(true);
   mockComments.closing = false;
   mockAssistantOpen = true;
   update();
-  expect(players()).toHaveLength(0);
+  expect(players()).toHaveLength(1);
+  expect(players()[0].props.paused).toBe(true);
   mockAssistantOpen = false;
   update();
   expect(players()).toHaveLength(1);
+  expect(players()[0]).toBe(decoder);
+  expect(players()[0].props.paused).toBe(false);
 });
 
 it('pauses throughout the more menu, report sheet and native caption alert', async () => {
@@ -190,15 +204,18 @@ it('pauses throughout the more menu, report sheet and native caption alert', asy
   await render();
   view(0);
   press('More options');
-  expect(players()).toHaveLength(0);
+  expect(players()).toHaveLength(1);
+  expect(players()[0].props.paused).toBe(true);
   Renderer.act(() => tree.root.findByType(ClipMoreSheet).props.onAction('report'));
-  expect(players()).toHaveLength(0);
+  expect(players()).toHaveLength(1);
+  expect(players()[0].props.paused).toBe(true);
   expect(tree.root.findByType(GuidedReportVideoSheet).props.visible).toBe(true);
   Renderer.act(() => tree.root.findByType(GuidedReportVideoSheet).props.onClose());
   expect(players()).toHaveLength(1);
   press('More options');
   Renderer.act(() => tree.root.findByType(ClipMoreSheet).props.onAction('caption'));
-  expect(players()).toHaveLength(0);
+  expect(players()).toHaveLength(1);
+  expect(players()[0].props.paused).toBe(true);
   Renderer.act(() => alert.mock.calls[0][2]![0].onPress!());
   expect(players()).toHaveLength(1);
 });
@@ -211,7 +228,8 @@ it('pauses during native sharing and resumes the same visible clip on dismissal'
   await render();
   view(0);
   press('Share');
-  expect(players()).toHaveLength(0);
+  expect(players()).toHaveLength(1);
+  expect(players()[0].props.paused).toBe(true);
   await Renderer.act(async () => dismiss());
   expect(players()).toHaveLength(1);
   expect(players()[0].props.uri).toBe(mockReels[0].videoUrl);
@@ -226,7 +244,8 @@ it('resumes an unchanged first row after refresh without requiring a new viewabi
   view(0);
   let refresh: Promise<void>;
   Renderer.act(() => { refresh = list().props.refreshControl.props.onRefresh(); });
-  expect(players()).toHaveLength(0);
+  expect(players()).toHaveLength(1);
+  expect(players()[0].props.paused).toBe(true);
   await Renderer.act(async () => { finish(); await refresh; });
   expect(players()).toHaveLength(1);
   expect(players()[0].props.uri).toBe(mockReels[0].videoUrl);
@@ -244,9 +263,11 @@ it('keeps pagination on the same owner and rejects displaced rows after refresh 
   const newClip = { ...mockReels[0], id: 'new', videoUrl: 'https://cdn.test/new.mp4' };
   mockQuery.data = { pages: [{ items: [newClip, ...mockReels] }] };
   update();
-  expect(players()).toHaveLength(0);
+  expect(players()).toHaveLength(1);
+  expect(players()[0].props.paused).toBe(true);
   Renderer.act(() => list().props.onViewableItemsChanged({ viewableItems: [displacedToken] }));
-  expect(players()).toHaveLength(0);
+  expect(players()).toHaveLength(1);
+  expect(players()[0].props.paused).toBe(true);
   view(2);
   expect(players()[0].props.uri).toBe(mockReels[1].videoUrl);
   mockQuery.data = { pages: [{ items: [newClip] }] };

@@ -13,6 +13,7 @@ import {
   CallingState,
   RingingCallContent,
   StreamCall,
+  StreamVideo,
   type Call,
   type CallContentProps,
 } from '@stream-io/video-react-native-sdk';
@@ -121,12 +122,14 @@ export function CallScreen() {
 
   return (
     <View style={styles.root}>
+      <StreamVideo client={videoClient!}>
       <StreamCall call={call}>
         <RingingCallContent
           CallContent={AcceptedCallContent}
           onBackPress={() => navigation.goBack()}
         />
       </StreamCall>
+      </StreamVideo>
     </View>
   );
 }

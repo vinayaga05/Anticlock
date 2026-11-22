@@ -339,8 +339,12 @@ export function ReelFeedScreen() {
   const pageHeight = Math.max(1, Math.round(windowHeight));
   const [currentIndex, setCurrentIndex] = useState(0);
   const [visibleEntryKey, setVisibleEntryKey] = useState<string | null>(null);
+  // Retain the last visible decoder through transient viewability/focus gaps.
+  // Playback eligibility still pauses it immediately; another page replaces it.
+  const [preparedEntryKey, setPreparedEntryKey] = useState<string | null>(null);
   const visibleEntryKeyRef = useRef<string | null>(null);
   const updateVisibleEntryKey = useCallback((key: string | null) => {
+    if (key) setPreparedEntryKey(key);
     visibleEntryKeyRef.current = key;
     setVisibleEntryKey(key);
   }, []);
@@ -1079,14 +1083,14 @@ export function ReelFeedScreen() {
     return (
       <View style={[styles.reel, { height: pageHeight, width: pageWidth }]}>
         {item.posterUrl ? <Image source={{ uri: item.posterUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
-        {isActivePlayer ? (
+        {playerWindowState === 'active' && preparedEntryKey === entry.key ? (
           <VideoPlayer
             key={item.id}
             uri={item.videoUrl}
             poster={item.posterUrl || undefined}
             muted={mediaState.muted}
             muteControlStyle={{ top: insets.top + 80, bottom: undefined }}
-            paused={mediaState.paused}
+            paused={!isActivePlayer || mediaState.paused}
             initialPositionSeconds={mediaState.position}
             onMutedChange={muted => {
               feedMediaMemory.update(mediaKey, { muted });
@@ -1327,8 +1331,8 @@ export function ReelFeedScreen() {
         data={loopedReels}
         keyExtractor={entry => entry.key}
         renderItem={renderItem}
-        // Keep retained view trees small; only the viewable active row owns
-        // a native player, independent of FlatList's virtualization window.
+        // Retain at most the current page's decoder. Visibility and focus
+        // pause it without recreating its native surface or replaying its poster.
         {...(Platform.OS === 'android'
           ? {
               initialNumToRender: 1,

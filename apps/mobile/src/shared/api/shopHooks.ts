@@ -19,16 +19,51 @@ export function useProductsQuery(categoryId?: string, options: { enabled?: boole
   return useQuery({
     queryKey: ['products', categoryId],
     enabled: options.enabled !== false,
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (categoryId) params.set('categoryId', categoryId);
-
-      const response = await apiRequest<ProductListResponse>(
-        `/v1/shop/products?${params.toString()}`,
-      );
-      return response;
+    queryFn: async ({ signal }) => {
+      // Shop filters/sorts locally, so expose a complete catalog instead of the
+      // server's default first page. Only one bounded request runs at a time.
+      const products = new Map<string, Product>();
+      const cursors = new Set<string>();
+      let cursor: string | null = null;
+      do {
+        if (signal.aborted) throw shopQueryCancelled();
+        const params = new URLSearchParams({ limit: '100' });
+        if (categoryId) params.set('categoryId', categoryId);
+        if (cursor) params.set('cursor', cursor);
+        const controller = new AbortController();
+        const cancel = () => controller.abort();
+        signal.addEventListener('abort', cancel, { once: true });
+        // apiRequest uses a supplied signal in place of its own timeout signal.
+        const deadline = setTimeout(cancel, 20_000);
+        let response: ProductListResponse;
+        try {
+          response = await apiRequest<ProductListResponse>(
+            `/v1/shop/products?${params.toString()}`,
+            { signal: controller.signal },
+          );
+        } finally {
+          clearTimeout(deadline);
+          signal.removeEventListener('abort', cancel);
+        }
+        if (signal.aborted) throw shopQueryCancelled();
+        for (const product of response.products) {
+          if (!products.has(product.id)) products.set(product.id, product);
+        }
+        cursor = response.nextCursor;
+        if (cursor && cursors.has(cursor)) {
+          throw new Error('Could not load the complete product catalog. Please try again.');
+        }
+        if (cursor) cursors.add(cursor);
+      } while (cursor);
+      return { products: [...products.values()], nextCursor: null };
     },
   });
+}
+
+function shopQueryCancelled() {
+  const error = new Error('Product loading was cancelled.');
+  error.name = 'AbortError';
+  return error;
 }
 
 export function useExploreProductsQuery(options: {

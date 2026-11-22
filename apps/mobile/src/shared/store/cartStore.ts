@@ -1,21 +1,15 @@
 import { create } from 'zustand';
 import {
-  getStoredCartCount,
-  setStoredCartCount,
+  getStoredCartItems,
+  setStoredCartItems,
+  type StoredCartItem,
 } from '@/shared/services/storage';
 
-export interface CartItem {
-  productId: string;
-  name: string;
-  price: number;
-  quantity: number;
-  imageUrl?: string;
-}
+export type CartItem = StoredCartItem;
 
 interface CartState {
   count: number;
   items: CartItem[];
-  add: (n?: number) => void;
   addProduct: (
     productId: string,
     name: string,
@@ -28,18 +22,21 @@ interface CartState {
   getTotal: () => number;
 }
 
+const initialItems = getStoredCartItems();
+const itemCount = (items: CartItem[]) => items.reduce((sum, item) => sum + item.quantity, 0);
+function saveCart(items: CartItem[]) {
+  setStoredCartItems(items);
+  return { items, count: itemCount(items) };
+}
+
 export const useCartStore = create<CartState>((set, get) => ({
-  count: getStoredCartCount(),
-  items: [],
-  add: (n = 1) =>
-    set(state => {
-      const next = state.count + n;
-      setStoredCartCount(next);
-      return { count: next };
-    }),
+  count: itemCount(initialItems),
+  items: initialItems,
   addProduct: (productId, name, price, imageUrl) =>
     set(state => {
+      if (!productId.trim() || !name.trim() || !Number.isFinite(price) || price < 0) return state;
       const existing = state.items.find(item => item.productId === productId);
+      if (existing && !Number.isSafeInteger(existing.quantity + 1)) return state;
       let newItems: CartItem[];
 
       if (existing) {
@@ -55,13 +52,11 @@ export const useCartStore = create<CartState>((set, get) => ({
         ];
       }
 
-      const totalCount = newItems.reduce((sum, item) => sum + item.quantity, 0);
-      setStoredCartCount(totalCount);
-
-      return { items: newItems, count: totalCount };
+      return saveCart(newItems);
     }),
   updateQuantity: (productId, quantity) =>
     set(state => {
+      if (!Number.isSafeInteger(quantity)) return state;
       const newItems =
         quantity > 0
           ? state.items.map(item =>
@@ -69,22 +64,15 @@ export const useCartStore = create<CartState>((set, get) => ({
             )
           : state.items.filter(item => item.productId !== productId);
 
-      const totalCount = newItems.reduce((sum, item) => sum + item.quantity, 0);
-      setStoredCartCount(totalCount);
-
-      return { items: newItems, count: totalCount };
+      return saveCart(newItems);
     }),
   removeItem: productId =>
     set(state => {
       const newItems = state.items.filter(item => item.productId !== productId);
-      const totalCount = newItems.reduce((sum, item) => sum + item.quantity, 0);
-      setStoredCartCount(totalCount);
-
-      return { items: newItems, count: totalCount };
+      return saveCart(newItems);
     }),
   clear: () => {
-    setStoredCartCount(0);
-    set({ count: 0, items: [] });
+    set(saveCart([]));
   },
   getTotal: () => {
     return get().items.reduce(

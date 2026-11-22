@@ -20,7 +20,7 @@ jest.mock('@/shared/api/marketplaceHooks', () => ({
 }));
 jest.mock('@/shared/api/hooks', () => ({ useProfileClipReelsQuery: () => ({ data: [] }) }));
 jest.mock('@/shared/api/storyHooks', () => ({ useContentProfileQuery: () => ({ data: { counts: { clips: 0 } } }) }));
-jest.mock('@/shared/store/cartStore', () => ({ useCartStore: (select: any) => select({ add: mockAddToCart }) }));
+jest.mock('@/shared/store/cartStore', () => ({ useCartStore: (select: any) => select({ addProduct: mockAddToCart }) }));
 jest.mock('@/shared/hooks/useTheme', () => require('@/test/componentMocks').themeModule);
 jest.mock('@/shared/components/AppIcon', () => require('@/test/componentMocks').appIconModule);
 jest.mock('@/shared/components/EmptyState', () => ({ EmptyState: () => null }));

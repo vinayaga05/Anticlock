@@ -100,7 +100,7 @@ export function UniversalDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<RootStackParamList, 'UniversalDetail'>>();
   const { entityType, entityId, categoryId } = route.params;
-  const addToCart = useCartStore(s => s.add);
+  const addToCart = useCartStore(s => s.addProduct);
 
   const providerQuery = useMarketplaceProviderQuery(
     entityType === 'provider' ? entityId : undefined,
@@ -311,7 +311,8 @@ export function UniversalDetailScreen() {
         navigation.navigate('EventDetail', { eventId: event?.id ?? entityId });
         break;
       case 'cart':
-        addToCart(1);
+        if (!product) return;
+        addToCart(product.id, product.name, product.price, product.imageUrl);
         Alert.alert('Added to cart', `${title} is in your cart.`);
         break;
       case 'enquiry':

@@ -4,7 +4,7 @@ import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Channel, MessageComposer, MessageList } from 'stream-chat-react-native';
 import type { Channel as StreamChannel } from 'stream-chat';
-import { useStreamChat } from '@/shared/providers/StreamChatProvider';
+import { ConversationChatProvider, useStreamChat } from '@/shared/providers/StreamChatProvider';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { RootStackParamList } from '@/shared/navigation/types';
 import { IconButton } from '@/shared/components/IconButton';
@@ -189,6 +189,7 @@ export function ThreadScreen() {
         <IconButton name="more" accessibilityLabel="Conversation actions" onPress={openActions} glass={false} />
       </View>
       {/* Channel must fit below the header; MessageComposer owns the bottom safe inset. */}
+      <ConversationChatProvider>
       <Channel
         channel={channel}
         markReadOnMount
@@ -197,6 +198,7 @@ export function ThreadScreen() {
         <MessageList />
         <MessageComposer />
       </Channel>
+      </ConversationChatProvider>
     </SafeAreaView>
   );
 }

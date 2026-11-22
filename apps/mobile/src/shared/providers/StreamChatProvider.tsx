@@ -162,25 +162,26 @@ export function StreamChatProvider({ children }: { children: React.ReactNode }) 
     retry: () => setRetryVersion(value => value + 1),
   };
 
-  // OverlayProvider always mounted (supplies ThemeContext / overlay portal for
-  // Stream components); Chat only once the Stream client is connected.
-  const chatContent =
-    isApiEnabled && client && isReady ? (
-      <Chat client={client} enableOfflineSupport style={streamTheme}>{children}</Chat>
-    ) : (
-      children
-    );
-
+  // SDK readiness must not change navigation ancestry and remount every screen.
   return (
     <StreamChatContext.Provider value={contextValue}>
       <OverlayProvider value={{ style: streamTheme }}>
+        {children}
         {videoClient && isVideoReady ? (
           <StreamVideo client={videoClient}>
             <IncomingCallNavigator />
-            {chatContent}
           </StreamVideo>
-        ) : chatContent}
+        ) : null}
       </OverlayProvider>
     </StreamChatContext.Provider>
   );
+}
+
+/** Scope the SDK to conversation content, keeping application navigation stable. */
+export function ConversationChatProvider({ children }: { children: React.ReactNode }) {
+  const { client, isReady } = useStreamChat();
+  const theme = useTheme();
+  const streamTheme = useMemo(() => createStreamChatTheme(theme), [theme]);
+  if (!client || !isReady) return null;
+  return <Chat client={client} enableOfflineSupport style={streamTheme}>{children}</Chat>;
 }

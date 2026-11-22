@@ -56,6 +56,7 @@ export function ServiceTreeCard({
             source={cover}
             style={styles.image}
             resizeMode="cover"
+          resizeMethod="resize"
             accessible
             accessibilityLabel={`${tree.name} service image`}
           />

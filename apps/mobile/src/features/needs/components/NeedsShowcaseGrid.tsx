@@ -36,6 +36,7 @@ function SubIcon({ item }: { item: NeedsShowcaseItem }) {
             source={item.image}
             style={styles.iconImage}
             resizeMode="cover"
+          resizeMethod="resize"
             accessible
             accessibilityLabel={`${item.label} service image`}
           />

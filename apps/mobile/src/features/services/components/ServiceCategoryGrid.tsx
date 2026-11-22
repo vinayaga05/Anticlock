@@ -41,6 +41,7 @@ function CategoryVisual({
           source={image}
           style={styles.image}
           resizeMode="cover"
+          resizeMethod="resize"
           accessible
           accessibilityLabel={`${category.name} service image`}
         />

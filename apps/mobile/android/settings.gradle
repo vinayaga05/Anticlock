@@ -1,4 +1,17 @@
-pluginManagement { includeBuild("../../../node_modules/@react-native/gradle-plugin") }
+pluginManagement {
+    includeBuild("../../../node_modules/@react-native/gradle-plugin")
+    // AGP 8.12.0 embeds R8 8.12.14, which crashes while shrinking Firebase's
+    // CycleDetector$Dep. Pin the patched shrinker while retaining release optimization.
+    buildscript {
+        repositories {
+            google()
+            mavenCentral()
+        }
+        dependencies {
+            classpath("com.android.tools:r8:8.12.28")
+        }
+    }
+}
 plugins { id("com.facebook.react.settings") }
 
 // Fix PATH for Android Studio / Gradle daemon before subprojects look up `node`.

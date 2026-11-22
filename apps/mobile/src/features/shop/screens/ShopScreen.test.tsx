@@ -64,14 +64,16 @@ jest.mock('@/shared/components/SectionHeader', () => ({
   SectionHeader: () => null,
 }));
 jest.mock('@/shared/components/IconBadge', () => ({ IconBadge: () => null }));
-jest.mock('@/features/services/components/ProductCard', () => ({
-  ProductCard: (props: any) => require('react').createElement('shop-product-card', props),
+jest.mock('@/features/shop/components/ShopProductCard', () => ({
+  ShopProductCard: (props: any) =>
+    require('react').createElement('shop-product-card', props),
 }));
 jest.mock('@/shared/navigation/tabBarInset', () => ({
   useTabBarBottomInset: () => 100,
 }));
+let mockCartCount = 0;
 jest.mock('@/shared/store/cartStore', () => ({
-  useCartStore: () => ({ count: 0 }),
+  useCartStore: () => ({ count: mockCartCount }),
 }));
 const categoryId = '11111111-1111-4111-8111-111111111111';
 const customId = '22222222-2222-4222-8222-222222222222';
@@ -129,7 +131,11 @@ function render() {
 beforeEach(() => {
   mockNavigate.mockClear();
   mockRefetchProducts.mockClear();
-  mockUseProductsQuery.mockClear();
+  mockUseProductsQuery.mockReset().mockReturnValue({
+    data: { products: [] },
+    refetch: mockRefetchProducts,
+    isLoading: false,
+  });
   mockApiEnabled = true;
   mockRouteParams = {};
   mockCategoryQuery = {
@@ -154,9 +160,38 @@ beforeEach(() => {
 });
 
 describe('Shop layout and business entry', () => {
+  it('updates the cart badge as items change and opens checkout from the icon', () => {
+    mockCartCount = 0;
+    const renderer = render();
+    expect(
+      renderer.root.findAllByProps({ testID: 'shop-cart-badge' }),
+    ).toHaveLength(0);
+    mockCartCount = 3;
+    ReactTestRenderer.act(() => renderer.update(<ShopScreen />));
+    expect(
+      renderer.root
+        .findByProps({ testID: 'shop-cart-badge' })
+        .findByType(require('react-native').Text).props.children,
+    ).toBe(3);
+    const cart = renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Cart, 3 items' &&
+        typeof node.props.onPress === 'function',
+    )[0];
+    ReactTestRenderer.act(() => cart.props.onPress());
+    expect(mockNavigate).toHaveBeenCalledWith('Checkout');
+    mockCartCount = 0;
+    ReactTestRenderer.act(() => renderer.update(<ShopScreen />));
+    expect(
+      renderer.root.findAllByProps({ testID: 'shop-cart-badge' }),
+    ).toHaveLength(0);
+  });
+
   it('keeps the header outside scrolling content and reserves room above floating tabs', () => {
     const renderer = render();
-    const scroll = renderer.root.findByType(ScrollView);
+    const scroll = renderer.root
+      .findAllByType(ScrollView)
+      .find(node => !node.props.horizontal)!;
     expect(
       scroll.findAll(node => node.props.testID === 'shop-app-header'),
     ).toHaveLength(0);
@@ -424,14 +459,66 @@ describe('Shop category resolution', () => {
 });
 
 it('refreshes Shop on focus and renders newly published admin products with rupee pricing and detail navigation', () => {
-  mockUseProductsQuery.mockReturnValueOnce({data:{products:[{id:'product-admin',name:'Resistance Band Set',price:99900,inventory:3,images:[{url:'https://cdn.example/band.png'}]}]},refetch:mockRefetchProducts,isLoading:false} as any);
-  const renderer=render();
-  expect(mockCategoryQuery.refetch).toHaveBeenCalled(); expect(mockRefetchProducts).toHaveBeenCalled();
-  const product=renderer.root.findByType('shop-product-card' as any);
+  mockUseProductsQuery.mockReturnValueOnce({
+    data: {
+      products: [
+        {
+          id: 'product-admin',
+          name: 'Resistance Band Set',
+          price: 99900,
+          inventory: 3,
+          images: [{ url: 'https://cdn.example/band.png' }],
+        },
+      ],
+    },
+    refetch: mockRefetchProducts,
+    isLoading: false,
+  } as any);
+  const renderer = render();
+  expect(mockCategoryQuery.refetch).toHaveBeenCalled();
+  expect(mockRefetchProducts).toHaveBeenCalled();
+  const product = renderer.root.findByType('shop-product-card' as any);
   expect(product.props.product.name).toBe('Resistance Band Set');
   expect(product.props.product.price).toBe(999);
   expect(product.props.product.imageUrl).toBe('https://cdn.example/band.png');
-  ReactTestRenderer.act(()=>product.props.onPress());
-  expect(mockNavigate).toHaveBeenCalledWith('ProductDetail',{productId:'product-admin'});
-  ReactTestRenderer.act(()=>renderer.unmount());
+  ReactTestRenderer.act(() => product.props.onPress());
+  expect(mockNavigate).toHaveBeenCalledWith('ProductDetail', {
+    productId: 'product-admin',
+  });
+  ReactTestRenderer.act(() => renderer.unmount());
+});
+
+it('filters by budget and sorts real product prices without changing the catalog', () => {
+  const rows = [
+    { id: 'high', name: 'Headphones', price: 199900, inventory: 4, images: [] },
+    { id: 'low', name: 'Bottle', price: 29900, inventory: 3, images: [] },
+    { id: 'mid', name: 'Band', price: 79900, inventory: 2, images: [] },
+  ];
+  mockUseProductsQuery.mockReturnValue({
+    data: { products: rows },
+    refetch: mockRefetchProducts,
+    isLoading: false,
+  } as any);
+  const renderer = render();
+  const cards = () =>
+    renderer.root
+      .findAllByType('shop-product-card' as any)
+      .map(node => node.props.product);
+  const press = (label: string) =>
+    ReactTestRenderer.act(() =>
+      renderer.root
+        .findAll(
+          node =>
+            String(node.props.accessibilityLabel).startsWith(label) &&
+            node.props.onPress,
+        )[0]
+        .props.onPress(),
+    );
+  press('Sort products');
+  expect(cards().map(p => p.id)).toEqual(['low', 'mid', 'high']);
+  press('Products under ₹999');
+  expect(cards().map(p => p.id)).toEqual(['low', 'mid']);
+  press('Sort products');
+  expect(cards().map(p => p.id)).toEqual(['mid', 'low']);
+  expect(rows.map(p => p.id)).toEqual(['high', 'low', 'mid']);
 });

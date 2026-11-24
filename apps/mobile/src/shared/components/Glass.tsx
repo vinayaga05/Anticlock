@@ -9,6 +9,7 @@ import {
 import { BlurView } from '@react-native-community/blur';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { healthTheme } from '@/shared/theme/healthTheme';
+import { elevatedSurface } from '@/shared/theme/elevatedSurface';
 
 type Intensity = 'light' | 'medium' | 'heavy';
 type GlassVariant = 'default' | 'health';
@@ -54,7 +55,7 @@ export function Glass({
 
   return (
     <View
-      style={[
+      style={elevatedSurface(StyleSheet.flatten<ViewStyle>([
         styles.inner,
         {
           backgroundColor: blur ? 'transparent' : tokens.background,
@@ -63,7 +64,10 @@ export function Glass({
         },
         shadow,
         style,
-      ]}
+        // Keep real blur translucent; Android cannot cast a clean elevation
+        // shadow through it. iOS keeps its native shadow treatment.
+        blur && Platform.OS === 'android' ? { elevation: 0 } : null,
+      ]), theme.colors.surface)}
       {...rest}>
       {blur ? (
         <>

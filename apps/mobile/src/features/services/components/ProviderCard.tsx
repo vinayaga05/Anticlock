@@ -1,39 +1,52 @@
-import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { MarketplaceProvider } from '@/shared/data/services';
 import { Card } from '@/shared/components/Card';
 import { Glass } from '@/shared/components/Glass';
 import { AppIcon } from '@/shared/components/AppIcon';
-import { Button } from '@/shared/components/Button';
+import { PressableScale } from '@/shared/components/PressableScale';
+import { ProviderCardMedia } from './ProviderCardMedia';
 import { healthTheme } from '@/shared/theme/healthTheme';
 
 export function ProviderCard({
   provider,
   onPress,
   health = false,
+  previewActive = false,
+  onPreviewReady,
+  onPreviewFailed,
 }: {
   provider: MarketplaceProvider;
   onPress?: () => void;
   health?: boolean;
+  previewActive?: boolean;
+  onPreviewReady?: (id: string) => void;
+  onPreviewFailed?: (id: string, url: string) => void;
 }) {
   const theme = useTheme();
+  const handlePreviewReady = useCallback(
+    () => onPreviewReady?.(provider.id),
+    [onPreviewReady, provider.id],
+  );
+  const handlePreviewFailed = useCallback(
+    (url: string) => onPreviewFailed?.(provider.id, url),
+    [onPreviewFailed, provider.id],
+  );
 
   const content = (
     <>
       <View style={styles.row}>
-        {provider.imageUrl ? (
-          <Image source={{ uri: provider.imageUrl }} style={styles.avatar} />
-        ) : (
-          <View
-            style={[
-              styles.avatar,
-              styles.avatarFallback,
-              { backgroundColor: theme.colors.primarySoft },
-            ]}>
-            <AppIcon name="shop" size={22} color={theme.colors.primary} />
-          </View>
-        )}
+        <ProviderCardMedia
+          key={`${provider.id}:${provider.introVideoUrl}:${provider.imageUrl}:${provider.fallbackImageUrl}`}
+          imageUrl={provider.imageUrl}
+          fallbackImageUrl={provider.fallbackImageUrl}
+          videoUrl={provider.introVideoUrl}
+          active={previewActive}
+          name={provider.name}
+          onPreviewReady={handlePreviewReady}
+          onPreviewFailed={handlePreviewFailed}
+        />
         <View style={{ flex: 1, gap: 4 }}>
           <View style={styles.nameRow}>
             <Text
@@ -45,7 +58,8 @@ export function ProviderCard({
                   flex: 1,
                 },
               ]}
-              numberOfLines={1}>
+              numberOfLines={1}
+            >
               {provider.name}
             </Text>
             {provider.verified ? (
@@ -59,8 +73,13 @@ export function ProviderCard({
           <Text
             style={[
               theme.typography.caption,
-              { color: health ? healthTheme.textMuted : theme.colors.textSecondary },
-            ]}>
+              {
+                color: health
+                  ? healthTheme.textMuted
+                  : theme.colors.textSecondary,
+              },
+            ]}
+          >
             {provider.subtitle ?? provider.type}
           </Text>
           <View style={styles.meta}>
@@ -68,8 +87,13 @@ export function ProviderCard({
             <Text
               style={[
                 theme.typography.caption,
-                { color: health ? healthTheme.textMuted : theme.colors.textSecondary },
-              ]}>
+                {
+                  color: health
+                    ? healthTheme.textMuted
+                    : theme.colors.textSecondary,
+                },
+              ]}
+            >
               {provider.reviewCount > 0 ? provider.rating : 'New'}
               {provider.location.area || provider.location.city
                 ? ` · ${provider.location.area || provider.location.city}`
@@ -84,32 +108,37 @@ export function ProviderCard({
                   color: health ? healthTheme.navy : theme.colors.primary,
                   fontWeight: '700',
                 },
-              ]}>
+              ]}
+            >
               From Rs {provider.priceFrom}
             </Text>
           ) : null}
         </View>
       </View>
-      {onPress ? (
-        <Button
-          title="View profile"
-          variant={health ? 'health' : 'secondary'}
-          onPress={onPress}
-        />
-      ) : null}
     </>
   );
 
   if (health) {
-    return (
+    const surface = (
       <Glass
         variant="health"
         intensity="heavy"
         radius={healthTheme.radiusMd}
         elevated
-        style={{ gap: 12, padding: 14 }}>
+        style={{ gap: 12, padding: 14 }}
+      >
         {content}
       </Glass>
+    );
+    return onPress ? (
+      <PressableScale
+        onPress={onPress}
+        accessibilityLabel={`Open ${provider.name} profile`}
+      >
+        {surface}
+      </PressableScale>
+    ) : (
+      surface
     );
   }
 
@@ -121,9 +150,7 @@ export function ProviderCard({
 }
 
 const styles = StyleSheet.create({
-  avatarFallback: { alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', gap: 12 },
-  avatar: { width: 72, height: 72, borderRadius: 18 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
 });

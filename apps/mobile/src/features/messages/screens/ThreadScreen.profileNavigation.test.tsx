@@ -1,8 +1,11 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
+import { Text } from 'react-native';
 import { ThreadScreen } from './ThreadScreen';
 
 const mockNavigate = jest.fn();
+const mockReconnect = jest.fn();
+let mockReady = true;
 let mockPeerType: 'personal' | 'business' = 'business';
 const peerId = 'ed3b2a59-3ab7-49bd-b557-d74294a01ed4';
 const mockChannel = {
@@ -18,7 +21,10 @@ jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate, goBack: jest.fn() }),
   useRoute: () => ({ params: { conversationId: 'conversation-1' } }),
 }));
-jest.mock('@/shared/providers/StreamChatProvider', () => ({ useStreamChat: () => ({ client: mockClient, isReady: true, isConnecting: false }) }));
+jest.mock('@/shared/providers/StreamChatProvider', () => ({
+  useStreamChat: () => ({ client: mockReady ? mockClient : null, isReady: mockReady, isConnecting: false, error: mockReady ? null : 'Network connection failed', retry: mockReconnect }),
+  ConversationChatProvider: ({ children }: any) => children,
+}));
 jest.mock('stream-chat-react-native', () => ({ Channel: ({ children }: any) => children, MessageList: () => null, MessageComposer: () => null }));
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }: any) => children }));
 jest.mock('@/shared/hooks/useTheme', () => require('@/test/componentMocks').themeModule);
@@ -36,5 +42,19 @@ test.each(['business', 'personal'] as const)('opens the channel peer’s %s iden
   ReactTestRenderer.act(() => profile.props.onPress());
   expect(mockNavigate).toHaveBeenCalledWith(type === 'business' ? 'BusinessProfile' : 'Profile', type === 'business'
     ? { providerId: peerId } : { profileType: 'personal', profileId: peerId });
+  ReactTestRenderer.act(() => renderer.unmount());
+});
+
+test('Try again reconnects the SDK after a connection failure and can recover the thread', async () => {
+  mockReady = false;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(async () => { renderer = ReactTestRenderer.create(<ThreadScreen />); });
+  expect(renderer.root.findAllByType(Text).some(n => n.props.children === 'Network connection failed')).toBe(true);
+  const retry = renderer.root.findAll(n => n.props.accessibilityLabel === 'Retry conversation' && n.props.onPress)[0];
+  ReactTestRenderer.act(() => retry.props.onPress());
+  expect(mockReconnect).toHaveBeenCalledTimes(1);
+  mockReady = true;
+  await ReactTestRenderer.act(async () => { renderer.update(<ThreadScreen />); });
+  expect(renderer.root.findAll(n => n.props.accessibilityLabel === 'Open Peer profile profile').length).toBeGreaterThan(0);
   ReactTestRenderer.act(() => renderer.unmount());
 });

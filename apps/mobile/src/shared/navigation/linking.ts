@@ -101,6 +101,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
 
       // Community
       Communities: 'communities',
+      ProfileConnections: 'connections/:profileType/:profileId/:direction',
       TeamDetail: 'team/:teamId',
       TeamRoster: 'team/:teamId/roster',
       TeamPlayerForm: 'team/:teamId/player/:playerId?',

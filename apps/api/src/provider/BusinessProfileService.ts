@@ -4,7 +4,7 @@ import { db } from '../db/client.js';
 import { bookings, businessProfileReports, businessProfileSaves, businessReviews, contentPosts, exploreEventMedia, exploreEvents, mediaAssets, mediaUsages, mobileUsers, products, productImages, providerApplications, providerMemberships, providers, providerServiceOfferings, serviceCategories } from '../db/schema.js';
 import { ApiError } from '../lib/httpError.js';
 import { mediaService } from '../media/MediaService.js';
-import { profileFollowService } from '../social/ProfileFollowService.js';
+import { profileFollowService, profileConnectionCounts } from '../social/ProfileFollowService.js';
 import { resolveOwnedPublisher, type PublisherRef } from '../publishing/publisher.js';
 import { businessSlots, configuredServiceDuration, dayKey, istDate, validBusinessDate, validWorkingDay } from './businessAvailability.js';
 
@@ -189,7 +189,7 @@ export class BusinessProfileService {
 
   async getProfile(providerId: string, userId?: string, viewer?: PublisherRef): Promise<BusinessProfile> {
     const provider = await this.loadAvailable(providerId, userId, viewer), fields = businessPublicFields(provider);
-    const [services, categories, role, saved, ratingRows, reviewPage, productRows, eventRows, followerRows, clipRows] = await Promise.all([
+    const [services, categories, role, saved, ratingRows, reviewPage, productRows, eventRows, clipRows] = await Promise.all([
       this.services(provider),
       db.select({ id: serviceCategories.id, name: serviceCategories.name, treeId: serviceCategories.treeId }).from(providerServiceOfferings).innerJoin(serviceCategories, eq(providerServiceOfferings.categoryId, serviceCategories.id)).where(and(eq(providerServiceOfferings.providerId, providerId), eq(serviceCategories.status, 'published'))),
       this.role(provider, userId),
@@ -198,7 +198,6 @@ export class BusinessProfileService {
       this.listReviews(providerId, userId, 5, undefined, viewer),
       db.select({ id: products.id, name: products.name, price: products.price, inventory: products.inventory }).from(products).where(and(eq(products.authorProviderId, providerId), eq(products.status, 'published'), eq(products.reviewStatus, 'approved'), eq(products.requestedVisibility, 'public'))).orderBy(desc(products.createdAt)),
       db.select({ id: exploreEvents.id, title: exploreEvents.title, startsAt: exploreEvents.startsAt, endsAt: exploreEvents.endsAt, price: exploreEvents.price, currency: exploreEvents.currency, location: exploreEvents.location }).from(exploreEvents).where(and(eq(exploreEvents.authorProviderId, providerId), eq(exploreEvents.reviewStatus, 'approved'), eq(exploreEvents.requestedVisibility, 'public'), isNull(exploreEvents.deletedAt), isNull(exploreEvents.archivedAt))).orderBy(desc(exploreEvents.startsAt)),
-      db.execute(sql`SELECT count(*)::int AS count FROM profile_follows WHERE followed_profile_id = ${providerId} AND followed_profile_type = 'business' AND status = 'accepted'`),
       db.select({ count: sql<number>`count(*)::int` }).from(contentPosts).where(and(eq(contentPosts.authorProviderId, providerId), eq(contentPosts.format, 'clip'), eq(contentPosts.visibility, 'public'), eq(contentPosts.status, 'published'))),
     ]);
     const publicIds = [fields.logoId, ...fields.coverIds, ...fields.galleryIds, fields.introId].filter((id): id is string => Boolean(id));
@@ -208,6 +207,7 @@ export class BusinessProfileService {
       eventRows.length ? db.select().from(exploreEventMedia).where(inArray(exploreEventMedia.eventId, eventRows.map(row => row.id))).orderBy(asc(exploreEventMedia.sortOrder)) : [],
       userId ? profileFollowService.relationship(viewer ?? { id: userId, type: 'personal' }, { id: providerId, type: 'business' }) : null,
     ]);
+    const socialCounts = await profileConnectionCounts({ type: 'business', id: providerId });
     const cardMedia = await this.safeMedia([...productMedia.map(row => row.mediaAssetId), ...eventMedia.map(row => row.mediaAssetId)]);
     const imageFor = (ids: string[]) => ids.map(id => cardMedia.find(m => m.id === id && m.kind === 'image')?.url).find(Boolean) ?? null;
     const now = new Date(), today = istDate(now);
@@ -240,7 +240,7 @@ export class BusinessProfileService {
       rating: { average: ratingRows[0]?.average == null ? null : Number(ratingRows[0].average), count: ratingRows[0]?.count ?? 0 }, reviews: reviewPage.reviews,
       products: productRows.map(row => ({ ...row, imageUrl: imageFor(productMedia.filter(m => m.productId === row.id).map(m => m.mediaAssetId)) })),
       events: eventRows.map(({ location, ...row }) => ({ ...row, startsAt: row.startsAt.toISOString(), endsAt: row.endsAt.toISOString(), imageUrl: imageFor(eventMedia.filter(m => m.eventId === row.id).map(m => m.mediaAssetId)), locationLabel: location?.name ?? null })),
-      stats: { followers: Number(followerRows[0]?.count ?? 0), clips: clipRows[0]?.count ?? 0, products: productRows.length, events: eventRows.length },
+      stats: { followers: socialCounts.followers, following: socialCounts.following, clips: clipRows[0]?.count ?? 0, products: productRows.length, events: eventRows.length },
       viewer: { role, isOwner: role === 'owner', canManage: role !== null && MANAGE.includes(role), canPublish: role !== null && PUBLISH.includes(role), canEditServices: role !== null && MANAGE.includes(role), canViewAnalytics: role !== null && [...MANAGE, 'analyst'].includes(role), isSaved: saved.length > 0, canReview: !role && reviewPage.eligibleBookings.length > 0, relationship },
     };
   }

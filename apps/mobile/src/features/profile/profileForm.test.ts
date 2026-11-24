@@ -14,10 +14,16 @@ test('enforces name, biography, city and normalized URL limits', () => {
 test('uses local initials and recognizes generated fallback avatars without inventing a photo', () => {
   expect(profileInitials(' Arun   Kumar ')).toBe('AK'); expect(profileInitials('  ')).toBe('You');
   expect(storedProfilePhoto('data:image/svg+xml;utf8,generated')).toBeNull(); expect(storedProfilePhoto('https://images.example.test/avatar.jpg')).toBe('https://images.example.test/avatar.jpg');
-  expect(profileDraft(null)).toEqual({ displayName: '', bio: '', location: '', website: '' });
+  expect(profileDraft(null)).toEqual({ displayName: '', handle: '', bio: '', location: '', website: '' });
 });
 
 
 test.each(['file:///private/photo.jpg', 'content://photos/1', 'data:image/png;base64,AA==', 'https://user:password@example.com/photo.jpg', 'https:example.com/photo.jpg', 'not-a-url'])('ignores unsupported legacy avatar %s instead of sending it back on a text save', value => {
   expect(storedProfilePhoto(value)).toBeNull();
+});
+
+test('normalizes optional usernames and rejects invalid handles', () => {
+  const draft = { displayName: 'Asha', bio: '', location: '', website: '', handle: ' Asha_123 ' };
+  expect(validateProfileDraft(draft)).toMatchObject({ handle: 'asha_123' });
+  expect(() => validateProfileDraft({ ...draft, handle: '@invalid user' })).toThrow('Username');
 });

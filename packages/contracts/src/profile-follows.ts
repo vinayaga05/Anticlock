@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PublisherProfileTypeSchema } from './publishing.js';
+import { PublisherProfileTypeSchema, ContentPublisherSchema } from './publishing.js';
 
 /** A profile is either the account's personal profile or one business profile. */
 export const ProfileRefSchema = z
@@ -66,3 +66,15 @@ export const ProfileFollowSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 export type ProfileFollow = z.infer<typeof ProfileFollowSchema>;
+
+export const ProfileConnectionsQuerySchema = z.object({
+  cursor: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+});
+export const ProfileConnectionsPageSchema = z.object({
+  items: z.array(z.object({ profile: ContentPublisherSchema, relationship: ProfileRelationshipSchema, canRemove: z.boolean() })),
+  nextCursor: z.string().uuid().nullable(),
+  counts: z.object({ followers: z.number(), following: z.number(), pendingRequests: z.number() }),
+  isOwner: z.boolean(),
+});
+export type ProfileConnectionsPage = z.infer<typeof ProfileConnectionsPageSchema>;

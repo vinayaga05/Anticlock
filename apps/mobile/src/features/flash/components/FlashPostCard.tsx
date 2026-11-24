@@ -296,6 +296,7 @@ export function FlashPostCard({
           ) : null}
           {post.isOwn ? null : (
             <UserCallActions
+              showVideo={false}
               name={post.author.name}
               profileId={post.publisherProfileId ?? post.author.id}
               profileType={post.publisherProfileType ?? post.author.profileType}

@@ -1,3 +1,4 @@
+import { useGenieSearch } from '@/features/assistant/search/searchState';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -25,6 +26,10 @@ export function InboxScreen() {
   const route = useRoute<RouteProp<MainTabParamList, 'Knock'>>();
   const [tab, setTab] = useState<KnockTab>('bookings');
   const [bookingSearch, setBookingSearch] = useState('');
+  const genieCommand = useGenieSearch(state => state.command);
+  useEffect(()=>{
+    if (genieCommand?.domain === 'knock') setTab('bookings');
+  },[genieCommand]);
   const { data: unreadData } = useUnreadCount();
   const { client, isReady } = useStreamChat();
   const [chatUnread, setChatUnread] = useState(0);
@@ -124,7 +129,7 @@ export function InboxScreen() {
             showVoiceControls
             compact
           />
-          <KnockBookingsList searchQuery={bookingSearch} />
+          <KnockBookingsList searchQuery={bookingSearch} genieActive={tab === 'bookings'} onGenieQuery={setBookingSearch} />
         </ScrollView>
         <View style={tab === 'chat' ? styles.chatContent : styles.hidden}>
           <KnockChatList />

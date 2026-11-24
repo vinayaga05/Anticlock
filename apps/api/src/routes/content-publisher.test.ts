@@ -158,6 +158,7 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
     const { profileFollowRoutes } = await import("./profile-follows.js");
     const { moderationAdminRoutes } = await import("./moderation.js");
     const { contentSafetyRoutes } = await import("./contentSafety.js");
+    const { marketplaceRoutes } = await import("./provider.js");
     ({ signToken } = await import("../lib/auth.js"));
     const client = await import("../db/client.js");
     db = client.db;
@@ -169,6 +170,7 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
     hono.route("/v1/content", content.contentPublicRoutes);
     hono.route("/v1/content", contentSafetyRoutes);
     hono.route("/v1/profile-follows", profileFollowRoutes);
+    hono.route("/v1/marketplace", marketplaceRoutes);
     hono.route("/admin/moderation", moderationAdminRoutes);
     app = hono as unknown as typeof app;
 
@@ -821,6 +823,24 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
       })
       .where(eq(schema.providers.id, BIZ1));
 
+    async function assertMarketplaceIntro(visible: boolean) {
+      const [list, detail] = await Promise.all([
+        call("B", "GET", `/v1/marketplace/providers?categoryId=${categoryId}`),
+        call("B", "GET", `/v1/marketplace/providers/${BIZ1}`),
+      ]);
+      assert.equal(list.status, 200, JSON.stringify(list.json));
+      assert.equal(detail.status, 200, JSON.stringify(detail.json));
+      const card = (list.json.data as Json[]).find((item) => item.id === BIZ1);
+      assert.ok(card, "provider remains discoverable with or without an intro");
+      for (const provider of [card, detail.json.provider]) {
+        assert.equal(provider.avatarUrl, "https://cdn.example.com/yoga.png");
+        if (visible) assert.ok(provider.introVideoUrl?.includes(introId));
+        else assert.equal(provider.introVideoUrl, null);
+      }
+    }
+
+    await assertMarketplaceIntro(true); // Legacy upload before a Clip exists.
+
     const savedRedisUrl = process.env.REDIS_URL;
     delete process.env.REDIS_URL;
     const publishedIds: string[] = [];
@@ -881,6 +901,20 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
     assert.equal(intro.serviceCategoryId, categoryId);
     assert.equal(intro.publisherProfileId, BIZ1);
 
+    await assertMarketplaceIntro(true);
+    try {
+      await db.update(schema.providers).set({ isPrivate: true }).where(eq(schema.providers.id, BIZ1));
+      await assertMarketplaceIntro(false);
+    } finally {
+      await db.update(schema.providers).set({ isPrivate: false }).where(eq(schema.providers.id, BIZ1));
+    }
+    try {
+      await db.update(schema.contentPosts).set({ visibility: "followers" }).where(eq(schema.contentPosts.id, intro.id));
+      await assertMarketplaceIntro(false);
+    } finally {
+      await db.update(schema.contentPosts).set({ visibility: "public" }).where(eq(schema.contentPosts.id, intro.id));
+    }
+
     const profilePosts = await call(
       "B",
       "GET",
@@ -932,6 +966,7 @@ describe("content publisher profiles (integration)", { skip: !TEST_DATABASE_URL 
         ));
       assert.deepEqual(rows, [{ status }], "reads preserve the existing decision without creating another intro");
       assert.deepEqual(publishedIds, [], "hidden intro reads emit no publication event");
+      await assertMarketplaceIntro(false);
     }
 
     const removed = await call("A", "DELETE", `/v1/content/posts/${intro.id}`);

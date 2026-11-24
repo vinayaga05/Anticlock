@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { reconcileSocialState } from '@/shared/api/profileFollows';
 import { apiRequest } from '@/shared/api/client';
 import {
   isPublishedContentClipFeedItem,
@@ -67,7 +68,10 @@ export function useLiveContentSync(
     if (!enabled) return;
     const stop = startLiveContent();
     const unsubscribe = subscribeLiveContent(event => {
-      if (event.type === 'resync') return;
+      if (event.type === 'resync' || event.type === 'social.changed') {
+        void reconcileSocialState(queryClient).catch(() => undefined);
+        return;
+      }
       if (event.type === 'post.removed') {
         dropRemovedClip(queryClient, event.id);
         // Removal events carry no publisher; refresh profile surfaces broadly.
@@ -150,6 +154,7 @@ export function useLivePendingClips(options: {
         catchUp().catch(() => undefined);
         return;
       }
+      if (event.type === 'social.changed') { setPending([]); return; }
       if (event.format !== 'clip') return;
       if (event.type === 'post.removed') {
         setPending(previous => withoutPending(previous, event.id));

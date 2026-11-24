@@ -1,3 +1,5 @@
+import { useGenieScreen } from '@/features/assistant/search/useGenieScreen';
+import { SearchFilterChips } from '@/features/assistant/search/SearchFilterChips';
 import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -110,6 +112,7 @@ export function CommunitiesScreen() {
   const navigation = useNavigation<any>();
   const [mode, setMode] = useState<ModeTab>('feed');
   const [teamTab, setTeamTab] = useState<TeamTab>('mine');
+  const [joining, setJoining] = useState(false);
   const [sportTag, setSportTag] = useState<string | null>(null);
   const [filter, setFilter] = useState<HubFilter>('all');
   const showEvents = filter === 'all' || filter === 'events';
@@ -146,6 +149,24 @@ export function CommunitiesScreen() {
   const getEligibleTeamsForChallenge = useCommunityStore(
     s => s.getEligibleTeamsForChallenge,
   );
+
+  const eligibleTeams = joining ? discoverTeams.filter(team =>
+    !isMember(team.id) && !joinRequests.some(r => r.teamId === team.id && r.userId === CURRENT_USER_ID && r.status === 'pending')
+  ) : discoverTeams;
+  useGenieScreen({
+    domain:'community',
+    filters:{ teams:mode === 'teams' && teamTab === 'discover' || undefined, sport:sportTag && sportTag !== 'More' ? sportTag : undefined, joining:joining || undefined },
+    status:'ready',
+    message:mode !== 'teams' || teamTab !== 'discover' ? 'Community is open. Tell me if you want to find a team.' : undefined,
+    rows:mode === 'teams' && teamTab === 'discover' ? eligibleTeams.map(team=>({
+      id:team.id,name:team.name, detail:[team.sport,team.location,team.joinPolicy === 'open' ? 'open to join' : 'join by request'].filter(Boolean).join(', '),
+      open:()=>navigation.navigate('TeamDetail',{teamId:team.id}),
+    })) : [],
+  }, next=>{
+    if (next.teams || next.sport || next.joining) { setMode('teams'); setTeamTab('discover'); }
+    setSportTag(next.sport ?? null);
+    setJoining(Boolean(next.joining));
+  });
 
   const quickPills = useMemo(
     () => filter === 'news' ? [] : QUICK_FILTERS.filter(
@@ -367,7 +388,8 @@ export function CommunitiesScreen() {
                   })}
                 </ScrollView>
 
-                {discoverTeams.length === 0 ? (
+                <SearchFilterChips filters={{joining}} onClear={()=>setJoining(false)} />
+                {eligibleTeams.length === 0 ? (
                   <Text
                     style={[
                       theme.typography.body,
@@ -377,7 +399,7 @@ export function CommunitiesScreen() {
                     No teams match this filter.
                   </Text>
                 ) : (
-                  discoverTeams.map(team => {
+                  eligibleTeams.map(team => {
                     const pending = joinRequests.some(
                       r =>
                         r.teamId === team.id &&

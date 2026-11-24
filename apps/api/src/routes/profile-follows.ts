@@ -4,12 +4,15 @@ import {
   ProfileFollowTargetSchema,
   ProfilePrivacyUpdateSchema,
   ProfileRefSchema,
+  ProfileConnectionsQuerySchema,
 } from '@anticlock/contracts';
+import { ZodError } from 'zod';
 import { requireAuth, type AppEnv } from '../middleware/auth.js';
 import { normalizePublisherType, resolveOwnedPublisher, type PublisherRef } from '../publishing/publisher.js';
 import { profileFollowService } from '../social/ProfileFollowService.js';
 
 function httpError(error: unknown) {
+  if (error instanceof ZodError) return { status: 400 as const, body: { error: { code: 'validation_error', message: 'Invalid follow request', details: error.flatten() } } };
   const err = error as { status?: number; code?: string; message?: string };
   return {
     status: (err.status ?? 500) as 400 | 403 | 404 | 409 | 500,
@@ -23,9 +26,9 @@ function mobileUserId(auth: { kind: string; sub: string }) {
 }
 
 function routeRef(type: string, id: string): PublisherRef {
-  const profileType = normalizePublisherType(type);
-  if (!profileType || !/^[0-9a-f-]{36}$/i.test(id)) throw Object.assign(new Error('Profile not found'), { status: 404, code: 'not_found' });
-  return { type: profileType, id };
+  const parsed = ProfileRefSchema.safeParse({ id, type: normalizePublisherType(type) });
+  if (!parsed.success) throw Object.assign(new Error('Profile not found'), { status: 404, code: 'not_found' });
+  return parsed.data;
 }
 
 /** Profile-scoped social graph. Every mutation verifies the acting profile belongs to auth. */
@@ -59,6 +62,17 @@ profileFollowRoutes.get('/requests/:type/:id', async c => {
   try {
     const userId = mobileUserId(c.get('auth'));
     return c.json({ data: await profileFollowService.incoming(userId, routeRef(c.req.param('type'), c.req.param('id'))) });
+  } catch (error) {
+    const { status, body } = httpError(error);
+    return c.json(body, status);
+  }
+});
+
+profileFollowRoutes.get('/requests/:type/:id/page', async c => {
+  try {
+    const userId = mobileUserId(c.get('auth'));
+    const options = ProfileConnectionsQuerySchema.parse(c.req.query());
+    return c.json({ data: await profileFollowService.incomingPage(userId, routeRef(c.req.param('type'), c.req.param('id')), options) });
   } catch (error) {
     const { status, body } = httpError(error);
     return c.json(body, status);
@@ -125,8 +139,21 @@ profileFollowRoutes.get('/connections/:type/:id/:direction', async c => {
     const target = routeRef(c.req.param('type'), c.req.param('id'));
     const viewerType = normalizePublisherType(c.req.query('viewerProfileType')) ?? 'personal';
     const viewerId = c.req.query('viewerProfileId') ?? userId;
-    const viewer = (await resolveOwnedPublisher(userId, { id: viewerId, type: viewerType })).ref;
-    return c.json({ data: await profileFollowService.listConnections(userId, target, viewer, direction) });
+    const viewer = (await resolveOwnedPublisher(userId, ProfileRefSchema.parse({ id: viewerId, type: viewerType }))).ref;
+    const options = ProfileConnectionsQuerySchema.parse(c.req.query());
+    return c.json({ data: await profileFollowService.listConnections(userId, target, viewer, direction, options) });
+  } catch (error) {
+    const { status, body } = httpError(error);
+    return c.json(body, status);
+  }
+});
+
+profileFollowRoutes.delete('/followers/:type/:id', async c => {
+  try {
+    const userId = mobileUserId(c.get('auth'));
+    const followed = routeRef(c.req.param('type'), c.req.param('id'));
+    const follower = ProfileRefSchema.parse(await c.req.json());
+    return c.json({ data: await profileFollowService.removeFollower(userId, followed, follower) });
   } catch (error) {
     const { status, body } = httpError(error);
     return c.json(body, status);

@@ -65,6 +65,7 @@ export const MobileTokenRequestSchema = z.object({
 export type MobileTokenRequest = z.infer<typeof MobileTokenRequestSchema>;
 
 export const MobileUserSchema = z.object({
+  handle: z.string().nullable().optional(),
   id: z.string().uuid(),
   phone: z.string().min(8),
   displayName: z.string(),
@@ -78,6 +79,7 @@ export const MobileUserSchema = z.object({
 export type MobileUser = z.infer<typeof MobileUserSchema>;
 
 export const UpdateMobileProfileRequestSchema = z.object({
+  handle: z.string().trim().toLowerCase().regex(/^[a-z0-9_]{3,30}$/, 'Username must be 3–30 letters, numbers or underscores').nullable().optional(),
   displayName: z.string().trim().min(2).max(80),
   avatarUrl: z.string().url().max(2_000).refine(value => {
     try {

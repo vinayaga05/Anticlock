@@ -5,7 +5,10 @@ import {
   DefaultTheme,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Linking } from 'react-native';
+import { AssistantBottomSheetHost } from '@/features/assistant/components/AssistantBottomSheet';
+import { FloatingAssistantButton } from '@/features/assistant/components/FloatingAssistantButton';
+import { useGenieSearch } from '@/features/assistant/search/searchState';
+import { Linking, StyleSheet, View } from 'react-native';
 import { linking } from '@/shared/navigation/linking';
 import { rootNavigationRef } from '@/shared/navigation/rootNavigation';
 import { 
@@ -28,6 +31,7 @@ import { useMyInterestsQuery } from '@/features/interests/hooks/useInterestPrefe
 import { InterestSelectionScreen } from '@/features/interests/screens/InterestSelectionScreen';
 import { SearchScreen } from '@/features/booking/screens/SearchScreen';
 import { AccountSettingsScreen } from '@/features/settings/screens/AccountSettingsScreen';
+import { ProfileConnectionsScreen } from '@/features/profile/screens/ProfileConnectionsScreen';
 import { ProfileRouteScreen, UniversalDetailRouteScreen } from '@/shared/navigation/businessRouteScreens';
 import { BusinessProfileScreen } from '@/features/business-profile/screens/BusinessProfileScreen';
 import { BusinessBookingScreen } from '@/features/business-profile/screens/BusinessBookingScreen';
@@ -93,9 +97,19 @@ import { ProviderDashboardScreen } from '@/features/provider-onboarding/screens/
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+function syncGenieRoute() {
+  const route = rootNavigationRef.getCurrentRoute();
+  useAssistantStore.getState().setCurrentScreen(route?.name ?? null, route?.key);
+}
+
 export function RootNavigator() {
   const theme = useTheme();
   const { user, loading } = useAuth();
+  useEffect(() => {
+    useGenieSearch.getState().reset();
+    useAssistantStore.getState().clearMessages();
+    useAssistantStore.getState().closeAssistant();
+  }, [user?.id]);
   const shouldLoadInterests = Boolean(
     user && user.id !== 'temporary-guest' && isApiEnabled,
   );
@@ -168,20 +182,8 @@ export function RootNavigator() {
       ref={rootNavigationRef}
       theme={navigationTheme}
       linking={linking}
-      onStateChange={state => {
-        if (!state) return;
-        const route = state.routes[state.index];
-        if (!route) return;
-        // Prefer nested tab name when on Main (Shop, PlayFeed, …)
-        let screenName: string | null = route.name ?? null;
-        const nested = route.state as
-          | { index: number; routes: { name: string }[] }
-          | undefined;
-        if (route.name === 'Main' && nested?.routes?.[nested.index]?.name) {
-          screenName = nested.routes[nested.index].name;
-        }
-        useAssistantStore.getState().setCurrentScreen(screenName);
-      }}
+      onReady={syncGenieRoute}
+      onStateChange={syncGenieRoute}
     >
       <Stack.Navigator
         screenOptions={{
@@ -231,6 +233,7 @@ export function RootNavigator() {
               options={{ headerShown: false }}
             />
             <Stack.Screen name="BusinessProfile" component={BusinessProfileScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="ProfileConnections" component={ProfileConnectionsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="BusinessBooking" component={BusinessBookingScreen} options={{ headerShown: false }} />
             <Stack.Screen name="BusinessManage" component={BusinessManageScreen} options={{ headerShown: false }} />
             <Stack.Screen
@@ -553,6 +556,12 @@ export function RootNavigator() {
           </>
         )}
       </Stack.Navigator>
+      {user && !needsNameOnboarding && !needsInterestOnboarding ? (
+        <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, {zIndex:120,elevation:120}]}>
+          <AssistantBottomSheetHost key={user.id} />
+          <FloatingAssistantButton />
+        </View>
+      ) : null}
     </NavigationContainer>
   );
 }

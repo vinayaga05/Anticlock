@@ -63,7 +63,7 @@ export function businessFixture(
     reviews: [],
     products: [],
     events: [],
-    stats: { followers: 18, clips: 0, products: 0, events: 0 },
+    stats: { followers: 18, following: 0, clips: 0, products: 0, events: 0 },
     viewer: {
       role: null,
       isOwner: false,

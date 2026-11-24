@@ -1,3 +1,5 @@
+import { useGenieScreen } from '@/features/assistant/search/useGenieScreen';
+import { SearchFilterChips } from '@/features/assistant/search/SearchFilterChips';
 import React, {
   createContext,
   useCallback,
@@ -14,6 +16,7 @@ import { isApiEnabled } from '@/shared/api/config';
 import {
   AppState,
   FlatList,
+  Text,
   StyleSheet,
   View,
   type CellRendererProps,
@@ -73,7 +76,7 @@ function FeedCell({
 export function FlashFeedScreen() {
   const theme = useTheme();
   const focused = useIsFocused();
-  const assistantOpen = useAssistantStore(s => s.open);
+  const assistantOpen = useAssistantStore(s => Boolean(s.open || s.speaking));
   const [appActive, setAppActive] = useState(
     AppState.currentState === 'active',
   );
@@ -93,6 +96,8 @@ export function FlashFeedScreen() {
   }, []);
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<FeedTab>('forYou');
+  const [recent, setRecent] = useState(false);
+  const listRef = useRef<FlatList<FlashPost>>(null);
   const { active: activeViewerProfile } = useActiveProfile();
   const viewerProfile = activeViewerProfile
     ? {
@@ -107,6 +112,8 @@ export function FlashFeedScreen() {
     data: apiPosts,
     refetch,
     isRefetching,
+    isLoading,
+    error,
   } = useFlashPostsQuery(viewerProfile);
 
   // Server-published Flash posts (personal + business publishers) lead the
@@ -122,13 +129,23 @@ export function FlashFeedScreen() {
   );
   const commentsOpen = useCommentsSheetStore(s => s.open || s.closing);
 
-  const feed = useMemo(
-    () =>
-      posts.filter(
-        p => !p.hidden && !hiddenIds.includes(p.id) && p.feedTabs.includes(tab),
-      ),
-    [posts, hiddenIds, tab],
-  );
+  const feed = useMemo(() => {
+    const authoritative = isApiEnabled && (recent || tab === 'following');
+    const allowed = new Map((apiPosts ?? []).map(post=>[post.id,post]));
+    const visible = posts.filter(p => !p.hidden && !hiddenIds.includes(p.id) &&
+      (authoritative ? allowed.has(p.id) : true) && p.feedTabs.includes(tab) &&
+      (tab !== 'following' || !isApiEnabled || allowed.get(p.id)?.author?.followed === true));
+    if (recent) visible.sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt));
+    return visible;
+  }, [posts, hiddenIds, tab, recent, apiPosts]);
+  useGenieScreen({
+    domain:'flash',
+    filters:{following:tab === 'following' || undefined,sort:recent ? 'recent' : undefined},
+    status:isLoading || isRefetching || Boolean(apiPosts?.some(p=>!posts.some(visible=>visible.id===p.id))) ? 'loading' : error ? 'error' : 'ready',
+    partial:(apiPosts?.length ?? 0) >= 50,
+    rows:feed.map((p,index)=>({id:p.id,name:p.text?.slice(0,70) || `Post by ${p.author?.name ?? 'a member'}`,
+      detail:`${p.author?.name ?? 'a member'} · ${p.timeLabel}`,open:()=>listRef.current?.scrollToIndex({index, animated:true})})),
+  }, next=>{setTab(next.following ? 'following' : 'forYou');setRecent(next.sort === 'recent'); if (error) void refetch();});
   const feedScope = `${tab}:${viewerProfile?.type ?? ''}:${
     viewerProfile?.id ?? ''
   }`;
@@ -238,7 +255,9 @@ export function FlashFeedScreen() {
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
       <GeometryContext.Provider value={geometryContext}>
         <FlatList
-          key={feedScope}
+          ref={listRef}
+          onScrollToIndexFailed={({index,averageItemLength})=>listRef.current?.scrollToOffset({offset:index*averageItemLength,animated:true})}
+          key={`${feedScope}:${recent}`}
           data={feed}
           CellRendererComponent={FeedCell}
           extraData={[activePostId, preparedPostId, playbackEnabled]}
@@ -272,7 +291,10 @@ export function FlashFeedScreen() {
                 onChange={id => setTab(id as FeedTab)}
                 pills={FEED_PILLS}
               />
+              <SearchFilterChips filters={{sort:recent?'recent':undefined}} onClear={()=>setRecent(false)} />
               <FlashComposerBar />
+              {error && (recent || tab === 'following') ? <Text style={{color:theme.colors.textSecondary}}>Could not load posts. Pull to retry.</Text> :
+                !isLoading && !feed.length && (recent || tab === 'following') ? <Text style={{color:theme.colors.textSecondary}}>No matching posts.</Text> : null}
             </View>
           }
           renderItem={({ item }) => (

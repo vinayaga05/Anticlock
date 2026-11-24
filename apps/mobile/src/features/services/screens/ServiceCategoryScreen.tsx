@@ -18,7 +18,12 @@ import {
   getEventsForCategory,
   getProductsForCategory,
 } from '@/shared/data/services';
+import { useGenieScreen } from '@/features/assistant/search/useGenieScreen';
+import { useGenieSearch, type SearchFilters } from '@/features/assistant/search/searchState';
+import { SearchFilterChips } from '@/features/assistant/search/SearchFilterChips';
+import { filterProviderResults, useProvidersAvailableToday } from '@/features/assistant/search/providerSearch';
 import { ProviderCard } from '@/features/services/components/ProviderCard';
+import { useProviderListPreview } from '@/features/services/components/useProviderListPreview';
 import {
   isMarketplaceProviderId,
   useMarketplaceProvidersQuery,
@@ -38,10 +43,19 @@ export function ServiceCategoryScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<RootStackParamList, 'ServiceCategory'>>();
-  const { categoryId, treeId, q: initialQ, areaLabel, sort: initialSort } =
-    route.params;
+  const {
+    categoryId,
+    treeId,
+    q: initialQ,
+    areaLabel,
+    sort: initialSort,
+  } = route.params;
   const category = getCategory(categoryId);
-  const [sort, setSort] = useState(initialSort ?? 'near');
+  const [filters, setFilters] = useState<SearchFilters>(() => ({
+    areaLabel, sort: initialSort === 'rating' || initialSort === 'price' ? initialSort : undefined,
+  }));
+  const position = useGenieSearch(s => s.position);
+  const sort = filters.sort === 'rating' || filters.sort === 'price' ? filters.sort : 'near';
   const { searchQuery, onChangeText, scrollRef, onScroll } =
     useSearchScrollRestoration(initialQ ?? '');
   const treeKey = (
@@ -58,7 +72,10 @@ export function ServiceCategoryScreen() {
 
   // Approved businesses offering this category (or a sub-category) come
   // from the API; fixtures are only used when the app runs offline.
-  const providersQuery = useMarketplaceProvidersQuery({ categoryId, limit: 50 });
+  const providersQuery = useMarketplaceProvidersQuery({
+    categoryId,
+    limit: 50,
+  });
   const providers = useMemo(
     () => providersQuery.data ?? [],
     [providersQuery.data],
@@ -84,7 +101,7 @@ export function ServiceCategoryScreen() {
       ),
     [childCategories, normalizedQuery],
   );
-  const filteredProviders = useMemo(
+  const textMatches = useMemo(
     () =>
       providers.filter(provider =>
         matchesQuery(
@@ -99,6 +116,16 @@ export function ServiceCategoryScreen() {
       ),
     [providers, normalizedQuery],
   );
+  const candidates = useMemo(() => filterProviderResults(textMatches, filters, position), [textMatches, filters, position]);
+  const availability = useProvidersAvailableToday(candidates, categoryId, filters.availability === 'today');
+  const checkingToday = filters.availability === 'today' && candidates.some(p => p.modes?.length && p.categoryIds.length);
+  const availabilityError = checkingToday && availability.isError;
+  const loadingResults = Boolean(providersQuery.isLoading || providersQuery.isFetching || (checkingToday && availability.isFetching));
+  const failedResults = Boolean(providersQuery.error || availabilityError);
+  const filteredProviders = useMemo(() => filters.availability === 'today'
+    ? candidates.filter(p => availability.data?.includes(p.id))
+    : candidates, [filters.availability, candidates, availability.data]);
+  const preview = useProviderListPreview(filteredProviders);
   const filteredEvents = useMemo(
     () =>
       events.filter(event =>
@@ -136,6 +163,76 @@ export function ServiceCategoryScreen() {
     [products, normalizedQuery],
   );
 
+  const actionType = category?.actionType;
+  const isEvent =
+    actionType === 'event_booking' ||
+    actionType === 'transport_booking';
+  const isCourse = actionType === 'course_enrollment';
+  const isProduct =
+    actionType === 'product_purchase' ||
+    actionType === 'property_enquiry';
+  const isRequest =
+    actionType === 'home_service' ||
+    actionType === 'service_request';
+
+
+  const showsSpecialties = isHealth && categoryId !== 'health.doctors' && childCategories.length > 0;
+  const isProviderList = !showsSpecialties && !isEvent && !isCourse && !isProduct;
+  const openProvider = (provider: (typeof providers)[number]) => {
+    // Keep the list and ordinal selection on the same destination.
+    if (!isMarketplaceProviderId(provider.id)) {
+      if (category?.legacyRoute === 'Doctors' && provider.id === 'prov-doc-remya') {
+        navigation.navigate('DoctorProfile', { doctorId:'doc-remya' });
+        return;
+      }
+      if (category?.legacyRoute === 'LabList' || category?.legacyRoute === 'DiagnosticsHub') {
+        navigation.navigate('LabDetail', { labId:'lab-thyrocare' });
+        return;
+      }
+      if (category?.legacyRoute === 'FitnessFeed' || category?.legacyRoute === 'PhysioHub') {
+        navigation.navigate('ClassDetail', { classId:'fit-sathish-am' });
+        return;
+      }
+    }
+    navigateToProvider(navigation,provider.id,categoryId);
+  };
+  const metadataUnavailable = isProviderList && providers.length > 0 &&
+    providers.every(provider => provider.searchMetadataAvailable === false) &&
+    Boolean(filters.nearby || filters.sort === 'closest' || filters.sort === 'rating' || filters.minRating || filters.availability === 'open_now');
+  const resultRows = showsSpecialties
+    ? filteredChildCategories.map(c=>({id:c.id,name:c.name,detail:c.description,
+        open:()=>navigation.navigate('ServiceCategory',{categoryId:c.id,treeId})}))
+    : isEvent
+    ? filteredEvents.map(e=>({id:e.id,name:e.title,detail:e.destination,
+        open:()=>navigation.navigate('EventDetail',{eventId:e.id})}))
+    : isCourse
+    ? filteredCourses.map(c=>({id:c.id,name:c.title,detail:c.instructor,
+        open:()=>navigation.navigate('CourseDetail',{courseId:c.id})}))
+    : isProduct
+    ? filteredProducts.map(p=>({id:p.id,name:p.name,detail:p.seller,
+        open:()=>navigation.navigate('ProductDetail',{productId:p.id})}))
+    : filteredProviders.map(p=>({
+        id:p.id,name:p.name,
+        detail:[p.location.distanceKm != null ? `${p.location.distanceKm.toFixed(1)} km away` : p.location.area || p.location.city,
+          p.priceFrom != null ? `from ₹${p.priceFrom}` : undefined,
+          p.reviewCount ? `${p.rating.toFixed(1)} stars` : undefined,
+          filters.availability === 'today' ? 'has a slot today' : filters.availability === 'open_now' ? 'open now' : undefined,
+        ].filter(Boolean).join(', '),
+        open:()=>openProvider(p),
+      }));
+  useGenieScreen({
+    domain:'services', filters:{...filters,q:searchQuery.trim() || undefined,categoryId,treeId},
+    status:isProviderList && loadingResults ? 'loading' : isProviderList && failedResults ? 'error' : metadataUnavailable ? 'unavailable' : 'ready',
+    message:metadataUnavailable ? 'The current API doesn’t provide the data needed for that filter.' : undefined,
+    partial:isProviderList && providers.length === 50,rows:resultRows,
+  }, next=>{
+    const {q,categoryId: _categoryId,treeId: _treeId,...rest}=next;
+    setFilters(rest);
+    onChangeText(q ?? '');
+    if (isProviderList && providersQuery.error) void providersQuery.refetch();
+    if (next.availability === 'today' && availability.isError) void availability.refetch();
+  },Boolean(category),route.key);
+
   if (!category) {
     return (
       <Shell tabAware={false}>
@@ -150,7 +247,7 @@ export function ServiceCategoryScreen() {
 
   // Doctors opens the shared provider list directly. Keep legacy specialty
   // categories available for existing provider classifications and links.
-  if (isHealth && categoryId !== 'health.doctors' && childCategories.length) {
+  if (showsSpecialties) {
     return (
       <Shell
         scrollable
@@ -189,23 +286,16 @@ export function ServiceCategoryScreen() {
     );
   }
 
-  const isEvent =
-    category.actionType === 'event_booking' ||
-    category.actionType === 'transport_booking';
-  const isCourse = category.actionType === 'course_enrollment';
-  const isProduct =
-    category.actionType === 'product_purchase' ||
-    category.actionType === 'property_enquiry';
-  const isRequest =
-    category.actionType === 'home_service' ||
-    category.actionType === 'service_request';
-
   return (
     <Shell
       scrollable
       tabAware={false}
       scrollRef={scrollRef}
-      onScroll={onScroll}
+      onScroll={event => {
+        onScroll(event);
+        preview.onScroll(event);
+      }}
+      onViewportLayout={preview.onViewportLayout}
     >
       <Text
         style={[
@@ -215,15 +305,6 @@ export function ServiceCategoryScreen() {
       >
         {category.description}
       </Text>
-      {areaLabel ? (
-        <Text
-          style={[
-            theme.typography.caption,
-            { color: theme.colors.primary, marginBottom: 4 },
-          ]}>
-          Showing results for {areaLabel}
-        </Text>
-      ) : null}
       <SearchBar
         placeholder={`Search ${category.name}`}
         value={searchQuery}
@@ -231,7 +312,7 @@ export function ServiceCategoryScreen() {
       />
       <FilterPills
         activeId={sort}
-        onChange={setSort}
+        onChange={id => setFilters(current => ({...current,sort: id === 'rating' || id === 'price' ? id : current.nearby ? 'closest' : undefined}))}
         accent={accent}
         pills={[
           { id: 'near', label: 'Near you' },
@@ -239,6 +320,11 @@ export function ServiceCategoryScreen() {
           { id: 'price', label: 'Price' },
         ]}
       />
+
+      <SearchFilterChips filters={filters} onClear={key => setFilters(current => ({
+        ...current, [key]:undefined,
+        ...(key === 'nearby' && current.sort === 'closest' ? {sort:undefined} : {}),
+      }))} />
 
       {isEvent ? (
         filteredEvents.length === 0 ? (
@@ -300,6 +386,13 @@ export function ServiceCategoryScreen() {
             ))}
           </View>
         )
+      ) : metadataUnavailable && !loadingResults ? (
+        <EmptyState icon="search" title="Filter unavailable" description="Provider data for this filter is unavailable." />
+      ) : failedResults ? (
+        <EmptyState icon="search" title="Could not load providers" actionLabel="Retry"
+          onAction={() => { void providersQuery.refetch(); if (checkingToday) void availability.refetch(); }} />
+      ) : loadingResults && filteredProviders.length === 0 ? (
+        <Text style={{color:theme.colors.textSecondary}}>{checkingToday ? 'Checking available times…' : 'Loading providers…'}</Text>
       ) : filteredProviders.length === 0 ? (
         <EmptyState
           icon="search"
@@ -319,45 +412,26 @@ export function ServiceCategoryScreen() {
           }
         />
       ) : (
-        filteredProviders.map(provider => (
-          <ProviderCard
-            key={provider.id}
-            provider={provider}
-            health={isHealth}
-            onPress={() => {
-              // Real businesses always open their own detail page; the legacy
-              // jumps below only apply to the offline demo fixtures.
-              if (isMarketplaceProviderId(provider.id)) {
-                navigateToProvider(navigation, provider.id, categoryId);
-                return;
-              }
-              if (
-                category.legacyRoute === 'Doctors' &&
-                provider.id === 'prov-doc-remya'
-              ) {
-                navigation.navigate('DoctorProfile', { doctorId: 'doc-remya' });
-                return;
-              }
-              if (
-                category.legacyRoute === 'LabList' ||
-                category.legacyRoute === 'DiagnosticsHub'
-              ) {
-                navigation.navigate('LabDetail', { labId: 'lab-thyrocare' });
-                return;
-              }
-              if (
-                category.legacyRoute === 'FitnessFeed' ||
-                category.legacyRoute === 'PhysioHub'
-              ) {
-                navigation.navigate('ClassDetail', {
-                  classId: 'fit-sathish-am',
-                });
-                return;
-              }
-              navigateToProvider(navigation, provider.id, categoryId);
-            }}
-          />
-        ))
+        <View
+          onLayout={preview.onGroupLayout}
+          style={{ gap: theme.spacing.lg }}
+        >
+          {filteredProviders.map(provider => (
+            <View
+              key={provider.id}
+              onLayout={event => preview.onRowLayout(provider.id, event)}
+            >
+              <ProviderCard
+                provider={provider}
+                previewActive={preview.activeId === provider.id}
+                onPreviewReady={preview.onPreviewReady}
+                onPreviewFailed={preview.onPreviewFailed}
+                health={isHealth}
+                onPress={() => openProvider(provider)}
+              />
+            </View>
+          ))}
+        </View>
       )}
     </Shell>
   );

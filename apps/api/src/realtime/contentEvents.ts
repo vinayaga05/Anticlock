@@ -13,6 +13,7 @@ import Redis from "ioredis";
  * failure falls back to local delivery so the single-VPS setup keeps working.
  */
 export type ContentEvent =
+  | { type: "social.changed"; postId: string; format: string; publisherProfileType: string; publisherProfileId: string; at: string; affectedUserIds?: string[] }
   | {
       type: "post.published";
       postId: string;
@@ -52,7 +53,7 @@ function parseEvent(raw: string): ContentEvent | null {
   try {
     const value = JSON.parse(raw) as Partial<ContentEvent>;
     if (
-      (value.type === "post.published" || value.type === "post.removed") &&
+      (value.type === "post.published" || value.type === "post.removed" || value.type === "social.changed") &&
       typeof value.postId === "string" &&
       typeof value.format === "string"
     ) {

@@ -1,3 +1,4 @@
+import { useGenieScreen } from '@/features/assistant/search/useGenieScreen';
 import { navigateToProvider } from '@/shared/navigation/businessNavigation';
 import React, { useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -17,7 +18,6 @@ import { useSearchScrollRestoration } from '@/shared/hooks/useSearchScrollRestor
 import { fitnessClasses, doctors } from '@/shared/data/mocks';
 import { marketplaceProviders } from '@/shared/data/services';
 import { NeedsShowcaseGrid } from '@/features/needs/components/NeedsShowcaseGrid';
-import { RoomsRestaurantHub } from '@/features/needs/components/RoomsRestaurantHub';
 import { ServiceCatalogSearchResults } from '@/features/services/components/ServiceCatalogSearchResults';
 import { ProviderCard } from '@/features/services/components/ProviderCard';
 import { RootStackParamList } from '@/shared/navigation/types';
@@ -34,6 +34,11 @@ export function NeedsScreen() {
   const { searchQuery, onChangeText, scrollRef, onScroll } =
     useSearchScrollRestoration();
   const popular = marketplaceProviders.slice(0, 3);
+  useGenieScreen({
+    domain:'needs',filters:{},status:'ready',
+    message:'I opened Needs. Tell me which service you’re looking for.',
+    rows:[],
+  }, next=>onChangeText(next.q ?? ''), !searchQuery.trim());
 
   const bottomPad =
     TAB_BAR_VISIBLE_HEIGHT + Math.max(insets.bottom, 8) + 8 + 24;
@@ -69,15 +74,11 @@ export function NeedsScreen() {
 
         {searchQuery.trim() ? (
           <View style={styles.padded}>
-            <ServiceCatalogSearchResults query={searchQuery} />
+            <ServiceCatalogSearchResults query={searchQuery} onGenieQuery={onChangeText} />
           </View>
         ) : (
           <>
             <NeedsShowcaseGrid />
-
-            <View style={styles.padded}>
-              <RoomsRestaurantHub />
-            </View>
 
             <View style={styles.padded}>
               <PromoBannerRow

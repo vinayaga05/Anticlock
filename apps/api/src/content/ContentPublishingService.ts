@@ -1105,6 +1105,7 @@ export async function getProfileSummary(
   const clips = byFormat.get("clip") ?? 0;
   const flash = byFormat.get("flash") ?? 0;
   const socialCounts = await profileConnectionCounts(ref);
+  if (!(ref.type === "personal" ? ref.id === viewerUserId : viewer.managedProviderIds.includes(ref.id))) socialCounts.pendingRequests = 0;
   return {
     publisher,
     details,

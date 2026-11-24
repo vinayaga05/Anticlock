@@ -1,331 +1,444 @@
-import { useCallback, useRef } from 'react';
-import { Alert, PermissionsAndroid, Platform } from 'react-native';
-import { apiStream, ApiError } from '@/shared/api/client';
+import { useCallback, useEffect, useRef } from 'react';
+import { apiStream, apiRequest, ApiError } from '@/shared/api/client';
 import { isApiEnabled } from '@/shared/api/config';
 import { createAnalyticsEventId } from '@/shared/api/reelAnalytics';
-import { useAssistantStore } from '@/features/assistant/store/assistantStore';
-import type { AssistantStreamEvent } from '@/features/assistant/types';
+import { useAssistantStore } from '../store/assistantStore';
+import { locateBusinessViewer } from '@/features/business-profile/businessLocation';
+import type { AssistantStreamEvent, AssistantResultCard } from '../types';
 import {
   executeAssistantNavigation,
-  executeGenieAction,
-  resetGenieActionDedupe,
-} from '@/features/assistant/navigation/assistantNavigation';
+  validAssistantRoute,
+  type GenieNavigation,
+} from '../navigation/assistantNavigation';
+import { rootNavigationRef } from '@/shared/navigation/rootNavigation';
+import { interpretSearch, validateSearch } from '../search/interpretSearch';
 import {
-  getDefaultAreaLabel,
-  resolveGenieLocation,
-  type GenieLocationContext,
-} from '@/features/assistant/services/genieLocation';
+  searchScreens,
+  searchSummary,
+  useGenieSearch,
+  type SearchContext,
+} from '../search/searchState';
+import { speakGenieReply, stopGenieSpeech } from '../services/speechOutput';
 
-function newId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+function logSearchEvent(
+  type: string,
+  id: string,
+  metadata: Record<string, unknown>,
+) {
+  if (!isApiEnabled) return;
+  void apiRequest('/v1/assistant/behavior-events', {
+    method: 'POST',
+    body: JSON.stringify({
+      type,
+      metadata,
+      idempotencyKey: `genie-${type}-${id}`,
+    }),
+  }).catch(() => {});
 }
 
-/** Must be a UUID — API schema validates `clientRequestId` with z.string().uuid(). */
-function newRequestId() {
-  return createAnalyticsEventId();
-}
-
-async function requestDeviceLocationPermission(): Promise<boolean> {
-  if (Platform.OS === 'android') {
-    const result = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      {
-        title: 'Location for Genie',
-        message: 'Genie uses your location only when you ask for things near you.',
-        buttonPositive: 'Allow',
-        buttonNegative: 'Not now',
-      },
-    );
-    return result === PermissionsAndroid.RESULTS.GRANTED;
-  }
-  // iOS: without a geolocation native module, we cannot prompt — fall back to typed area.
-  return false;
-}
-
-export function useAssistantChat(navigation: {
-  navigate: (route: string, params?: object) => void;
-}) {
-  const abortRef = useRef<AbortController | null>(null);
-  const activeRequestIdRef = useRef<string | null>(null);
-  const locationCtxRef = useRef<GenieLocationContext>({});
-
-  const trackAnalytics = useCallback(
-    async (conversationId: string | undefined, event: Record<string, unknown>) => {
-      if (!isApiEnabled) return;
-      try {
-        const { apiRequest } = await import('@/shared/api/client');
-        await apiRequest('/v1/assistant/analytics', {
-          method: 'POST',
-          body: JSON.stringify({ conversationId, event }),
-        });
-      } catch {
-        /* non-blocking */
-      }
-    },
-    [],
-  );
-
-  const trackBehavior = useCallback(async (event: Record<string, unknown>) => {
-    if (!isApiEnabled) return;
-    try {
-      const { apiRequest } = await import('@/shared/api/client');
-      await apiRequest('/v1/assistant/behavior-events', {
-        method: 'POST',
-        body: JSON.stringify(event),
+function waitForScreen(id: string, signal: AbortSignal) {
+  return new Promise<ReturnType<typeof useGenieSearch.getState>['report']>(
+    resolve => {
+      const finish = (
+        result: ReturnType<typeof useGenieSearch.getState>['report'],
+      ) => {
+        clearTimeout(deadline);
+        unsubscribe();
+        signal.removeEventListener('abort', cancel);
+        resolve(result);
+      };
+      const cancel = () => finish(null);
+      const deadline = setTimeout(cancel, 35_000);
+      const unsubscribe = useGenieSearch.subscribe(state => {
+        if (
+          state.command?.id === id &&
+          state.report?.domain === state.command.domain &&
+          state.report.status !== 'loading'
+        ) {
+          finish(state.report);
+        }
       });
-    } catch {
-      /* non-blocking */
-    }
-  }, []);
-
-  const handleRequestLocation = useCallback(
-    async (purpose: string, _actionId: string) => {
-      Alert.alert(
-        'Use your location?',
-        purpose || 'Genie needs your location to show nearby results.',
-        [
-          {
-            text: 'Type an area instead',
-            style: 'cancel',
-            onPress: () => {
-              useAssistantStore.getState().updateLastAssistant({
-                content:
-                  'No problem — tell me a city, area, or PIN (for example “Anna Nagar” or “Chennai”).',
-                pending: false,
-              });
-            },
-          },
-          {
-            text: 'Allow',
-            onPress: () => {
-              void (async () => {
-                const granted = await requestDeviceLocationPermission();
-                if (!granted) {
-                  useAssistantStore.getState().updateLastAssistant({
-                    content:
-                      'Location access was denied. Tell me an area to search, or browse without location.',
-                    pending: false,
-                  });
-                  return;
-                }
-                locationCtxRef.current = {
-                  ...locationCtxRef.current,
-                  deviceLabel: getDefaultAreaLabel(),
-                };
-                useAssistantStore.getState().updateLastAssistant({
-                  content: `Got it — using ${getDefaultAreaLabel()}. Ask me again and I’ll continue.`,
-                  pending: false,
-                });
-              })();
-            },
-          },
-        ],
-      );
+      signal.addEventListener('abort', cancel, { once: true });
+      if (signal.aborted) cancel();
     },
-    [],
   );
+}
+
+export function useAssistantChat(navigation: GenieNavigation) {
+  const abortRef = useRef<AbortController | null>(null);
+  const pending = useRef<{ assistantId: string; searchId?: string } | null>(
+    null,
+  );
+  const clarification = useRef<{
+    type: 'area' | 'budget' | 'category';
+    context?: SearchContext;
+  } | null>(null);
+  const previous = useRef<SearchContext | null>(null);
+  const lastOpened = useRef<string | null>(null);
+  const retry = useRef<string | null>(null);
+
+  const interrupt = useCallback(() => {
+    abortRef.current?.abort();
+    stopGenieSpeech();
+    const turn = pending.current;
+    if (turn?.searchId) useGenieSearch.getState().cancel(turn.searchId);
+    if (turn)
+      useAssistantStore.getState().updateMessage(turn.assistantId, {
+        content: 'Stopped.',
+        pending: false,
+      });
+    pending.current = null;
+    const store = useAssistantStore.getState();
+    store.setSending(false);
+    store.setToolProgress(null);
+  }, []);
+  useEffect(() => interrupt, [interrupt]);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (input: string) => {
       const store = useAssistantStore.getState();
-      if (!store.enabled) return;
-
-      const trimmed = text.trim();
-      if (!trimmed) return;
-
-      abortRef.current?.abort();
-      abortRef.current = new AbortController();
-      const clientRequestId = newRequestId();
-      activeRequestIdRef.current = clientRequestId;
-      resetGenieActionDedupe();
-
-      store.addMessage({ id: newId(), role: 'user', content: trimmed });
-      store.addMessage({ id: newId(), role: 'assistant', content: '', pending: true });
-      store.setSending(true);
-      store.setToolProgress(null);
-      store.setQuickActions([]);
-
-      if (!isApiEnabled) {
-        store.updateLastAssistant({
-          content: 'API is not configured. Connect to the server to use Genie.',
-          pending: false,
-        });
-        store.setSending(false);
-        store.enqueueOffline({ message: trimmed, conversationId: store.conversationId ?? undefined });
-        return;
-      }
-
-      const resolved = resolveGenieLocation(trimmed, locationCtxRef.current);
-      if (resolved.explicitArea) {
-        locationCtxRef.current = {
-          ...locationCtxRef.current,
-          lastExplicitArea: resolved.explicitArea,
-        };
-      }
-
-      void trackBehavior({
-        type: 'search_submitted',
-        metadata: {
-          source: 'genie',
-          hasArea: Boolean(resolved.areaLabel),
-        },
-        idempotencyKey: `genie-search-${clientRequestId}`,
+      if (!store.enabled || !input.trim()) return;
+      const text =
+        /^retry$/i.test(input.trim()) && retry.current
+          ? retry.current
+          : input.trim();
+      retry.current = text;
+      interrupt();
+      const clientRequestId = createAnalyticsEventId();
+      const assistantId = `${clientRequestId}:reply`;
+      const controller = new AbortController();
+      abortRef.current = controller;
+      pending.current = { assistantId };
+      const { signal } = controller;
+      store.addMessage({ id: clientRequestId, role: 'user', content: text });
+      store.addMessage({
+        id: assistantId,
+        role: 'assistant',
+        content: '',
+        pending: true,
       });
+      store.setSending(true);
+      store.setQuickActions([]);
+      const voice = store.voiceMode || store.voiceOutput;
+      const reply = (content: string, cards?: AssistantResultCard[]) => {
+        if (signal.aborted) return;
+        const current = useAssistantStore.getState();
+        current.updateMessage(assistantId, { content, pending: false, cards });
+        current.setToolProgress(null);
+        if (voice) void speakGenieReply(content);
+      };
+      const report = useGenieSearch.getState().report;
+      const context =
+        clarification.current?.context ??
+        report ??
+        useGenieSearch.getState().requestedContext;
+
+      const applySearch = async (
+        next: SearchContext,
+        needsLocation = false,
+      ) => {
+        const id = `${clientRequestId}:search`;
+        const state = useGenieSearch.getState();
+        if (needsLocation) {
+          try {
+            const point = await locateBusinessViewer(
+              'Location for Genie',
+              'Use your location to find nearby services.',
+            );
+            if (signal.aborted) return;
+            state.setPosition(point);
+          } catch {
+            if (signal.aborted) return;
+            clarification.current = { type: 'area', context: next };
+            reply(
+              'I couldn’t use your location. Which area, city, or PIN should I search?',
+            );
+            return;
+          }
+        }
+        if (signal.aborted || !pending.current) return;
+        clarification.current = null;
+        previous.current = context
+          ? { domain: context.domain, filters: context.filters }
+          : null;
+        lastOpened.current = null;
+        pending.current.searchId = id;
+        const confirmed = waitForScreen(id, signal);
+        logSearchEvent('search_submitted', clientRequestId, {
+          domain: next.domain,
+          hasArea: Boolean(next.filters.areaLabel),
+        });
+
+        state.request({ ...next, id });
+        const currentRoute = rootNavigationRef.isReady()
+          ? rootNavigationRef.getCurrentRoute()
+          : undefined;
+        const currentParams = currentRoute?.params as
+          | { categoryId?: string }
+          | undefined;
+        const sameScreen =
+          currentRoute?.name === searchScreens[next.domain] &&
+          (next.domain !== 'services' ||
+            currentParams?.categoryId === next.filters.categoryId);
+        if (!sameScreen) {
+          if (next.domain === 'services')
+            navigation.navigate('ServiceCategory', {
+              categoryId: next.filters.categoryId,
+              treeId: next.filters.treeId,
+            });
+          else
+            executeAssistantNavigation(navigation, 'Main', {
+              screen: searchScreens[next.domain],
+              ...(next.domain === 'knock' ? { initialTab: 'bookings' } : {}),
+            });
+        }
+        useAssistantStore.getState().setToolProgress({
+          toolName: 'search',
+          message: 'Checking the results on screen…',
+        });
+        const result = await confirmed;
+        if (signal.aborted) return;
+        state.cancel(id);
+        if (!result) {
+          store.setQuickActions(['Retry']);
+          reply(
+            'The results screen hasn’t finished loading. Try again in a moment.',
+          );
+          return;
+        }
+        if (result.status === 'error') store.setQuickActions(['Retry']);
+        else if (
+          result.status === 'ready' &&
+          !result.rows.length &&
+          next.domain === 'services' &&
+          (result.filters.areaLabel || result.filters.nearby)
+        )
+          store.setQuickActions(['Search nearby areas', 'Undo']);
+        else if (previous.current) store.setQuickActions(['Undo']);
+        reply(searchSummary(result));
+        if (result.status === 'ready')
+          logSearchEvent('genie_action_executed', id, { domain: next.domain });
+
+        if (result.status === 'ready' && result.rows.length)
+          store.closeAssistant();
+      };
 
       try {
-        let assistantText = '';
-        let cards = store.messages.at(-1)?.cards;
-        const isStale = () => activeRequestIdRef.current !== clientRequestId;
-
+        if (
+          /^undo(?: last (?:filter|change))?$/i.test(text) &&
+          previous.current
+        ) {
+          await applySearch(previous.current);
+          return;
+        }
+        if (
+          /^what (?:does verified mean|is a verified provider)[.?!]*$/i.test(
+            text,
+          )
+        ) {
+          reply(
+            'A verified provider has an approved business profile in Knock. Check their reviews, prices, and available times on the profile.',
+          );
+          return;
+        }
+        const interpreted = interpretSearch(
+          text,
+          context,
+          clarification.current?.type,
+        );
+        if (interpreted.type === 'question') {
+          if (interpreted.waiting)
+            clarification.current = {
+              type: interpreted.waiting,
+              context: interpreted.context,
+            };
+          reply(interpreted.text);
+          return;
+        }
+        if (interpreted.type === 'open' || interpreted.type === 'explain') {
+          const index = interpreted.index;
+          const row =
+            index === -2
+              ? report?.rows.find(row => row.id === lastOpened.current)
+              : report?.rows.at(index);
+          if (!row || report?.status !== 'ready') {
+            reply(
+              index === -2
+                ? 'Which result do you mean? Try “Why did you show the second one?”'
+                : 'I don’t see that result in the current list.',
+            );
+            return;
+          }
+          if (interpreted.type === 'explain') {
+            reply(
+              row.detail
+                ? `${row.name} matched the filters on screen. The listing shows ${row.detail}.`
+                : `${row.name} is in the current results. I don’t have more details about the match.`,
+            );
+          } else if (row.open) {
+            lastOpened.current = row.id;
+            row.open();
+            reply(`Opening ${row.name}.`);
+            store.closeAssistant();
+          } else reply('This result doesn’t have a detail page here.');
+          return;
+        }
+        if (interpreted.type === 'search') {
+          await applySearch(interpreted.context, interpreted.needsLocation);
+          return;
+        }
+        if (!isApiEnabled) {
+          reply('Connect to the server to use Genie.');
+          return;
+        }
+        let answer = '';
+        let cards: AssistantResultCard[] | undefined;
+        let action:
+          | Extract<AssistantStreamEvent, { type: 'action' }>['action']
+          | undefined;
+        let legacy:
+          | Extract<AssistantStreamEvent, { type: 'navigation' }>
+          | undefined;
+        let done = false;
+        let failure: string | undefined;
         await apiStream<AssistantStreamEvent>(
           '/v1/assistant/chat',
           {
-            message: trimmed,
+            message: text,
             conversationId: store.conversationId ?? undefined,
             currentScreen: store.currentScreen ?? undefined,
             previousResponseId: store.responseId ?? undefined,
             clientRequestId,
-            areaLabel: resolved.areaLabel,
-            locationHint: resolved.locationHint,
+            areaLabel: context?.filters.areaLabel,
           },
           event => {
-            if (isStale()) return;
-            const s = useAssistantStore.getState();
+            if (signal.aborted) return;
+            const live = useAssistantStore.getState();
             switch (event.type) {
               case 'token':
-                assistantText += event.delta;
-                s.updateLastAssistant({ content: assistantText, pending: true });
-                break;
-              case 'tool_start':
-                s.setToolProgress({ toolName: event.toolName, message: event.message });
-                break;
-              case 'tool_result':
+                answer += event.delta;
                 break;
               case 'result_cards':
                 cards = event.cards;
-                s.updateLastAssistant({ cards: event.cards, pending: true });
+                break;
+              case 'tool_start':
+                live.setToolProgress({
+                  toolName: event.toolName,
+                  message: event.message,
+                });
                 break;
               case 'navigation':
-                executeAssistantNavigation(navigation, event.route, event.params);
-                void trackAnalytics(s.conversationId ?? undefined, {
-                  type: 'navigation_completed',
-                  route: event.route,
-                  fromScreen: s.currentScreen ?? undefined,
-                });
-                void trackBehavior({
-                  type: 'genie_action_executed',
-                  entityType: 'route',
-                  entityId: event.route,
-                  metadata: { params: event.params },
-                  idempotencyKey: `nav-${clientRequestId}-${event.route}`,
-                });
+                legacy = event;
                 break;
-              case 'action': {
-                const outcome = executeGenieAction(navigation, event.action, {
-                  onRequestLocation: (purpose, actionId) => {
-                    void handleRequestLocation(purpose, actionId);
-                  },
-                });
-                void trackAnalytics(s.conversationId ?? undefined, {
-                  type: outcome.ok ? 'action_executed' : 'action_failed',
-                  actionType: event.action.type,
-                  actionId: event.action.id,
-                  ...(outcome.ok ? {} : { code: outcome.reason ?? 'failed' }),
-                });
-                if (outcome.ok) {
-                  void trackBehavior({
-                    type: 'genie_action_executed',
-                    entityType: event.action.type,
-                    entityId: event.action.id,
-                    idempotencyKey: `action-${event.action.id}`,
-                  });
-                }
-                break;
-              }
-              case 'result':
-                if (event.outcome === 'no_results' && event.message) {
-                  // Prefer streamed assistant text; keep outcome message as fallback hint
-                  if (!assistantText.trim()) {
-                    s.updateLastAssistant({ content: event.message, pending: true });
-                  }
-                }
+              case 'action':
+                action = event.action;
                 break;
               case 'quick_actions':
-                s.setQuickActions(event.actions);
+                live.setQuickActions(event.actions);
+                break;
+              case 'error':
+                failure = event.message;
                 break;
               case 'done':
                 if (
                   event.clientRequestId &&
                   event.clientRequestId !== clientRequestId
-                ) {
+                )
                   break;
-                }
-                s.setConversationId(event.conversationId);
-                if (event.responseId) s.setResponseId(event.responseId);
-                s.updateLastAssistant({
-                  content: event.message || assistantText,
-                  cards,
-                  pending: false,
-                });
-                s.setToolProgress(null);
-                break;
-              case 'error':
-                s.updateLastAssistant({ content: event.message, pending: false });
-                s.setToolProgress(null);
-                void trackAnalytics(s.conversationId ?? undefined, {
-                  type: 'stream_failed',
-                  code: event.code,
-                });
-                break;
-              default:
+                live.setConversationId(event.conversationId);
+                if (event.responseId) live.setResponseId(event.responseId);
+                answer = event.message || answer;
+                done = true;
                 break;
             }
           },
-          { signal: abortRef.current.signal },
+          { signal },
         );
-      } catch (err) {
-        const isAbort = err instanceof Error && err.name === 'AbortError';
-        if (!isAbort && activeRequestIdRef.current === clientRequestId) {
-          const message =
-            err instanceof ApiError && err.message
-              ? err.message
-              : 'Something went wrong. Please try again.';
-          useAssistantStore.getState().updateLastAssistant({
-            content: message,
-            pending: false,
-          });
-          useAssistantStore.getState().enqueueOffline({
-            message: trimmed,
-            conversationId: useAssistantStore.getState().conversationId ?? undefined,
-          });
-          void trackAnalytics(useAssistantStore.getState().conversationId ?? undefined, {
-            type: 'stream_failed',
-            code: err instanceof ApiError ? err.code : 'network_error',
-          });
+        if (signal.aborted) return;
+        if (failure) {
+          reply(failure);
+          store.setQuickActions(['Retry']);
+          return;
         }
+        if (!done) {
+          reply('The connection ended before Genie could finish. Try again.');
+          store.setQuickActions(['Retry']);
+          return;
+        }
+        if (action?.type === 'open_search_results') {
+          const validated = validateSearch(action.domain, action.filters ?? {});
+          if (validated) await applySearch(validated);
+          else reply('The results screen doesn’t support those filters.');
+          return;
+        }
+        if (action?.type === 'request_location') {
+          if (context) clarification.current = { type: 'area', context };
+          reply('Which area, city, or PIN should I search?');
+          return;
+        }
+        if (action?.type === 'confirm_mutation') {
+          reply('That change needs to be confirmed on its own screen.');
+          return;
+        }
+        if (action && action.version !== 1) {
+          reply('That action isn’t supported by this version of the app.');
+          return;
+        }
+        const target = action?.type === 'navigate' ? action.target : legacy;
+        if (target) {
+          const params = target.params ?? {};
+          if (!validAssistantRoute(target.route, params)) {
+            reply(
+              'That destination isn’t available in this version of the app.',
+            );
+            return;
+          }
+          if (target.route === 'ServiceCategory') {
+            const search = validateSearch('services', params);
+            if (search) {
+              await applySearch(search);
+              return;
+            }
+          }
+          if (target.route === 'Main' && !params.reelId) {
+            const domain = (
+              Object.keys(searchScreens) as Array<keyof typeof searchScreens>
+            ).find(domain => searchScreens[domain] === params.screen);
+            const filters = Object.fromEntries(
+              Object.entries(params).filter(
+                ([key]) => key !== 'screen' && key !== 'initialTab',
+              ),
+            );
+            const search = domain && validateSearch(domain, filters);
+            if (
+              search &&
+              (!params.initialTab || params.initialTab === 'bookings')
+            ) {
+              await applySearch(search);
+              return;
+            }
+          }
+          executeAssistantNavigation(navigation, target.route, params);
+          store.closeAssistant();
+        }
+        reply(answer || 'What would you like to find?', cards);
+      } catch (err) {
+        if (signal.aborted) return;
+        store.setQuickActions(['Retry']);
+        reply(
+          err instanceof ApiError
+            ? err.message
+            : 'Something went wrong. Please try again.',
+        );
       } finally {
-        if (activeRequestIdRef.current === clientRequestId) {
-          useAssistantStore.getState().setSending(false);
+        if (!signal.aborted) {
+          pending.current = null;
+          store.setSending(false);
+          store.setToolProgress(null);
         }
       }
     },
-    [handleRequestLocation, navigation, trackAnalytics, trackBehavior],
+    [interrupt, navigation],
   );
-
-  const interrupt = useCallback(() => {
-    abortRef.current?.abort();
-    activeRequestIdRef.current = null;
-    useAssistantStore.getState().setSending(false);
-    useAssistantStore.getState().setToolProgress(null);
-  }, []);
-
-  const flushOfflineQueue = useCallback(async () => {
-    if (!isApiEnabled) return;
-    const items = useAssistantStore.getState().drainOfflineQueue();
-    for (const item of items) {
-      await sendMessage(item.message);
-    }
-  }, [sendMessage]);
-
-  return { sendMessage, interrupt, flushOfflineQueue };
+  return { sendMessage, interrupt };
 }

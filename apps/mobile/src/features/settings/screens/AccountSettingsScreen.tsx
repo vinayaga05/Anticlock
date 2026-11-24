@@ -306,18 +306,21 @@ export function AccountSettingsScreen() {
                   </View>
                   <PressableScale
                     accessibilityLabel="Accept follow request"
+                    disabled={followRequestAction.isPending}
                     style={[styles.requestAction, { backgroundColor: theme.colors.primary }]}
                     onPress={() => followRequestAction.mutate({ action: 'accept', follower })}>
                     <AppIcon name="check" size={15} color="#fff" />
                   </PressableScale>
                   <PressableScale
                     accessibilityLabel="Delete follow request"
+                    disabled={followRequestAction.isPending}
                     style={[styles.requestAction, { backgroundColor: theme.colors.surfaceMuted }]}
                     onPress={() => followRequestAction.mutate({ action: 'reject', follower })}>
                     <AppIcon name="close" size={15} color={theme.colors.textPrimary} />
                   </PressableScale>
                   <PressableScale
                     accessibilityLabel="Block follow requester"
+                    disabled={followRequestAction.isPending}
                     style={[styles.requestAction, { backgroundColor: theme.colors.surfaceMuted }]}
                     onPress={() => followRequestAction.mutate({ action: 'block', follower })}>
                     <AppIcon name="alert" size={15} color={theme.colors.error} />

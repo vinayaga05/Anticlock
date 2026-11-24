@@ -431,6 +431,10 @@ export async function viewerEventPayload(
   viewerProfile: Awaited<ReturnType<typeof clipViewerProfile>> | undefined,
   event: ContentEvent,
 ) {
+  if (event.type === 'social.changed') {
+    return !event.affectedUserIds || event.affectedUserIds.includes(mobileUserId)
+      ? { type: 'social.changed' as const } : null;
+  }
   const base = {
     id: event.postId,
     format: event.format,
@@ -1006,7 +1010,7 @@ contentMobileRoutes.get("/stream", requireAuth, async (c) => {
         if (!payload) continue;
         await stream.writeSSE({
           event: payload.type,
-          id: `${event.at}|${event.postId}`,
+          id: event.type === "social.changed" ? `${event.at}|social` : `${event.at}|${event.postId}`,
           data: JSON.stringify(payload),
         });
       }
@@ -1546,7 +1550,8 @@ contentPublicRoutes.get("/feeds/:format", async (c) => {
       rows.map(async post => {
         const ref = publisherRefFromAuthor(post);
         if (!ref) return null;
-        return (await getProfilePrivacy(ref)).isPrivate ? null : post;
+        try { return (await getProfilePrivacy(ref)).isPrivate ? null : post; }
+        catch (error: any) { if (error.status === 404) return null; throw error; }
       }),
     )
   ).filter((post): post is ClipPost => post !== null);

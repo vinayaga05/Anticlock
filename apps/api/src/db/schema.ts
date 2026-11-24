@@ -125,6 +125,7 @@ export const mobileDevices = pgTable("mobile_devices", {
 });
 
 export const mobileUsers = pgTable("mobile_users", {
+  handle: text("handle").unique(),
   id: uuid("id").defaultRandom().primaryKey(),
   phone: text("phone").notNull().unique(),
   displayName: text("display_name").notNull(),

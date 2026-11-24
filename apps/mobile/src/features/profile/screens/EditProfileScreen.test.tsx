@@ -34,7 +34,7 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 test('shows Camera/Gallery, grouped fields and locked mobile without a photo-link input', () => {
   const renderer = render(); expect(texts(renderer)).toEqual(expect.arrayContaining(['Camera', 'Gallery', 'About you', 'Details', '+919000000001']));
-  expect(renderer.root.findAllByType(TextInput).map(node => node.props.accessibilityLabel)).toEqual(['Name', 'Bio', 'City', 'Website']); expect(action(renderer, 'Save profile changes').props.disabled).toBe(true);
+  expect(renderer.root.findAllByType(TextInput).map(node => node.props.accessibilityLabel)).toEqual(['Name', 'Username', 'Bio', 'City', 'Website']); expect(action(renderer, 'Save profile changes').props.disabled).toBe(true);
   expect(StyleSheet.flatten(action(renderer, 'Take profile photo').props.style).minHeight).toBeGreaterThanOrEqual(44); expect(renderer.root.findByType(KeyboardAvoidingView).props.keyboardVerticalOffset).toBe(0); close(renderer);
 });
 test('Gallery previews immediately and uploads only on Save', async () => {

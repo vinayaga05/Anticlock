@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { StatusBar } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PortalProvider } from 'react-native-teleport';
@@ -24,6 +24,14 @@ const queryClient = new QueryClient({
 function AppShell() {
   const theme = useTheme();
   const { user } = useAuth();
+  const previousAccount = useRef(user?.id);
+  useLayoutEffect(() => {
+    if (previousAccount.current !== user?.id) {
+      void queryClient.cancelQueries();
+      queryClient.clear();
+      previousAccount.current = user?.id;
+    }
+  }, [user?.id]);
 
   // Set up push notifications when user is authenticated
   useNotificationSetup(Boolean(user && user.id !== 'temporary-guest'));

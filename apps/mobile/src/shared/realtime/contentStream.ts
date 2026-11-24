@@ -31,6 +31,7 @@ export type LiveContentEvent =
       publisherProfileType: string;
       publisherProfileId: string;
     }
+  | { type: 'social.changed' }
   | { type: 'resync' };
 
 type Listener = (event: LiveContentEvent) => void;
@@ -148,6 +149,7 @@ function connect() {
         }
         continue;
       }
+      if (message.event === 'social.changed') { emit({ type: 'social.changed' }); continue; }
       if (message.event !== 'post.published' && message.event !== 'post.removed') {
         continue;
       }

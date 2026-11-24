@@ -2,7 +2,10 @@ import { PermissionsAndroid, Platform } from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
 
 /** Only requested when the viewer taps Show distance. Coordinates stay on-device. */
-export async function locateBusinessViewer(): Promise<{
+export async function locateBusinessViewer(
+  title = 'Distance to this business',
+  message = 'Use your location to show the distance to this business.',
+): Promise<{
   latitude: number;
   longitude: number;
 }> {
@@ -15,8 +18,8 @@ export async function locateBusinessViewer(): Promise<{
       ))
     ) {
       const result = await PermissionsAndroid.request(permission, {
-        title: 'Distance to this business',
-        message: 'Use your location to show the distance to this business.',
+        title,
+        message,
         buttonPositive: 'Continue',
         buttonNegative: 'Not now',
       });

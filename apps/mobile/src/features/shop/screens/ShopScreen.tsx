@@ -1,3 +1,5 @@
+import { useGenieScreen } from '@/features/assistant/search/useGenieScreen';
+import { SearchFilterChips } from '@/features/assistant/search/SearchFilterChips';
 import React, {
   useCallback,
   useEffect,
@@ -79,7 +81,9 @@ export function ShopScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const productSectionY = useRef(0);
   const [sort, setSort] = useState<'featured' | 'low' | 'high'>('featured');
-  const [budgetOnly, setBudgetOnly] = useState(false);
+  const [maxPrice, setMaxPrice] = useState<number>();
+  const budgetOnly = maxPrice === 999;
+  const setBudgetOnly = (enabled: boolean) => setMaxPrice(enabled ? 999 : undefined);
   const [refreshing, setRefreshing] = useState(false);
   const bottomInset = useTabBarBottomInset();
   const categoryTileWidth = 80 * Math.max(1, fontScale);
@@ -123,6 +127,7 @@ export function ShopScreen() {
     data: apiData,
     refetch: refetchProducts,
     isLoading,
+    isFetching,
     error,
   } = useProductsQuery(isApiEnabled ? categoryFilter.categoryId : undefined, {
     enabled: canLoadProducts,
@@ -146,7 +151,7 @@ export function ShopScreen() {
       if (!q) return base;
       return base.filter(
         p =>
-          p.name.toLowerCase().includes(q) ||
+          p.name.toLowerCase().includes(q) || p.name.toLowerCase().includes(q.replace(/s$/i,'')) ||
           p.seller?.toLowerCase().includes(q) ||
           p.description?.toLowerCase().includes(q),
       );
@@ -158,7 +163,7 @@ export function ShopScreen() {
     return apiProducts
       .filter(
         p =>
-          p.name.toLowerCase().includes(q) ||
+          p.name.toLowerCase().includes(q) || p.name.toLowerCase().includes(q.replace(/s$/i,'')) ||
           p.description?.toLowerCase().includes(q),
       )
       .map(mapApiProductToCard);
@@ -170,13 +175,28 @@ export function ShopScreen() {
     )?.name ?? (categoryId ? 'Selected category' : 'All products');
 
   const displayedProducts = useMemo(() => {
-    const list = budgetOnly
-      ? products.filter(product => product.price <= 999)
+    const list = maxPrice != null
+      ? products.filter(product => product.price <= maxPrice)
       : [...products];
     if (sort === 'low') list.sort((a, b) => a.price - b.price);
     if (sort === 'high') list.sort((a, b) => b.price - a.price);
     return list;
-  }, [products, budgetOnly, sort]);
+  }, [products, maxPrice, sort]);
+  useGenieScreen({
+    domain:'shop',
+    filters:{ q:query.trim() || undefined, categoryId:categoryId ?? undefined,maxPrice,
+      sort: sort === 'low' ? 'price' : sort === 'high' ? 'highPrice' : undefined },
+    status:isLoading || isFetching || categoryQuery.isFetching ? 'loading' : error || categoryQuery.error ? 'error' : categoryFilter.status === 'unavailable' ? 'unavailable' : 'ready',
+    rows:displayedProducts.map(p=>({id:p.id,name:p.name,detail:`₹${p.price}`,
+      open:()=>navigation.navigate('ProductDetail',{productId:p.id})})),
+  }, next=>{
+    setCategoryId(next.categoryId ?? null);
+    setQuery(next.q ?? '');
+    setMaxPrice(next.maxPrice);
+    setSort(next.sort === 'price' ? 'low' : next.sort === 'highPrice' ? 'high' : 'featured');
+    if (error) void refetchProducts();
+    if (categoryQuery.error) void refetchCategories();
+  });
   const showCollection = !query.trim() && !categoryId;
   const refresh = async () => {
     setRefreshing(true);
@@ -191,7 +211,8 @@ export function ShopScreen() {
   };
   const resetFilters = () => {
     setCategoryId(null);
-    setBudgetOnly(false);
+    setMaxPrice(undefined);
+    setSort('featured');
     setQuery('');
   };
 
@@ -534,11 +555,12 @@ export function ShopScreen() {
               </Text>
             </View>
           </View>
+          {maxPrice != null && !budgetOnly ? <SearchFilterChips filters={{maxPrice}} onClear={()=>setMaxPrice(undefined)} /> : null}
           <View style={styles.filterRow}>
             <PressableScale
               accessibilityLabel="Products under ₹999"
               accessibilityState={{ selected: budgetOnly }}
-              onPress={() => setBudgetOnly(value => !value)}
+              onPress={() => setBudgetOnly(!budgetOnly)}
               style={[
                 styles.filterChip,
                 {

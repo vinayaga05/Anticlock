@@ -23,6 +23,9 @@
   "pnpm": {
     "overrides": {
       "react-native-worklets": "0.12.1"
+    },
+    "patchedDependencies": {
+      "@react-native-voice/voice@3.2.4": "patches/@react-native-voice__voice@3.2.4.patch"
     }
   },
   "devDependencies": {

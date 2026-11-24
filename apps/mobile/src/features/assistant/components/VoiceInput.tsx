@@ -192,7 +192,7 @@ export function VoiceInput({
           placeholder="Ask Genie anything…"
           placeholderTextColor={theme.colors.textTertiary}
           style={[styles.input, { color: theme.colors.textPrimary }]}
-          editable={!sending && !listening}
+          editable={!listening}
           onSubmitEditing={onSubmit}
           returnKeyType="send"
           maxFontSizeMultiplier={1.4}
@@ -200,7 +200,7 @@ export function VoiceInput({
         <PressableScale
           accessibilityLabel={listening ? 'Stop voice input' : 'Start voice input'}
           onPress={() => void handleMicPress()}
-          style={[styles.iconBtn, !available && styles.iconBtnDisabled]}
+          style={[styles.iconBtn, !available ? styles.iconBtnDisabled : {}]}
           disabled={!available || sending}>
           <Animated.View style={micPulseStyle}>
             <AppIcon
@@ -216,7 +216,7 @@ export function VoiceInput({
             />
           </Animated.View>
         </PressableScale>
-        {sending ? (
+        {sending && !value.trim() ? (
           <PressableScale accessibilityLabel="Stop" onPress={onStop} style={styles.iconBtn}>
             <AppIcon name="x" size={20} color={theme.colors.textSecondary} />
           </PressableScale>

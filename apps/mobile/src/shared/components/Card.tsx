@@ -1,10 +1,11 @@
 import React, { PropsWithChildren } from 'react';
-import { StyleSheet, View, ViewStyle } from 'react-native';
+import { StyleSheet, View, ViewStyle, type StyleProp } from 'react-native';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { PressableScale } from '@/shared/components/PressableScale';
+import { elevatedSurface } from '@/shared/theme/elevatedSurface';
 
 type Props = PropsWithChildren<{
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   onPress?: () => void;
   padded?: boolean;
   elevated?: boolean;
@@ -20,6 +21,7 @@ export function Card({
   tint,
 }: Props) {
   const theme = useTheme();
+  const customStyle = StyleSheet.flatten(style);
 
   const visualStyle: ViewStyle = {
     backgroundColor: tint ?? theme.colors.surface,
@@ -30,19 +32,19 @@ export function Card({
   };
 
   // Layout that must size the pressable cell (grids) stays on the wrapper.
-  const wrapperStyle: ViewStyle | undefined = style
+  const wrapperStyle: ViewStyle | undefined = customStyle
     ? {
-        width: style.width,
-        flex: style.flex,
-        flexGrow: style.flexGrow,
-        alignSelf: style.alignSelf,
+        width: customStyle.width,
+        flex: customStyle.flex,
+        flexGrow: customStyle.flexGrow,
+        alignSelf: customStyle.alignSelf,
       }
     : undefined;
 
   if (onPress) {
     return (
       <PressableScale onPress={onPress} style={wrapperStyle}>
-        <View style={[styles.card, visualStyle, styles.fill, style]}>
+        <View style={elevatedSurface(StyleSheet.flatten([styles.card, visualStyle, styles.fill, style]), theme.colors.surface)}>
           {children}
         </View>
       </PressableScale>
@@ -50,7 +52,7 @@ export function Card({
   }
 
   return (
-    <View style={[styles.card, visualStyle, style]}>{children}</View>
+    <View style={elevatedSurface(StyleSheet.flatten([styles.card, visualStyle, style]), theme.colors.surface)}>{children}</View>
   );
 }
 

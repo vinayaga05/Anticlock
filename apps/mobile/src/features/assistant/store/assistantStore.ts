@@ -11,9 +11,12 @@ export type AssistantToolProgress = {
 type AssistantState = {
   open: boolean;
   voiceMode: boolean;
+  voiceOutput: boolean;
+  speaking: boolean;
   conversationId: string | null;
   responseId: string | null;
   currentScreen: string | null;
+  currentRouteKey?: string;
   messages: AssistantMessage[];
   toolProgress: AssistantToolProgress;
   quickActions: string[];
@@ -25,10 +28,11 @@ type AssistantState = {
 type AssistantActions = {
   openAssistant: (opts?: { voiceMode?: boolean }) => void;
   closeAssistant: () => void;
-  setCurrentScreen: (screen: string | null) => void;
+  setCurrentScreen: (screen: string | null, key?: string) => void;
   setConversationId: (id: string | null) => void;
   setResponseId: (id: string | null) => void;
   addMessage: (message: AssistantMessage) => void;
+  updateMessage: (id: string, patch: Partial<AssistantMessage>) => void;
   updateLastAssistant: (patch: Partial<AssistantMessage>) => void;
   setToolProgress: (progress: AssistantToolProgress) => void;
   setQuickActions: (actions: string[]) => void;
@@ -36,7 +40,9 @@ type AssistantActions = {
   clearMessages: () => void;
   setEnabled: (enabled: boolean) => void;
   enqueueOffline: (item: { message: string; conversationId?: string }) => void;
-  dequeueOffline: () => { message: string; conversationId?: string } | undefined;
+  dequeueOffline: () =>
+    | { message: string; conversationId?: string }
+    | undefined;
   drainOfflineQueue: () => Array<{ message: string; conversationId?: string }>;
 };
 
@@ -59,61 +65,74 @@ function persistOfflineQueue(queue: AssistantState['offlineQueue']) {
   storage.set(STORAGE_KEYS.ASSISTANT_OFFLINE_QUEUE, JSON.stringify(queue));
 }
 
-export const useAssistantStore = create<AssistantState & AssistantActions>((set, get) => ({
-  open: false,
-  voiceMode: false,
-  conversationId: null,
-  responseId: null,
-  currentScreen: null,
-  messages: [],
-  toolProgress: null,
-  quickActions: [],
-  sending: false,
-  enabled: loadEnabled(),
-  offlineQueue: loadOfflineQueue(),
+export const useAssistantStore = create<AssistantState & AssistantActions>(
+  (set, get) => ({
+    open: false,
+    voiceMode: false,
+    voiceOutput: false,
+    speaking: false,
+    conversationId: null,
+    responseId: null,
+    currentScreen: null,
+    messages: [],
+    toolProgress: null,
+    quickActions: [],
+    sending: false,
+    enabled: loadEnabled(),
+    offlineQueue: loadOfflineQueue(),
 
-  openAssistant: opts =>
-    set({ open: true, voiceMode: Boolean(opts?.voiceMode) }),
-  closeAssistant: () => set({ open: false, voiceMode: false, toolProgress: null }),
-  setCurrentScreen: screen => set({ currentScreen: screen }),
-  setConversationId: id => set({ conversationId: id }),
-  setResponseId: id => set({ responseId: id }),
-  addMessage: message =>
-    set(state => ({ messages: [...state.messages, message] })),
-  updateLastAssistant: patch =>
-    set(state => {
-      const messages = [...state.messages];
-      for (let i = messages.length - 1; i >= 0; i -= 1) {
-        if (messages[i].role === 'assistant') {
-          messages[i] = { ...messages[i], ...patch };
-          break;
+    openAssistant: opts =>
+      set({ open: true, voiceMode: Boolean(opts?.voiceMode) }),
+    closeAssistant: () =>
+      set({ open: false, voiceMode: false, toolProgress: null }),
+    setCurrentScreen: (screen, key) =>
+      set({ currentScreen: screen, currentRouteKey: key }),
+    setConversationId: id => set({ conversationId: id }),
+    setResponseId: id => set({ responseId: id }),
+    addMessage: message =>
+      set(state => ({ messages: [...state.messages, message] })),
+    updateMessage: (id, patch) =>
+      set(state => ({
+        messages: state.messages.map(item =>
+          item.id === id ? { ...item, ...patch } : item,
+        ),
+      })),
+    updateLastAssistant: patch =>
+      set(state => {
+        const messages = [...state.messages];
+        for (let i = messages.length - 1; i >= 0; i -= 1) {
+          if (messages[i].role === 'assistant') {
+            messages[i] = { ...messages[i], ...patch };
+            break;
+          }
         }
-      }
-      return { messages };
-    }),
-  setToolProgress: toolProgress => set({ toolProgress }),
-  setQuickActions: quickActions => set({ quickActions }),
-  setSending: sending => set({ sending }),
-  clearMessages: () => set({ messages: [], conversationId: null, responseId: null }),
-  setEnabled: enabled => {
-    storage.set(STORAGE_KEYS.ASSISTANT_ENABLED, enabled ? 'true' : 'false');
-    set({ enabled });
-  },
-  enqueueOffline: item => {
-    const queue = [...get().offlineQueue, item];
-    persistOfflineQueue(queue);
-    set({ offlineQueue: queue });
-  },
-  dequeueOffline: () => {
-    const [first, ...rest] = get().offlineQueue;
-    persistOfflineQueue(rest);
-    set({ offlineQueue: rest });
-    return first;
-  },
-  drainOfflineQueue: () => {
-    const queue = get().offlineQueue;
-    persistOfflineQueue([]);
-    set({ offlineQueue: [] });
-    return queue;
-  },
-}));
+        return { messages };
+      }),
+    setToolProgress: toolProgress => set({ toolProgress }),
+    setQuickActions: quickActions => set({ quickActions }),
+    setSending: sending => set({ sending }),
+    clearMessages: () =>
+      set({ messages: [], conversationId: null, responseId: null }),
+    setEnabled: enabled => {
+      storage.set(STORAGE_KEYS.ASSISTANT_ENABLED, enabled ? 'true' : 'false');
+      set({ enabled });
+    },
+    enqueueOffline: item => {
+      const queue = [...get().offlineQueue, item];
+      persistOfflineQueue(queue);
+      set({ offlineQueue: queue });
+    },
+    dequeueOffline: () => {
+      const [first, ...rest] = get().offlineQueue;
+      persistOfflineQueue(rest);
+      set({ offlineQueue: rest });
+      return first;
+    },
+    drainOfflineQueue: () => {
+      const queue = get().offlineQueue;
+      persistOfflineQueue([]);
+      set({ offlineQueue: [] });
+      return queue;
+    },
+  }),
+);

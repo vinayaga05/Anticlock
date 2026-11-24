@@ -6,6 +6,7 @@ import {
   StyleSheet,
   View,
   ViewStyle,
+  type LayoutChangeEvent,
 } from 'react-native';
 import { ScreenContainer } from '@/shared/components/ScreenContainer';
 import { healthTheme } from '@/shared/theme/healthTheme';
@@ -17,6 +18,7 @@ type HealthScreenShellProps = PropsWithChildren<{
   tabAware?: boolean;
   scrollRef?: React.Ref<ScrollView>;
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onViewportLayout?: (event: LayoutChangeEvent) => void;
 }>;
 
 /** Soft clinical backdrop for health booking and service flows. */
@@ -28,6 +30,7 @@ export function HealthScreenShell({
   tabAware = false,
   scrollRef,
   onScroll,
+  onViewportLayout,
 }: HealthScreenShellProps) {
   return (
     <View style={styles.root}>
@@ -40,6 +43,7 @@ export function HealthScreenShell({
         tabAware={tabAware}
         scrollRef={scrollRef}
         onScroll={onScroll}
+        onViewportLayout={onViewportLayout}
         variant="health"
       >
         {children}

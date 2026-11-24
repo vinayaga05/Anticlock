@@ -6,6 +6,7 @@ import {
   StyleSheet,
   View,
   ViewStyle,
+  type LayoutChangeEvent,
 } from 'react-native';
 import {
   SafeAreaView,
@@ -27,6 +28,7 @@ interface ScreenContainerProps extends PropsWithChildren {
   variant?: 'default' | 'health';
   scrollRef?: React.Ref<ScrollView>;
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onViewportLayout?: (event: LayoutChangeEvent) => void;
 }
 
 export function ScreenContainer({
@@ -39,6 +41,7 @@ export function ScreenContainer({
   variant = 'default',
   scrollRef,
   onScroll,
+  onViewportLayout,
 }: ScreenContainerProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -84,6 +87,7 @@ export function ScreenContainer({
         <ScrollView
           ref={scrollRef}
           onScroll={onScroll}
+          onLayout={onViewportLayout}
           scrollEventThrottle={16}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}

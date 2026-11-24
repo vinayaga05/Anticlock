@@ -22,8 +22,8 @@ function profilePalette(dark: boolean) {
   };
 }
 
-type FieldProps = { label: string; value: string; onChangeText: (value: string) => void; placeholder: string; maxLength: number; palette: Palette; disabled: boolean; multiline?: boolean; url?: boolean; icon?: IconName };
-function ProfileField({ label, value, onChangeText, placeholder, maxLength, palette, disabled, multiline, url, icon }: FieldProps) {
+type FieldProps = { label: string; value: string; onChangeText: (value: string) => void; placeholder: string; maxLength: number; palette: Palette; disabled: boolean; multiline?: boolean; url?: boolean; username?: boolean; icon?: IconName };
+function ProfileField({ label, value, onChangeText, placeholder, maxLength, palette, disabled, multiline, url, username, icon }: FieldProps) {
   return (
     <View style={styles.field}>
       <View style={styles.fieldLabelRow}>
@@ -32,7 +32,7 @@ function ProfileField({ label, value, onChangeText, placeholder, maxLength, pale
       </View>
       <View style={[styles.inputWrap, { backgroundColor: palette.field, borderColor: palette.border }, multiline && styles.multilineWrap]}>
         {icon ? <AppIcon name={icon} size={18} color={palette.muted} /> : null}
-        <TextInput accessibilityLabel={label} value={value} onChangeText={onChangeText} editable={!disabled} placeholder={placeholder} placeholderTextColor={palette.muted} maxLength={maxLength} multiline={multiline} keyboardType={url ? 'url' : 'default'} autoCapitalize={url ? 'none' : 'sentences'} autoCorrect={!url} style={[styles.input, { color: palette.ink }, multiline && styles.bioInput]} />
+        <TextInput accessibilityLabel={label} value={value} onChangeText={onChangeText} editable={!disabled} placeholder={placeholder} placeholderTextColor={palette.muted} maxLength={maxLength} multiline={multiline} keyboardType={url ? 'url' : 'default'} autoCapitalize={url || username ? 'none' : 'sentences'} autoCorrect={!url && !username} style={[styles.input, { color: palette.ink }, multiline && styles.bioInput]} />
       </View>
     </View>
   );
@@ -132,7 +132,7 @@ export function EditProfileScreen() {
       setPhase('saving');
       await updateProfile({ ...fields, avatarUrl });
       if (!isCurrentSession()) return;
-      const next = { displayName: fields.displayName, bio: fields.bio ?? '', location: fields.location ?? '', website: fields.website ?? '' };
+      const next = { handle: fields.handle ?? '', displayName: fields.displayName, bio: fields.bio ?? '', location: fields.location ?? '', website: fields.website ?? '' };
       setDraft(next); setBaseline(next); setBasePhoto(avatarUrl); setPhoto(null); setRemoved(false); uploadCache.current = null; setSaved(true);
     } catch (problem) {
       if (mounted.current && operation.current === request && userRef.current?.id === ownerId) {
@@ -175,6 +175,7 @@ export function EditProfileScreen() {
             <View testID="profile-about-card" style={[styles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
               <View style={styles.sectionHeading}><View><Text style={[styles.sectionTitle, { color: palette.ink }]}>About you</Text><Text style={[styles.sectionCopy, { color: palette.muted }]}>The details that make you, you.</Text></View><AppIcon name="user-round" size={22} color={palette.violet} /></View>
               <ProfileField label="Name" value={draft.displayName} onChangeText={value => edit('displayName', value)} placeholder="Your name" maxLength={80} palette={palette} disabled={busy} />
+              <ProfileField username label="Username" value={draft.handle ?? ''} onChangeText={value => edit('handle', value)} placeholder="your_username" maxLength={30} palette={palette} disabled={busy} />
               <ProfileField label="Bio" value={draft.bio} onChangeText={value => edit('bio', value)} placeholder="A little about you" maxLength={160} palette={palette} disabled={busy} multiline />
             </View>
             <View testID="profile-details-card" style={[styles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>

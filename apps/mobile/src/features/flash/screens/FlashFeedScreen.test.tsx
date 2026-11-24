@@ -1,3 +1,4 @@
+jest.mock('@/features/assistant/search/SearchFilterChips', () => ({ SearchFilterChips: () => null }));
 import React from 'react';
 import Renderer from 'react-test-renderer';
 import { AppState, FlatList, View } from 'react-native';

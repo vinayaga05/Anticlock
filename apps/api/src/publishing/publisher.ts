@@ -1,4 +1,4 @@
-import { and, eq, inArray, or, type SQL } from "drizzle-orm";
+import { and, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import type {
   ContentPublisher,
   ProviderMembershipRole,
@@ -146,6 +146,7 @@ export async function loadPublishers(
           .select({
             id: mobileUsers.id,
             displayName: mobileUsers.displayName,
+            handle: mobileUsers.handle,
             avatarUrl: mobileUsers.avatarUrl,
           })
           .from(mobileUsers)
@@ -162,7 +163,7 @@ export async function loadPublishers(
           })
           .from(providers)
           .where(
-            and(inArray(providers.id, providerIds), eq(providers.status, "active"))
+            and(inArray(providers.id, providerIds), eq(providers.status, "active"), sql`EXISTS (SELECT 1 FROM mobile_users owner WHERE owner.id = ${providers.mobileUserId} AND owner.is_active = true)`)
           )
       : Promise.resolve([]),
     providerIds.length
@@ -193,7 +194,7 @@ export async function loadPublishers(
       id: user.id,
       type: "personal",
       displayName: user.displayName,
-      handle: null,
+      handle: user.handle,
       avatarUrl: httpUrl(user.avatarUrl),
       verified: false,
       businessCategory: null,

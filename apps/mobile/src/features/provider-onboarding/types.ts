@@ -135,6 +135,13 @@ export type MarketplaceProviderCard = {
   priceFrom: number | null;
   avatarUrl: string | null;
   coverUrl: string | null;
+  introVideoUrl?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  pincode?: string | null;
+  temporarilyUnavailable?: boolean;
+  rating?: number;
+  reviewCount?: number;
   modes: ServiceModeFlag[];
   workingDays: string[];
   openingTime: string | null;

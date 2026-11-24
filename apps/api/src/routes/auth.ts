@@ -63,6 +63,7 @@ async function issueMobileSession(user: typeof mobileUsers.$inferSelect, context
       id: user.id,
       phone: user.phone,
       displayName: user.displayName,
+      handle: user.handle,
       avatarUrl: user.avatarUrl,
       bio: user.bio,
       location: user.location,
@@ -372,6 +373,7 @@ authRoutes.get('/mobile/me', requireAuth, async c => {
       id: user.id,
       phone: user.phone,
       displayName: user.displayName,
+      handle: user.handle,
       avatarUrl: user.avatarUrl,
       bio: user.bio,
       location: user.location,
@@ -424,7 +426,7 @@ authRoutes.put('/mobile/profile', requireAuth, async c => {
       if (!owner) return null;
       await mediaService.replaceMobileAvatarUsage(auth, body.avatarUrl, transaction);
       const [saved] = await transaction.update(mobileUsers).set({
-        displayName: body.displayName, avatarUrl: body.avatarUrl, bio: body.bio,
+        displayName: body.displayName, handle: body.handle, avatarUrl: body.avatarUrl, bio: body.bio,
         location: body.location, website: body.website, updatedAt: new Date(),
       }).where(and(eq(mobileUsers.id, auth.sub), eq(mobileUsers.isActive, true))).returning();
       return saved;
@@ -448,6 +450,7 @@ authRoutes.put('/mobile/profile', requireAuth, async c => {
         id: user.id,
         phone: user.phone,
         displayName: user.displayName,
+        handle: user.handle,
         avatarUrl: user.avatarUrl,
         bio: user.bio,
         location: user.location,
@@ -456,6 +459,7 @@ authRoutes.put('/mobile/profile', requireAuth, async c => {
       },
     });
   } catch (error) {
+    if ((error as any)?.code === '23505' || (error as any)?.cause?.code === '23505') return c.json({ error: { code: 'username_taken', message: 'This username is already taken.' } }, 409);
     const { status, body } = httpError(error, 'mobile-profile');
     return c.json(body, status);
   }

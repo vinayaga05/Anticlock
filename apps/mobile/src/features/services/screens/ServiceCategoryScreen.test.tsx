@@ -1,3 +1,9 @@
+jest.mock('@/features/assistant/search/SearchFilterChips', () => ({ SearchFilterChips: () => null }));
+jest.mock('@/features/assistant/search/providerSearch', () => ({
+  filterProviderResults: (providers: unknown[]) => providers,
+  useProvidersAvailableToday: () => ({}),
+}));
+jest.mock('@/features/assistant/search/useGenieScreen', () => ({ useGenieScreen: () => undefined }));
 import React from 'react';
 import Renderer from 'react-test-renderer';
 import { ServiceCategoryScreen } from './ServiceCategoryScreen';

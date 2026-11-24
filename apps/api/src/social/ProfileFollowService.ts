@@ -1,4 +1,4 @@
-import { and, asc, eq, or, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, or, sql } from 'drizzle-orm';
 import type {
   CreateProfileFollowRequest,
   ProfileFollowTarget,
@@ -10,14 +10,22 @@ import { db } from '../db/client.js';
 import { mobileUsers, profileBlocks, profileFollows, providers } from '../db/schema.js';
 import {
   loadPublisher,
+  loadPublishers,
   publisherKey,
   resolveOwnedPublisher,
   type PublisherRef,
 } from '../publishing/publisher.js';
 import { notificationService } from '../notifications/NotificationService.js';
 import { getStreamClient, isStreamConfigured } from '../lib/stream.js';
+import { publishContentEvent } from '../realtime/contentEvents.js';
 import { StreamChatService } from '../messages/StreamChatService.js';
 
+type GraphTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+async function lockProfiles(tx: GraphTransaction, ...profiles: PublisherRef[]) {
+  for (const key of [...new Set(profiles.map(publisherKey))].sort()) {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
+  }
+}
 const appError = (message: string, code: string, status: 400 | 403 | 404 | 409) =>
   Object.assign(new Error(message), { code, status });
 
@@ -46,7 +54,7 @@ function relationshipFor(
   const blocked = status === 'blocked';
   const following = status === 'following';
   return {
-    canFollow: !isOwner && !blocked,
+    canFollow: !isOwner && !blocked && (following || status === 'requested' || !privacy.isPrivate || privacy.allowFollowRequests),
     followStatus: isOwner ? 'not_following' : status,
     isFollowing: following,
     isRequested: status === 'requested',
@@ -58,9 +66,9 @@ function relationshipFor(
   };
 }
 
-export async function getProfilePrivacy(target: PublisherRef): Promise<ProfilePrivacy> {
+export async function getProfilePrivacy(target: PublisherRef, executor: Pick<typeof db, 'select'> = db): Promise<ProfilePrivacy> {
   if (target.type === 'personal') {
-    const [row] = await db
+    const [row] = await executor
       .select({
         ownerUserId: mobileUsers.id,
         isPrivate: mobileUsers.isPrivate,
@@ -74,7 +82,7 @@ export async function getProfilePrivacy(target: PublisherRef): Promise<ProfilePr
     if (!row) throw appError('Profile not found', 'not_found', 404);
     return row;
   }
-  const [row] = await db
+  const [row] = await executor
     .select({
       ownerUserId: providers.mobileUserId,
       isPrivate: providers.isPrivate,
@@ -83,7 +91,7 @@ export async function getProfilePrivacy(target: PublisherRef): Promise<ProfilePr
       allowMessages: providers.allowMessages,
     })
     .from(providers)
-    .where(and(eq(providers.id, target.id), eq(providers.status, 'active')))
+    .where(and(eq(providers.id, target.id), eq(providers.status, 'active'), sql`EXISTS (SELECT 1 FROM mobile_users owner WHERE owner.id = ${providers.mobileUserId} AND owner.is_active = true)`))
     .limit(1);
   if (!row) throw appError('Profile not found', 'not_found', 404);
   return row;
@@ -93,8 +101,8 @@ async function assertExisting(target: PublisherRef) {
   if (!(await loadPublisher(target))) throw appError('Profile not found', 'not_found', 404);
 }
 
-export async function profilesAreBlocked(a: PublisherRef, b: PublisherRef) {
-  const [row] = await db
+export async function profilesAreBlocked(a: PublisherRef, b: PublisherRef, executor: Pick<typeof db, 'select'> = db) {
+  const [row] = await executor
     .select({ id: profileBlocks.id })
     .from(profileBlocks)
     .where(
@@ -248,16 +256,22 @@ export async function canProfileViewContent(viewer: PublisherRef, followed: Publ
   return !privacy.isPrivate || hasAcceptedFollow(viewer, followed);
 }
 
+
+function activeProfile(id: typeof profileFollows.followerProfileId | typeof profileFollows.followedProfileId, type: typeof profileFollows.followerProfileType | typeof profileFollows.followedProfileType) {
+  return sql`((${type} = 'personal' AND EXISTS (SELECT 1 FROM mobile_users u WHERE u.id = ${id} AND u.is_active = true))
+    OR (${type} = 'business' AND EXISTS (SELECT 1 FROM providers p WHERE p.id = ${id} AND p.status = 'active' AND EXISTS (SELECT 1 FROM mobile_users owner WHERE owner.id = p.mobile_user_id AND owner.is_active = true)))) `;
+}
+
 export async function profileConnectionCounts(profile: PublisherRef) {
   const [followers, following, pending] = await Promise.all([
     db.select({ total: sql<number>`count(*)::int` }).from(profileFollows).where(and(
-      eq(profileFollows.followedProfileId, profile.id), eq(profileFollows.followedProfileType, profile.type), eq(profileFollows.status, 'accepted'),
+      eq(profileFollows.followedProfileId, profile.id), eq(profileFollows.followedProfileType, profile.type), eq(profileFollows.status, 'accepted'), activeProfile(profileFollows.followerProfileId, profileFollows.followerProfileType),
     )),
     db.select({ total: sql<number>`count(*)::int` }).from(profileFollows).where(and(
-      eq(profileFollows.followerProfileId, profile.id), eq(profileFollows.followerProfileType, profile.type), eq(profileFollows.status, 'accepted'),
+      eq(profileFollows.followerProfileId, profile.id), eq(profileFollows.followerProfileType, profile.type), eq(profileFollows.status, 'accepted'), activeProfile(profileFollows.followedProfileId, profileFollows.followedProfileType),
     )),
     db.select({ total: sql<number>`count(*)::int` }).from(profileFollows).where(and(
-      eq(profileFollows.followedProfileId, profile.id), eq(profileFollows.followedProfileType, profile.type), eq(profileFollows.status, 'pending'),
+      eq(profileFollows.followedProfileId, profile.id), eq(profileFollows.followedProfileType, profile.type), eq(profileFollows.status, 'pending'), activeProfile(profileFollows.followerProfileId, profileFollows.followerProfileType),
     )),
   ]);
   return {
@@ -265,6 +279,21 @@ export async function profileConnectionCounts(profile: PublisherRef) {
     following: Number(following[0]?.total ?? 0),
     pendingRequests: Number(pending[0]?.total ?? 0),
   };
+}
+
+async function socialChanged(a: PublisherRef, b?: PublisherRef) {
+  const owners = b ? await Promise.all([getProfilePrivacy(a), getProfilePrivacy(b)]).then(rows => rows.map(row => row.ownerUserId)).catch(() => []) : undefined;
+  await publishContentEvent({ type: 'social.changed', postId: a.id, format: '', publisherProfileId: a.id, publisherProfileType: a.type, at: new Date().toISOString(), affectedUserIds: owners });
+}
+
+async function viewerConnectionCounts(userId: string, profile: PublisherRef) {
+  const counts = await profileConnectionCounts(profile);
+  try { await resolveOwnedPublisher(userId, profile); }
+  catch (error: any) {
+    if (![403, 404].includes(error.status)) throw error;
+    counts.pendingRequests = 0;
+  }
+  return counts;
 }
 
 export class ProfileFollowService {
@@ -299,43 +328,52 @@ export class ProfileFollowService {
     if (same(follower, followed)) throw appError('You cannot follow yourself', 'cannot_follow_self', 400);
     await resolveOwnedPublisher(userId, follower);
     await assertExisting(followed);
-    if (await profilesAreBlocked(follower, followed)) throw appError('Profile is unavailable', 'profile_blocked', 403);
-    const privacy = await getProfilePrivacy(followed);
-    if (privacy.isPrivate && !privacy.allowFollowRequests) {
-      throw appError('This profile does not accept follow requests', 'follow_requests_disabled', 403);
-    }
-    const now = new Date();
-    const status = privacy.isPrivate ? 'pending' : 'accepted';
-    const [row] = await db
-      .insert(profileFollows)
-      .values({
-        followerProfileId: follower.id,
-        followerProfileType: follower.type,
-        followedProfileId: followed.id,
-        followedProfileType: followed.type,
-        status,
-        acceptedAt: status === 'accepted' ? now : null,
-        updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: [
-          profileFollows.followerProfileId,
-          profileFollows.followedProfileId,
-        ],
-        set: { status, acceptedAt: status === 'accepted' ? now : null, updatedAt: now },
-      })
-      .returning();
+    const { inserted, status, privacy } = await db.transaction(async tx => {
+      await lockProfiles(tx, follower, followed);
+      if (await profilesAreBlocked(follower, followed, tx)) throw appError('Profile is unavailable', 'profile_blocked', 403);
+      const privacy = await getProfilePrivacy(followed, tx);
+      const [existing] = await tx.select().from(profileFollows).where(and(
+        eq(profileFollows.followerProfileId, follower.id), eq(profileFollows.followerProfileType, follower.type),
+        eq(profileFollows.followedProfileId, followed.id), eq(profileFollows.followedProfileType, followed.type),
+      )).limit(1);
+      if (existing) return { inserted: undefined, status: existing.status, privacy };
+      if (privacy.isPrivate && !privacy.allowFollowRequests) {
+        throw appError('This profile does not accept follow requests', 'follow_requests_disabled', 403);
+      }
+      const now = new Date();
+      const status = privacy.isPrivate ? 'pending' : 'accepted';
+      const [inserted] = await tx
+        .insert(profileFollows)
+        .values({
+          followerProfileId: follower.id,
+          followerProfileType: follower.type,
+          followedProfileId: followed.id,
+          followedProfileType: followed.type,
+          status,
+          acceptedAt: status === 'accepted' ? now : null,
+          updatedAt: now,
+        })
+        // A repeated tap must not downgrade an already accepted private follow.
+        .onConflictDoNothing()
+        .returning();
+      return { inserted, status, privacy };
+    });
+    const row = inserted ?? (await db.select().from(profileFollows).where(and(
+      eq(profileFollows.followerProfileId, follower.id), eq(profileFollows.followerProfileType, follower.type),
+      eq(profileFollows.followedProfileId, followed.id), eq(profileFollows.followedProfileType, followed.type),
+    )).limit(1))[0];
     const followerPublisher = await loadPublisher(follower);
-    await notificationService.notifyUser(privacy.ownerUserId, {
+    if (inserted) await notificationService.notifyUser(privacy.ownerUserId, {
       type: status === 'pending' ? 'follow_request' : 'new_follower',
       title: status === 'pending' ? 'Follow request' : 'New follower',
       body: `${followerPublisher?.displayName ?? 'Someone'} ${status === 'pending' ? 'requested to follow' : 'followed'} your ${followed.type === 'business' ? 'business' : 'profile'}`,
       data: { followerProfile: follower, followedProfile: followed },
     }).catch(() => undefined);
     if (status === 'accepted') await syncProfileConversationQuietly(follower, followed);
+    await socialChanged(follower, followed);
     const [relationship, followedCounts, followerCounts] = await Promise.all([
       this.relationship(follower, followed),
-      profileConnectionCounts(followed),
+      viewerConnectionCounts(userId, followed),
       profileConnectionCounts(follower),
     ]);
     return { follow: row!, relationship, followedCounts, followerCounts };
@@ -344,17 +382,21 @@ export class ProfileFollowService {
   async unfollow(userId: string, follower: PublisherRef, followed: PublisherRef) {
     await resolveOwnedPublisher(userId, follower);
     await assertExisting(followed);
-    const [removed] = await db
+    const [removed] = await db.transaction(async tx => {
+      await lockProfiles(tx, follower, followed);
+      return tx
       .delete(profileFollows)
       .where(and(
         eq(profileFollows.followerProfileId, follower.id), eq(profileFollows.followerProfileType, follower.type),
         eq(profileFollows.followedProfileId, followed.id), eq(profileFollows.followedProfileType, followed.type),
       ))
       .returning({ id: profileFollows.id });
+    });
     if (removed) await syncProfileConversationQuietly(follower, followed);
+    await socialChanged(follower, followed);
     const [relationship, followedCounts, followerCounts] = await Promise.all([
       this.relationship(follower, followed),
-      profileConnectionCounts(followed),
+      viewerConnectionCounts(userId, followed),
       profileConnectionCounts(follower),
     ]);
     return { removed: Boolean(removed), relationship, followedCounts, followerCounts };
@@ -367,7 +409,10 @@ export class ProfileFollowService {
       eq(profileFollows.followedProfileType, followed.type),
       eq(profileFollows.status, 'pending'),
     )).orderBy(asc(profileFollows.createdAt));
-    const publishers = await Promise.all(rows.map(row => loadPublisher({ id: row.followerProfileId, type: row.followerProfileType as PublisherRef['type'] })));
+    const publishers = await Promise.all(rows.map(async row => {
+      const peer = { id: row.followerProfileId, type: row.followerProfileType as PublisherRef['type'] };
+      return await profilesAreBlocked(followed, peer) ? null : loadPublisher(peer);
+    }));
     return rows.map((row, index) => ({
       id: row.id,
       follower: publishers[index],
@@ -375,58 +420,124 @@ export class ProfileFollowService {
     })).filter(item => item.follower !== null);
   }
 
+  async incomingPage(userId: string, followed: PublisherRef, options: { limit: number; cursor?: string }) {
+    await resolveOwnedPublisher(userId, followed);
+    const rows = await db.select().from(profileFollows).where(and(
+      eq(profileFollows.followedProfileId, followed.id), eq(profileFollows.followedProfileType, followed.type),
+      eq(profileFollows.status, 'pending'), activeProfile(profileFollows.followerProfileId, profileFollows.followerProfileType),
+      options.cursor ? gt(profileFollows.id, options.cursor) : undefined,
+    )).orderBy(asc(profileFollows.id)).limit(options.limit + 1);
+    const page = rows.slice(0, options.limit);
+    const items = await Promise.all(page.map(async row => {
+      const follower = { id: row.followerProfileId, type: row.followerProfileType as PublisherRef['type'] };
+      if (await profilesAreBlocked(followed, follower)) return null;
+      const profile = await loadPublisher(follower);
+      return profile ? { id: row.id, follower: profile, createdAt: row.createdAt.toISOString() } : null;
+    }));
+    return { items: items.filter(item => item !== null), nextCursor: rows.length > options.limit ? page[page.length - 1]!.id : null };
+  }
+
   async listConnections(
-    userId: string,
-    target: PublisherRef,
-    viewer: PublisherRef,
-    direction: 'followers' | 'following',
+    userId: string, target: PublisherRef, viewer: PublisherRef,
+    direction: 'followers' | 'following', options: { limit: number; cursor?: string } = { limit: 30 },
   ) {
     await resolveOwnedPublisher(userId, viewer);
     const privacy = await getProfilePrivacy(target);
-    const ownsTarget = same(viewer, target);
-    if (!privacy.showFollowerLists && !ownsTarget) throw appError('Profile list is private', 'not_found', 404);
-    if (privacy.isPrivate && !ownsTarget && !(await hasAcceptedFollow(viewer, target))) {
-      throw appError('Profile list is private', 'not_found', 404);
+    let ownsTarget = same(viewer, target);
+    if (!ownsTarget) {
+      try { await resolveOwnedPublisher(userId, target); ownsTarget = true; }
+      catch (error: any) { if (![403, 404].includes(error.status)) throw error; }
+    }
+    if ((!privacy.showFollowerLists || privacy.isPrivate) && !ownsTarget &&
+        (!privacy.showFollowerLists || !(await hasAcceptedFollow(viewer, target)))) {
+      throw appError('This account’s connections are private', 'private_connections', 403);
     }
     if (await profilesAreBlocked(viewer, target)) throw appError('Profile not found', 'not_found', 404);
+    const peerId = direction === 'followers' ? profileFollows.followerProfileId : profileFollows.followedProfileId;
+    const peerType = direction === 'followers' ? profileFollows.followerProfileType : profileFollows.followedProfileType;
     const rows = await db.select().from(profileFollows).where(and(
       direction === 'followers'
         ? and(eq(profileFollows.followedProfileId, target.id), eq(profileFollows.followedProfileType, target.type))
         : and(eq(profileFollows.followerProfileId, target.id), eq(profileFollows.followerProfileType, target.type)),
       eq(profileFollows.status, 'accepted'),
-    )).orderBy(asc(profileFollows.acceptedAt));
-    const refs = rows.map(row => direction === 'followers'
+      options.cursor ? gt(profileFollows.id, options.cursor) : undefined,
+      activeProfile(peerId, peerType),
+      sql`NOT EXISTS (SELECT 1 FROM profile_blocks b WHERE
+        (b.blocker_profile_id = ${viewer.id} AND b.blocker_profile_type = ${viewer.type} AND b.blocked_profile_id = ${peerId} AND b.blocked_profile_type = ${peerType}) OR
+        (b.blocked_profile_id = ${viewer.id} AND b.blocked_profile_type = ${viewer.type} AND b.blocker_profile_id = ${peerId} AND b.blocker_profile_type = ${peerType}))`,
+    )).orderBy(asc(profileFollows.id)).limit(options.limit + 1);
+    const page = rows.slice(0, options.limit);
+    const refs = page.map(row => direction === 'followers'
       ? { id: row.followerProfileId, type: row.followerProfileType as PublisherRef['type'] }
       : { id: row.followedProfileId, type: row.followedProfileType as PublisherRef['type'] });
-    const profiles = await Promise.all(refs.map(item => loadPublisher(item)));
-    return profiles.filter((item): item is NonNullable<typeof item> => item !== null);
+    const profiles = await loadPublishers(refs);
+    const items = await Promise.all(refs.map(async peer => {
+      const profile = profiles.get(publisherKey(peer));
+      if (!profile) return null;
+      try {
+        return { profile, relationship: await this.relationship(viewer, peer), canRemove: ownsTarget && direction === 'followers' };
+      } catch (error: any) { if (error.status === 404) return null; throw error; }
+    }));
+    const counts = await profileConnectionCounts(target);
+    if (!ownsTarget) counts.pendingRequests = 0;
+    return { items: items.filter(item => item !== null),
+      nextCursor: rows.length > options.limit ? page[page.length - 1]!.id : null,
+      counts, isOwner: ownsTarget };
+  }
+
+  async removeFollower(userId: string, followed: PublisherRef, follower: PublisherRef) {
+    await resolveOwnedPublisher(userId, followed);
+    const [removed] = await db.transaction(async tx => {
+      await lockProfiles(tx, follower, followed);
+      return tx.delete(profileFollows).where(and(
+      eq(profileFollows.followedProfileId, followed.id), eq(profileFollows.followedProfileType, followed.type),
+      eq(profileFollows.followerProfileId, follower.id), eq(profileFollows.followerProfileType, follower.type),
+    )).returning({ id: profileFollows.id });
+    });
+    if (removed) await syncProfileConversationQuietly(follower, followed);
+    await socialChanged(follower, followed);
+    return { removed: Boolean(removed), followedCounts: await profileConnectionCounts(followed) };
   }
 
   async accept(userId: string, followed: PublisherRef, follower: PublisherRef) {
     await resolveOwnedPublisher(userId, followed);
+    await assertExisting(follower);
+    if (await profilesAreBlocked(follower, followed)) throw appError('Profile unavailable', 'profile_blocked', 403);
     const now = new Date();
-    const [accepted] = await db.update(profileFollows).set({ status: 'accepted', acceptedAt: now, updatedAt: now }).where(and(
+    const [accepted] = await db.transaction(async tx => {
+      await lockProfiles(tx, follower, followed);
+      if (await profilesAreBlocked(follower, followed, tx)) throw appError('Profile unavailable', 'profile_blocked', 403);
+      return tx.update(profileFollows).set({ status: 'accepted', acceptedAt: now, updatedAt: now }).where(and(
       eq(profileFollows.followerProfileId, follower.id), eq(profileFollows.followerProfileType, follower.type),
       eq(profileFollows.followedProfileId, followed.id), eq(profileFollows.followedProfileType, followed.type),
       eq(profileFollows.status, 'pending'),
     )).returning();
-    if (!accepted) throw appError('Follow request not found', 'not_found', 404);
+    });
+    if (!accepted) {
+      if (await hasAcceptedFollow(follower, followed)) return { accepted: true };
+      throw appError('Follow request not found', 'not_found', 404);
+    }
     const followerPrivacy = await getProfilePrivacy(follower);
     await notificationService.notifyUser(followerPrivacy.ownerUserId, {
       type: 'follow_accepted', title: 'Follow request accepted', body: 'Your follow request was accepted.',
       data: { followerProfile: follower, followedProfile: followed },
     }).catch(() => undefined);
     await syncProfileConversationQuietly(follower, followed);
+    await socialChanged(follower, followed);
     return accepted;
   }
 
   async reject(userId: string, followed: PublisherRef, follower: PublisherRef) {
     await resolveOwnedPublisher(userId, followed);
-    const [removed] = await db.delete(profileFollows).where(and(
+    const [removed] = await db.transaction(async tx => {
+      await lockProfiles(tx, follower, followed);
+      return tx.delete(profileFollows).where(and(
       eq(profileFollows.followerProfileId, follower.id), eq(profileFollows.followerProfileType, follower.type),
       eq(profileFollows.followedProfileId, followed.id), eq(profileFollows.followedProfileType, followed.type),
       eq(profileFollows.status, 'pending'),
     )).returning({ id: profileFollows.id });
+    });
+    await socialChanged(follower, followed);
     return { removed: Boolean(removed) };
   }
 
@@ -435,6 +546,7 @@ export class ProfileFollowService {
     await resolveOwnedPublisher(userId, blocker);
     await assertExisting(blocked);
     await db.transaction(async tx => {
+      await lockProfiles(tx, blocker, blocked);
       await tx.insert(profileBlocks).values({ blockerProfileId: blocker.id, blockerProfileType: blocker.type, blockedProfileId: blocked.id, blockedProfileType: blocked.type }).onConflictDoNothing();
       await tx.delete(profileFollows).where(or(
         and(eq(profileFollows.followerProfileId, blocker.id), eq(profileFollows.followerProfileType, blocker.type), eq(profileFollows.followedProfileId, blocked.id), eq(profileFollows.followedProfileType, blocked.type)),
@@ -442,48 +554,57 @@ export class ProfileFollowService {
       ));
     });
     await syncProfileConversationQuietly(blocker, blocked);
+    await socialChanged(blocker, blocked);
   }
 
   async unblock(userId: string, blocker: PublisherRef, blocked: PublisherRef) {
     await resolveOwnedPublisher(userId, blocker);
-    const [removed] = await db.delete(profileBlocks).where(and(
+    const [removed] = await db.transaction(async tx => {
+      await lockProfiles(tx, blocker, blocked);
+      return tx.delete(profileBlocks).where(and(
       eq(profileBlocks.blockerProfileId, blocker.id), eq(profileBlocks.blockerProfileType, blocker.type),
       eq(profileBlocks.blockedProfileId, blocked.id), eq(profileBlocks.blockedProfileType, blocked.type),
     )).returning({ id: profileBlocks.id });
+    });
+    await socialChanged(blocker, blocked);
     return { removed: Boolean(removed) };
   }
 
   async updatePrivacy(userId: string, profile: PublisherRef, update: ProfilePrivacyUpdate) {
     await resolveOwnedPublisher(userId, profile);
-    const values = { ...update, updatedAt: new Date() };
-    if (profile.type === 'personal') {
-      await db.update(mobileUsers).set(values).where(eq(mobileUsers.id, profile.id));
-    } else {
-      await db.update(providers).set(values).where(eq(providers.id, profile.id));
-    }
-    // Social convention: publishing a private profile auto-accepts its existing requests.
-    const newlyAccepted = update.isPrivate === false
-      ? await db.update(profileFollows).set({ status: 'accepted', acceptedAt: new Date(), updatedAt: new Date() }).where(and(
-          eq(profileFollows.followedProfileId, profile.id), eq(profileFollows.followedProfileType, profile.type), eq(profileFollows.status, 'pending'),
-        )).returning({
-          followerProfileId: profileFollows.followerProfileId,
-          followerProfileType: profileFollows.followerProfileType,
-        })
-      : [];
-    const connections = update.allowMessages !== undefined
-      ? await db.select({
-          followerProfileId: profileFollows.followerProfileId,
-          followerProfileType: profileFollows.followerProfileType,
-          followedProfileId: profileFollows.followedProfileId,
-          followedProfileType: profileFollows.followedProfileType,
-        }).from(profileFollows).where(and(
-          eq(profileFollows.status, 'accepted'),
-          or(
-            and(eq(profileFollows.followerProfileId, profile.id), eq(profileFollows.followerProfileType, profile.type)),
-            and(eq(profileFollows.followedProfileId, profile.id), eq(profileFollows.followedProfileType, profile.type)),
-          ),
-        ))
-      : [];
+    const { newlyAccepted, connections } = await db.transaction(async tx => {
+      await lockProfiles(tx, profile);
+      const values = { ...update, updatedAt: new Date() };
+      if (profile.type === 'personal') {
+        await tx.update(mobileUsers).set(values).where(eq(mobileUsers.id, profile.id));
+      } else {
+        await tx.update(providers).set(values).where(eq(providers.id, profile.id));
+      }
+      // Social convention: publishing a private profile auto-accepts its existing requests.
+      const newlyAccepted = update.isPrivate === false
+        ? await tx.update(profileFollows).set({ status: 'accepted', acceptedAt: new Date(), updatedAt: new Date() }).where(and(
+            eq(profileFollows.followedProfileId, profile.id), eq(profileFollows.followedProfileType, profile.type), eq(profileFollows.status, 'pending'), activeProfile(profileFollows.followerProfileId, profileFollows.followerProfileType),
+          )).returning({
+            followerProfileId: profileFollows.followerProfileId,
+            followerProfileType: profileFollows.followerProfileType,
+          })
+        : [];
+      const connections = update.allowMessages !== undefined
+        ? await tx.select({
+            followerProfileId: profileFollows.followerProfileId,
+            followerProfileType: profileFollows.followerProfileType,
+            followedProfileId: profileFollows.followedProfileId,
+            followedProfileType: profileFollows.followedProfileType,
+          }).from(profileFollows).where(and(
+            eq(profileFollows.status, 'accepted'),
+            or(
+              and(eq(profileFollows.followerProfileId, profile.id), eq(profileFollows.followerProfileType, profile.type)),
+              and(eq(profileFollows.followedProfileId, profile.id), eq(profileFollows.followedProfileType, profile.type)),
+            ),
+          ))
+        : [];
+      return { newlyAccepted, connections };
+    });
     const peers = [
       ...newlyAccepted.map(row => ({ id: row.followerProfileId, type: row.followerProfileType as PublisherRef['type'] })),
       ...connections.map(row => row.followerProfileId === profile.id && row.followerProfileType === profile.type
@@ -492,6 +613,7 @@ export class ProfileFollowService {
     ];
     await Promise.all([...new Map(peers.map(peer => [publisherKey(peer), peer])).values()]
       .map(peer => syncProfileConversationQuietly(profile, peer)));
+    await socialChanged(profile);
     return getProfilePrivacy(profile);
   }
 }

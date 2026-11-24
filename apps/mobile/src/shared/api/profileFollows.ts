@@ -1,6 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, useInfiniteQuery, type QueryClient } from '@tanstack/react-query';
 import { apiRequest } from './client';
 import { contentQueryKeys } from '@/shared/publishing/contentQueryKeys';
+import type { ProfileConnectionsPage } from '@anticlock/contracts';
 import type { PublisherProfileType } from '@/shared/publishing/publisherSelection';
 
 export type ProfileRef = { id: string; type: PublisherProfileType };
@@ -68,6 +69,7 @@ export type IncomingFollowRequest = {
     type: PublisherProfileType;
     displayName: string;
     avatarUrl: string | null;
+    handle?: string | null;
     verified: boolean;
   };
   createdAt: string;
@@ -104,13 +106,7 @@ export function useFollowRequestAction(profile: ProfileRef | null) {
         body: JSON.stringify(follower),
       });
     },
-    onSuccess: async () => {
-      if (!profile) return;
-      await Promise.all([
-        client.invalidateQueries({ queryKey: ['profile-follows', 'requests', profile.type, profile.id] }),
-        client.invalidateQueries({ queryKey: contentQueryKeys.profile(profile.type, profile.id) }),
-      ]);
-    },
+    onSuccess: async () => { await reconcileSocialState(client); },
   });
 }
 
@@ -128,9 +124,7 @@ export function useProfilePrivacyMutation(profile: ProfileRef | null) {
       if (!profile) throw new Error('Profile identity unavailable');
       return updateProfilePrivacy(profile, privacy);
     },
-    onSuccess: async () => {
-      if (profile) await client.invalidateQueries({ queryKey: contentQueryKeys.profile(profile.type, profile.id) });
-    },
+    onSuccess: async () => { await reconcileSocialState(client); },
   });
 }
 
@@ -179,6 +173,68 @@ export function useProfileFollowMutation(follower: ProfileRef | null, followed: 
         );
       }
       await invalidate();
+      await reconcileSocialState(client);
     },
+  });
+}
+
+/** Clear restricted content before refetching: invalidation alone leaves old
+ * private posts visible while a revoked relationship is being refreshed. */
+export async function reconcileSocialState(client: QueryClient) {
+  const keys = [['content'], ['reels'], ['profile-follows'], ['business-profile'], ['search']];
+  await Promise.all(keys.map(queryKey => client.cancelQueries({ queryKey })));
+  await Promise.all(keys.map(queryKey => client.resetQueries({ queryKey })));
+}
+
+export function useProfileConnections(target: ProfileRef, viewer: ProfileRef | null, direction: 'followers' | 'following') {
+  return useInfiniteQuery({
+    queryKey: ['profile-follows', 'connections', target.type, target.id, direction, viewer?.type, viewer?.id],
+    enabled: Boolean(viewer),
+    staleTime: 0,
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam, signal }) => {
+      const params = new URLSearchParams({ limit: '30', viewerProfileId: viewer!.id, viewerProfileType: viewer!.type });
+      if (pageParam) params.set('cursor', pageParam);
+      const result = await connectionPageRequest<{ data: ProfileConnectionsPage }>(
+        `/v1/profile-follows/connections/${target.type}/${target.id}/${direction}?${params}`, signal);
+      if (!result.data || !Array.isArray(result.data.items) || typeof result.data.isOwner !== 'boolean') throw new Error('Connections are temporarily unavailable. Please try again later.');
+      return result.data;
+    },
+    getNextPageParam: page => page.nextCursor ?? undefined,
+  });
+}
+
+export function useRemoveFollower(profile: ProfileRef) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (follower: ProfileRef) => apiRequest(`/v1/profile-follows/followers/${profile.type}/${profile.id}`, {
+      method: 'DELETE', body: JSON.stringify(follower),
+    }),
+    onSuccess: async () => { await reconcileSocialState(client); },
+  });
+}
+
+async function connectionPageRequest<T>(path: string, signal: AbortSignal): Promise<T> {
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  if (signal.aborted) cancel();
+  else signal.addEventListener('abort', cancel, { once: true });
+  const timeout = setTimeout(cancel, 20_000);
+  try { return await apiRequest<T>(path, { signal: controller.signal }); }
+  finally { clearTimeout(timeout); signal.removeEventListener('abort', cancel); }
+}
+
+export function usePagedFollowRequests(profile: ProfileRef | null) {
+  return useInfiniteQuery({
+    queryKey: ['profile-follows', 'requests', profile?.type, profile?.id, 'pages'],
+    enabled: Boolean(profile), initialPageParam: null as string | null,
+    queryFn: async ({ pageParam, signal }) => {
+      const params = new URLSearchParams({ limit: '30' });
+      if (pageParam) params.set('cursor', pageParam);
+      const result = await connectionPageRequest<{ data: { items: IncomingFollowRequest[]; nextCursor: string | null } }>(
+        `/v1/profile-follows/requests/${profile!.type}/${profile!.id}/page?${params}`, signal);
+      return result.data;
+    },
+    getNextPageParam: page => page.nextCursor ?? undefined,
   });
 }

@@ -112,6 +112,9 @@ async function migrate() {
       updated_at timestamptz NOT NULL DEFAULT now()
     )
   `;
+  await sql`ALTER TABLE mobile_users ADD COLUMN IF NOT EXISTS handle text`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS mobile_users_handle_unique ON mobile_users (handle)`;
+
 
   await sql`
     CREATE TABLE IF NOT EXISTS media_assets (

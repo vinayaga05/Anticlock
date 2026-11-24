@@ -1,4 +1,5 @@
 export type MobileUser = {
+  handle?: string | null;
   id: string;
   phone: string;
   displayName: string;
@@ -17,6 +18,7 @@ export type AuthSession = {
 };
 
 export type ProfileUpdate = {
+  handle?: string | null;
   displayName: string;
   avatarUrl: string | null;
   bio: string | null;

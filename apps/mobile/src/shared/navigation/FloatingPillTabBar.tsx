@@ -11,9 +11,8 @@ import { AppIcon, IconName } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { CommentsBottomSheetHost } from '@/shared/navigation/CommentsBottomSheetHost';
 import { useCommentsSheetStore } from '@/shared/store/commentsSheetStore';
-import { FloatingAssistantButton } from '@/features/assistant/components/FloatingAssistantButton';
-import { AssistantBottomSheetHost } from '@/features/assistant/components/AssistantBottomSheet';
 import { useClipPlaybackStore } from '@/shared/store/clipPlaybackStore';
+import { elevatedSurface } from '@/shared/theme/elevatedSurface';
 
 /** Visible control height for the floating pill (icons + labels). */
 export const TAB_BAR_VISIBLE_HEIGHT = 66;
@@ -161,7 +160,7 @@ export function FloatingPillTabBar({
         ]}
       >
         <View
-          style={[
+          style={elevatedSurface(StyleSheet.flatten([
             styles.bar,
             {
               backgroundColor: onPlayFeed
@@ -172,7 +171,7 @@ export function FloatingPillTabBar({
                 : theme.colors.borderSoft,
               ...theme.shadows.float,
             },
-          ]}
+          ]), theme.colors.surface)}
         >
           {state.routes.map((route, index) => {
             const focused = state.index === index;
@@ -274,9 +273,7 @@ export function FloatingPillTabBar({
         style={[styles.sheetLayer, { zIndex: 50, elevation: 50 }]}
       >
         <CommentsBottomSheetHost />
-        <AssistantBottomSheetHost />
       </View>
-      <FloatingAssistantButton />
       {onPlayFeed && activeClipId && currentClipDuration > 0 ? (
         <ClipProgressBar
           progress={clipProgress}

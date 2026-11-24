@@ -1,3 +1,4 @@
+import { useGenieScreen } from '@/features/assistant/search/useGenieScreen';
 import { navigateToProvider } from '@/shared/navigation/businessNavigation';
 import React, { useMemo } from 'react';
 import { Text, View } from 'react-native';
@@ -18,7 +19,7 @@ import { CourseCard } from './CourseCard';
 import { ProductCard } from './ProductCard';
 
 /** Live, in-place search across the complete service marketplace catalog. */
-export function ServiceCatalogSearchResults({ query }: { query: string }) {
+export function ServiceCatalogSearchResults({ query,onGenieQuery }: { query: string;onGenieQuery?:(query:string)=>void }) {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const normalizedQuery = query.trim();
@@ -45,6 +46,18 @@ export function ServiceCatalogSearchResults({ query }: { query: string }) {
     results.courses.length +
     results.products.length;
 
+  useGenieScreen({
+    domain:'needs',filters:{q:normalizedQuery || undefined},
+    status:normalizedQuery !== debouncedQuery || providersQuery.isFetching ? 'loading' : providersQuery.error ? 'error' : 'ready',
+    partial:results.providers.length === 10,
+    rows:[
+      ...results.categories.map(c=>({id:c.id,name:c.name,open:()=>navigation.navigate('ServiceCategory',{treeId:c.treeId,categoryId:c.id})})),
+      ...results.providers.map(p=>({id:p.id,name:p.name,detail:p.subtitle,open:()=>navigateToProvider(navigation,p.id,p.categoryIds[0])})),
+      ...results.events.map(e=>({id:e.id,name:e.title,open:()=>navigation.navigate('EventDetail',{eventId:e.id})})),
+      ...results.courses.map(c=>({id:c.id,name:c.title,open:()=>navigation.navigate('CourseDetail',{courseId:c.id})})),
+      ...results.products.map(p=>({id:p.id,name:p.name,open:()=>navigation.navigate('ProductDetail',{productId:p.id})})),
+    ],
+  }, next=>onGenieQuery?.(next.q ?? ''),Boolean(onGenieQuery));
   if (!normalizedQuery) return null;
 
   if (!resultCount) {

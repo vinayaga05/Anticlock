@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  AppState,
   Dimensions,
   Keyboard,
   Platform,
@@ -20,7 +21,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { rootNavigationRef } from '@/shared/navigation/rootNavigation';
+import { speakGenieReply, stopGenieSpeech } from '../services/speechOutput';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { AppIcon } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
@@ -35,7 +37,6 @@ import {
   resultCardToNavigation,
 } from '@/features/assistant/navigation/assistantNavigation';
 import type { AssistantResultCard } from '@/features/assistant/types';
-import { isApiEnabled } from '@/shared/api/config';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const TOP_GAP = 10;
@@ -52,7 +53,7 @@ const GLASS_BLUR = 28;
 export function AssistantBottomSheetHost() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation<any>();
+  const navigation = rootNavigationRef;
   const open = useAssistantStore(s => s.open);
   const voiceMode = useAssistantStore(s => s.voiceMode);
   const closeAssistant = useAssistantStore(s => s.closeAssistant);
@@ -61,7 +62,10 @@ export function AssistantBottomSheetHost() {
   const quickActions = useAssistantStore(s => s.quickActions);
   const sending = useAssistantStore(s => s.sending);
   const conversationId = useAssistantStore(s => s.conversationId);
-  const { sendMessage, interrupt, flushOfflineQueue } = useAssistantChat(navigation);
+  const voiceOutput = useAssistantStore(s => s.voiceOutput);
+  const speaking = useAssistantStore(s => s.speaking);
+  const lastReply = [...messages].reverse().find(item => item.role === 'assistant' && !item.pending)?.content;
+  const { sendMessage, interrupt } = useAssistantChat(navigation);
   const [draft, setDraft] = useState('');
   const [sheetMounted, setSheetMounted] = useState(false);
   const dismissingRef = React.useRef(false);
@@ -167,10 +171,11 @@ export function AssistantBottomSheetHost() {
   }, [open]);
 
   useEffect(() => {
-    if (open && isApiEnabled) {
-      void flushOfflineQueue();
-    }
-  }, [flushOfflineQueue, open]);
+    const subscription = AppState.addEventListener('change', state => {
+      if (state !== 'active') stopGenieSpeech();
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -294,7 +299,7 @@ export function AssistantBottomSheetHost() {
 
   const handleSubmit = () => {
     const text = draft.trim();
-    if (!text || sending) return;
+    if (!text) return;
     setDraft('');
     void sendMessage(text);
     Keyboard.dismiss();
@@ -446,6 +451,21 @@ export function AssistantBottomSheetHost() {
         </GestureDetector>
 
         <Animated.View style={[styles.footer, keyboardPadStyle]}>
+          <View style={{flexDirection:'row',gap:14,paddingHorizontal:12,alignItems:'center'}}>
+            <PressableScale accessibilityLabel={voiceOutput?'Disable spoken replies':'Enable spoken replies'}
+              onPress={()=>{
+                if (voiceOutput) stopGenieSpeech();
+                useAssistantStore.setState({voiceOutput:!voiceOutput});
+              }}>
+              <Text style={{color:theme.colors.primary}}>{voiceOutput?'Voice on':'Voice off'}</Text>
+            </PressableScale>
+            {lastReply ? <PressableScale accessibilityLabel="Replay Genie reply" onPress={()=>void speakGenieReply(lastReply)}>
+              <Text style={{color:theme.colors.primary}}>Replay</Text>
+            </PressableScale> : null}
+            {speaking ? <PressableScale accessibilityLabel="Stop Genie reply" onPress={stopGenieSpeech}>
+              <Text style={{color:theme.colors.primary}}>Stop</Text>
+            </PressableScale> : null}
+          </View>
           <QuickSuggestions actions={quickActions} onSelect={handleQuickAction} />
           <VoiceInput
             value={draft}
@@ -455,6 +475,7 @@ export function AssistantBottomSheetHost() {
             sending={sending}
             sheetOpen={open || sheetMounted}
             autoStartListening={voiceMode}
+            onVoiceStateChange={state => { if (state === 'listening') stopGenieSpeech(); }}
           />
         </Animated.View>
       </Animated.View>

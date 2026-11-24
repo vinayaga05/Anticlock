@@ -30,7 +30,7 @@ export function ThreadScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<RootStackParamList, 'Thread'>>();
-  const { client, isReady, isConnecting } = useStreamChat();
+  const { client, isReady, isConnecting, error: connectionError, retry: reconnect } = useStreamChat();
   const [channel, setChannel] = useState<StreamChannel | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -154,8 +154,11 @@ export function ThreadScreen() {
         <View style={styles.centerContainer}>
           <AppIcon name="messages" size={34} color={theme.colors.textTertiary} />
           <Text style={[theme.typography.section, { color: theme.colors.textPrimary }]}>Chat unavailable</Text>
-          <Text style={[styles.statusText, { color: theme.colors.textSecondary }]}>{error ?? 'Reconnect to load this conversation.'}</Text>
-          <PressableScale style={[styles.retryButton, { backgroundColor: theme.colors.primary }]} onPress={() => setRetry(value => value + 1)}>
+          <Text style={[styles.statusText, { color: theme.colors.textSecondary }]}>{error ?? connectionError ?? 'Reconnect to load this conversation.'}</Text>
+          <PressableScale accessibilityLabel="Retry conversation" style={[styles.retryButton, { backgroundColor: theme.colors.primary }]} onPress={() => {
+            if (!client || !isReady) reconnect();
+            setRetry(value => value + 1);
+          }}>
             <Text style={styles.retryText}>Try again</Text>
           </PressableScale>
         </View>

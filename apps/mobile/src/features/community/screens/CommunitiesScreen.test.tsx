@@ -1,3 +1,4 @@
+jest.mock('@/features/assistant/search/useGenieScreen', () => ({ useGenieScreen: () => undefined }));
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { StyleSheet, Text, TextInput } from 'react-native';

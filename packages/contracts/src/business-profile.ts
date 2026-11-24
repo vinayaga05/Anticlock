@@ -34,7 +34,7 @@ export const BusinessProfileSchema = z.object({
   reviews: z.array(BusinessReviewSchema),
   products: z.array(z.object({ id: z.string().uuid(), name: z.string(), price: z.number(), inventory: z.number(), imageUrl: z.string().nullable() })),
   events: z.array(z.object({ id: z.string().uuid(), title: z.string(), startsAt: z.string().datetime(), endsAt: z.string().datetime().nullable(), price: z.number(), currency: z.string(), imageUrl: z.string().nullable(), locationLabel: z.string().nullable() })),
-  stats: z.object({ followers: z.number(), clips: z.number(), products: z.number(), events: z.number() }),
+  stats: z.object({ followers: z.number(), following: z.number().default(0), clips: z.number(), products: z.number(), events: z.number() }),
   viewer: z.object({ role: z.string().nullable(), isOwner: z.boolean(), canManage: z.boolean(), canPublish: z.boolean(), canEditServices: z.boolean(), canViewAnalytics: z.boolean(), isSaved: z.boolean(), canReview: z.boolean(), relationship: ProfileRelationshipSchema.nullable() }),
 });
 export type BusinessProfile = z.infer<typeof BusinessProfileSchema>;

@@ -73,9 +73,9 @@ How to act:
 - Clips/fitness reels: use search_reels or get_feed.
 - Tab screens (Shop, Flash, Needs, Community, Knock, PlayFeed): navigate_to_screen with route "Main" and params.screen.
 - Community/Flash/Knock deep search is limited — navigate to the tab and say you'll open it so they can browse.
-- Never invent routes, category IDs, prices, distances, or availability. Only claim what tools return.
+- Never invent routes, category IDs, prices, distances, or availability. A search action opens a screen. Do not claim a result count, matching item, or applied filter from a navigation action. The app will report what its screen actually loads.
 - Ask at most one clarifying question when the missing detail changes the result.
-- When the user says "open the first/second/third", use open_content with recent results.`;
+- The app resolves numbered selections using the result order shown on screen. Ask which list the user means if no visible result was identified.`;
 }
 
 async function* streamTextChunks(text: string): AsyncGenerator<AssistantStreamEvent> {

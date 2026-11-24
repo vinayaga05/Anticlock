@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { messagingUnavailableReason } from '@/features/messages/profileMessaging';
 import {
   ActivityIndicator,
   Alert,
@@ -45,7 +46,6 @@ import {
   type ProfileRef,
 } from '@/shared/api/profileFollows';
 import { createOrGetChannel } from '@/shared/api/messagesClient';
-import { useStreamChat } from '@/shared/providers/StreamChatProvider';
 import { useProfileClipReelsQuery } from '@/shared/api/hooks';
 import { ApiError, getApiToken } from '@/shared/api/client';
 import type { RootStackParamList } from '@/shared/navigation/types';
@@ -313,7 +313,6 @@ export function BusinessProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
   const { active, identities, isLoading: identityLoading } = useActiveProfile();
-  const { isReady: chatReady } = useStreamChat();
   const queryClient = useQueryClient();
   const viewer: ProfileRef | undefined = active
     ? { id: active.id, type: identityProfileType(active) }
@@ -466,7 +465,7 @@ export function BusinessProfileScreen() {
     }
   };
   const doMessage = async () => {
-    if (!viewer || !business || messageBusy || !chatReady) return;
+    if (!viewer || !business || messageBusy || relationship?.canMessage !== true) return;
     const scope = interactionScope.current;
     setMessageBusy(true);
     setNotice(null);
@@ -825,24 +824,36 @@ export function BusinessProfileScreen() {
             onPress={() => void doMessage()}
             brand={brand}
             colors={colors}
-            disabled={isMember || !relationship?.canMessage || !chatReady}
+            disabled={isMember || !relationship?.canMessage}
             pending={messageBusy}
           />
         </View>
+        {!isMember && relationship?.canMessage !== true ? (
+          <Text style={{ color: colors.muted, paddingHorizontal: 16, paddingVertical: 8 }}>
+            {messagingUnavailableReason(relationship)}
+          </Text>
+        ) : null}
         <View style={[styles.stats, { backgroundColor: colors.surface }]}>
           {[
             [business.stats.followers, 'Followers'],
+            [business.stats.following ?? 0, 'Following'],
             [business.stats.clips, 'Clips'],
             [business.rating.count, 'Reviews'],
           ].map(([value, label]) => (
-            <View key={label} style={styles.stat}>
+            <PressableScale key={label} style={styles.stat}
+              accessibilityLabel={`View ${String(label).toLowerCase()}`}
+              disabled={label !== 'Followers' && label !== 'Following'}
+              onPress={() => navigation.navigate('ProfileConnections', {
+                profileId: providerId, profileType: 'business',
+                direction: label === 'Followers' ? 'followers' : 'following', displayName: business.name,
+              })}>
               <Text style={[styles.statValue, { color: colors.ink }]}>
                 {value}
               </Text>
               <Text style={[styles.statLabel, { color: colors.muted }]}>
                 {label}
               </Text>
-            </View>
+            </PressableScale>
           ))}
         </View>
         {ownerControls ? (

@@ -17,6 +17,7 @@ const mockRefetch = jest.fn();
 const mockSave = jest.fn();
 const mockFollow = jest.fn();
 const mockMessage = jest.fn();
+let mockChatReady = true;
 const mockBlock = jest.fn();
 const mockReport = jest.fn();
 let mockRouteId = mockBusinessId;
@@ -70,7 +71,7 @@ jest.mock('@/shared/api/messagesClient', () => ({
   createOrGetChannel: (...args: any[]) => mockMessage(...args),
 }));
 jest.mock('@/shared/providers/StreamChatProvider', () => ({
-  useStreamChat: () => ({ isReady: true }),
+  useStreamChat: () => ({ isReady: mockChatReady }),
 }));
 jest.mock('@/shared/api/hooks', () => ({
   useProfileClipReelsQuery: () => ({
@@ -349,6 +350,16 @@ test('failed chat keeps the viewer on the storefront and exposes an error', asyn
   expect(mockNavigate).not.toHaveBeenCalled();
   expect(renderedText()).toContain('Messaging unavailable');
 });
+test('an eligible customer can open chat while the SDK is disconnected', async () => {
+  mockChatReady = false;
+  try {
+    render();
+    const message = actions('Message')[0];
+    expect(message.props.disabled).toBe(false);
+    await press('Message');
+    expect(mockNavigate).toHaveBeenCalledWith('Thread', expect.objectContaining({ channelId: 'business-channel' }));
+  } finally { mockChatReady = true; }
+});
 test('copy/share and blocking work from the more menu with this profile identity', async () => {
   const share = jest
     .spyOn(Share, 'share')
@@ -518,4 +529,9 @@ test('cover and scrolled toolbar keep navigation and status text legible', () =>
   expect(renderer.root.findByType(StatusBar).props.barStyle).toBe(
     'dark-content',
   );
+});
+
+test.each(['followers', 'following'])('opens the business %s list', async direction => {
+  render(); await press(`View ${direction}`);
+  expect(mockNavigate).toHaveBeenCalledWith('ProfileConnections', expect.objectContaining({ profileId: mockBusinessId, profileType: 'business', direction }));
 });

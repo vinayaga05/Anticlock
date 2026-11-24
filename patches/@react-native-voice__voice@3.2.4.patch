@@ -1,0 +1,13 @@
+diff --git a/android/src/main/java/com/wenkesj/voice/VoiceModule.java b/android/src/main/java/com/wenkesj/voice/VoiceModule.java
+index f22833ee4ab674c94d23af731f41c3c4d330298b..b1d10b1873e37cf49c5c5f28df015957ae1b7fd9 100644
+--- a/android/src/main/java/com/wenkesj/voice/VoiceModule.java
++++ b/android/src/main/java/com/wenkesj/voice/VoiceModule.java
+@@ -146,7 +146,7 @@ public class VoiceModule extends ReactContextBaseJavaModule implements Recogniti
+ 
+   @Override
+   public String getName() {
+-    return "RCTVoice";
++    return "Voice";
+   }
+ 
+   @ReactMethod

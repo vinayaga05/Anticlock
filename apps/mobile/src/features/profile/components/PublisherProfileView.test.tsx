@@ -6,6 +6,7 @@ import { PublisherProfileView } from './PublisherProfileView';
 jest.mock('@/shared/hooks/useTheme', () => require('@/test/componentMocks').themeModule);
 jest.mock('@/shared/components/AppIcon', () => require('@/test/componentMocks').appIconModule);
 jest.mock('@/shared/components/PressableScale', () => require('@/test/componentMocks').pressableScaleModule);
+jest.mock('@/shared/services/storage', () => ({ storage: { getString: jest.fn(), set: jest.fn(), remove: jest.fn() } }));
 const mockFollowMutate = jest.fn();
 const mockCreateOrGetChannel = jest.fn();
 let mockFollowRefs: any[] = [];
@@ -16,7 +17,8 @@ jest.mock('@/shared/api/profileFollows', () => ({
   },
 }));
 jest.mock('@/shared/api/messagesClient', () => ({ createOrGetChannel: (...args: any[]) => mockCreateOrGetChannel(...args) }));
-jest.mock('@/shared/providers/StreamChatProvider', () => ({ useStreamChat: () => ({ isReady: true }) }));
+let mockChatReady = true;
+jest.mock('@/shared/providers/StreamChatProvider', () => ({ useStreamChat: () => ({ isReady: mockChatReady }) }));
 jest.mock('@/shared/api/publishingHooks', () => ({ discardContentDraft: jest.fn(() => Promise.resolve()) }));
 jest.mock('react-native-safe-area-context', () => require('@/test/componentMocks').safeAreaModule);
 
@@ -57,6 +59,7 @@ jest.mock('@/shared/api/storyHooks', () => ({
 
 describe('PublisherProfileView', () => {
   beforeEach(() => {
+    mockChatReady = true;
     jest.useFakeTimers();
     mockNavigate.mockClear();
     mockFollowMutate.mockClear();
@@ -314,7 +317,8 @@ describe('PublisherProfileView', () => {
     ]);
   });
 
-  it('opens chat addressed to the displayed business profile using the active viewer profile', async () => {
+  it.each([true, false])('opens chat for the displayed business and active viewer when SDK ready=%s', async ready => {
+    mockChatReady = ready;
     mockProfileSummary = {
       publisher: { id: 'business-2', type: 'business', displayName: 'Studio', avatarUrl: 'https://cdn.example/logo.png', verified: true },
       counts: { posts: 0, clips: 0, flash: 0, stories: 0 },
@@ -452,4 +456,13 @@ describe('PublisherProfileView', () => {
     expect(renderer.root.find(node => node.props.accessibilityLabel === 'Follow').props.disabled).toBe(true);
     expect(renderer.root.find(node => node.props.accessibilityLabel === 'Message profile').props.disabled).toBe(true);
   });
+  it.each(['followers', 'following'] as const)('opens the displayed account’s %s list', direction => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => { renderer = ReactTestRenderer.create(<PublisherProfileView />); });
+    const button = renderer.root.findAll(n => n.props.accessibilityLabel === `View ${direction}` && n.props.onPress)[0];
+    ReactTestRenderer.act(() => button.props.onPress());
+    expect(mockNavigate).toHaveBeenCalledWith('ProfileConnections', expect.objectContaining({ profileId: mockProfileSummary.publisher.id, profileType: mockProfileSummary.publisher.type, direction }));
+    ReactTestRenderer.act(() => renderer.unmount());
+  });
+
 });

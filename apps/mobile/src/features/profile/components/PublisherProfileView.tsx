@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { navigateToProfile } from '@/shared/navigation/businessNavigation';
+import { messagingUnavailableReason } from '@/features/messages/profileMessaging';
 import {
   Alert,
   ActivityIndicator,
@@ -18,7 +19,6 @@ import { FilterPills } from '@/shared/components/FilterPills';
 import { PressableScale } from '@/shared/components/PressableScale';
 import { createOrGetChannel } from '@/shared/api/messagesClient';
 import { discardContentDraft } from '@/shared/api/publishingHooks';
-import { useStreamChat } from '@/shared/providers/StreamChatProvider';
 import { formatProfileCount } from '@/shared/data/flash';
 import { useActiveProfile } from '@/shared/publishing/useActiveProfile';
 import {
@@ -80,7 +80,6 @@ export function PublisherProfileView({
   const { width } = useWindowDimensions();
   const cellSize = (width - 2) / 3;
   const { identities, active: globalActive } = useActiveProfile();
-  const { isReady: chatReady } = useStreamChat();
 
   // A switcher choice wins; then an explicit profile; otherwise the
   // viewer's global active profile (personal unless switched in Settings).
@@ -250,7 +249,7 @@ export function PublisherProfileView({
   };
 
   const onMessagePress = async () => {
-    if (!followerRef || !followedRef || !publisher || openingChat || !chatReady) return;
+    if (!followerRef || !followedRef || !publisher || openingChat) return;
     if (relationship?.isBlocked) {
       Alert.alert('Conversation unavailable', 'This profile cannot be messaged.');
       return;
@@ -319,12 +318,17 @@ export function PublisherProfileView({
               ['following', profile?.socialCounts?.following ?? 0],
             ] as const
           ).map(([label, value]) => (
-            <View key={label} style={styles.statItem}>
+            <PressableScale key={label} style={styles.statItem}
+              accessibilityLabel={label === 'posts' ? 'Posts count' : `View ${label}`}
+              disabled={label === 'posts' || !publisher}
+              onPress={() => publisher && label !== 'posts' && navigation.navigate('ProfileConnections', {
+                profileId: publisher.id, profileType: publisher.type, direction: label, displayName: publisher.displayName,
+              })}>
               <Text style={[styles.statNumber, { color: theme.colors.textPrimary }]}>
                 {formatProfileCount(value)}
               </Text>
               <Text style={[styles.statLabel, { color: theme.colors.textPrimary }]}>{label}</Text>
-            </View>
+            </PressableScale>
           ))}
         </View>
       </View>
@@ -408,10 +412,10 @@ export function PublisherProfileView({
           </PressableScale>
           <PressableScale
             accessibilityLabel="Message profile"
-            accessibilityState={{ disabled: openingChat || !chatReady || !publisher || relationship?.canMessage !== true }}
+            accessibilityState={{ disabled: openingChat || !publisher || relationship?.canMessage !== true }}
             onPress={() => void onMessagePress()}
-            disabled={openingChat || !chatReady || !publisher || relationship?.canMessage !== true}
-            style={[styles.messageButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, opacity: openingChat || !chatReady || relationship?.canMessage !== true ? 0.55 : 1 }]}>
+            disabled={openingChat || !publisher || relationship?.canMessage !== true}
+            style={[styles.messageButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, opacity: openingChat || relationship?.canMessage !== true ? 0.55 : 1 }]}>
             {openingChat ? <ActivityIndicator size="small" color={theme.colors.textPrimary} /> : <AppIcon name="message-circle" size={17} color={theme.colors.textPrimary} strokeWidth={2} />}
             <Text style={[styles.messageButtonText, { color: theme.colors.textPrimary }]}>{openingChat ? 'Opening' : 'Message'}</Text>
           </PressableScale>
@@ -422,6 +426,11 @@ export function PublisherProfileView({
             avatarUrl={publisher?.avatarUrl}
           />
         </View>
+      ) : null}
+      {showSocialActions && relationship?.canMessage !== true ? (
+        <Text style={[theme.typography.caption, { color: theme.colors.textSecondary, paddingHorizontal: 16 }]}>
+          {messagingUnavailableReason(relationship)}
+        </Text>
       ) : null}
 
       {isOwner && inProgress.length > 0 ? (

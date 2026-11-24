@@ -75,6 +75,9 @@ export type MarketplaceLocation = {
   city: string;
   area: string;
   distanceKm?: number;
+  latitude?: number;
+  longitude?: number;
+  pincode?: string;
 };
 
 export type MarketplaceProvider = {
@@ -84,6 +87,13 @@ export type MarketplaceProvider = {
   categoryIds: string[];
   actionType: ServiceActionType;
   imageUrl: string;
+  introVideoUrl?: string;
+  fallbackImageUrl?: string;
+  openingTime?: string | null;
+  closingTime?: string | null;
+  workingDays?: string[];
+  temporarilyUnavailable?: boolean;
+  searchMetadataAvailable?: boolean;
   rating: number;
   reviewCount: number;
   location: MarketplaceLocation;

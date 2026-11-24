@@ -14,10 +14,11 @@ type Props = {
   profileId?: string;
   profileType?: PublisherProfileType;
   avatarUrl?: string | null;
+  showVideo?: boolean;
 };
 
 /** Audio and video calls are available for every other user. */
-export function UserCallActions({ name, profileId, profileType, avatarUrl }: Props) {
+export function UserCallActions({ name, profileId, profileType, avatarUrl, showVideo = true }: Props) {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const { active } = useActiveProfile();
@@ -46,7 +47,7 @@ export function UserCallActions({ name, profileId, profileType, avatarUrl }: Pro
       >
         <AppIcon name="phone" size={16} color={theme.colors.textPrimary} strokeWidth={2} />
       </PressableScale>
-      <PressableScale
+      {showVideo ? <PressableScale
         accessibilityLabel={`Video call ${name}`}
         accessibilityState={{ disabled }}
         disabled={disabled}
@@ -55,7 +56,7 @@ export function UserCallActions({ name, profileId, profileType, avatarUrl }: Pro
         style={[styles.hit, { backgroundColor: theme.colors.surfaceMuted, opacity: disabled ? 0.45 : 1 }]}
       >
         <AppIcon name="video" size={16} color={theme.colors.textPrimary} strokeWidth={2} />
-      </PressableScale>
+      </PressableScale> : null}
     </View>
   );
 }

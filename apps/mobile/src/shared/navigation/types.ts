@@ -32,6 +32,7 @@ export type RootStackParamList = {
         profileId?: string;
       }
     | undefined;
+  ProfileConnections: { profileId: string; profileType: 'personal' | 'business'; direction: 'followers' | 'following'; displayName?: string };
   BusinessProfile: { providerId: string; categoryId?: string };
   BusinessBooking: { providerId: string; categoryId?: string };
   BusinessManage: { providerId: string; section?: 'profile' | 'services' | 'analytics' };

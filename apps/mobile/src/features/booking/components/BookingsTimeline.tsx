@@ -1,3 +1,5 @@
+import { useGenieScreen } from '@/features/assistant/search/useGenieScreen';
+import { SearchFilterChips } from '@/features/assistant/search/SearchFilterChips';
 import React, { useMemo, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -31,6 +33,8 @@ type BookingsTimelineProps = {
   onFilterSheetOpenChange?: (open: boolean) => void;
   showFilterButton?: boolean;
   searchQuery?: string;
+  genieActive?: boolean;
+  onGenieQuery?: (query:string)=>void;
 };
 
 export function BookingsTimeline({
@@ -38,9 +42,12 @@ export function BookingsTimeline({
   onFilterSheetOpenChange,
   showFilterButton = true,
   searchQuery = '',
+  genieActive = false,
+  onGenieQuery,
 }: BookingsTimelineProps) {
   const theme = useTheme();
   const navigation = useNavigation<any>();
+  const [upcomingOnly,setUpcomingOnly] = useState(false);
   const [filter, setFilter] = useState<BookingFilter>('all');
   const [advanced, setAdvanced] = useState<BookingAdvancedFilters>(DEFAULT_ADVANCED_FILTERS);
   const [internalSheetOpen, setInternalSheetOpen] = useState(false);
@@ -89,7 +96,7 @@ export function BookingsTimeline({
     [filtered],
   );
 
-  const past = useMemo(() => getPastBookings(filtered), [filtered]);
+  const past = useMemo(() => upcomingOnly ? [] : getPastBookings(filtered), [filtered,upcomingOnly]);
   const pastPreview = pastExpanded ? past : past.slice(0, 2);
 
   const onPress = (booking: ConsolidatedBooking) => {
@@ -138,6 +145,15 @@ export function BookingsTimeline({
   };
 
   const hasUpcoming = nextUp || sections.some(s => s.items.length > 0);
+  useGenieScreen({
+    domain:'knock',filters:{upcoming:upcomingOnly || undefined,q:searchQuery.trim() || undefined},
+    status:!authenticated?'unavailable': error?'error':isLoading?'loading':'ready',
+    message:!authenticated?'Sign in to see your bookings.':undefined,
+    partial:hasNextPage,
+    rows:[...(nextUp?[nextUp]:[]),...sections.flatMap(s=>s.items),...pastPreview].map(b=>({
+      id:b.id,name:b.serviceTitle,detail:b.providerName,open:()=>navigateBookingTarget(navigation,b),
+    })),
+  }, next=>{setUpcomingOnly(Boolean(next.upcoming)); onGenieQuery?.(next.q ?? '');},genieActive);
 
   if (!isApiEnabled || !authenticated) {
     return (
@@ -200,6 +216,7 @@ export function BookingsTimeline({
         onOpenFilters={showFilterButton ? () => setSheetOpen(true) : undefined}
       />
 
+      <SearchFilterChips filters={{upcoming:upcomingOnly}} onClear={()=>setUpcomingOnly(false)} />
       {!hasUpcoming && past.length === 0 ? (
         <EmptyState
           icon="calendar"

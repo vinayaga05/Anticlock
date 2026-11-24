@@ -1,3 +1,4 @@
+import { useGenieScreen } from '@/features/assistant/search/useGenieScreen';
 import { navigateToProfile } from '@/shared/navigation/businessNavigation';
 import React, {
   useCallback,
@@ -310,7 +311,7 @@ export function ReelFeedScreen() {
   const navigation = useNavigation<any>();
   const isFocused = useIsFocused();
   const [appActive, setAppActive] = useState(() => AppState.currentState === 'active');
-  const assistantOpen = useAssistantStore(s => s.open);
+  const assistantOpen = useAssistantStore(s => Boolean(s.open || s.speaking));
   const route = useRoute<
     | RouteProp<MainTabParamList, 'PlayFeed'>
     | RouteProp<RootStackParamList, 'ProviderClips'>
@@ -595,7 +596,9 @@ export function ReelFeedScreen() {
     : profilePlayback
       ? profileReelsQuery.error
       : globalReelsQuery.error;
-  const genieQ = params?.q?.trim().toLowerCase();
+  const [searchPhrase,setSearchPhrase] = useState(params?.q ?? '');
+  useEffect(()=>setSearchPhrase(params?.q ?? ''),[params?.q]);
+  const genieQ = searchPhrase.trim().toLowerCase();
   const reels = useMemo(() => {
     const visibleReels = withoutHiddenClips(feedReels, hiddenIds).filter(
       reel =>
@@ -610,6 +613,13 @@ export function ReelFeedScreen() {
         r.author?.toLowerCase().includes(genieQ),
     );
   }, [blockedProfileKeys, feedReels, genieQ, hiddenIds]);
+  useGenieScreen({
+    domain:'clips', filters:{q:searchPhrase.trim() || undefined},
+    status:feedError?'error':feedLoading?'loading':'ready',
+    partial:!hasReachedEndOfServerFeed,
+    rows:reels.map(r=>({id:r.id,name:r.title || r.caption || 'Clip',detail:r.author,
+      open:()=>navigation.setParams({reelId:r.id})})),
+  }, next=>setSearchPhrase(next.q ?? ''), !providerPlayback && !profilePlayback);
   const loopedReels = useMemo(
     () => buildLoopedClipFeed(reels, hasReachedEndOfServerFeed),
     [hasReachedEndOfServerFeed, reels],
@@ -1182,6 +1192,13 @@ export function ReelFeedScreen() {
               providerPlayback ? navigation.goBack() : navigation.navigate('Search')
             }
           />
+          {!providerPlayback && genieQ ? (
+            <PressableScale accessibilityLabel={`Clear ${searchPhrase} filter`}
+              onPress={() => { setSearchPhrase(''); navigation.setParams({ q: undefined }); }}
+              style={styles.coinsChip}>
+              <Text numberOfLines={1} style={[styles.coinsText, {maxWidth:110}]}>{searchPhrase} ×</Text>
+            </PressableScale>
+          ) : null}
           {providerPlayback ? (
             <Text numberOfLines={1} style={styles.providerFeedTitle}>
               {params?.providerName ?? 'Provider Clips'}

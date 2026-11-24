@@ -4,10 +4,12 @@ import {
   StyleSheet,
   useWindowDimensions,
   View,
+  Text,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { AppIcon } from '@/shared/components/AppIcon';
+import { stopGenieSpeech } from '../services/speechOutput';
 import { useAssistantStore } from '@/features/assistant/store/assistantStore';
 import { STORAGE_KEYS } from '@/shared/constants';
 import { storage } from '@/shared/services/storage';
@@ -79,6 +81,7 @@ export function FloatingAssistantButton() {
   const { width, height } = useWindowDimensions();
   const enabled = useAssistantStore(s => s.enabled);
   const open = useAssistantStore(s => s.open);
+  const speaking = useAssistantStore(s => s.speaking);
   const openAssistant = useAssistantStore(s => s.openAssistant);
   const savedPosition = React.useRef(loadSavedPosition()).current;
   const bounds = React.useMemo(
@@ -169,6 +172,14 @@ export function FloatingAssistantButton() {
   );
 
   if (!enabled || open) return null;
+  if (speaking) return (
+    <Text accessibilityRole="button" accessibilityLabel="Stop Genie reply"
+      onPress={stopGenieSpeech}
+      style={[styles.wrap, {left:position.x,top:position.y,backgroundColor:theme.colors.primary,
+        color:'#fff',textAlign:'center',textAlignVertical:'center',lineHeight:52,fontWeight:'700'}]}>
+      Stop
+    </Text>
+  );
 
   return (
     <View

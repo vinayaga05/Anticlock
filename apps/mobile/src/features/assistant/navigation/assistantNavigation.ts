@@ -33,6 +33,7 @@ export function executeAssistantNavigation(
     if (params.reelId) tabParams.reelId = params.reelId;
     if (params.q) tabParams.q = params.q;
     if (params.categoryId) tabParams.categoryId = params.categoryId;
+    if (params.screen === 'Knock' && params.initialTab) tabParams.initialTab = params.initialTab;
     navigation.navigate('Main', {
       screen: params.screen as string,
       ...(Object.keys(tabParams).length ? { params: tabParams } : {}),
@@ -186,3 +187,21 @@ export const assistantLinking = {
     },
   },
 };
+
+const genieTabs = new Set(['PlayFeed','Flash','Needs','Community','Knock','Shop']);
+const deepLinkId = (value:unknown) => typeof value === 'string' && /^[a-z0-9_.-]{1,120}$/i.test(value);
+
+export function validAssistantRoute(route: string, params: Record<string, unknown>) {
+  if (route === 'Main') return genieTabs.has(String(params.screen)) &&
+    (params.reelId == null || deepLinkId(params.reelId)) &&
+    (params.initialTab == null || ['bookings','notifications','chat'].includes(String(params.initialTab)));
+  const required: Record<string,string[]> = {
+    Profile: [], BusinessProfile:['providerId'], ServiceTree:['treeId'], ServiceCategory:['treeId','categoryId'],
+    BookingDetail:['bookingId'], ProductDetail:['productId'], EventDetail:['eventId'], CourseDetail:['courseId'],
+    TeamDetail:['teamId'], DoctorProfile:['doctorId'], LabDetail:['labId'], ClassDetail:['classId'],
+    Search:[], SavedHub:[], MyBookings:[], MyOrders:[], Inbox:[], AccountSettings:[],
+    ProviderDashboard:['providerId'], Doctors:[], DiagnosticsHub:[], LabList:[], PhysioHub:[], FitnessFeed:[],
+  };
+  return Object.prototype.hasOwnProperty.call(required,route) && required[route].every(key=>deepLinkId(params[key])) &&
+    (route !== 'Profile' || params.userId == null || deepLinkId(params.userId));
+}

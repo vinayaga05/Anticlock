@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 import type {
   MarketplaceProviderCard,
   MarketplaceProviderListQuery,
@@ -7,8 +7,11 @@ import type {
   UpdateProviderBusinessRequest,
 } from '@anticlock/contracts';
 import { db } from '../db/client.js';
+import { mediaService } from '../media/MediaService.js';
+import { resolveMarketplaceMedia } from './marketplaceMedia.js';
 import {
   bookings,
+  contentPosts,
   mobileUserBlocks,
   mobileUsers,
   providerMemberships,
@@ -103,9 +106,30 @@ async function loadOfferings(providerIds: string[]) {
     .orderBy(asc(providerServiceOfferings.createdAt));
 }
 
+function loadMarketplaceMedia(rows: ProviderRow[]) {
+  return resolveMarketplaceMedia(
+    rows,
+    (id, kind) => mediaService.getPublicContentDeliveryUrl(id, kind),
+    intros => db.select({
+      providerId: contentPosts.authorProviderId,
+      mediaId: contentPosts.duplicateClusterId,
+    }).from(contentPosts).where(and(
+      eq(contentPosts.format, 'clip'),
+      inArray(contentPosts.authorProviderId, intros.map(intro => intro.providerId)),
+      inArray(contentPosts.duplicateClusterId, [...new Set(intros.map(intro => intro.mediaId))]),
+      or(
+        ne(contentPosts.status, 'published'),
+        ne(contentPosts.visibility, 'public'),
+        lte(contentPosts.expiresAt, new Date()),
+      ),
+    )),
+  );
+}
+
 function toCard(
   row: ProviderRow,
   offerings: Awaited<ReturnType<typeof loadOfferings>>,
+  media?: { avatarUrl: string | null; coverUrl: string | null; introVideoUrl: string | null },
 ): MarketplaceProviderCard {
   const view = publicProfileView(row);
   const mine = offerings.filter(o => o.providerId === row.id);
@@ -127,8 +151,9 @@ function toCard(
     area: view.area,
     description: view.description,
     priceFrom: view.pricingStartsAt ?? (offeringPrices.length ? Math.min(...offeringPrices) : null),
-    avatarUrl: view.avatarUrl,
-    coverUrl: view.coverUrl,
+    avatarUrl: media?.avatarUrl ?? view.avatarUrl,
+    coverUrl: media?.coverUrl ?? view.coverUrl,
+    introVideoUrl: media?.introVideoUrl ?? null,
     modes: view.modes,
     workingDays: view.workingDays,
     openingTime: view.openingTime,
@@ -209,9 +234,12 @@ export class ProviderBusinessService {
       .offset(offset);
 
     const page = rows.slice(0, limit).map(r => r.provider);
-    const offerings = await loadOfferings(page.map(p => p.id));
+    const [offerings, media] = await Promise.all([
+      loadOfferings(page.map(p => p.id)),
+      loadMarketplaceMedia(page),
+    ]);
     return {
-      data: page.map(p => toCard(p, offerings)),
+      data: page.map(p => toCard(p, offerings, media.get(p.id))),
       nextOffset: rows.length > limit ? offset + limit : null,
     };
   }
@@ -244,7 +272,11 @@ export class ProviderBusinessService {
       )
       .limit(1);
     if (!row) throw appError('Provider not found', 'not_found', 404);
-    return toCard(row.provider, await loadOfferings([providerId]));
+    const [offerings, media] = await Promise.all([
+      loadOfferings([providerId]),
+      loadMarketplaceMedia([row.provider]),
+    ]);
+    return toCard(row.provider, offerings, media.get(providerId));
   }
 
   /** Throws 404 unless the user is a member of an active business. */

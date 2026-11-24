@@ -502,6 +502,7 @@ export const MarketplaceProviderCardSchema = z.object({
   priceFrom: z.number().nullable(),
   avatarUrl: z.string().url().nullable(),
   coverUrl: z.string().url().nullable(),
+  introVideoUrl: z.string().url().nullable().optional(),
   modes: ServiceModeFlagsSchema,
   workingDays: z.array(z.string()),
   openingTime: z.string().nullable(),

@@ -147,7 +147,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
 
       // Provider
       ProviderApplicationIntro: 'provider/apply',
-      ProviderApplicationKind: 'provider/apply/kind',
+      ProviderApplicationStart: { path: 'provider/apply/start', alias: ['provider/apply/kind'] },
       ProviderApplicationServices: 'provider/apply/:applicationId/services',
       ProviderApplicationForm: 'provider/apply/:applicationId/form',
       ProviderApplicationReview: 'provider/apply/:applicationId/review',

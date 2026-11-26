@@ -1,3 +1,5 @@
+import { PERSONAL_PLAY_EDITION, PLAY_EDITION_HEADER } from '@anticlock/contracts/play-edition';
+import { isHealthRequest, isHealthRecord, healthFeaturesEnabled, releaseResponse } from '@/shared/config/releaseFeatures';
 import { getApiBaseUrl, isApiEnabled } from './config';
 
 export class ApiError extends Error {
@@ -56,8 +58,17 @@ export async function apiRequest<T>(
     throw new ApiError(0, 'api_disabled', 'API_BASE_URL is not configured');
   }
 
+  let requestBody: unknown;
+  if (typeof init.body === 'string') {
+    try { requestBody = JSON.parse(init.body); } catch { /* not JSON */ }
+  }
+  if (isHealthRequest(path, requestBody)) {
+    throw new ApiError(403, 'feature_unavailable', 'This service is not available in this version of Knock.');
+  }
+
   const requestToken = bearerToken;
   const headers = new Headers(init.headers);
+  if (!healthFeaturesEnabled) headers.set(PLAY_EDITION_HEADER, PERSONAL_PLAY_EDITION);
   if (!headers.has('Content-Type') && !(init.body instanceof ArrayBuffer)) {
     headers.set('Content-Type', 'application/json');
   }
@@ -112,7 +123,13 @@ export async function apiRequest<T>(
     throw new ApiError(res.status, code, message, retryAfterSeconds);
   }
 
-  return (await res.json()) as T;
+  const data: unknown = await res.json();
+  // A direct detail link must fail rather than display a health provider.
+  if (!healthFeaturesEnabled && (isHealthRecord(data) ||
+    (data && typeof data === 'object' && !Array.isArray(data) && Object.values(data).some(isHealthRecord)))) {
+    throw new ApiError(403, 'feature_unavailable', 'This service is not available in this version of Knock.');
+  }
+  return releaseResponse(data) as T;
 }
 
 /** Thin POST/GET helper used by messages/Stream Chat (matches apiRequest JSON body). */
@@ -143,6 +160,9 @@ export async function apiStream<TEvent>(
   onEvent: (event: TEvent) => void,
   init: { signal?: AbortSignal } = {},
 ): Promise<void> {
+  if (isHealthRequest(path, body)) {
+    throw new ApiError(403, 'feature_unavailable', 'This feature is not available in this version of Knock.');
+  }
   const requestToken = bearerToken;
   if (!isApiEnabled) {
     throw new ApiError(0, 'api_disabled', 'API_BASE_URL is not configured');
@@ -184,6 +204,7 @@ export async function apiStream<TEvent>(
 
     xhr.open('POST', `${getApiBaseUrl()}${path}`);
     xhr.setRequestHeader('Content-Type', 'application/json');
+    if (!healthFeaturesEnabled) xhr.setRequestHeader(PLAY_EDITION_HEADER, PERSONAL_PLAY_EDITION);
     xhr.setRequestHeader('Accept', 'text/event-stream');
     if (requestToken) {
       xhr.setRequestHeader('Authorization', `Bearer ${requestToken}`);

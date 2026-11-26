@@ -1,3 +1,4 @@
+import { applyProviderRegistrationPolicy, effectiveLocationFields, requiresBusinessLocation } from '@anticlock/contracts/provider-registration';
 import {
   PROVIDER_FORM_FIELD_ALIASES,
   ProviderApplicationCommonPayloadSchema,
@@ -64,15 +65,13 @@ export function readFieldValue(
     const direct = dynamicPayload[field.key] ?? flat[field.key];
     if (direct && typeof direct === 'object' && !Array.isArray(direct)) {
       const loc = direct as Record<string, unknown>;
-      return finiteNumber(loc.latitude) !== null && finiteNumber(loc.longitude) !== null
-        ? loc
-        : undefined;
+      return loc;
     }
     const section = field.key.split('.')[0];
     const lat = flat[`${section}.latitude`] ?? flat[`${field.key}.latitude`];
     const lng = flat[`${section}.longitude`] ?? flat[`${field.key}.longitude`];
-    return finiteNumber(lat) !== null && finiteNumber(lng) !== null
-      ? { latitude: lat, longitude: lng }
+    return !isEmpty(lat) || !isEmpty(lng) || flat[`${section}.pinConfirmed`] === true
+      ? { latitude: lat, longitude: lng, pinConfirmed: flat[`${section}.pinConfirmed`] }
       : undefined;
   }
   const alias = PROVIDER_FORM_FIELD_ALIASES[field.key];
@@ -89,6 +88,11 @@ export function validateFieldValue(
   if (isEmpty(value)) return null;
   const v = field.validation ?? {};
   switch (field.type) {
+    case 'location': {
+      const point = value as Record<string, unknown>;
+      const lat = finiteNumber(point?.latitude), lng = finiteNumber(point?.longitude);
+      return lat !== null && lng !== null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && point.pinConfirmed === true ? null : 'Confirm a pin for the business entrance before submitting';
+    }
     case 'number':
     case 'currency': {
       const n = finiteNumber(value);
@@ -98,6 +102,10 @@ export function validateFieldValue(
       if (v.max !== undefined && n > v.max) return `${field.label} must be at most ${v.max}`;
       return null;
     }
+    case 'text':
+    case 'textarea':
+      if (typeof value !== 'string') return `${field.label} must be text`;
+      break;
     case 'email':
       return typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
         ? null
@@ -145,6 +153,8 @@ function humanize(key: string) {
 export function computeApplicationReadiness(
   input: ReadinessInput,
 ): ProviderApplicationReadiness {
+  const policy = applyProviderRegistrationPolicy(input.schema);
+  input = { ...input, schema: { ...policy, fields: effectiveLocationFields(policy.fields, input.categoryIds, (input.commonPayload.services ?? {}) as Record<string, unknown>) } };
   const flat = flattenPayload(input.commonPayload);
   const missing: ProviderApplicationMissingItem[] = [];
   const seen = new Set<string>();
@@ -209,6 +219,12 @@ export function computeApplicationReadiness(
         message: error,
       });
     }
+  }
+
+  if (requiresBusinessLocation(input.categoryIds, (input.commonPayload.services ?? {}) as Record<string, unknown>)) {
+    const location = (input.commonPayload.location ?? {}) as Record<string, unknown>;
+    if (finiteNumber(location.latitude) === null || finiteNumber(location.longitude) === null || location.pinConfirmed !== true) push({ key: 'location.map', label: 'Business location', sectionId: 'location', reason: 'required', message: 'Confirm a pin for the business entrance before submitting' });
+    for (const part of ['address', 'city', 'pincode']) if (isEmpty(location[part])) push({ key: `location.${part}`, label: part, sectionId: 'location', reason: 'required', message: `Business ${part} is required` });
   }
 
   // The common payload must also satisfy the full contract, because that is

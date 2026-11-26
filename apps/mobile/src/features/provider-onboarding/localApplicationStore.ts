@@ -28,11 +28,9 @@ export function getLocalApplications(): ProviderApplicationDetail[] {
     const parsed = JSON.parse(raw) as ProviderApplicationDetail | ProviderApplicationDetail[];
     return (Array.isArray(parsed) ? parsed : [parsed]).map(application => ({
       ...application,
+      providerKind: 'business',
       businessName:
-        application.businessName
-        ?? (application.providerKind === 'business'
-          ? 'New business'
-          : 'New professional profile'),
+        application.businessName ?? 'New business',
     }));
   } catch {
     return [];
@@ -66,13 +64,13 @@ export function deleteLocalApplication(applicationId: string) {
   );
 }
 
-export function createLocalApplication(providerKind: ProviderKind) {
+export function createLocalApplication(_legacyKind?: ProviderKind) {
   // Existing drafts are kept: each one is a separate business in progress.
   const createdAt = nowIso();
   return saveLocalApplication({
     id: newId(),
-    businessName: providerKind === 'business' ? 'New business' : 'New professional profile',
-    providerKind,
+    businessName: 'New business',
+    providerKind: 'business',
     status: 'draft',
     categoryIds: [],
     submittedAt: null,
@@ -98,7 +96,7 @@ export function updateLocalApplication(
   }
   const next: ProviderApplicationDetail = {
     ...existing,
-    providerKind: body.providerKind ?? existing.providerKind,
+    providerKind: 'business',
     commonPayload: body.commonPayload
       ? { ...existing.commonPayload, ...body.commonPayload }
       : existing.commonPayload,

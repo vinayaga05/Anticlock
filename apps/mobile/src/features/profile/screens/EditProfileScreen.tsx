@@ -1,3 +1,4 @@
+import { UsernameField, useUsernameAvailability } from '../components/UsernameField';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useNavigation, usePreventRemove } from '@react-navigation/native';
@@ -45,6 +46,7 @@ export function EditProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, updateProfile, logout } = useAuth();
   const [draft, setDraft] = useState(() => profileDraft(user));
+  const usernameCheck = useUsernameAvailability(draft.handle ?? '', user?.handle);
   const [baseline, setBaseline] = useState(() => profileDraft(user));
   const [basePhoto, setBasePhoto] = useState(() => storedProfilePhoto(user?.avatarUrl));
   const [photo, setPhoto] = useState<PickedProfilePhoto | null>(null);
@@ -107,7 +109,7 @@ export function EditProfileScreen() {
   const removePhoto = () => { if (busy || operation.current || picker.current) return; setPhoto(null); setRemoved(true); uploadCache.current = null; setSaved(false); setError(null); };
 
   const save = async () => {
-    if (operation.current || picker.current || !signedIn || !dirty) return;
+    if (operation.current || picker.current || !signedIn || !dirty || usernameCheck.status !== 'available') return;
     let fields;
     try { fields = validateProfileDraft(draft); }
     catch (problem) { setError({ message: problem instanceof Error ? problem.message : 'Check your profile details.' }); return; }
@@ -137,6 +139,7 @@ export function EditProfileScreen() {
     } catch (problem) {
       if (mounted.current && operation.current === request && userRef.current?.id === ownerId) {
         const failure = problem as { message?: string; code?: string };
+        if (failure.code === 'USERNAME_TAKEN') usernameCheck.retry();
         if (!['cancelled', 'session_changed'].includes(failure.code ?? '')) setError({ message: failure.message || 'Could not save your profile. Your changes are still here. Please try again.', settings: failure.code === 'permission_denied' });
       }
     } finally {
@@ -175,7 +178,7 @@ export function EditProfileScreen() {
             <View testID="profile-about-card" style={[styles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
               <View style={styles.sectionHeading}><View><Text style={[styles.sectionTitle, { color: palette.ink }]}>About you</Text><Text style={[styles.sectionCopy, { color: palette.muted }]}>The details that make you, you.</Text></View><AppIcon name="user-round" size={22} color={palette.violet} /></View>
               <ProfileField label="Name" value={draft.displayName} onChangeText={value => edit('displayName', value)} placeholder="Your name" maxLength={80} palette={palette} disabled={busy} />
-              <ProfileField username label="Username" value={draft.handle ?? ''} onChangeText={value => edit('handle', value)} placeholder="your_username" maxLength={30} palette={palette} disabled={busy} />
+              <UsernameField value={draft.handle ?? ''} onChangeText={value => edit('handle', value)} check={usernameCheck} disabled={busy} />
               <ProfileField label="Bio" value={draft.bio} onChangeText={value => edit('bio', value)} placeholder="A little about you" maxLength={160} palette={palette} disabled={busy} multiline />
             </View>
             <View testID="profile-details-card" style={[styles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
@@ -188,7 +191,7 @@ export function EditProfileScreen() {
           <View testID="profile-footer" style={[styles.footer, { backgroundColor: palette.card, borderTopColor: palette.border, paddingBottom: insets.bottom + 12 }]}>
             {error ? <View style={[styles.errorBox, { backgroundColor: palette.errorBg }]}><Text accessibilityRole="alert" style={[styles.errorText, { color: palette.error }]}>{error.message}</Text>{error.settings ? <PressableScale accessibilityLabel="Open Settings" onPress={() => { void Linking.openSettings().catch(() => setError({ message: 'Open your phone Settings to allow photo access.' })); }} style={styles.settingsAction}><Text style={[styles.settingsText, { color: palette.error }]}>Open Settings</Text></PressableScale> : null}</View> : null}
             <View style={styles.saveStatus}><View style={[styles.statusDot, { backgroundColor: saved ? palette.violet : palette.muted }]} /><Text accessibilityLiveRegion="polite" style={[styles.statusText, { color: palette.muted }]}>{saving ? phase === 'uploading' ? 'Uploading your photo…' : 'Saving your profile…' : selecting ? 'Choosing your photo…' : saved ? 'Changes saved' : dirty ? 'Unsaved changes' : 'All up to date'}</Text></View>
-            <PressableScale accessibilityLabel="Save profile changes" testID="profile-save" disabled={busy || !dirty} accessibilityState={{ disabled: busy || !dirty }} onPress={() => { void save(); }} style={[styles.saveButton, { backgroundColor: palette.action, opacity: !dirty && !saved ? 0.55 : 1 }]}>{saving ? <ActivityIndicator color="#FFF" /> : <AppIcon name={saved && !dirty ? 'check' : 'check-circle'} size={20} color="#FFF" />}<Text style={styles.saveText}>Save changes</Text></PressableScale>
+            <PressableScale accessibilityLabel="Save profile changes" testID="profile-save" disabled={busy || !dirty || usernameCheck.status !== 'available'} accessibilityState={{ disabled: busy || !dirty || usernameCheck.status !== 'available' }} onPress={() => { void save(); }} style={[styles.saveButton, { backgroundColor: palette.action, opacity: !dirty && !saved ? 0.55 : 1 }]}>{saving ? <ActivityIndicator color="#FFF" /> : <AppIcon name={saved && !dirty ? 'check' : 'check-circle'} size={20} color="#FFF" />}<Text style={styles.saveText}>Save changes</Text></PressableScale>
           </View>
         </>
       )}

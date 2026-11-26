@@ -10,7 +10,7 @@ export type AppEnv = RequestLoggerEnv & {
   };
 };
 
-function readSessionCookie(cookieHeader: string | undefined): string | null {
+export function readSessionCookie(cookieHeader: string | undefined): string | null {
   if (!cookieHeader) return null;
   const match = cookieHeader
     .split(';')

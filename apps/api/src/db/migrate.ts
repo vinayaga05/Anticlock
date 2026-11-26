@@ -1,5 +1,7 @@
 import "dotenv/config";
+import { applyUsernameSchema } from "./usernameSchema.js";
 import { sql } from "./client.js";
+import { syncServiceCatalog } from "../seed/serviceCatalog.js";
 
 async function migrate() {
   await sql`CREATE EXTENSION IF NOT EXISTS pgcrypto`;
@@ -114,6 +116,7 @@ async function migrate() {
   `;
   await sql`ALTER TABLE mobile_users ADD COLUMN IF NOT EXISTS handle text`;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS mobile_users_handle_unique ON mobile_users (handle)`;
+  await applyUsernameSchema(sql);
 
 
   await sql`
@@ -2029,6 +2032,11 @@ async function migrate() {
   await sql`CREATE TABLE IF NOT EXISTS fitness_catalog_limits (id text PRIMARY KEY, count integer NOT NULL, reset_at timestamptz NOT NULL)`;
 
   await sql`UPDATE fitness_plans SET title = 'Fitness plan' WHERE title <> 'Fitness plan'`;
+
+  await syncServiceCatalog({ onlyIfMissingTree: "local_services" });
+
+  await sql`ALTER TABLE provider_applications ALTER COLUMN provider_kind SET DEFAULT 'business'`;
+  await sql`ALTER TABLE providers ALTER COLUMN provider_kind SET DEFAULT 'business'`;
 
   console.log("Migrations applied.");
   await sql.end({ timeout: 5 });

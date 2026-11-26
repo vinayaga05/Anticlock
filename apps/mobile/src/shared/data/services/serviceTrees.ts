@@ -1,15 +1,8 @@
+import { releaseRecords } from '@/shared/config/releaseFeatures';
 import { treeColors } from '@/shared/theme/colors';
 import { ServiceTree } from './serviceTypes';
 
-export const serviceTrees: ServiceTree[] = [
-  {
-    id: 'rooms_restaurant',
-    name: 'Rooms and Restaurant',
-    description: 'Find nearby stays, restaurants, and food spots.',
-    icon: 'utensils',
-    serviceCount: 9,
-    accent: treeColors.rooms_restaurant.accent,
-  },
+export const serviceTrees: ServiceTree[] = releaseRecords<ServiceTree>([
   {
     id: 'health',
     name: 'Health',
@@ -19,12 +12,28 @@ export const serviceTrees: ServiceTree[] = [
     accent: treeColors.health.accent,
   },
   {
+    id: 'home_services',
+    name: 'Needs',
+    description: 'Find property, jobs, automotive, and home services.',
+    icon: 'home',
+    serviceCount: 9,
+    accent: treeColors.home_services.accent,
+  },
+  {
     id: 'fitness',
-    name: 'Fitness',
-    description: 'Gyms, trainers, and classes near you.',
+    name: 'Fitness, Beauty & Spa',
+    description: 'Find fitness, beauty, and spa providers near you.',
     icon: 'fitness',
     serviceCount: 9,
     accent: treeColors.fitness.accent,
+  },
+  {
+    id: 'course_training',
+    name: 'Coaching & Training',
+    description: 'Learn skills from trusted instructors.',
+    icon: 'graduation-cap',
+    serviceCount: 9,
+    accent: treeColors.course_training.accent,
   },
   {
     id: 'sports',
@@ -35,20 +44,37 @@ export const serviceTrees: ServiceTree[] = [
     accent: treeColors.sports.accent,
   },
   {
+    id: 'tours_events',
+    name: 'Travel & Events',
+    description: 'Trips, adventures, and celebrations.',
+    icon: 'globe',
+    serviceCount: 9,
+    accent: treeColors.tours_events.accent,
+  },
+  {
     id: 'wellness',
-    name: 'Wellness',
-    description: 'Mind, body, and holistic care.',
+    name: 'Indian Medicine & Wellness',
+    description: 'Explore Indian medicine, holistic care, and mental wellness.',
     icon: 'leaf',
     serviceCount: 9,
     accent: treeColors.wellness.accent,
   },
   {
-    id: 'tours_events',
-    name: 'Tours & Events',
-    description: 'Trips, adventures, and celebrations.',
-    icon: 'globe',
+    id: 'rooms_restaurant',
+    name: 'Hotels & Restaurants',
+    description: 'Find nearby stays, restaurants, and food spots.',
+    icon: 'utensils',
     serviceCount: 9,
-    accent: treeColors.tours_events.accent,
+    accent: treeColors.rooms_restaurant.accent,
+  },
+  {
+    id: 'local_services',
+    name: 'Services',
+    description:
+      'Find nearby document, printing, payment, and technology services.',
+    icon: 'clipboard',
+    serviceCount: 9,
+    accent: treeColors.local_services.accent,
   },
   {
     id: 'beauty_spa',
@@ -59,27 +85,15 @@ export const serviceTrees: ServiceTree[] = [
     accent: treeColors.beauty_spa.accent,
   },
   {
-    id: 'course_training',
-    name: 'Course & Training',
-    description: 'Learn skills from trusted instructors.',
-    icon: 'graduation-cap',
-    serviceCount: 9,
-    accent: treeColors.course_training.accent,
-  },
-  {
-    id: 'home_services',
-    name: 'Home Need Services',
-    description: 'On-demand help for your home.',
-    icon: 'home',
-    serviceCount: 9,
-    accent: treeColors.home_services.accent,
-  },
-  {
     id: 'ecommerce',
     name: 'E-commerce & Products',
-    description: 'Shop health, fitness, and lifestyle products.',
+    description: 'Shop products from local sellers.',
     icon: 'shopping-bag',
     serviceCount: 9,
     accent: treeColors.ecommerce.accent,
   },
-];
+]);
+
+export const needsServiceTrees = serviceTrees.filter(
+  tree => tree.id !== 'beauty_spa' && tree.id !== 'ecommerce',
+);

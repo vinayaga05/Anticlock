@@ -215,7 +215,13 @@ export class ProviderBusinessService {
       conditions.push(sql`EXISTS (
         SELECT 1 FROM provider_service_offerings o
         WHERE o.provider_id = ${providers.id}
-          AND (o.category_id = ${query.categoryId} OR o.category_id LIKE ${prefix})
+          AND (
+            o.category_id = ${query.categoryId} OR o.category_id LIKE ${prefix}
+            OR EXISTS (
+              SELECT 1 FROM service_categories child
+              WHERE child.id = o.category_id AND child.parent_id = ${query.categoryId}
+            )
+          )
       )`);
     }
     if (query.treeId) {

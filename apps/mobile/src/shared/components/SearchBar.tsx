@@ -1,3 +1,4 @@
+import { healthFeaturesEnabled } from '@/shared/config/releaseFeatures';
 import React, { useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { useTheme } from '@/shared/hooks/useTheme';
@@ -5,7 +6,7 @@ import { AppIcon } from '@/shared/components/AppIcon';
 import { PressableScale } from '@/shared/components/PressableScale';
 
 export function SearchBar({
-  placeholder = 'Search services, doctors, products...',
+  placeholder = healthFeaturesEnabled ? 'Search services, doctors, products...' : 'Search services, shops, products...',
   showFilter,
   emphasized = true,
   showVoiceControls = true,

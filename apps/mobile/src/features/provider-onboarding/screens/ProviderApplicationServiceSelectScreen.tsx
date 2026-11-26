@@ -16,9 +16,7 @@ import { AppIcon } from '@/shared/components/AppIcon';
 
 /** Local-only ids that are not in the API catalog and fail the category foreign key. */
 const UNSUPPORTED_CATEGORY_IDS = new Set([
-  'health.special_educator',
   'health.doctors.general_physician',
-  'health.doctors.dentist',
   'health.doctors.dermatologist',
   'health.doctors.pediatrician',
   'fitness.womens',
@@ -54,13 +52,16 @@ export function ProviderApplicationServiceSelectScreen() {
   );
 
   useEffect(() => {
-    if (application) setSelectedCategoryId(application.categoryIds[0] ?? null);
+    if (application) {
+      setSelectedCategoryId(application.categoryIds[0] ?? null);
+      const tree = application.categories?.[0]?.treeId ?? serviceTrees.find(item => getCategoriesByTree(item.id).some(category => category.id === application.categoryIds[0]))?.id;
+      if (tree) setSelectedTree(tree);
+    }
   }, [application?.id, application?.categoryIds.join('|')]);
 
   const categoriesQuery = useServiceCategoriesQuery(
     selectedTree ?? undefined,
     selectedTree ? localCategoryFallback(selectedTree) : [],
-    application?.providerKind,
   );
   const categories = categoriesQuery.data ?? [];
 

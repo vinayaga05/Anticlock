@@ -1,3 +1,4 @@
+import { isHealthRecord, healthFeaturesEnabled } from '@/shared/config/releaseFeatures';
 import { serviceCategories } from '@/shared/data/services/serviceCategories';
 import { SPORT_TAGS } from '@/shared/data/community/types';
 import type { GenieActionDomain } from '@anticlock/contracts';
@@ -41,6 +42,7 @@ export function validateSearch(
     typeof raw !== 'object'
   )
     return null;
+  if (!healthFeaturesEnabled && isHealthRecord(raw)) return null;
   const d = domain as GenieActionDomain;
   const filters: SearchFilters = {};
   for (const [key, value] of Object.entries(raw)) {
@@ -103,7 +105,7 @@ export function validateSearch(
     const isSpecialtyList =
       category.treeId === 'health' &&
       category.id !== 'health.doctors' &&
-      serviceCategories.some(child => child.parentId === category.id);
+      serviceCategories.some(child => child.parentId === category.id && child.id.startsWith(`${category.id}.`));
     if (
       (isCatalogList || isSpecialtyList) &&
       Object.keys(filters).some(

@@ -141,6 +141,8 @@ export const ProviderLocationSchema = z.object({
   latitude: numberish(z.number().min(-90).max(90)),
   longitude: numberish(z.number().min(-180).max(180)),
   serviceRadiusKm: optionalNumber(z.number().positive()),
+  pinConfirmed: z.boolean().optional(),
+  addressDetails: z.string().trim().max(300).optional(),
 });
 export type ProviderLocation = z.infer<typeof ProviderLocationSchema>;
 
@@ -175,6 +177,14 @@ export const ProviderProfileSchema = z.object({
 });
 export type ProviderProfile = z.infer<typeof ProviderProfileSchema>;
 
+const optionalBusinessText = (schema: z.ZodString) => z.preprocess(value =>
+  value === null || (typeof value === 'string' && !value.trim()) ? undefined : typeof value === 'string' ? value.trim() : value, schema.optional());
+export const ProviderBusinessRegistrationSchema = z.object({
+  legalBusinessName: optionalBusinessText(z.string().min(2).max(200)),
+  registrationNumber: optionalBusinessText(z.string().min(2).max(80).regex(/^[A-Za-z0-9][A-Za-z0-9 ./_-]*$/)),
+  gstin: optionalBusinessText(z.string().regex(/^[0-9A-Za-z]{15}$/, 'Enter a 15-character GSTIN.')),
+});
+
 export const ProviderApplicationCommonPayloadSchema = z
   .object({
     basic: z.object({
@@ -183,10 +193,11 @@ export const ProviderApplicationCommonPayloadSchema = z
       mobile: z.string().min(8),
       email: z.string().email(),
     }),
-    location: ProviderLocationSchema,
+    location: ProviderLocationSchema.partial().optional(),
     profile: ProviderProfileSchema,
     availability: ProviderAvailabilitySchema,
     services: ProviderServicesSummarySchema,
+    registration: ProviderBusinessRegistrationSchema.optional(),
   })
   .superRefine((value, ctx) => {
     if (!value.services.atLocation && !value.services.homeVisit && !value.services.online) {
@@ -222,6 +233,7 @@ export const ProviderApplicationDraftCommonPayloadSchema = z.object({
       email: z.string(),
     })
     .partial()
+    .passthrough()
     .optional(),
   location: ProviderLocationSchema.extend({
     address: z.string(),
@@ -229,12 +241,14 @@ export const ProviderApplicationDraftCommonPayloadSchema = z.object({
     pincode: z.string(),
   })
     .partial()
+    .passthrough()
     .optional(),
   profile: ProviderProfileSchema.partial()
     .extend({
       description: z.string().optional(),
       logoMediaId: z.string().uuid().optional(),
     })
+    .passthrough()
     .optional(),
   availability: ProviderAvailabilitySchema.extend({
     workingDays: z.array(z.string()),
@@ -242,8 +256,10 @@ export const ProviderApplicationDraftCommonPayloadSchema = z.object({
     closingTime: z.string().optional(),
   })
     .partial()
+    .passthrough()
     .optional(),
-  services: ProviderServicesSummarySchema.partial().optional(),
+  services: ProviderServicesSummarySchema.partial().passthrough().optional(),
+  registration: z.object({ legalBusinessName: optionalBusinessText(z.string().max(200)), registrationNumber: optionalBusinessText(z.string().max(80)), gstin: optionalBusinessText(z.string().max(30)) }).optional(),
 });
 export type ProviderApplicationDraftCommonPayload = z.infer<
   typeof ProviderApplicationDraftCommonPayloadSchema
@@ -260,15 +276,12 @@ export const PROVIDER_FORM_FIELD_ALIASES: Record<string, string> = {
   'profile.introVideo': 'profile.introVideoMediaId',
 };
 
-export const CreateProviderApplicationRequestSchema = z.object({
-  providerKind: ProviderKindSchema,
-});
+export const CreateProviderApplicationRequestSchema = z.object({});
 export type CreateProviderApplicationRequest = z.infer<
   typeof CreateProviderApplicationRequestSchema
 >;
 
 export const UpdateProviderApplicationRequestSchema = z.object({
-  providerKind: ProviderKindSchema.optional(),
   commonPayload: ProviderApplicationDraftCommonPayloadSchema.optional(),
   dynamicPayload: z.record(z.unknown()).optional(),
   aadhaarNumber: z.string().optional(),
@@ -442,7 +455,7 @@ export type ProviderApplicationReviewRequest = z.infer<
 >;
 
 export const ResolveFormSchemaQuerySchema = z.object({
-  providerKind: ProviderKindSchema,
+  providerKind: ProviderKindSchema.optional(),
   categoryIds: z.union([z.string(), z.array(z.string())]),
 });
 export type ResolveFormSchemaQuery = z.infer<

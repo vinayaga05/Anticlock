@@ -14,6 +14,7 @@ type ProfileMember = {
   profile_id?: string;
   profile_type?: 'personal' | 'business';
   name?: string;
+  handle?: string | null;
   image?: string | null;
 };
 
@@ -110,6 +111,7 @@ export function KnockChatList() {
     if (!client || !isReady) return () => { mounted.current = false; };
     const refresh = () => { void loadFirstPage(); };
     const listeners = [
+      client.on('user.updated', refresh),
       client.on('message.new', refresh),
       client.on('message.read', refresh),
       client.on('channel.updated', refresh),
@@ -164,7 +166,9 @@ export function KnockChatList() {
         const message = lastMessage(channel);
         const unread = channel.countUnread();
         const delivered = deliveryState(channel, message, peer?.user_id);
-        const title = peer?.name ?? 'Conversation';
+        const peerUser = peer?.user_id ? channel.state.members[peer.user_id]?.user : undefined;
+        const title = (peer?.profile_type === 'personal' ? peerUser?.name : undefined) ?? peer?.name ?? 'Conversation';
+        const handle = peer?.profile_type === 'personal' ? (peerUser as any)?.username ?? peer?.handle : peer?.handle;
         const time = formatTime(message?.created_at ?? (channel.data as any)?.last_message_at);
         const preview = message?.text?.trim() || (message?.type === 'system' ? 'You are now connected' : 'New message');
         return (
@@ -194,6 +198,7 @@ export function KnockChatList() {
                 <Text numberOfLines={1} style={[styles.name, { color: theme.colors.textPrimary }]}>{title}</Text>
                 <Text style={[styles.time, { color: unread > 0 ? theme.colors.primary : theme.colors.textTertiary }]}>{time}</Text>
               </View>
+              {handle ? <Text numberOfLines={1} style={{ color: theme.colors.textSecondary, fontSize: 12 }}>@{handle}</Text> : null}
               <View style={styles.previewRow}>
                 {delivered ? <Text style={[styles.delivery, { color: delivered === '✓✓' ? theme.colors.primary : theme.colors.textTertiary }]}>{delivered}</Text> : null}
                 <Text numberOfLines={1} style={[styles.preview, { color: unread > 0 ? theme.colors.textPrimary : theme.colors.textSecondary }]}>{preview}</Text>

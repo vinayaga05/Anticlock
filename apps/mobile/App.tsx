@@ -34,7 +34,7 @@ function AppShell() {
   }, [user?.id]);
 
   // Set up push notifications when user is authenticated
-  useNotificationSetup(Boolean(user && user.id !== 'temporary-guest'));
+  useNotificationSetup(Boolean(user && user.handle && !user.needsUsername && user.id !== 'temporary-guest'));
 
   return (
     <>
@@ -42,7 +42,7 @@ function AppShell() {
         barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'}
         backgroundColor={theme.colors.background}
       />
-      {user && user.id !== 'temporary-guest' ? (
+      {user && user.handle && !user.needsUsername && user.id !== 'temporary-guest' ? (
         <>
           <LiveContentSync />
           <LiveBookingSync />

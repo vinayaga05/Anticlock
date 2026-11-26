@@ -25,5 +25,5 @@ test.each(['file:///private/photo.jpg', 'content://photos/1', 'data:image/png;ba
 test('normalizes optional usernames and rejects invalid handles', () => {
   const draft = { displayName: 'Asha', bio: '', location: '', website: '', handle: ' Asha_123 ' };
   expect(validateProfileDraft(draft)).toMatchObject({ handle: 'asha_123' });
-  expect(() => validateProfileDraft({ ...draft, handle: '@invalid user' })).toThrow('Username');
+  expect(() => validateProfileDraft({ ...draft, handle: '@invalid user' })).toThrow('Use 3–30');
 });

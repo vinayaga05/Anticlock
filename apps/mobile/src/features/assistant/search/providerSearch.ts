@@ -1,3 +1,4 @@
+import { matchesCategoryOffering } from '@/shared/data/services/catalog';
 import { useQuery } from '@tanstack/react-query';
 import type { BusinessAvailability } from '@anticlock/contracts';
 import type { MarketplaceProvider } from '@/shared/data/services/serviceTypes';
@@ -111,7 +112,7 @@ export function useProvidersAvailableToday(
   const date = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
   const candidates = providers.flatMap(provider => {
     const categories = provider.categoryIds.filter(
-      id => id === categoryId || id.startsWith(`${categoryId}.`),
+      id => matchesCategoryOffering(categoryId, id),
     );
     return categories.length && provider.modes?.length
       ? [{ id: provider.id, categories, modes: provider.modes }]

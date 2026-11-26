@@ -1,3 +1,6 @@
+import { UsernameOnboardingScreen } from '@/features/auth/screens/UsernameOnboardingScreen';
+import { useQueryClient } from '@tanstack/react-query';
+import { ReleaseRouteGuard } from './ReleaseRouteGuard';
 import React, { useEffect } from 'react';
 import {
   NavigationContainer,
@@ -87,7 +90,7 @@ import { StoryViewerScreen } from '@/features/flash/screens/StoryViewerScreen';
 import { StoryCreatorScreen } from '@/features/flash/screens/StoryCreatorScreen';
 import { SavedHubScreen } from '@/features/flash/screens/SavedHubScreen';
 import { ProviderApplicationIntroScreen } from '@/features/provider-onboarding/screens/ProviderApplicationIntroScreen';
-import { ProviderApplicationKindScreen } from '@/features/provider-onboarding/screens/ProviderApplicationKindScreen';
+import { ProviderApplicationStartScreen } from '@/features/provider-onboarding/screens/ProviderApplicationStartScreen';
 import { ProviderApplicationServiceSelectScreen } from '@/features/provider-onboarding/screens/ProviderApplicationServiceSelectScreen';
 import { ProviderApplicationFormScreen } from '@/features/provider-onboarding/screens/ProviderApplicationFormScreen';
 import { ProviderApplicationReviewScreen } from '@/features/provider-onboarding/screens/ProviderApplicationReviewScreen';
@@ -104,25 +107,30 @@ function syncGenieRoute() {
 
 export function RootNavigator() {
   const theme = useTheme();
+  const queryClient = useQueryClient();
   const { user, loading } = useAuth();
   useEffect(() => {
     useGenieSearch.getState().reset();
     useAssistantStore.getState().clearMessages();
     useAssistantStore.getState().closeAssistant();
   }, [user?.id]);
+  const needsUsername = Boolean(user && user.id !== 'temporary-guest' && (!user.handle || user.needsUsername === true));
+  useEffect(() => { if (user?.handle) void queryClient.invalidateQueries(); }, [user?.handle, queryClient]);
   const shouldLoadInterests = Boolean(
-    user && user.id !== 'temporary-guest' && isApiEnabled,
+    user && !needsUsername && user.id !== 'temporary-guest' && isApiEnabled,
   );
   const { data: interests, isLoading: interestsLoading } =
     useMyInterestsQuery(shouldLoadInterests);
 
-  // Handle pending deep links after authentication
-  const isAuthenticated = Boolean(user);
+  const needsNameOnboarding = needsDisplayName(user);
+  const needsInterestOnboarding = interests?.needsOnboarding === true;
+  // Hold links until all onboarding steps are complete.
+  const isAuthenticated = Boolean(user && !needsUsername && !needsNameOnboarding && !needsInterestOnboarding);
   usePendingDeepLink(isAuthenticated);
 
   // Store deep links when unauthenticated
   useEffect(() => {
-    if (!user) {
+    if (!isAuthenticated) {
       const handleUrl = ({ url }: { url: string }) => {
         // Store the link to navigate after login
         storePendingDeepLink(url);
@@ -139,7 +147,7 @@ export function RootNavigator() {
       const subscription = Linking.addEventListener('url', handleUrl);
       return () => subscription.remove();
     }
-  }, [user]);
+  }, [isAuthenticated]);
 
   const navigationTheme =
     theme.mode === 'dark'
@@ -174,18 +182,16 @@ export function RootNavigator() {
     return <AuthLoadingScreen />;
   }
 
-  const needsNameOnboarding = needsDisplayName(user);
-  const needsInterestOnboarding = interests?.needsOnboarding === true;
-
   return (
     <NavigationContainer
       ref={rootNavigationRef}
       theme={navigationTheme}
-      linking={linking}
+      linking={isAuthenticated ? linking : undefined}
       onReady={syncGenieRoute}
       onStateChange={syncGenieRoute}
     >
       <Stack.Navigator
+        screenLayout={({ route, children }) => <ReleaseRouteGuard route={route}>{children}</ReleaseRouteGuard>}
         screenOptions={{
           headerStyle: { backgroundColor: theme.colors.background },
           headerTintColor: theme.colors.textPrimary,
@@ -202,6 +208,8 @@ export function RootNavigator() {
             component={LoginScreen}
             options={{ headerShown: false }}
           />
+        ) : needsUsername ? (
+          <Stack.Screen name="UsernameOnboarding" component={UsernameOnboardingScreen} options={{ headerShown: false, gestureEnabled: false }} />
         ) : needsNameOnboarding ? (
           <Stack.Screen
             name="NameOnboarding"
@@ -519,9 +527,9 @@ export function RootNavigator() {
               options={{ title: 'Become a Provider' }}
             />
             <Stack.Screen
-              name="ProviderApplicationKind"
-              component={ProviderApplicationKindScreen}
-              options={{ title: 'Provider type' }}
+              name="ProviderApplicationStart"
+              component={ProviderApplicationStartScreen}
+              options={{ title: 'Service registration' }}
             />
             <Stack.Screen
               name="ProviderApplicationServices"
@@ -556,7 +564,7 @@ export function RootNavigator() {
           </>
         )}
       </Stack.Navigator>
-      {user && !needsNameOnboarding && !needsInterestOnboarding ? (
+      {user && !needsUsername && !needsNameOnboarding && !needsInterestOnboarding ? (
         <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, {zIndex:120,elevation:120}]}>
           <AssistantBottomSheetHost key={user.id} />
           <FloatingAssistantButton />

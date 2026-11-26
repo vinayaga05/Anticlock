@@ -82,7 +82,7 @@ export function StreamChatProvider({ children }: { children: React.ReactNode }) 
   const [error, setError] = useState<string | null>(null);
   const [retryVersion, setRetryVersion] = useState(0);
   const { user } = useAuth();
-  const userId = user?.id === 'temporary-guest' ? null : user?.id ?? null;
+  const userId = user?.id === 'temporary-guest' || !user?.handle || user.needsUsername === true ? null : user.id;
   const streamTheme = useMemo(() => createStreamChatTheme(theme), [theme]);
 
   useEffect(() => {
@@ -120,7 +120,7 @@ export function StreamChatProvider({ children }: { children: React.ReactNode }) 
 
         connectedChat = StreamChat.getInstance(initial.apiKey);
         await connectedChat.connectUser(
-          { id: initial.userId, name: user?.displayName, image: user?.avatarUrl ?? undefined },
+          { id: initial.userId, name: user?.displayName, image: user?.avatarUrl ?? undefined, username: user?.handle ?? undefined },
           tokenProvider(),
         );
         if (cancelled) return;
@@ -150,7 +150,7 @@ export function StreamChatProvider({ children }: { children: React.ReactNode }) 
       connectedChat?.disconnectUser().catch(console.error);
       connectedVideo?.disconnectUser().catch(console.error);
     };
-  }, [userId, user?.displayName, user?.avatarUrl, retryVersion]);
+  }, [userId, user?.displayName, user?.avatarUrl, user?.handle, retryVersion]);
 
   const contextValue: StreamChatContextType = {
     client,

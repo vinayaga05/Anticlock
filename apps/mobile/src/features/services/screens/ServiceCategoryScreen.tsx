@@ -17,6 +17,7 @@ import {
   getCoursesForCategory,
   getEventsForCategory,
   getProductsForCategory,
+  matchesCategoryOffering,
 } from '@/shared/data/services';
 import { useGenieScreen } from '@/features/assistant/search/useGenieScreen';
 import { useGenieSearch, type SearchFilters } from '@/features/assistant/search/searchState';
@@ -45,12 +46,13 @@ export function ServiceCategoryScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'ServiceCategory'>>();
   const {
     categoryId,
-    treeId,
+    treeId: routeTreeId,
     q: initialQ,
     areaLabel,
     sort: initialSort,
   } = route.params;
   const category = getCategory(categoryId);
+  const treeId = category?.treeId ?? routeTreeId;
   const [filters, setFilters] = useState<SearchFilters>(() => ({
     areaLabel, sort: initialSort === 'rating' || initialSort === 'price' ? initialSort : undefined,
   }));
@@ -176,7 +178,7 @@ export function ServiceCategoryScreen() {
     actionType === 'service_request';
 
 
-  const showsSpecialties = isHealth && categoryId !== 'health.doctors' && childCategories.length > 0;
+  const showsSpecialties = isHealth && categoryId !== 'health.doctors' && childCategories.some(child => child.id.startsWith(`${categoryId}.`));
   const isProviderList = !showsSpecialties && !isEvent && !isCourse && !isProduct;
   const openProvider = (provider: (typeof providers)[number]) => {
     // Keep the list and ordinal selection on the same destination.
@@ -194,7 +196,10 @@ export function ServiceCategoryScreen() {
         return;
       }
     }
-    navigateToProvider(navigation,provider.id,categoryId);
+    const offeringId = provider.categoryIds?.includes(categoryId)
+      ? categoryId
+      : provider.categoryIds?.find(id => matchesCategoryOffering(categoryId, id));
+    navigateToProvider(navigation, provider.id, offeringId ?? categoryId);
   };
   const metadataUnavailable = isProviderList && providers.length > 0 &&
     providers.every(provider => provider.searchMetadataAvailable === false) &&

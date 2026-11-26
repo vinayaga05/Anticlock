@@ -17,6 +17,7 @@ import {
   validateSession,
   verifyOtp,
   updateProfile as persistProfile,
+  claimUsername as persistUsername,
 } from '@/shared/services/auth/authService';
 import type { MobileUser, OtpSendResult, ProfileUpdate, OtpRequestOptions } from '@/shared/services/auth/types';
 import { setUnauthorizedHandler } from '@/shared/api/client';
@@ -35,6 +36,7 @@ type AuthState = {
   continueAsGuest: () => void;
   logout: () => Promise<void>;
   updateProfile: (input: ProfileUpdate) => Promise<void>;
+  claimUsername: (username: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -147,6 +149,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(current => current?.id === expectedSession.user.id ? updatedUser : current);
   }, []);
 
+  const claimUsername = useCallback(async (username: string) => {
+    const expected = readStoredSession();
+    if (!expected) throw new Error('Please sign in again.');
+    const updated = await persistUsername(username);
+    if (readStoredSession()?.token !== expected.token) throw new Error('Your account changed. Sign in again.');
+    setUser(current => current?.id === updated.id ? updated : current);
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -156,8 +166,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       continueAsGuest,
       logout,
       updateProfile,
+      claimUsername,
     }),
-    [user, loading, requestOtp, loginWithOtp, continueAsGuest, logout, updateProfile],
+    [user, loading, requestOtp, loginWithOtp, continueAsGuest, logout, updateProfile, claimUsername],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

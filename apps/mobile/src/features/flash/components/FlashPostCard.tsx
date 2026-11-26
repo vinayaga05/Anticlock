@@ -253,7 +253,7 @@ export function FlashPostCard({
               style={[styles.metaText, { color: theme.colors.textTertiary }]}
               numberOfLines={1}
             >
-              {post.timeLabel} · {VISIBILITY_LABEL[post.visibility]}
+              {post.author.handle ? `@${post.author.handle} · ` : ''}{post.timeLabel} · {VISIBILITY_LABEL[post.visibility]}
               {post.pinned ? ' · Pinned' : ''}
             </Text>
             {post.communityName ? (

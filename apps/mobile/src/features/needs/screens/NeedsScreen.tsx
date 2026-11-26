@@ -1,3 +1,4 @@
+import { healthFeaturesEnabled } from '@/shared/config/releaseFeatures';
 import { useGenieScreen } from '@/features/assistant/search/useGenieScreen';
 import { navigateToProvider } from '@/shared/navigation/businessNavigation';
 import React, { useState } from 'react';
@@ -85,7 +86,7 @@ export function NeedsScreen() {
                 banners={[
                   {
                     id: 'b1',
-                    title: 'Healthy groceries',
+                    title: 'Groceries',
                     cta: 'Shop',
                     imageUrl:
                       'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&h=400&q=80',
@@ -94,12 +95,12 @@ export function NeedsScreen() {
                   },
                   {
                     id: 'b2',
-                    title: 'Specialty Center',
+                    title: healthFeaturesEnabled ? 'Specialty Center' : 'Local services',
                     cta: 'Book',
                     imageUrl:
                       'https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=600&h=400&q=80',
                     onPress: () =>
-                      navigation.navigate('ServiceTree', { treeId: 'fitness' }),
+                      navigation.navigate('ServiceTree', { treeId: healthFeaturesEnabled ? 'fitness' : 'home_services' }),
                   },
                 ]}
               />
@@ -129,6 +130,7 @@ export function NeedsScreen() {
                 />
               ))}
 
+              {healthFeaturesEnabled ? <>
               <SectionHeader
                 title="Recommended"
                 actionLabel="Doctors"
@@ -170,6 +172,8 @@ export function NeedsScreen() {
                   color={theme.colors.textTertiary}
                 />
               </Card>
+              </> : null}
+
 
               <Card
                 onPress={() =>
@@ -218,6 +222,7 @@ export function NeedsScreen() {
                 />
               </Card>
 
+              {healthFeaturesEnabled ? <>
               <SectionHeader title="Trending on Knock" />
               <PressableScale
                 onPress={() =>
@@ -250,6 +255,8 @@ export function NeedsScreen() {
                   </Text>
                 </View>
               </PressableScale>
+              </> : null}
+
             </View>
           </>
         )}

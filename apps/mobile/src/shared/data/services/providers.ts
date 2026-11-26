@@ -1,3 +1,4 @@
+import { releaseRecords } from '@/shared/config/releaseFeatures';
 import {
   MarketplaceCourse,
   MarketplaceEvent,
@@ -10,7 +11,7 @@ import {
 const img = (id: string, w = 800, h = 600) =>
   `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${w}&h=${h}&q=80`;
 
-export const marketplaceProviders: MarketplaceProvider[] = [
+export const marketplaceProviders: MarketplaceProvider[] = releaseRecords<MarketplaceProvider>([
   {
     id: 'prov-doc-remya',
     name: 'Dr. Remya',
@@ -240,9 +241,9 @@ export const marketplaceProviders: MarketplaceProvider[] = [
     priceFrom: 1499,
     verified: true,
   },
-];
+]);
 
-export const marketplaceEvents: MarketplaceEvent[] = [
+export const marketplaceEvents: MarketplaceEvent[] = releaseRecords<MarketplaceEvent>([
   {
     id: 'evt-adventure-1',
     categoryId: 'tours.adventure',
@@ -313,9 +314,9 @@ export const marketplaceEvents: MarketplaceEvent[] = [
     itinerary: ['Warm-up', 'Matches', 'Awards'],
     meetingPoint: 'Arena gate 2',
   },
-];
+]);
 
-export const marketplaceCourses: MarketplaceCourse[] = [
+export const marketplaceCourses: MarketplaceCourse[] = releaseRecords<MarketplaceCourse>([
   {
     id: 'course-ai-1',
     categoryId: 'course.ai',
@@ -366,9 +367,9 @@ export const marketplaceCourses: MarketplaceCourse[] = [
     imageUrl: img('photo-1517694712202-14dd9538aa97'),
     curriculum: ['JS/TS', 'RN basics', 'Navigation', 'Capstone'],
   },
-];
+]);
 
-export const marketplaceProducts: MarketplaceProduct[] = [
+export const marketplaceProducts: MarketplaceProduct[] = releaseRecords<MarketplaceProduct>([
   {
     id: 'prod-mat',
     categoryId: 'ecom.fitness',
@@ -480,9 +481,9 @@ export const marketplaceProducts: MarketplaceProduct[] = [
     description: 'Ready-to-move 2BHK with covered parking.',
     isProperty: true,
   },
-];
+]);
 
-export const universalBookings: UniversalBooking[] = [
+export const universalBookings: UniversalBooking[] = releaseRecords<UniversalBooking>([
   {
     id: 'ub-1',
     type: 'appointment',
@@ -508,9 +509,9 @@ export const universalBookings: UniversalBooking[] = [
     status: 'upcoming',
     price: 3499,
   },
-];
+]);
 
-export const serviceRequests: ServiceRequest[] = [
+export const serviceRequests: ServiceRequest[] = releaseRecords<ServiceRequest>([
   {
     id: 'req-1',
     categoryId: 'home.plumber',
@@ -522,4 +523,4 @@ export const serviceRequests: ServiceRequest[] = [
     providerName: 'QuickFix Plumbing',
     priceEstimate: 499,
   },
-];
+]);

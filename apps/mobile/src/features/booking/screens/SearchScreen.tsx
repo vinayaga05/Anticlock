@@ -1,3 +1,7 @@
+import { useQuery } from '@tanstack/react-query';
+import { apiRequest, getApiToken } from '@/shared/api/client';
+import type { ContentPublisher } from '@/shared/api/publishingHooks';
+import { Button } from '@/shared/components/Button';
 import { navigateToProvider } from '@/shared/navigation/businessNavigation';
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
@@ -20,6 +24,12 @@ export function SearchScreen() {
   const [q, setQ] = useState('');
 
   const debouncedQ = useDebouncedValue(q.trim(), 250);
+  const people = useQuery({
+    queryKey: ['people', debouncedQ],
+    enabled: Boolean(debouncedQ && getApiToken()),
+    queryFn: ({ signal }) => apiRequest<{ data: ContentPublisher[] }>(`/auth/mobile/users?q=${encodeURIComponent(debouncedQ)}`, { signal }),
+    staleTime: 0,
+  });
   const catalog = useMemo(() => searchCatalog(q), [q]);
   // Providers are real approved businesses from the API (fixtures only offline).
   const providersQuery = useMarketplaceProvidersQuery({ q: debouncedQ, limit: 6 });
@@ -32,7 +42,7 @@ export function SearchScreen() {
   );
 
   const hasAny =
-    results.categories.length +
+    (people.data?.data.length ?? 0) + results.categories.length +
       results.providers.length +
       results.products.length +
       results.events.length +
@@ -103,13 +113,19 @@ export function SearchScreen() {
         <TextInput
           value={q}
           onChangeText={setQ}
-          placeholder="Services, providers, products, trips, courses"
+          placeholder="People, @usernames, services and products"
           placeholderTextColor={theme.colors.textTertiary}
           style={[theme.typography.body, { flex: 1, color: theme.colors.textPrimary }]}
           autoFocus
         />
       </View>
 
+      {debouncedQ ? <Section title="People">
+        {people.isFetching ? <Text style={{ color: theme.colors.textSecondary }}>Searching people…</Text> : null}
+        {people.isError ? <Button title="Retry people search" onPress={() => void people.refetch()} /> : null}
+        {people.data?.data.map(person => <Row key={person.id} title={person.displayName} subtitle={`@${person.handle}`} icon="user" onPress={() => navigation.navigate('Profile', { userId: person.id, profileId: person.id, profileType: 'personal' })} />)}
+        {!people.isFetching && !people.isError && !people.data?.data.length ? <Text style={{ color: theme.colors.textSecondary }}>No people found.</Text> : null}
+      </Section> : null}
       {!hasAny ? (
         <EmptyState icon="search" title="No matches" description="Try another keyword." />
       ) : (

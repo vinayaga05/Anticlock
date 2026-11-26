@@ -17,7 +17,7 @@ const schema = mergeFormSchemas(GLOBAL_PROVIDER_FORM_SCHEMA, [], 'business', ['f
 
 const complete = {
   basic: { providerName: 'Lotus', contactPerson: 'Asha', mobile: '9876543210', email: 'a@b.co' },
-  location: { address: '1 Road', city: 'Chennai', pincode: '600020', latitude: 13.08, longitude: 80.27 },
+  location: { address: '1 Road', city: 'Chennai', pincode: '600020', latitude: 13.08, longitude: 80.27, pinConfirmed: true },
   availability: { workingDays: ['mon'], openingTime: '09:00', closingTime: '18:00' },
   services: { pricingStartsAt: 500, atLocation: true },
   profile: {
@@ -165,7 +165,6 @@ describe('computeApplicationReadiness', () => {
       },
     });
     assert.deepEqual(missing.missing.map(m => m.key).sort(), [
-      'identity.businessRegistration',
       'location.map',
       'profile.introVideo',
       'profile.logo',

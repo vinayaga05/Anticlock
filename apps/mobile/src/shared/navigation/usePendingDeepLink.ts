@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Linking } from 'react-native';
-import { useNavigationContainerRef } from '@react-navigation/native';
+import { rootNavigationRef } from './rootNavigation';
 import { createMMKV } from 'react-native-mmkv';
 
 const storage = createMMKV({ id: 'deep-link-storage' });
@@ -38,23 +38,15 @@ export function clearPendingDeepLink(): void {
  * stored deep links after login.
  */
 export function usePendingDeepLink(isAuthenticated: boolean): void {
-  const navigationRef = useNavigationContainerRef();
-
   useEffect(() => {
-    if (!isAuthenticated || !navigationRef.isReady()) {
-      return;
-    }
-
-    const pendingUrl = consumePendingDeepLink();
-    if (pendingUrl) {
-      // Small delay to ensure navigation is fully ready
-      const timer = setTimeout(() => {
-        Linking.openURL(pendingUrl).catch(err => {
-          console.warn('Failed to navigate to pending deep link:', err);
-        });
-      }, 500);
-
-      return () => clearTimeout(timer);
-    }
-  }, [isAuthenticated, navigationRef]);
+    if (!isAuthenticated) return;
+    const openPending = () => {
+      if (!rootNavigationRef.isReady()) return;
+      const url = consumePendingDeepLink();
+      if (url) void Linking.openURL(url).catch(() => storePendingDeepLink(url));
+    };
+    openPending();
+    const unsubscribe = rootNavigationRef.addListener('state', openPending);
+    return unsubscribe;
+  }, [isAuthenticated]);
 }

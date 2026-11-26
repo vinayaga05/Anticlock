@@ -1,3 +1,4 @@
+import { normalizeUsername, usernameProblem } from '@anticlock/contracts/username';
 import type { MobileUser, ProfileUpdate } from '@/shared/services/auth/types';
 
 export type ProfileDraft = { handle?: string; displayName: string; bio: string; location: string; website: string };
@@ -41,7 +42,7 @@ export function validateProfileDraft(draft: ProfileDraft): Omit<ProfileUpdate, '
   if (displayName.length < 2 || displayName.length > 80) throw new Error('Enter a name between 2 and 80 characters.');
   if (bio.length > 160) throw new Error('Keep your bio under 160 characters.');
   if (location.length > 80) throw new Error('Keep your city or location under 80 characters.');
-  const handle = draft.handle?.trim().toLowerCase();
-  if (handle && !/^[a-z0-9_]{3,30}$/.test(handle)) throw new Error('Username must be 3–30 letters, numbers or underscores.');
-  return { ...(draft.handle !== undefined ? { handle: handle || null } : {}), displayName, bio: bio || null, location: location || null, website: normalizeProfileWebsite(draft.website) };
+  const handle = draft.handle === undefined ? undefined : normalizeUsername(draft.handle);
+  if (draft.handle !== undefined) { const problem = usernameProblem(draft.handle); if (problem) throw new Error(problem); }
+  return { ...(handle !== undefined ? { handle } : {}), displayName, bio: bio || null, location: location || null, website: normalizeProfileWebsite(draft.website) };
 }

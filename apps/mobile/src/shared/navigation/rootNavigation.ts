@@ -1,3 +1,4 @@
+import { healthFeaturesEnabled } from '@/shared/config/releaseFeatures';
 import { createNavigationContainerRef } from '@react-navigation/native';
 
 /** Navigation ref for code that runs outside screens (push taps). */
@@ -16,7 +17,7 @@ export function routeForNotification(
   data: Record<string, unknown> | null | undefined,
 ): NotificationRoute | null {
   if (!data) return null;
-  if (data.kind === 'fitness') return routeForFitnessNotification(data);
+  if (data.kind === 'fitness') return healthFeaturesEnabled ? routeForFitnessNotification(data) : null;
   const applicationId =
     typeof data.applicationId === 'string' ? data.applicationId : null;
   if (data.kind === 'provider_application' && applicationId) {

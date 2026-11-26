@@ -1,3 +1,4 @@
+import { effectiveLocationFields } from '@anticlock/contracts/provider-registration';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ScrollView,
@@ -114,6 +115,7 @@ function FieldInput({
   hasError,
   onBlur,
   addressQuery = '',
+  addressParts,
 }: {
   field: FormFieldDefinition;
   value: unknown;
@@ -128,6 +130,7 @@ function FieldInput({
   hasError?: boolean;
   onBlur?: () => void;
   addressQuery?: string;
+  addressParts?: { address?: string; city?: string; area?: string; pincode?: string };
 }) {
   const theme = useTheme();
   const [editingAadhaar, setEditingAadhaar] = useState(false);
@@ -228,6 +231,7 @@ function FieldInput({
       <MapLocationField
         value={value}
         addressQuery={addressQuery}
+        addressParts={addressParts}
         onChange={point => {
           onChange(point);
           onBlur?.();
@@ -310,7 +314,7 @@ function FieldInput({
 }
 
 export function DynamicFormRenderer({
-  schema,
+  schema: baseSchema,
   values,
   onChange,
   aadhaarMasked,
@@ -323,6 +327,7 @@ export function DynamicFormRenderer({
   focusField,
   onFieldBlur,
 }: Props) {
+  const schema = useMemo(() => ({ ...baseSchema, fields: effectiveLocationFields(baseSchema.fields, baseSchema.categoryIds, { atLocation: values['services.atLocation'], online: values['services.online'], homeVisit: values['services.homeVisit'] }) }), [baseSchema, values]);
   const theme = useTheme();
   const focusSection = focusField
     ? schema.fields.find(f => f.key === focusField)?.sectionId
@@ -543,6 +548,11 @@ export function DynamicFormRenderer({
                 >
                   {completedCount} of {fields.length} details completed
                 </Text>
+                {required.length === 0 ? <Button title="Skip for now" variant="ghost" onPress={() => {
+                  if (section.id === 'location') { for (const field of fields) if (field.key !== 'location.addressDetails') onChange(field.key, undefined); }
+                  const next = visibleSections[visibleSections.findIndex(item => item.id === section.id) + 1];
+                  setOpenSection(next?.id ?? '');
+                }} /> : null}
                 {fields.map(field => (
                   <View
                     key={field.key}
@@ -558,7 +568,7 @@ export function DynamicFormRenderer({
                       ]}
                     >
                       {field.label}
-                      {field.required ? ' *' : ''}
+                      {field.required ? ' *' : ' (Optional)'}
                     </Text>
                     {field.helpText ? (
                       <Text
@@ -573,7 +583,14 @@ export function DynamicFormRenderer({
                     <FieldInput
                       field={field}
                       value={getValue(values, field.key)}
-                      onChange={val => onChange(field.key, val)}
+                      onChange={val => {
+                        if (field.type === 'location' && val && typeof val === 'object') {
+                          const location = val as Record<string, unknown>;
+                          // Address first, then the confirmed pin: one batched update preserves confirmation.
+                          for (const part of ['address', 'city', 'area', 'pincode']) if (location[part] !== undefined) onChange(`location.${part}`, location[part]);
+                          onChange(field.key, { latitude: location.latitude, longitude: location.longitude, pinConfirmed: location.pinConfirmed });
+                        } else onChange(field.key, val);
+                      }}
                       aadhaarMasked={
                         field.type === 'aadhaar' ? aadhaarMasked : undefined
                       }
@@ -587,6 +604,7 @@ export function DynamicFormRenderer({
                       }
                       hasError={Boolean(errors[field.key])}
                       onBlur={() => onFieldBlur?.(field.key)}
+                      addressParts={field.type === 'location' ? Object.fromEntries(['address', 'city', 'area', 'pincode'].map(part => [part, String(values[`location.${part}`] ?? '')])) : undefined}
                       addressQuery={
                         field.type === 'location'
                           ? placeQueryFromValues(values, field.key)

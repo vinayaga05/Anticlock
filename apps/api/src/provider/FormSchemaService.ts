@@ -1,3 +1,4 @@
+import { applyProviderRegistrationPolicy } from '@anticlock/contracts/provider-registration';
 import type {
   FormFieldDefinition,
   FormSection,
@@ -39,7 +40,7 @@ export function mergeFormSchemas(
   }
 
   for (const schema of categorySchemas) {
-    if (!schema.providerKinds.includes(providerKind)) continue;
+
     for (const section of schema.sections) {
       if (!sectionMap.has(section.id)) {
         sectionMap.set(section.id, section);
@@ -57,7 +58,7 @@ export function mergeFormSchemas(
   );
   const fields = Array.from(fieldMap.values());
 
-  return { sections, fields, categoryIds };
+  return applyProviderRegistrationPolicy({ sections, fields, categoryIds });
 }
 
 export async function loadPublishedSchemas(categoryIds: string[]) {
@@ -145,7 +146,7 @@ export async function resolveFormSchema(
       status: 500,
     });
   }
-  if (!global.providerKinds.includes(providerKind)) {
+  if (!global.providerKinds.length) {
     throw Object.assign(new Error('Provider kind is not supported'), {
       code: 'invalid_provider_kind',
       status: 400,
@@ -156,14 +157,13 @@ export async function resolveFormSchema(
     schema => schema.categoryId && categoryIds.includes(schema.categoryId) && !present.has(schema.categoryId),
   );
   const merged = mergeFormSchemas(global, [...categories, ...builtins], providerKind, categoryIds);
-  return {
+  return applyProviderRegistrationPolicy({
     ...merged,
-    fields: merged.fields.map(field => applyOnboardingRequirement(field, providerKind)),
-  };
+    fields: merged.fields.map(field => applyOnboardingRequirement(field, 'business')),
+  });
 }
 
 const ALWAYS_REQUIRED = new Set([
-  'location.map',
   'profile.description',
   'availability.openingTime',
   'availability.closingTime',
@@ -184,14 +184,12 @@ function applyOnboardingRequirement(field: FormFieldDefinition, providerKind: Pr
   if (ALWAYS_REQUIRED.has(field.key)) {
     return { ...field, required: true };
   }
-  if (field.key === 'identity.businessRegistration' && providerKind === 'business') {
-    return { ...field, required: true };
-  }
+
   return field;
 }
 
 export function categoryAllowsProviderKind(categoryId: string, providerKind: ProviderKind) {
-  return providerKindsForCategory(categoryId).includes(providerKind);
+  return providerKind === 'business' || providerKindsForCategory(categoryId).includes(providerKind);
 }
 
 export function publishedCategorySchema(categoryId: string) {

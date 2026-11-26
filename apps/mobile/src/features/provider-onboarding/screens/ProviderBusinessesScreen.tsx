@@ -200,7 +200,7 @@ export function ProviderBusinessesScreen() {
           </View>
         )}
 
-        <Button title={applications.length ? 'Add another business' : 'Start a business'} icon="plus" onPress={() => navigation.navigate('ProviderApplicationKind')} />
+        <Button title={applications.length ? 'Add another business' : 'Start a business'} icon="plus" onPress={() => navigation.navigate('ProviderApplicationStart')} />
         {applications.length ? <Button title="Refresh status" variant="secondary" onPress={() => void refetch()} /> : null}
       </ScrollView>
     </View>

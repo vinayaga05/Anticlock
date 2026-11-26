@@ -1290,7 +1290,7 @@ export function ReelFeedScreen() {
               source={{ uri: getAuthorAvatar(item) }}
               style={styles.creatorAvatar}
             />
-            <Text style={styles.creator}>@{item.author}</Text>
+            <Text style={styles.creator}>{item.authorHandle ? `@${item.authorHandle}` : item.author}</Text>
           </PressableScale>
           <ClipCreatorActions item={item} showAlert={showBlockingAlert} />
           <Text style={styles.caption} numberOfLines={3}>

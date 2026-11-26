@@ -17,12 +17,16 @@ const mockIdentity = {
   avatarUrl: null,
 };
 let mockParams: any = undefined;
+let mockBeforeRemove: ((event: any) => void) | undefined;
 const mockNavigation = {
   replace: jest.fn(),
   navigate: jest.fn(),
   popTo: jest.fn(),
   goBack: jest.fn(),
-  addListener: () => jest.fn(),
+  addListener: (name: string, listener: (event: any) => void) => {
+    if (name === 'beforeRemove') mockBeforeRemove = listener;
+    return jest.fn();
+  },
   isFocused: () => true,
 };
 const mockPublish = jest.fn();
@@ -121,6 +125,8 @@ let tree: Renderer.ReactTestRenderer;
 beforeEach(() => {
   Object.values(mockNavigation).forEach(v => (v as any).mockClear?.());
   mockParams = undefined;
+  mockBeforeRemove = undefined;
+  mockNavigation.popTo.mockReset();
   mockPublish
     .mockReset()
     .mockResolvedValue({ post: { contentStatus: 'published' } });
@@ -255,6 +261,40 @@ test('Clip submits format clip and redirects to the main Clips feed after publis
     expect.objectContaining({ screen: 'PlayFeed' }),
   );
 });
+test.each(['published', 'pending_review'])(
+  'successful %s clip releases the upload guard before opening Clips',
+  async contentStatus => {
+    await prepareClip();
+    let complete!: (value: any) => void;
+    mockPublish.mockImplementationOnce(() => new Promise(resolve => {
+      complete = resolve;
+    }));
+    const publish = tree.root.findAll(n =>
+      n.type === ('action-button' as any) && n.props.title === 'Publish clip',
+    )[0];
+    let publishing!: Promise<void>;
+    await Renderer.act(async () => {
+      publishing = publish.props.onPress();
+      for (let i = 0; i < 15; i++) await Promise.resolve();
+    });
+    const leavingDuringUpload = { preventDefault: jest.fn() };
+    mockBeforeRemove!(leavingDuringUpload);
+    expect(leavingDuringUpload.preventDefault).toHaveBeenCalled();
+
+    const leavingAfterSuccess = { preventDefault: jest.fn() };
+    mockNavigation.popTo.mockImplementationOnce(() => {
+      mockBeforeRemove!(leavingAfterSuccess);
+    });
+    await Renderer.act(async () => {
+      complete({ post: { contentStatus } });
+      await publishing;
+    });
+    expect(mockNavigation.popTo).toHaveBeenCalledWith('Main',
+      expect.objectContaining({ screen: 'PlayFeed' }),
+    );
+    expect(leavingAfterSuccess.preventDefault).not.toHaveBeenCalled();
+  },
+);
 test('failed Flash publication stays in the composer', async () => {
   mockPublish.mockRejectedValue(new Error('Network failure'));
   await render(FlashComposerScreen);

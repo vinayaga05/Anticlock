@@ -82,7 +82,7 @@ export function ServiceCategoryCard({
             styles.compactTitle,
             { color: isHealth ? healthTheme.text : theme.colors.textPrimary },
           ]}
-          numberOfLines={2}>
+        >
           {category.name}
         </Text>
       </>

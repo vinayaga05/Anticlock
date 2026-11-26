@@ -279,12 +279,14 @@ messagesRoutes.post('/channels', requireAuth, async (c) => {
         id: viewer.ref.id,
         type: viewer.ref.type,
         name: viewer.publisher.displayName,
+        handle: viewer.publisher.handle,
         image: viewer.publisher.avatarUrl,
       },
       targetProfile: {
         id: target.id,
         type: target.type,
         name: targetProfile.displayName,
+        handle: targetProfile.handle,
         image: targetProfile.avatarUrl,
       },
     });

@@ -8,6 +8,7 @@ export type ServiceTreeId =
   | 'course_training'
   | 'home_services'
   | 'ecommerce'
+  | 'local_services'
   | 'rooms_restaurant';
 
 export type ServiceActionType =
@@ -56,6 +57,7 @@ export type ServiceCategory = {
   treeId: ServiceTreeId;
   /** Only Health currently uses this optional second-level specialty relationship. */
   parentId?: string;
+  hiddenFromBrowse?: boolean;
   order: number;
   name: string;
   description: string;

@@ -22,8 +22,9 @@ jest.mock('@stream-io/video-react-native-sdk', () => ({
   StreamVideoClient: jest.fn(() => mockVideo),
   useCalls: () => [],
 }));
+let mockHandle: string | null = 'test.user';
 jest.mock('@/shared/context/AuthProvider', () => ({
-  useAuth: () => ({ user: { id: 'user', displayName: 'Test' } }),
+  useAuth: () => ({ user: { id: 'user', displayName: 'Test', handle: mockHandle } }),
 }));
 jest.mock('@/shared/api/config', () => ({ isApiEnabled: true }));
 jest.mock('@/shared/api/client', () => ({
@@ -55,4 +56,17 @@ it('keeps navigation mounted while chat and calling connect independently', asyn
   expect(unmount).not.toHaveBeenCalled();
   Renderer.act(() => tree.unmount());
   expect(unmount).toHaveBeenCalledTimes(1);
+});
+
+
+it('does not connect chat before username setup completes', async () => {
+  mockChat.connectUser.mockClear();
+  mockVideo.connectUser.mockClear();
+  mockHandle = null;
+  let tree!: Renderer.ReactTestRenderer;
+  await Renderer.act(async () => { tree = Renderer.create(<StreamChatProvider><React.Fragment /></StreamChatProvider>); });
+  expect(mockChat.connectUser).not.toHaveBeenCalled();
+  expect(mockVideo.connectUser).not.toHaveBeenCalled();
+  Renderer.act(() => tree.unmount());
+  mockHandle = 'test.user';
 });

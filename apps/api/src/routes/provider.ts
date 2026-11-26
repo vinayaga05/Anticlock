@@ -354,7 +354,7 @@ providerMobileRoutes.get('/form-schemas/resolve', async c => {
       .filter(Boolean);
     ResolveFormSchemaQuerySchema.parse({ providerKind, categoryIds });
     const schema = await resolveFormSchema(
-      providerKind as 'business' | 'individual',
+      'business',
       categoryIds,
     );
     return c.json({ schema });

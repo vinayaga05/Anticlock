@@ -1,5 +1,5 @@
 import { serviceCategories } from './serviceCategories';
-import { serviceTrees } from './serviceTrees';
+import { needsServiceTrees, serviceTrees } from './serviceTrees';
 import {
   marketplaceCourses,
   marketplaceEvents,
@@ -21,7 +21,7 @@ import {
 } from './serviceTypes';
 
 export function getTrees(): ServiceTree[] {
-  return serviceTrees;
+  return needsServiceTrees;
 }
 
 export function getTree(treeId: ServiceTreeId): ServiceTree | undefined {
@@ -30,7 +30,7 @@ export function getTree(treeId: ServiceTreeId): ServiceTree | undefined {
 
 export function getCategoriesByTree(treeId: ServiceTreeId): ServiceCategory[] {
   return serviceCategories
-    .filter(c => c.treeId === treeId && !c.parentId)
+    .filter(c => c.treeId === treeId && !c.parentId && !c.hiddenFromBrowse)
     .sort((a, b) => a.order - b.order);
 }
 
@@ -48,11 +48,17 @@ export function getAllCategories(): ServiceCategory[] {
   return serviceCategories;
 }
 
+export function matchesCategoryOffering(categoryId: string, offeringId: string): boolean {
+  return offeringId === categoryId ||
+    offeringId.startsWith(`${categoryId}.`) ||
+    getCategory(offeringId)?.parentId === categoryId;
+}
+
 export function getProvidersForCategory(
   categoryId: string,
 ): MarketplaceProvider[] {
   const matched = marketplaceProviders.filter(p =>
-    p.categoryIds.includes(categoryId),
+    p.categoryIds.some(id => matchesCategoryOffering(categoryId, id)),
   );
   if (matched.length > 0) return matched;
 
@@ -69,7 +75,7 @@ export function getProvider(
 }
 
 export function getEventsForCategory(categoryId: string): MarketplaceEvent[] {
-  const direct = marketplaceEvents.filter(e => e.categoryId === categoryId);
+  const direct = marketplaceEvents.filter(e => matchesCategoryOffering(categoryId, e.categoryId));
   if (direct.length) return direct;
   const category = getCategory(categoryId);
   if (
@@ -86,7 +92,7 @@ export function getEvent(eventId: string): MarketplaceEvent | undefined {
 }
 
 export function getCoursesForCategory(categoryId: string): MarketplaceCourse[] {
-  const direct = marketplaceCourses.filter(c => c.categoryId === categoryId);
+  const direct = marketplaceCourses.filter(c => matchesCategoryOffering(categoryId, c.categoryId));
   if (direct.length) return direct;
   const category = getCategory(categoryId);
   if (category?.actionType === 'course_enrollment') return marketplaceCourses;
@@ -100,7 +106,7 @@ export function getCourse(courseId: string): MarketplaceCourse | undefined {
 export function getProductsForCategory(
   categoryId: string,
 ): MarketplaceProduct[] {
-  const direct = marketplaceProducts.filter(p => p.categoryId === categoryId);
+  const direct = marketplaceProducts.filter(p => matchesCategoryOffering(categoryId, p.categoryId));
   if (direct.length) return direct;
   const category = getCategory(categoryId);
   if (

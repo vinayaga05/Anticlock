@@ -160,3 +160,22 @@ export async function updateProfile(input: ProfileUpdate): Promise<MobileUser> {
   persistSession(updatedSession);
   return updatedSession.user;
 }
+
+/** Retrying a successful claim is safe; recover its server state after lost responses. */
+export async function claimUsername(username: string): Promise<MobileUser> {
+  const session = readStoredSession();
+  if (!session) throw new Error('Please sign in to choose a username.');
+  let user: MobileUser;
+  try {
+    user = (await sessionRequest<{ user: MobileUser }>('/auth/mobile/username', { method: 'PUT', body: JSON.stringify({ username }) })).user;
+  } catch (error) {
+    if (error instanceof ApiError && error.status >= 400 && error.status < 500) throw error;
+    const recovered = await sessionRequest<{ user: MobileUser }>('/auth/mobile/me').catch(() => null);
+    if (recovered?.user.handle !== username) throw error;
+    user = recovered.user;
+  }
+  const current = getStoredSession();
+  if (!current || current.token !== session.token || user.id !== session.user.id || isSessionExpired(current.expiresAt)) throw new Error('Your account changed. Sign in again.');
+  persistSession({ ...current, user: ensureUserAvatar(user) });
+  return user;
+}

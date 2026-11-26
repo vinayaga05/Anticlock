@@ -1,3 +1,4 @@
+import { healthFeaturesEnabled } from '@/shared/config/releaseFeatures';
 import { useCallback, useEffect, useRef } from 'react';
 import { apiStream, apiRequest, ApiError } from '@/shared/api/client';
 import { isApiEnabled } from '@/shared/api/config';
@@ -285,6 +286,12 @@ export function useAssistantChat(navigation: GenieNavigation) {
         }
         if (interpreted.type === 'search') {
           await applySearch(interpreted.context, interpreted.needsLocation);
+          return;
+        }
+        // Play's personal-account edition offers catalogue search only.
+        // Never route an unrecognised medical request into unrestricted AI chat.
+        if (!healthFeaturesEnabled) {
+          reply('I can help you search Knock for local services, shops, events and community content. What would you like to find?');
           return;
         }
         if (!isApiEnabled) {

@@ -20,7 +20,7 @@ function FieldGrid({ data }: { data: Record<string, unknown> }) {
       {entries.map(([key, value]) => (
         <div key={key}>
           <dt>{key}</dt>
-          <dd>{typeof value === 'object' ? JSON.stringify(value) : String(value)}</dd>
+          <dd>{value === null || value === undefined || value === '' ? 'Not provided' : typeof value === 'object' ? JSON.stringify(value) : String(value)}</dd>
         </div>
       ))}
     </dl>
@@ -138,6 +138,16 @@ export default function ProviderApplicationDetailPage() {
           ) : null}
 
           <div className="card" style={{ marginBottom: 16 }}>
+            <h2 className="section-title">Business registration (Optional)</h2>
+            <p className="muted">Missing legal business details and registration documents do not prevent approval.</p>
+            <FieldGrid data={{
+              'Legal business name': app.commonPayload?.registration?.legalBusinessName ?? null,
+              'Registration number': app.commonPayload?.registration?.registrationNumber ?? null,
+              GSTIN: app.commonPayload?.registration?.gstin ?? null,
+            }} />
+          </div>
+
+          <div className="card" style={{ marginBottom: 16 }}>
             <h2 className="section-title">Common details</h2>
             <FieldGrid data={(app.commonPayload ?? {}) as Record<string, unknown>} />
           </div>
@@ -155,7 +165,7 @@ export default function ProviderApplicationDetailPage() {
             <ul>
               {app.documents.map(doc => (
                 <li key={doc.fieldKey}>
-                  {doc.fieldKey}
+                  {doc.fieldKey}{/businessRegistration/i.test(doc.fieldKey) ? ' (Optional)' : ''}
                   {doc.downloadUrl ? (
                     <>
                       {' · '}

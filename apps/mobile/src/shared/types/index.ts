@@ -65,6 +65,7 @@ export interface ReelItem {
   id: string;
   title: string;
   author: string;
+  authorHandle?: string | null;
   /** Creator profile image shown on the clip overlay. */
   authorAvatarUrl?: string;
   /**

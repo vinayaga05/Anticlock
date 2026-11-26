@@ -24,3 +24,9 @@ export * from './fitness.js';
 export * from './fitness-media.js';
 
 export * from './fitness-experts.js';
+
+export * from './play-edition.js';
+
+export * from './username.js';
+
+export * from './provider-registration.js';

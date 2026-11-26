@@ -28,6 +28,8 @@ export type BusinessProfileDraft = {
   email: string;
   website: string;
   address: string;
+  addressDetails: string;
+  pinConfirmed: boolean;
   city: string;
   area: string;
   pincode: string;
@@ -65,6 +67,8 @@ export function businessProfileDraft(
     email: business.contact.email ?? '',
     website: business.contact.website ?? '',
     address: business.location.address ?? '',
+    addressDetails: business.location.addressDetails ?? '',
+    pinConfirmed: business.location.pinConfirmed === true,
     city: business.location.city ?? '',
     area: business.location.area ?? '',
     pincode: business.location.pincode ?? '',
@@ -195,6 +199,8 @@ export function buildBusinessProfileUpdate(
     email,
     website: normalizeProfileWebsite(draft.website),
     address: draft.address.trim() || null,
+    addressDetails: draft.addressDetails.trim() || null,
+    pinConfirmed: draft.pinConfirmed,
     city: draft.city.trim() || null,
     area: draft.area.trim() || null,
     pincode: draft.pincode.trim() || null,

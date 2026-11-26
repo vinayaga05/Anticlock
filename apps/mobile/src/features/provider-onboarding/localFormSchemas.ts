@@ -1,3 +1,4 @@
+import { applyProviderRegistrationPolicy } from '@anticlock/contracts/provider-registration';
 import type {
   FormFieldDefinition,
   FormSection,
@@ -203,16 +204,16 @@ export function resolveLocalFormSchema(
 
   for (const schema of CATEGORY_SCHEMAS) {
     if (!schema.categoryId || !categoryIds.includes(schema.categoryId)) continue;
-    if (!schema.providerKinds.includes(providerKind)) continue;
+
     for (const section of schema.sections) {
       if (!sectionMap.has(section.id)) sectionMap.set(section.id, section);
     }
     for (const field of schema.fields) fieldMap.set(field.key, field);
   }
 
-  return {
+  return applyProviderRegistrationPolicy({
     sections: Array.from(sectionMap.values()).sort((a, b) => a.sortOrder - b.sortOrder),
     fields: Array.from(fieldMap.values()),
     categoryIds,
-  };
+  });
 }

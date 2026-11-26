@@ -1,6 +1,8 @@
+jest.mock('@tanstack/react-query', () => ({ ...jest.requireActual('@tanstack/react-query'), useQueryClient: () => ({ clear: jest.fn() }) }));
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { Text } from 'react-native';
+import { Alert, Linking, Text } from 'react-native';
+import * as releaseFeatures from '@/shared/config/releaseFeatures';
 import { byTestId, countTestId } from '@/test/componentMocks';
 import { AccountSettingsScreen } from './AccountSettingsScreen';
 
@@ -115,6 +117,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  jest.restoreAllMocks();
   ReactTestRenderer.act(() => renderers.splice(0).forEach(renderer => renderer.unmount()));
 });
 
@@ -134,7 +137,7 @@ describe('AccountSettingsScreen (profile hub)', () => {
     expect(labels[0]).toBe('My businesses, Under review');
 
     ReactTestRenderer.act(() => byTestId(renderer, 'become-provider-action').props.onPress());
-    expect(mockNavigate).toHaveBeenCalledWith('ProviderApplicationKind');
+    expect(mockNavigate).toHaveBeenCalledWith('ProviderApplicationStart');
     ReactTestRenderer.act(() => byTestId(renderer, 'row-profile-preview').props.onPress());
     expect(mockNavigate).toHaveBeenCalledWith('Profile', { profileType: 'personal', profileId: 'u1' });
   });
@@ -183,8 +186,22 @@ describe('AccountSettingsScreen (profile hub)', () => {
     const { renderer } = render();
     ReactTestRenderer.act(() => byTestId(renderer, 'active-profile-card').props.onPress());
     ReactTestRenderer.act(() => byTestId(renderer, 'switcher-add-business').props.onPress());
-    expect(mockNavigate).toHaveBeenCalledWith('ProviderApplicationKind');
+    expect(mockNavigate).toHaveBeenCalledWith('ProviderApplicationStart');
   });
 });
 
 it.each(['personal','business'])('opens personal Fitness from Settings with %s publishing active',type=>{mockActive=type==='business'?lotus:personal;const {renderer,texts}=render();expect(texts()).toContain('Fitness Space');expect(texts()).toContain("Today's Focus");expect(texts()).toContain('Key Stats');ReactTestRenderer.act(()=>byTestId(renderer,'settings-open-fitness').props.onPress());expect(mockNavigate).toHaveBeenCalledWith('FitnessHome');});
+
+it('Android hides Fitness and keeps legal pages and account closure outside health routes', () => {
+  jest.replaceProperty(releaseFeatures, 'healthFeaturesEnabled', false);
+  const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  const { renderer, texts } = render();
+  expect(texts()).not.toContain('Fitness Space');
+  ReactTestRenderer.act(() => byTestId(renderer, 'row-privacy-policy').props.onPress());
+  expect(open).toHaveBeenCalledWith('https://knock.org.in/privacypolicy/');
+  ReactTestRenderer.act(() => byTestId(renderer, 'row-terms').props.onPress());
+  expect(open).toHaveBeenCalledWith('https://knock.org.in/termsandcondition/');
+  ReactTestRenderer.act(() => byTestId(renderer, 'row-close-account').props.onPress());
+  expect(alert).toHaveBeenCalledWith('Close your Knock account?', expect.stringContaining('cannot be undone'), expect.arrayContaining([expect.objectContaining({ text: 'Keep account' })]));
+});

@@ -92,24 +92,36 @@ export function formatCoordinates(point: MapPoint) {
   return `${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`;
 }
 
-/** Turns a typed address into a map point. Returns null when nothing matches. */
+export type BusinessPlace = MapPoint & { address: string; city?: string; area?: string; pincode?: string };
+type GeocodeResult = { formatted_address?: string; geometry?: { location?: { lat?: number; lng?: number } }; address_components?: Array<{ long_name?: string; types?: string[] }> };
+
+async function geocode(params: string): Promise<BusinessPlace[]> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?${params}&key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}`, { headers: { Accept: 'application/json' }, signal: controller.signal });
+    if (!response.ok) throw new Error('Address search is unavailable. Retry or place the pin manually.');
+    const body = await response.json() as { status?: string; results?: GeocodeResult[] };
+    if (body.status === 'ZERO_RESULTS') return [];
+    if (body.status !== 'OK') throw new Error('Address search is unavailable. Retry or place the pin manually.');
+    return (body.results ?? []).flatMap(result => {
+      const latitude = result.geometry?.location?.lat, longitude = result.geometry?.location?.lng;
+      if (typeof latitude !== 'number' || typeof longitude !== 'number' || !Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return [];
+      const component = (...types: string[]) => result.address_components?.find(item => types.some(type => item.types?.includes(type)))?.long_name;
+      return [{ latitude, longitude, address: result.formatted_address ?? '', city: component('locality', 'administrative_area_level_2'), area: component('sublocality_level_1', 'sublocality'), pincode: component('postal_code') }];
+    }).slice(0, 5);
+  } finally { clearTimeout(timer); }
+}
+
+/** Explicit address searches; no autocomplete requests while typing. */
+export async function searchPlaces(query: string): Promise<BusinessPlace[]> {
+  if (query.trim().length < 3) return [];
+  return geocode(`address=${encodeURIComponent(query.trim())}`);
+}
+export async function reversePlace(point: MapPoint): Promise<BusinessPlace | null> {
+  return (await geocode(`latlng=${point.latitude},${point.longitude}`))[0] ?? null;
+}
 export async function searchPlace(query: string): Promise<MapPoint | null> {
-  const trimmed = query.trim();
-  if (trimmed.length < 3) return null;
-  const url =
-    `https://maps.googleapis.com/maps/api/geocode/json` +
-    `?address=${encodeURIComponent(trimmed)}` +
-    `&key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}`;
-  const response = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!response.ok) return null;
-  const body = (await response.json()) as {
-    status?: string;
-    results?: Array<{ geometry?: { location?: { lat?: number; lng?: number } } }>;
-  };
-  if (body.status !== 'OK' && body.status !== 'ZERO_RESULTS') return null;
-  const location = body.results?.[0]?.geometry?.location;
-  const latitude = Number(location?.lat);
-  const longitude = Number(location?.lng);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-  return { latitude, longitude };
+  const found = (await searchPlaces(query))[0];
+  return found ? { latitude: found.latitude, longitude: found.longitude } : null;
 }

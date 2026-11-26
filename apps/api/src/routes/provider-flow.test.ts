@@ -109,7 +109,7 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     return {
       commonPayload: {
         basic: { providerName: name, contactPerson: 'Asha', mobile: '9876543210', email: 'asha@example.com' },
-        location: { address: '12 Lake Road', city: 'Chennai', area: 'Adyar', pincode: '600020', latitude: 13.001, longitude: 80.25 },
+        location: { address: '12 Lake Road', city: 'Chennai', area: 'Adyar', pincode: '600020', latitude: 13.001, longitude: 80.25, pinConfirmed: true },
         availability: { workingDays: ['mon', 'tue'], openingTime: '09:00', closingTime: '18:00' },
         services: { pricingStartsAt: '1,500', atLocation: true, homeVisit: true, online: true },
         profile: { description: `${name} description for guests`, yearsInOperation: '4' },
@@ -248,10 +248,12 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
   let secondProviderId = '';
 
   it('keeps every draft: starting a new application never deletes existing drafts', async () => {
-    const a = await call('OWNER', 'POST', '/v1/provider/applications', { providerKind: 'business' });
+    const a = await call('OWNER', 'POST', '/v1/provider/applications', {});
     const b = await call('OWNER', 'POST', '/v1/provider/applications', { providerKind: 'individual' });
     assert.equal(a.status, 201);
     assert.equal(b.status, 201);
+    assert.equal(a.json.application.providerKind, 'business');
+    assert.equal(b.json.application.providerKind, 'business');
     appIds.push(a.json.application.id, b.json.application.id);
     const list = await call('OWNER', 'GET', '/v1/provider/applications');
     assert.equal(list.status, 200);
@@ -313,7 +315,7 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     const readiness = detail.json.application.readiness;
     assert.equal(readiness.complete, false);
     const keys = (readiness.missing as Json[]).map(m => m.key);
-    for (const k of ['basic.contactPerson', 'location.city', 'identity.aadhaarDocument', 'identity.aadhaarNumber', 'availability.workingDays', 'profile.introVideo']) {
+    for (const k of ['basic.contactPerson', 'identity.aadhaarDocument', 'identity.aadhaarNumber', 'availability.workingDays', 'profile.introVideo']) {
       assert.ok(keys.includes(k), `missing ${k}`);
     }
     assert.equal((readiness.missing as Json[]).find(m => m.key === 'basic.email').reason, 'invalid');
@@ -744,4 +746,55 @@ describe('provider onboarding flow (integration)', { skip: !TEST_DATABASE_URL },
     assert.equal((await call('OTHER', 'GET', `/v1/provider/businesses/${firstProviderId}`)).status, 404);
     assert.equal((await call('OWNER', 'PATCH', `/v1/provider/businesses/${firstProviderId}`, { name: 'x' })).status, 400);
   });
+  it('submits and approves without legal business details, and restores the confirmed entrance', async () => {
+    const id = await completeDraft(`No registration ${runId}`, 'individual');
+    // Simulate an older stored Individual draft, keeping all its entered data.
+    const { eq } = await import('drizzle-orm');
+    await db.update(schema.providerApplications).set({ providerKind: 'individual' }).where(eq(schema.providerApplications.id, id));
+    const resumed = await call('OWNER', 'GET', `/v1/provider/applications/${id}`);
+    assert.equal(resumed.json.application.providerKind, 'business');
+    assert.equal(resumed.json.application.commonPayload.basic.providerName, `No registration ${runId}`);
+    const resolved = await call('OWNER', 'GET', `/v1/provider/form-schemas/resolve?categoryIds=${categoryId}`);
+    assert.equal(resolved.status, 200);
+    assert.equal(resolved.json.schema.fields.find((field: Json) => field.key === 'identity.businessRegistration').required, false);
+    const blank = await call('OWNER', 'PATCH', `/v1/provider/applications/${id}`, { commonPayload: { registration: { legalBusinessName: '', registrationNumber: '', gstin: '' }, location: { ...resumed.json.application.commonPayload.location, addressDetails: 'Shop 4, first floor' } } });
+    assert.equal(blank.status, 200, JSON.stringify(blank.json));
+    assert.equal(blank.json.application.readiness.complete, true, JSON.stringify(blank.json.application.readiness));
+    const unconfirmed = await call('OWNER', 'PATCH', `/v1/provider/applications/${id}`, { commonPayload: { location: { ...blank.json.application.commonPayload.location, pinConfirmed: false } } });
+    assert.equal(unconfirmed.json.application.readiness.complete, false);
+    assert.equal((await call('OWNER', 'POST', `/v1/provider/applications/${id}/submit`)).status, 400);
+    await call('OWNER', 'PATCH', `/v1/provider/applications/${id}`, { commonPayload: { location: blank.json.application.commonPayload.location } });
+    assert.equal((await call('OWNER', 'POST', `/v1/provider/applications/${id}/submit`)).status, 200);
+    const approved = await call('admin', 'POST', `/admin/provider/applications/${id}/review`, { action: 'approve' });
+    assert.equal(approved.status, 200, JSON.stringify(approved.json));
+    const [stored] = await db.select().from(schema.providers).where(eq(schema.providers.id, approved.json.application.providerId));
+    assert.equal(stored.providerKind, 'business');
+    const { BusinessProfileService } = await import('../provider/BusinessProfileService.js');
+    const reopened = await new BusinessProfileService().getProfile(stored.id, OWNER);
+    assert.equal(reopened.location.address, '12 Lake Road');
+    assert.equal(reopened.location.addressDetails, 'Shop 4, first floor');
+    assert.equal(reopened.location.latitude, 13.001);
+    assert.equal(reopened.location.longitude, 80.25);
+    assert.equal(reopened.location.pinConfirmed, true);
+  });
+
+  it('validates voluntary registration fields and permits online service without a physical pin', async () => {
+    const id = await completeDraft(`Online service ${runId}`, 'individual');
+    const invalid = await call('OWNER', 'PATCH', `/v1/provider/applications/${id}`, { commonPayload: { location: {}, services: { online: true }, registration: { gstin: 'bad' } } });
+    assert.equal(invalid.status, 200, JSON.stringify(invalid.json));
+    assert.ok(invalid.json.application.readiness.missing.some((item: Json) => item.key === 'registration.gstin'));
+    assert.equal((await call('OWNER', 'POST', `/v1/provider/applications/${id}/submit`)).status, 400);
+    const registration = { legalBusinessName: 'Voluntary Legal Name', registrationNumber: 'REG-12345', gstin: '33ABCDE1234F1Z5' };
+    const valid = await call('OWNER', 'PATCH', `/v1/provider/applications/${id}`, { commonPayload: { registration } });
+    assert.equal(valid.json.application.readiness.complete, true, JSON.stringify(valid.json.application.readiness));
+    assert.equal((await call('OWNER', 'POST', `/v1/provider/applications/${id}/submit`)).status, 200);
+    const review = await call('admin', 'GET', `/admin/provider/applications/${id}`);
+    assert.deepEqual(review.json.application.commonPayload.registration, registration);
+    const approved = await call('admin', 'POST', `/admin/provider/applications/${id}/review`, { action: 'approve' });
+    assert.equal(approved.status, 200, JSON.stringify(approved.json));
+    const { eq } = await import('drizzle-orm');
+    const [business] = await db.select().from(schema.providers).where(eq(schema.providers.id, approved.json.application.providerId));
+    assert.ok(!JSON.stringify(business.publicProfile).includes('33ABCDE1234F1Z5'), 'legal registration stays in private admin review');
+  });
+
 });

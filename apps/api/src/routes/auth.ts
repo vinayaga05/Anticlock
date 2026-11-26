@@ -1,8 +1,14 @@
+import { assertUsername, checkUsername, claimUsername } from '../usernames/UsernameService.js';
+import { normalizeUsername, usernameProblem } from '@anticlock/contracts/username';
+import { loadPublishers, publisherKey } from '../publishing/publisher.js';
+import { publishContentEvent } from '../realtime/contentEvents.js';
+import { getStreamClient, isStreamConfigured } from '../lib/stream.js';
 import { Hono, type Context } from 'hono';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ilike, or, sql, asc, isNotNull } from 'drizzle-orm';
 import { bodyLimit } from 'hono/body-limit';
 import bcrypt from 'bcryptjs';
 import {
+  UsernameSchema,
   AdminLoginRequestSchema,
   MobileOtpSendRequestSchema,
   MobileOtpVerifyRequestSchema,
@@ -24,6 +30,15 @@ import { getMobileUserContext } from '../lib/mobileUserContext.js';
 import { ApiError, httpError } from '../lib/httpError.js';
 import { mediaService } from '../media/MediaService.js';
 import { MAX_AVATAR_BYTES } from '../media/validateAvatarUpload.js';
+
+async function syncUsername(user: typeof mobileUsers.$inferSelect) {
+  // The database commit is authoritative; provider failures must not undo a claim.
+  if (isStreamConfigured()) {
+    await getStreamClient().partialUpdateUser({ id: user.id, set: { name: user.displayName, image: user.avatarUrl ?? '', username: user.handle ?? undefined } })
+      .catch(() => console.error('[username] Chat profile sync deferred until next connection.'));
+  }
+  await publishContentEvent({ type: 'social.changed', postId: user.id, format: '', publisherProfileType: 'personal', publisherProfileId: user.id, at: new Date().toISOString() }).catch(() => undefined);
+}
 
 export function createAuthRoutes(options: { otpProvider?: OtpProvider } = {}) {
 const authRoutes = new Hono<AppEnv>();
@@ -64,6 +79,7 @@ async function issueMobileSession(user: typeof mobileUsers.$inferSelect, context
       phone: user.phone,
       displayName: user.displayName,
       handle: user.handle,
+      needsUsername: !user.handle,
       avatarUrl: user.avatarUrl,
       bio: user.bio,
       location: user.location,
@@ -358,6 +374,7 @@ authRoutes.post('/mobile/otp/verify', async c => {
 });
 
 authRoutes.get('/mobile/me', requireAuth, async c => {
+  c.header('Cache-Control', 'private, no-store');
   const auth = c.get('auth');
   if (auth.kind !== 'mobile') {
     return c.json({ error: { code: 'forbidden', message: 'Mobile session required' } }, 403);
@@ -374,6 +391,7 @@ authRoutes.get('/mobile/me', requireAuth, async c => {
       phone: user.phone,
       displayName: user.displayName,
       handle: user.handle,
+      needsUsername: !user.handle,
       avatarUrl: user.avatarUrl,
       bio: user.bio,
       location: user.location,
@@ -381,6 +399,57 @@ authRoutes.get('/mobile/me', requireAuth, async c => {
       ...(await getMobileUserContext(user.id)),
     },
   });
+});
+
+// Setup endpoints also accept a valid OTP session whose username is incomplete.
+authRoutes.get('/mobile/username/availability', requireAuth, async c => {
+  if (c.get('auth').kind !== 'mobile') return c.json({ error: { code: 'forbidden', message: 'Mobile session required' } }, 403);
+  c.header('Cache-Control', 'private, no-store');
+  return c.json(await checkUsername((c.req.query('username') ?? '').slice(0, 256), c.get('auth').sub));
+});
+
+authRoutes.put('/mobile/username', requireAuth, bodyLimit({ maxSize: 2048 }), async c => {
+  c.header('Cache-Control', 'private, no-store');
+  try {
+    const auth = c.get('auth');
+    if (auth.kind !== 'mobile') throw new ApiError(403, 'forbidden', 'Mobile session required');
+    const input = await c.req.json().catch(() => null);
+    const parsed = UsernameSchema.safeParse(input?.username);
+    if (!parsed.success) throw new ApiError(400, 'USERNAME_INVALID', parsed.error.issues[0]?.message ?? 'Enter a valid username.');
+    const user = await claimUsername(auth.sub, parsed.data);
+    await syncUsername(user);
+    return c.json({ user: { id: user.id, phone: user.phone, handle: user.handle, needsUsername: false,
+      displayName: user.displayName, avatarUrl: user.avatarUrl, bio: user.bio, location: user.location,
+      website: user.website, ...(await getMobileUserContext(user.id)) } });
+  } catch (error) {
+    const result = httpError(error, 'username-claim');
+    return c.json(result.body, result.status);
+  }
+});
+
+// Public header only: private content still goes through the existing profile gate.
+authRoutes.get('/mobile/users', requireAuth, async c => {
+  const auth = c.get('auth');
+  if (auth.kind !== 'mobile') return c.json({ error: { code: 'forbidden', message: 'Mobile session required' } }, 403);
+  c.header('Cache-Control', 'private, no-store');
+  const query = normalizeUsername(c.req.query('q') ?? '').slice(0, 80);
+  const exact = c.req.query('exact') === 'true';
+  if (!query || (exact && usernameProblem(query))) return c.json({ data: [] });
+  if (exact) { try { assertUsername(query); } catch { return c.json({ data: [] }); } }
+  // LIKE metacharacters are literal user input, not wildcards.
+  const escaped = query.replace(/[\\%_]/g, value => `\\${value}`);
+  const rows = await db.select({ id: mobileUsers.id }).from(mobileUsers).where(and(
+    eq(mobileUsers.isActive, true), isNotNull(mobileUsers.handle),
+    exact ? eq(mobileUsers.handle, query) : or(ilike(mobileUsers.handle, `${escaped}%`), ilike(mobileUsers.displayName, `%${escaped}%`)),
+    sql`NOT EXISTS (SELECT 1 FROM profile_blocks b WHERE
+      (b.blocker_profile_type = 'personal' AND b.blocker_profile_id = ${auth.sub} AND b.blocked_profile_type = 'personal' AND b.blocked_profile_id = ${mobileUsers.id}) OR
+      (b.blocked_profile_type = 'personal' AND b.blocked_profile_id = ${auth.sub} AND b.blocker_profile_type = 'personal' AND b.blocker_profile_id = ${mobileUsers.id}))`,
+    sql`NOT EXISTS (SELECT 1 FROM mobile_user_blocks b WHERE
+      (b.blocker_mobile_user_id = ${auth.sub} AND b.blocked_mobile_user_id = ${mobileUsers.id}) OR
+      (b.blocked_mobile_user_id = ${auth.sub} AND b.blocker_mobile_user_id = ${mobileUsers.id}))`,
+  )).orderBy(sql`CASE WHEN ${mobileUsers.handle} = ${query} THEN 0 WHEN ${mobileUsers.handle} ILIKE ${escaped + '%'} THEN 1 ELSE 2 END`, asc(mobileUsers.handle), asc(mobileUsers.id)).limit(30);
+  const profiles = await loadPublishers(rows.map(row => ({ id: row.id, type: 'personal' })));
+  return c.json({ data: rows.map(row => profiles.get(publisherKey({ id: row.id, type: 'personal' }))).filter(Boolean) });
 });
 
 authRoutes.post('/mobile/avatar', requireAuth, async (c, next) => {
@@ -420,6 +489,7 @@ authRoutes.put('/mobile/profile', requireAuth, async c => {
     }
 
     const body = UpdateMobileProfileRequestSchema.parse(await c.req.json());
+    if (body.handle !== undefined) assertUsername(body.handle);
     const user = await db.transaction(async transaction => {
       const [owner] = await transaction.select({ id: mobileUsers.id }).from(mobileUsers)
         .where(and(eq(mobileUsers.id, auth.sub), eq(mobileUsers.isActive, true))).for('update');
@@ -436,6 +506,7 @@ authRoutes.put('/mobile/profile', requireAuth, async c => {
       return c.json({ error: { code: 'not_found', message: 'Profile not found' } }, 404);
     }
 
+    await syncUsername(user);
     await writeAudit({
       actorId: user.id,
       actorEmail: user.phone,
@@ -451,6 +522,7 @@ authRoutes.put('/mobile/profile', requireAuth, async c => {
         phone: user.phone,
         displayName: user.displayName,
         handle: user.handle,
+        needsUsername: !user.handle,
         avatarUrl: user.avatarUrl,
         bio: user.bio,
         location: user.location,
@@ -459,7 +531,7 @@ authRoutes.put('/mobile/profile', requireAuth, async c => {
       },
     });
   } catch (error) {
-    if ((error as any)?.code === '23505' || (error as any)?.cause?.code === '23505') return c.json({ error: { code: 'username_taken', message: 'This username is already taken.' } }, 409);
+    if ((error as any)?.code === '23505' || (error as any)?.cause?.code === '23505') return c.json({ error: { code: 'USERNAME_TAKEN', message: 'This username is already taken.' } }, 409);
     const { status, body } = httpError(error, 'mobile-profile');
     return c.json(body, status);
   }

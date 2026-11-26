@@ -11,8 +11,6 @@ import {
   permissions,
   rolePermissions,
   roles,
-  serviceCategories,
-  serviceTrees,
   stubBanners,
   stubProducts,
   stubProviders,
@@ -29,6 +27,7 @@ import {
   communityMembers,
   trips,
 } from '../db/schema.js';
+import { syncServiceCatalog } from './serviceCatalog.js';
 import catalog from './catalog.json' with { type: 'json' };
 import {
   ALL_CATEGORY_PROVIDER_FORM_SCHEMAS,
@@ -189,54 +188,7 @@ async function seed() {
       .onConflictDoNothing();
   }
 
-  for (const tree of catalog.trees) {
-    await db
-      .insert(serviceTrees)
-      .values({
-        id: tree.id,
-        slug: tree.id,
-        name: tree.name,
-        description: tree.description ?? null,
-        icon: tree.icon ?? null,
-        accentColor: tree.accentColor ?? null,
-        sortOrder: tree.sortOrder,
-        status: 'published',
-      })
-      .onConflictDoUpdate({
-        target: serviceTrees.id,
-        set: {
-          name: tree.name,
-          description: tree.description ?? null,
-          icon: tree.icon ?? null,
-          accentColor: tree.accentColor ?? null,
-          sortOrder: tree.sortOrder,
-          updatedAt: new Date(),
-        },
-      });
-  }
-
-  for (const cat of catalog.categories) {
-    await db
-      .insert(serviceCategories)
-      .values({
-        id: cat.id,
-        treeId: cat.treeId,
-        ...(cat.treeId === 'rooms_restaurant' ? { actionType: 'service_request' } : {}),
-        name: cat.name,
-        sortOrder: cat.sortOrder,
-        status: 'published',
-      })
-      .onConflictDoUpdate({
-        target: serviceCategories.id,
-        set: {
-          ...(cat.treeId === 'rooms_restaurant' ? { actionType: 'service_request' } : {}),
-          name: cat.name,
-          treeId: cat.treeId,
-          sortOrder: cat.sortOrder,
-          updatedAt: new Date(),
-        },
-      });
-  }
+  await syncServiceCatalog();
 
   const [existingGlobalSchema] = await db
     .select()

@@ -20,6 +20,7 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   Login: undefined;
   NameOnboarding: undefined;
+  UsernameOnboarding: undefined;
   InterestOnboarding: undefined;
   InterestPreferences: undefined;
   Main: undefined | { screen: keyof MainTabParamList };
@@ -162,7 +163,7 @@ export type RootStackParamList = {
   ChallengeDetail: { challengeId: string };
   ChallengeParticipate: { challengeId: string };
   ProviderApplicationIntro: undefined;
-  ProviderApplicationKind: { applicationId?: string } | undefined;
+  ProviderApplicationStart: { applicationId?: string } | undefined;
   ProviderApplicationServices: { applicationId: string };
   ProviderApplicationForm: { applicationId: string; focusField?: string };
   ProviderApplicationReview: { applicationId: string };

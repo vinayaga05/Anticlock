@@ -214,7 +214,7 @@ export function BusinessManageScreen() {
     value: BusinessProfileDraft[K],
   ) => {
     if (!operation.current && !picker.current) {
-      setDraft(current => (current ? { ...current, [key]: value } : current));
+      setDraft(current => (current ? { ...current, ...(key === 'address' ? { pinConfirmed: false } : {}), [key]: value } : current));
       setStatus('');
       setError(null);
     }
@@ -721,6 +721,7 @@ export function BusinessManageScreen() {
               </WorkspaceCard>
               <WorkspaceCard title="Location">
                 {profileField('Business address', 'address', 500, true)}
+                {profileField('Shop number, floor or landmark', 'addressDetails', 300)}
                 {profileField('City', 'city', 100)}
                 {profileField('Area', 'area', 100)}
                 {profileField('Postal code', 'pincode', 12)}
@@ -731,14 +732,16 @@ export function BusinessManageScreen() {
                         ? {
                             latitude: draft.latitude,
                             longitude: draft.longitude,
+                            pinConfirmed: draft.pinConfirmed,
                           }
                         : null
                     }
+                    addressParts={{ address: draft.address, city: draft.city, area: draft.area, pincode: draft.pincode }}
                     addressQuery={[draft.address, draft.city]
                       .filter(Boolean)
                       .join(', ')}
                     onChange={point => {
-                      if (!operation.current && !picker.current) {
+                      if (point && !operation.current && !picker.current) {
                         setDraft(current =>
                           current ? { ...current, ...point } : current,
                         );

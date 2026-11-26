@@ -1,3 +1,4 @@
+import { requiresBusinessLocation } from '@anticlock/contracts/provider-registration';
 import { and, asc, desc, eq, inArray, isNull, lt, notInArray, or, sql, type SQL } from 'drizzle-orm';
 import type { BusinessAnalytics, BusinessAvailabilityQuery, BusinessProfile, BusinessReview, BusinessService, CreateBusinessReviewRequest, ServiceMode, UpdateBusinessProfileRequest, UpdateBusinessServicesRequest } from '@anticlock/contracts';
 import { db } from '../db/client.js';
@@ -235,7 +236,7 @@ export class BusinessProfileService {
       coverUrl: media.find(m => fields.coverIds.includes(m.id) && m.kind === 'image')?.url ?? null,
       gallery: media.filter(m => m.id !== fields.logoId), services, categories,
       contact: { phone: text(fields.basic.mobile), email: text(fields.basic.email), website: website(fields.basic.website) },
-      location: { address: text(fields.location.address), city: text(fields.location.city), area: text(fields.location.area), pincode: text(fields.location.pincode), latitude: number(fields.location.latitude), longitude: number(fields.location.longitude), serviceRadiusKm: number(fields.location.serviceRadiusKm) },
+      location: { pinConfirmed: fields.location.pinConfirmed === true, addressDetails: text(fields.location.addressDetails), address: text(fields.location.address), city: text(fields.location.city), area: text(fields.location.area), pincode: text(fields.location.pincode), latitude: number(fields.location.latitude), longitude: number(fields.location.longitude), serviceRadiusKm: number(fields.location.serviceRadiusKm) },
       availability: { timeZone: 'Asia/Kolkata', workingDays: fields.workingDays, openingTime: fields.openingTime, closingTime: fields.closingTime, temporarilyUnavailable: fields.temporarilyUnavailable, operatingStatus, nextAvailableAt },
       rating: { average: ratingRows[0]?.average == null ? null : Number(ratingRows[0].average), count: ratingRows[0]?.count ?? 0 }, reviews: reviewPage.reviews,
       products: productRows.map(row => ({ ...row, imageUrl: imageFor(productMedia.filter(m => m.productId === row.id).map(m => m.mediaAssetId)) })),
@@ -312,7 +313,14 @@ export class BusinessProfileService {
     const profile = { ...fields.profile }, basic = { ...fields.basic }, location = { ...fields.location }, availability = { ...fields.availability };
     for (const key of ['description', 'tagline', 'brandAccentColor', 'yearsInBusiness', 'certifications', 'languages'] as const) if (request[key] !== undefined) profile[key] = request[key];
     for (const [key, stored] of [['phone', 'mobile'], ['email', 'email'], ['website', 'website']] as const) if (request[key] !== undefined) basic[stored] = request[key];
-    for (const key of ['address', 'city', 'area', 'pincode', 'latitude', 'longitude', 'serviceRadiusKm'] as const) if (request[key] !== undefined) location[key] = request[key];
+    for (const key of ['address', 'addressDetails', 'city', 'area', 'pincode', 'latitude', 'longitude', 'pinConfirmed', 'serviceRadiusKm'] as const) if (request[key] !== undefined) location[key] = request[key];
+    const pinChanged = ['latitude', 'longitude', 'address'].some(key => (request as Record<string, unknown>)[key] !== undefined && (request as Record<string, unknown>)[key] !== fields.location[key]);
+    if (pinChanged) {
+      const offerings = await db.select({ id: providerServiceOfferings.categoryId }).from(providerServiceOfferings).where(eq(providerServiceOfferings.providerId, providerId));
+      const required = requiresBusinessLocation(offerings.map(item => item.id), fields.services);
+      const hasPoint = typeof location.latitude === 'number' && typeof location.longitude === 'number';
+      if ((hasPoint || required) && (request.pinConfirmed !== true || !hasPoint || !text(location.address))) throw new ApiError(400, 'location_confirmation_required', 'Confirm the business entrance pin before saving the location.');
+    }
     for (const key of ['workingDays', 'openingTime', 'closingTime', 'temporarilyUnavailable'] as const) if (request[key] !== undefined) availability[key] = request[key];
     if (request.workingDays?.some(day => !validWorkingDay(day))) throw new ApiError(400, 'invalid_hours', 'Choose valid working days.');
     if (typeof availability.openingTime === 'string' && typeof availability.closingTime === 'string' && availability.openingTime >= availability.closingTime) throw new ApiError(400, 'invalid_hours', 'Closing time must be after opening time on the same day.');

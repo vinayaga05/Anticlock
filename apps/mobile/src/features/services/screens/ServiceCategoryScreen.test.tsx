@@ -97,7 +97,7 @@ test('Doctors skips specialties and shows real provider cards with normal search
   });
   expect(tree.root.findAllByType('specialty-grid' as any)).toHaveLength(0);
   expect(tree.root.findByType('search-input' as any).props.placeholder).toBe(
-    'Search Doctors',
+    'Search Hospitals & Doctors',
   );
   expect(tree.root.findByType('filter-pills' as any).props.activeId).toBe(
     'near',
@@ -121,7 +121,7 @@ test('other health services keep their direct provider-list behavior', () => {
   mockCategoryId = 'health.physiotherapist';
   render();
   expect(tree.root.findByType('search-input' as any).props.placeholder).toBe(
-    'Search Physiotherapist',
+    'Search Physiotherapy',
   );
   expect(tree.root.findAllByType('specialty-grid' as any)).toHaveLength(0);
 });

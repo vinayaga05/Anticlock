@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import { usernameSetupGate } from './middleware/usernameSetupGate.js';
+import { personalPlayEdition } from './lib/personal-play-edition.js';
 import { serve } from '@hono/node-server';
 import { createNodeWebSocket } from '@hono/node-ws';
 import { Hono } from 'hono';
@@ -120,11 +122,15 @@ app.use(
   '*',
   cors({
     origin: corsOrigins(),
-    allowHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-Anticlock-Context-Type', 'X-Anticlock-Context-ID'],
+    allowHeaders: ['X-Knock-Edition', 'Content-Type', 'Authorization', 'Idempotency-Key', 'X-Anticlock-Context-Type', 'X-Anticlock-Context-ID'],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   }),
 );
+
+app.use('/v1/*', personalPlayEdition);
+// Apply before HTTP and WebSocket routes, including deep-link targets.
+app.use('*', usernameSetupGate);
 
 app.get('/health', async c =>
   c.json({

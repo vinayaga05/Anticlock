@@ -36,7 +36,7 @@ export function ProviderApplicationIntroScreen() {
         ) : null}
         <Button
           title="Create a business"
-          onPress={() => navigation.navigate('ProviderApplicationKind')}
+          onPress={() => navigation.navigate('ProviderApplicationStart')}
         />
         <Button title="View my businesses" variant="secondary" onPress={() => navigation.navigate('ProviderBusinesses')} />
       </View>

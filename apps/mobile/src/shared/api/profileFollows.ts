@@ -181,7 +181,7 @@ export function useProfileFollowMutation(follower: ProfileRef | null, followed: 
 /** Clear restricted content before refetching: invalidation alone leaves old
  * private posts visible while a revoked relationship is being refreshed. */
 export async function reconcileSocialState(client: QueryClient) {
-  const keys = [['content'], ['reels'], ['profile-follows'], ['business-profile'], ['search']];
+  const keys = [['content'], ['reels'], ['profile-follows'], ['business-profile'], ['search'], ['people']];
   await Promise.all(keys.map(queryKey => client.cancelQueries({ queryKey })));
   await Promise.all(keys.map(queryKey => client.resetQueries({ queryKey })));
 }

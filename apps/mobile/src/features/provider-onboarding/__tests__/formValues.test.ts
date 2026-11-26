@@ -102,7 +102,7 @@ describe('buildApplicationPayload', () => {
       {
         'basic.providerName': '  Lotus Yoga  ',
         'location.pincode': '600017',
-        'location.map': { latitude: '13.04', longitude: '80.23' },
+        'location.map': { latitude: '13.04', longitude: '80.23', pinConfirmed: true },
         'location.serviceRadiusKm': '12',
         'profile.logo': 'media-logo',
         'profile.coverImages': ['c1', 'c2'],
@@ -120,6 +120,7 @@ describe('buildApplicationPayload', () => {
         pincode: '600017',
         latitude: 13.04,
         longitude: 80.23,
+        pinConfirmed: true,
         serviceRadiusKm: 12,
       },
       profile: { logoMediaId: 'media-logo', coverMediaIds: ['c1', 'c2'] },
@@ -169,6 +170,7 @@ describe('buildApplicationPayload', () => {
     expect(result.commonPayload.location).toEqual({
       latitude: 13.04,
       longitude: 80.23,
+      pinConfirmed: false,
       serviceRadiusKm: 8,
     });
     // Dynamic keys merge individually on the API, so an unsent key is kept.
@@ -203,6 +205,7 @@ describe('hydrateFormValues', () => {
     expect(values['location.map']).toEqual({
       latitude: '13.04',
       longitude: '80.23',
+      pinConfirmed: false,
     });
     expect(values['location.serviceRadiusKm']).toBe('12');
     expect(values['gym.capacity']).toBe('40');
@@ -229,7 +232,7 @@ describe('validation', () => {
     );
     expect(
       validateField(field('location.map'), { latitude: '200', longitude: '1' }),
-    ).toBe('Choose a point on the map');
+    ).toBe('Confirm a pin for the business entrance before submitting');
     expect(validateField(field('identity.aadhaarNumber'), '1234')).toBe(
       'Aadhaar must be 12 digits',
     );
@@ -285,12 +288,12 @@ describe('validation', () => {
       'basic.providerName': 'Lotus',
       'location.pincode': '600017',
     };
-    expect(computeCompletion(schema, values).done).toBe(2);
+    expect(computeCompletion(schema, values).done).toBe(1);
     const full = computeCompletion(schema, values, {
       documentKeys: ['identity.idDocument'],
       aadhaarSaved: true,
     });
-    expect(full).toMatchObject({ required: 4, done: 4 });
+    expect(full).toMatchObject({ required: 3, done: 3 });
     expect(
       validateFormValues(schema, { ...values, 'basic.email': 'x' })[
         'basic.email'

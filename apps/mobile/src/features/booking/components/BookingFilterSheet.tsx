@@ -1,3 +1,4 @@
+import { healthFeaturesEnabled } from '@/shared/config/releaseFeatures';
 import React from 'react';
 import {
   Modal,
@@ -33,8 +34,10 @@ const STATUS_OPTIONS: {
 ];
 
 const TYPE_OPTIONS: { id: BookingCategory; label: string }[] = [
-  { id: 'appointment', label: 'Health' },
-  { id: 'class', label: 'Fitness' },
+  ...(healthFeaturesEnabled ? [
+    { id: 'appointment' as const, label: 'Health' },
+    { id: 'class' as const, label: 'Fitness' },
+  ] : []),
   { id: 'home_service', label: 'Home Service' },
   { id: 'event', label: 'Events' },
 ];

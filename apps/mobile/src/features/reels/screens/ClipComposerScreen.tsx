@@ -478,6 +478,9 @@ export function ClipComposerScreen() {
         storage.remove(STORAGE_KEYS.CLIP_COMPOSER_DRAFT);
       }
       if (!mountedRef.current) return;
+      // Navigation dispatches before React commits the completed upload state.
+      // Release beforeRemove synchronously once the server confirms publication.
+      uploadPhaseRef.current = 'complete';
       setUploadStatus({ phase: 'complete', progress: 100 });
       const pendingReview = result?.post.contentStatus === 'pending_review';
       finishCreation(navigation, 'clip');

@@ -9,612 +9,982 @@
       "description": "Care for your health, all in one place."
     },
     {
+      "id": "home_services",
+      "name": "Needs",
+      "icon": "home",
+      "accentColor": "#0EA5E9",
+      "sortOrder": 1,
+      "description": "Find property, jobs, automotive, and home services."
+    },
+    {
       "id": "fitness",
-      "name": "Fitness",
+      "name": "Fitness, Beauty & Spa",
       "icon": "fitness",
       "accentColor": "#F97316",
-      "sortOrder": 1,
-      "description": "Gyms, trainers, and classes near you."
+      "sortOrder": 2,
+      "description": "Find fitness, beauty, and spa providers near you."
+    },
+    {
+      "id": "course_training",
+      "name": "Coaching & Training",
+      "icon": "graduation-cap",
+      "accentColor": "#6366F1",
+      "sortOrder": 3,
+      "description": "Learn skills from trusted instructors."
     },
     {
       "id": "sports",
       "name": "Sports",
       "icon": "activity",
       "accentColor": "#3B82F6",
-      "sortOrder": 2,
+      "sortOrder": 4,
       "description": "Play, train, and compete across sports."
     },
     {
-      "id": "wellness",
-      "name": "Wellness",
-      "icon": "leaf",
-      "accentColor": "#22C55E",
-      "sortOrder": 3,
-      "description": "Mind, body, and holistic care."
-    },
-    {
       "id": "tours_events",
-      "name": "Tours & Events",
+      "name": "Travel & Events",
       "icon": "globe",
       "accentColor": "#A855F7",
-      "sortOrder": 4,
+      "sortOrder": 5,
       "description": "Trips, adventures, and celebrations."
+    },
+    {
+      "id": "wellness",
+      "name": "Indian Medicine & Wellness",
+      "icon": "leaf",
+      "accentColor": "#22C55E",
+      "sortOrder": 6,
+      "description": "Explore Indian medicine, holistic care, and mental wellness."
+    },
+    {
+      "id": "rooms_restaurant",
+      "name": "Hotels & Restaurants",
+      "description": "Find nearby stays, restaurants, and food spots.",
+      "icon": "utensils",
+      "accentColor": "#B96728",
+      "sortOrder": 7
+    },
+    {
+      "id": "local_services",
+      "icon": "clipboard",
+      "accentColor": "#0F766E",
+      "name": "Services",
+      "sortOrder": 8,
+      "description": "Find nearby document, printing, payment, and technology services."
     },
     {
       "id": "beauty_spa",
       "name": "Beauty & Spa",
       "icon": "sparkles",
       "accentColor": "#EC4899",
-      "sortOrder": 5,
+      "sortOrder": 9,
       "description": "Salons, spa, and beauty professionals."
-    },
-    {
-      "id": "course_training",
-      "name": "Course & Training",
-      "icon": "graduation-cap",
-      "accentColor": "#6366F1",
-      "sortOrder": 6,
-      "description": "Learn skills from trusted instructors."
-    },
-    {
-      "id": "home_services",
-      "name": "Home Need Services",
-      "icon": "home",
-      "accentColor": "#0EA5E9",
-      "sortOrder": 7,
-      "description": "On-demand help for your home."
     },
     {
       "id": "ecommerce",
       "name": "E-commerce & Products",
       "icon": "shopping-bag",
       "accentColor": "#F59E0B",
-      "sortOrder": 8,
+      "sortOrder": 10,
       "description": "Shop health, fitness, and lifestyle products."
-    },
-    {
-      "id": "rooms_restaurant",
-      "name": "Rooms and Restaurant",
-      "description": "Find nearby stays, restaurants, and food spots.",
-      "icon": "utensils",
-      "accentColor": "#B96728",
-      "sortOrder": 9
     }
   ],
   "categories": [
     {
-      "id": "health.hospitals",
-      "treeId": "health",
-      "sortOrder": 1,
-      "name": "Hospitals"
-    },
-    {
       "id": "health.doctors",
       "treeId": "health",
-      "sortOrder": 2,
-      "name": "Doctors"
+      "sortOrder": 1,
+      "name": "Hospitals & Doctors",
+      "actionType": "appointment",
+      "parentId": null
     },
     {
-      "id": "health.clinic",
+      "id": "health.physiotherapist",
+      "treeId": "health",
+      "sortOrder": 2,
+      "name": "Physiotherapy",
+      "actionType": "appointment",
+      "parentId": null
+    },
+    {
+      "id": "health.laboratory",
       "treeId": "health",
       "sortOrder": 3,
-      "name": "Clinic"
+      "name": "Lab Tests & Diagnostics",
+      "actionType": "appointment",
+      "parentId": null
     },
     {
       "id": "health.pharmacy",
       "treeId": "health",
       "sortOrder": 4,
-      "name": "Pharmacy"
+      "name": "Pharmacy",
+      "actionType": "product_purchase",
+      "parentId": null
     },
     {
-      "id": "health.laboratory",
+      "id": "wellness.nutrition_clinical",
       "treeId": "health",
       "sortOrder": 5,
-      "name": "Laboratory"
+      "name": "Nutrition & Diet",
+      "actionType": "appointment",
+      "parentId": null
     },
     {
-      "id": "health.physiotherapist",
+      "id": "health.doctors.dentist",
       "treeId": "health",
+      "name": "Dental Care",
       "sortOrder": 6,
-      "name": "Physiotherapist"
+      "actionType": "appointment",
+      "parentId": null
+    },
+    {
+      "id": "health.special_educator",
+      "treeId": "health",
+      "name": "Special Educator",
+      "sortOrder": 7,
+      "actionType": "appointment",
+      "parentId": null
     },
     {
       "id": "health.nursing",
       "treeId": "health",
-      "sortOrder": 7,
-      "name": "Nursing Services"
-    },
-    {
-      "id": "health.scan",
-      "treeId": "health",
       "sortOrder": 8,
-      "name": "Scan / CT / MRI"
+      "name": "Nursing Service",
+      "actionType": "home_service",
+      "parentId": null
     },
     {
       "id": "health.medical_transport",
       "treeId": "health",
       "sortOrder": 9,
-      "name": "Medical Transport"
+      "name": "Medical Transport",
+      "actionType": "transport_booking",
+      "parentId": null
     },
     {
-      "id": "fitness.gym",
-      "treeId": "fitness",
-      "sortOrder": 10,
-      "name": "Gym"
+      "id": "ecom.property",
+      "treeId": "home_services",
+      "sortOrder": 1,
+      "name": "Rent & Properties",
+      "actionType": "property_enquiry",
+      "parentId": null
     },
     {
-      "id": "fitness.personal_trainer",
-      "treeId": "fitness",
-      "sortOrder": 11,
-      "name": "Personal Trainer / Online"
+      "id": "home.jobs",
+      "treeId": "home_services",
+      "name": "Job Opportunities",
+      "sortOrder": 2,
+      "actionType": "service_request",
+      "parentId": null
     },
     {
-      "id": "fitness.aerobics_zumba",
-      "treeId": "fitness",
-      "sortOrder": 12,
-      "name": "Aerobics / Zumba"
-    },
-    {
-      "id": "fitness.yoga",
-      "treeId": "fitness",
-      "sortOrder": 13,
-      "name": "Yoga"
-    },
-    {
-      "id": "fitness.sports_fitness",
-      "treeId": "fitness",
-      "sortOrder": 15,
-      "name": "Sports Fitness"
-    },
-    {
-      "id": "fitness.bodybuilding",
-      "treeId": "fitness",
-      "sortOrder": 16,
-      "name": "Bodybuilding"
-    },
-    {
-      "id": "fitness.crossfit",
-      "treeId": "fitness",
-      "sortOrder": 17,
-      "name": "CrossFit / Functional Exercise"
-    },
-    {
-      "id": "fitness.geriatric",
-      "treeId": "fitness",
-      "sortOrder": 18,
-      "name": "Geriatric / Old Age Fitness"
-    },
-    {
-      "id": "sports.athletics",
-      "treeId": "sports",
-      "sortOrder": 19,
-      "name": "Athletics"
-    },
-    {
-      "id": "sports.outdoor",
-      "treeId": "sports",
-      "sortOrder": 20,
-      "name": "Outdoor"
-    },
-    {
-      "id": "sports.traditional",
-      "treeId": "sports",
-      "sortOrder": 21,
-      "name": "Traditional"
-    },
-    {
-      "id": "sports.water",
-      "treeId": "sports",
-      "sortOrder": 22,
-      "name": "Water Sports"
-    },
-    {
-      "id": "sports.indoor",
-      "treeId": "sports",
-      "sortOrder": 23,
-      "name": "Indoor Sports"
-    },
-    {
-      "id": "sports.table",
-      "treeId": "sports",
-      "sortOrder": 24,
-      "name": "Table Sports"
-    },
-    {
-      "id": "sports.mma",
-      "treeId": "sports",
-      "sortOrder": 25,
-      "name": "Mixed Martial Arts"
-    },
-    {
-      "id": "sports.archery",
-      "treeId": "sports",
-      "sortOrder": 26,
-      "name": "Archery / Shooting"
-    },
-    {
-      "id": "sports.kids",
-      "treeId": "sports",
-      "sortOrder": 27,
-      "name": "Kids Sports"
-    },
-    {
-      "id": "wellness.alternate_medicine",
-      "treeId": "wellness",
-      "sortOrder": 28,
-      "name": "Alternate Medicine"
-    },
-    {
-      "id": "wellness.nutrition_clinical",
-      "treeId": "wellness",
-      "sortOrder": 29,
-      "name": "Nutritionist Clinical"
-    },
-    {
-      "id": "wellness.nutrition_sports",
-      "treeId": "wellness",
-      "sortOrder": 30,
-      "name": "Nutrition Sports / Fitness"
-    },
-    {
-      "id": "wellness.psychologist",
-      "treeId": "wellness",
-      "sortOrder": 31,
-      "name": "Psychologist"
-    },
-    {
-      "id": "wellness.reiki",
-      "treeId": "wellness",
-      "sortOrder": 32,
-      "name": "Reiki / Flower Therapy"
-    },
-    {
-      "id": "wellness.spiritual",
-      "treeId": "wellness",
-      "sortOrder": 33,
-      "name": "Spiritual Advice & Meditation"
-    },
-    {
-      "id": "wellness.life_coach",
-      "treeId": "wellness",
-      "sortOrder": 34,
-      "name": "Life Coach"
-    },
-    {
-      "id": "wellness.motivation",
-      "treeId": "wellness",
-      "sortOrder": 35,
-      "name": "Motivation Coach"
-    },
-    {
-      "id": "wellness.acupuncture",
-      "treeId": "wellness",
-      "sortOrder": 36,
-      "name": "Acupuncture"
-    },
-    {
-      "id": "tours.trekking",
-      "treeId": "tours_events",
-      "sortOrder": 37,
-      "name": "Trekking"
-    },
-    {
-      "id": "tours.cycling",
-      "treeId": "tours_events",
-      "sortOrder": 38,
-      "name": "Cycling"
-    },
-    {
-      "id": "tours.marathon",
-      "treeId": "tours_events",
-      "sortOrder": 39,
-      "name": "Marathon"
-    },
-    {
-      "id": "tours.devotional",
-      "treeId": "tours_events",
-      "sortOrder": 40,
-      "name": "Devotional Activity / Tours"
-    },
-    {
-      "id": "tours.adventure",
-      "treeId": "tours_events",
-      "sortOrder": 41,
-      "name": "Adventure Trip"
-    },
-    {
-      "id": "tours.india",
-      "treeId": "tours_events",
-      "sortOrder": 42,
-      "name": "Tours Inside India"
-    },
-    {
-      "id": "tours.abroad",
-      "treeId": "tours_events",
-      "sortOrder": 43,
-      "name": "Tours Outside India"
-    },
-    {
-      "id": "tours.party",
-      "treeId": "tours_events",
-      "sortOrder": 44,
-      "name": "Party / Festivals"
-    },
-    {
-      "id": "tours.transport",
-      "treeId": "tours_events",
-      "sortOrder": 45,
-      "name": "Transport for Tours"
-    },
-    {
-      "id": "beauty.parlour_female",
-      "treeId": "beauty_spa",
-      "sortOrder": 46,
-      "name": "Parlour Female"
-    },
-    {
-      "id": "beauty.salon_male",
-      "treeId": "beauty_spa",
-      "sortOrder": 47,
-      "name": "Hair Salon Male"
-    },
-    {
-      "id": "beauty.cosmetology",
-      "treeId": "beauty_spa",
-      "sortOrder": 48,
-      "name": "Cosmetology"
-    },
-    {
-      "id": "beauty.fashion_show",
-      "treeId": "beauty_spa",
-      "sortOrder": 49,
-      "name": "Fashion Show"
-    },
-    {
-      "id": "beauty.makeup",
-      "treeId": "beauty_spa",
-      "sortOrder": 50,
-      "name": "Make Up"
-    },
-    {
-      "id": "beauty.massage",
-      "treeId": "beauty_spa",
-      "sortOrder": 51,
-      "name": "Massage"
-    },
-    {
-      "id": "beauty.reflexology",
-      "treeId": "beauty_spa",
-      "sortOrder": 52,
-      "name": "Reflexology"
-    },
-    {
-      "id": "beauty.tattoo",
-      "treeId": "beauty_spa",
-      "sortOrder": 53,
-      "name": "Tattoo"
-    },
-    {
-      "id": "beauty.piercing",
-      "treeId": "beauty_spa",
-      "sortOrder": 54,
-      "name": "Piercing"
-    },
-    {
-      "id": "course.health_fitness",
-      "treeId": "course_training",
-      "sortOrder": 55,
-      "name": "Health & Fitness"
-    },
-    {
-      "id": "course.school_tuition",
-      "treeId": "course_training",
-      "sortOrder": 56,
-      "name": "School Tuition"
-    },
-    {
-      "id": "course.music",
-      "treeId": "course_training",
-      "sortOrder": 57,
-      "name": "Music & Instrumental"
-    },
-    {
-      "id": "course.homemade",
-      "treeId": "course_training",
-      "sortOrder": 58,
-      "name": "Home Made Products"
-    },
-    {
-      "id": "course.ai",
-      "treeId": "course_training",
-      "sortOrder": 59,
-      "name": "AI Courses"
-    },
-    {
-      "id": "course.language",
-      "treeId": "course_training",
-      "sortOrder": 60,
-      "name": "Language"
-    },
-    {
-      "id": "course.design",
-      "treeId": "course_training",
-      "sortOrder": 61,
-      "name": "Designing / Video Editing"
-    },
-    {
-      "id": "course.social",
-      "treeId": "course_training",
-      "sortOrder": 62,
-      "name": "Social Media"
-    },
-    {
-      "id": "course.app_dev",
-      "treeId": "course_training",
-      "sortOrder": 63,
-      "name": "App / Software Development"
+      "id": "home.automotive",
+      "treeId": "home_services",
+      "name": "Automobile Sales & Services",
+      "sortOrder": 3,
+      "actionType": "service_request",
+      "parentId": null
     },
     {
       "id": "home.electrician",
       "treeId": "home_services",
-      "sortOrder": 64,
-      "name": "Electrician"
+      "sortOrder": 4,
+      "name": "Electrical, AC & Appliance Repair",
+      "actionType": "home_service",
+      "parentId": null
     },
     {
       "id": "home.plumber",
       "treeId": "home_services",
-      "sortOrder": 65,
-      "name": "Plumber"
-    },
-    {
-      "id": "home.carpenter",
-      "treeId": "home_services",
-      "sortOrder": 66,
-      "name": "Carpenter"
+      "sortOrder": 5,
+      "name": "Plumbing & Carpentry",
+      "actionType": "home_service",
+      "parentId": null
     },
     {
       "id": "home.cleaning",
       "treeId": "home_services",
-      "sortOrder": 67,
-      "name": "House Cleaning"
-    },
-    {
-      "id": "home.ac",
-      "treeId": "home_services",
-      "sortOrder": 68,
-      "name": "AC Mechanic"
+      "sortOrder": 6,
+      "name": "Home Cleaning & Cooking",
+      "actionType": "home_service",
+      "parentId": null
     },
     {
       "id": "home.driver",
       "treeId": "home_services",
-      "sortOrder": 69,
-      "name": "Call Driver"
+      "sortOrder": 7,
+      "name": "Security & Call Drivers",
+      "actionType": "service_request",
+      "parentId": null
     },
     {
       "id": "home.interior",
       "treeId": "home_services",
-      "sortOrder": 70,
-      "name": "Interior Work"
-    },
-    {
-      "id": "home.civil",
-      "treeId": "home_services",
-      "sortOrder": 71,
-      "name": "Civil Work"
+      "sortOrder": 8,
+      "name": "Painting & Renovation",
+      "actionType": "home_service",
+      "parentId": null
     },
     {
       "id": "home.agriculture",
       "treeId": "home_services",
-      "sortOrder": 72,
-      "name": "Agriculture Work"
+      "sortOrder": 9,
+      "name": "Agriculture Work",
+      "actionType": "home_service",
+      "parentId": null
     },
     {
-      "id": "ecom.sports",
-      "treeId": "ecommerce",
-      "sortOrder": 73,
-      "name": "Sports"
+      "id": "fitness.gym",
+      "treeId": "fitness",
+      "sortOrder": 1,
+      "name": "Gym & Personal Training",
+      "actionType": "membership",
+      "parentId": null
     },
     {
-      "id": "ecom.health",
-      "treeId": "ecommerce",
-      "sortOrder": 74,
-      "name": "Health"
+      "id": "fitness.yoga",
+      "treeId": "fitness",
+      "sortOrder": 2,
+      "name": "Yoga & Meditation",
+      "actionType": "class_booking",
+      "parentId": null
     },
     {
-      "id": "ecom.fitness",
-      "treeId": "ecommerce",
-      "sortOrder": 75,
-      "name": "Fitness"
+      "id": "fitness.aerobics_zumba",
+      "treeId": "fitness",
+      "sortOrder": 3,
+      "name": "Aerobics & Dance Fitness",
+      "actionType": "class_booking",
+      "parentId": null
     },
     {
-      "id": "ecom.beauty",
-      "treeId": "ecommerce",
-      "sortOrder": 76,
-      "name": "Beauty & Spa"
+      "id": "beauty.massage",
+      "treeId": "fitness",
+      "sortOrder": 4,
+      "name": "Spa & Body Massage",
+      "actionType": "appointment",
+      "parentId": null
     },
     {
-      "id": "ecom.garments",
-      "treeId": "ecommerce",
-      "sortOrder": 77,
-      "name": "Garments"
+      "id": "beauty.cosmetology",
+      "treeId": "fitness",
+      "sortOrder": 5,
+      "name": "Beauty & Skin Care",
+      "actionType": "appointment",
+      "parentId": null
     },
     {
-      "id": "ecom.property",
-      "treeId": "ecommerce",
-      "sortOrder": 78,
-      "name": "Land & Properties"
+      "id": "beauty.salon_male",
+      "treeId": "fitness",
+      "sortOrder": 6,
+      "name": "Hair Care & Styling",
+      "actionType": "appointment",
+      "parentId": null
     },
     {
-      "id": "ecom.kitchen",
-      "treeId": "ecommerce",
-      "sortOrder": 79,
-      "name": "Kitchen Appliances"
+      "id": "beauty.tattoo",
+      "treeId": "fitness",
+      "sortOrder": 7,
+      "name": "Tattoo & Grooming",
+      "actionType": "appointment",
+      "parentId": null
     },
     {
-      "id": "ecom.games",
-      "treeId": "ecommerce",
-      "sortOrder": 80,
-      "name": "Games & Toys"
+      "id": "beauty.makeup",
+      "treeId": "fitness",
+      "sortOrder": 8,
+      "name": "Makeup & Bridal Services",
+      "actionType": "appointment",
+      "parentId": null
     },
     {
-      "id": "ecom.electronics",
-      "treeId": "ecommerce",
-      "sortOrder": 81,
-      "name": "Electronics and Gadgets"
+      "id": "fitness.body_wellness",
+      "treeId": "fitness",
+      "name": "Body Wellness & Slimming",
+      "sortOrder": 9,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "course.school_tuition",
+      "treeId": "course_training",
+      "sortOrder": 1,
+      "name": "School Tuition & Home Tuition",
+      "actionType": "course_enrollment",
+      "parentId": null
+    },
+    {
+      "id": "course.competitive_exams",
+      "treeId": "course_training",
+      "name": "Competitive Exam Coaching",
+      "sortOrder": 2,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "course.language",
+      "treeId": "course_training",
+      "sortOrder": 3,
+      "name": "Spoken English & Language Training",
+      "actionType": "course_enrollment",
+      "parentId": null
+    },
+    {
+      "id": "course.app_dev",
+      "treeId": "course_training",
+      "sortOrder": 4,
+      "name": "Computer & IT Training",
+      "actionType": "course_enrollment",
+      "parentId": null
+    },
+    {
+      "id": "course.design",
+      "treeId": "course_training",
+      "sortOrder": 5,
+      "name": "Professional Skill Development",
+      "actionType": "course_enrollment",
+      "parentId": null
+    },
+    {
+      "id": "course.sports_coaching",
+      "treeId": "course_training",
+      "name": "Sports Coaching",
+      "sortOrder": 6,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "course.music",
+      "treeId": "course_training",
+      "sortOrder": 7,
+      "name": "Music & Dance Classes",
+      "actionType": "course_enrollment",
+      "parentId": null
+    },
+    {
+      "id": "course.online_certifications",
+      "treeId": "course_training",
+      "name": "Online Courses & Certification",
+      "sortOrder": 8,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "course.career_guidance",
+      "treeId": "course_training",
+      "name": "Career Guidance & Job Training",
+      "sortOrder": 9,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "sports.indoor",
+      "treeId": "sports",
+      "sortOrder": 1,
+      "name": "Indoor Sports",
+      "actionType": "class_booking",
+      "parentId": null
+    },
+    {
+      "id": "sports.outdoor",
+      "treeId": "sports",
+      "sortOrder": 2,
+      "name": "Outdoor Sports",
+      "actionType": "event_booking",
+      "parentId": null
+    },
+    {
+      "id": "fitness.sports_fitness",
+      "treeId": "sports",
+      "sortOrder": 3,
+      "name": "Fitness Sports",
+      "actionType": "class_booking",
+      "parentId": null
+    },
+    {
+      "id": "sports.traditional",
+      "treeId": "sports",
+      "sortOrder": 4,
+      "name": "Traditional Sports",
+      "actionType": "class_booking",
+      "parentId": null
+    },
+    {
+      "id": "sports.facility_booking",
+      "treeId": "sports",
+      "name": "Sports Ground & Facility Booking",
+      "sortOrder": 5,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "wellness.nutrition_sports",
+      "treeId": "sports",
+      "sortOrder": 6,
+      "name": "Sports Nutrition & Diet Planning",
+      "actionType": "appointment",
+      "parentId": null
+    },
+    {
+      "id": "sports.professionals",
+      "treeId": "sports",
+      "name": "Sports Professionals & Staffing",
+      "sortOrder": 7,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "sports.mma",
+      "treeId": "sports",
+      "sortOrder": 8,
+      "name": "Karate & Martial Arts",
+      "actionType": "class_booking",
+      "parentId": null
+    },
+    {
+      "id": "sports.kids",
+      "treeId": "sports",
+      "sortOrder": 9,
+      "name": "Kids Sports",
+      "actionType": "class_booking",
+      "parentId": null
+    },
+    {
+      "id": "tours.india",
+      "treeId": "tours_events",
+      "sortOrder": 1,
+      "name": "Tour Packages & Travel Planning",
+      "actionType": "event_booking",
+      "parentId": null
+    },
+    {
+      "id": "tours.party",
+      "treeId": "tours_events",
+      "sortOrder": 2,
+      "name": "Parties & Festivals",
+      "actionType": "event_booking",
+      "parentId": null
+    },
+    {
+      "id": "tours.transport",
+      "treeId": "tours_events",
+      "sortOrder": 3,
+      "name": "Group Travel & Vehicle Rentals",
+      "actionType": "transport_booking",
+      "parentId": null
+    },
+    {
+      "id": "tours.adventure",
+      "treeId": "tours_events",
+      "sortOrder": 4,
+      "name": "Adventure Trips",
+      "actionType": "event_booking",
+      "parentId": null
+    },
+    {
+      "id": "tours.photography",
+      "treeId": "tours_events",
+      "name": "Event Photography & Videography",
+      "sortOrder": 5,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "tours.venues",
+      "treeId": "tours_events",
+      "name": "Exhibition & Event Venue Booking",
+      "sortOrder": 6,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "tours.event_management",
+      "treeId": "tours_events",
+      "name": "Events Planning & Management",
+      "sortOrder": 7,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "tours.devotional",
+      "treeId": "tours_events",
+      "sortOrder": 8,
+      "name": "Devotional Festivals & Celebrations",
+      "actionType": "event_booking",
+      "parentId": null
+    },
+    {
+      "id": "tours.entertainment",
+      "treeId": "tours_events",
+      "name": "DJ, Music & Entertainment Services",
+      "sortOrder": 9,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "wellness.alternate_medicine",
+      "treeId": "wellness",
+      "sortOrder": 1,
+      "name": "Siddha, Ayurveda & Traditional Medicine",
+      "actionType": "appointment",
+      "parentId": null
+    },
+    {
+      "id": "wellness.homeopathy_unani",
+      "treeId": "wellness",
+      "name": "Homeopathy & Unani Medicine",
+      "sortOrder": 2,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "wellness.naturopathy",
+      "treeId": "wellness",
+      "name": "Naturopathy & Massage Therapy",
+      "sortOrder": 3,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "wellness.varma_cupping",
+      "treeId": "wellness",
+      "name": "Varma & Cupping Therapy",
+      "sortOrder": 4,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "wellness.spiritual",
+      "treeId": "wellness",
+      "sortOrder": 5,
+      "name": "Spiritual Advice & Meditation",
+      "actionType": "class_booking",
+      "parentId": null
+    },
+    {
+      "id": "wellness.reiki",
+      "treeId": "wellness",
+      "sortOrder": 6,
+      "name": "Holistic & Energy Healing",
+      "actionType": "appointment",
+      "parentId": null
+    },
+    {
+      "id": "wellness.mental_wellness",
+      "treeId": "wellness",
+      "name": "Mental Wellness & Stress Management",
+      "sortOrder": 7,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "wellness.acupuncture",
+      "treeId": "wellness",
+      "sortOrder": 8,
+      "name": "Acupuncture & Reflexology",
+      "actionType": "appointment",
+      "parentId": null
+    },
+    {
+      "id": "wellness.psychologist",
+      "treeId": "wellness",
+      "sortOrder": 9,
+      "name": "Psychological Counselling",
+      "actionType": "appointment",
+      "parentId": null
     },
     {
       "id": "rooms.hotel",
       "treeId": "rooms_restaurant",
-      "name": "Hotel",
-      "sortOrder": 1
+      "name": "Hotels & Resorts",
+      "sortOrder": 1,
+      "actionType": "service_request",
+      "parentId": null
     },
     {
       "id": "rooms.lodge",
       "treeId": "rooms_restaurant",
-      "name": "Lodge",
-      "sortOrder": 2
+      "name": "Mansions & Lodges",
+      "sortOrder": 2,
+      "actionType": "service_request",
+      "parentId": null
     },
     {
       "id": "rooms.veg_restaurant",
       "treeId": "rooms_restaurant",
-      "name": "Veg Restaurant",
-      "sortOrder": 3
+      "name": "Veg Restaurants",
+      "sortOrder": 3,
+      "actionType": "service_request",
+      "parentId": null
     },
     {
       "id": "rooms.non_veg_restaurant",
       "treeId": "rooms_restaurant",
-      "name": "Non-Veg Restaurant",
-      "sortOrder": 4
+      "name": "Non-Veg Restaurants",
+      "sortOrder": 4,
+      "actionType": "service_request",
+      "parentId": null
     },
     {
       "id": "rooms.fast_food",
       "treeId": "rooms_restaurant",
-      "name": "Fast Food",
-      "sortOrder": 5
-    },
-    {
-      "id": "rooms.cloud_kitchen",
-      "treeId": "rooms_restaurant",
-      "name": "Cloud Kitchen",
-      "sortOrder": 6
+      "name": "Pizza, Burgers & Fast Food",
+      "sortOrder": 5,
+      "actionType": "service_request",
+      "parentId": null
     },
     {
       "id": "rooms.food_truck",
       "treeId": "rooms_restaurant",
       "name": "Food Truck",
-      "sortOrder": 7
+      "sortOrder": 6,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "rooms.cloud_kitchen",
+      "treeId": "rooms_restaurant",
+      "name": "Cloud Kitchen",
+      "sortOrder": 7,
+      "actionType": "service_request",
+      "parentId": null
     },
     {
       "id": "rooms.cafe_juice_bar",
       "treeId": "rooms_restaurant",
       "name": "Café & Juice Bar",
-      "sortOrder": 8
+      "sortOrder": 8,
+      "actionType": "service_request",
+      "parentId": null
     },
     {
       "id": "rooms.cake_sweet_stall",
       "treeId": "rooms_restaurant",
       "name": "Cake & Sweet Stall",
-      "sortOrder": 9
+      "sortOrder": 9,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "services.e_sevai",
+      "treeId": "local_services",
+      "name": "e-Sevai & Government Certificates",
+      "sortOrder": 1,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "services.documents",
+      "treeId": "local_services",
+      "name": "Stamp Papers, Xerox & Printing",
+      "sortOrder": 2,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "services.payments",
+      "treeId": "local_services",
+      "name": "Money Transfer & Payments",
+      "sortOrder": 3,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "services.finance",
+      "treeId": "local_services",
+      "name": "Small Finance & Jewel Loans",
+      "sortOrder": 4,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "services.insurance",
+      "treeId": "local_services",
+      "name": "Insurance & Mutual Funds",
+      "sortOrder": 5,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "services.banner_printing",
+      "treeId": "local_services",
+      "name": "Flex & Banner Printing",
+      "sortOrder": 6,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "services.signage",
+      "treeId": "local_services",
+      "name": "ID Cards & Board Printing",
+      "sortOrder": 7,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "services.devices",
+      "treeId": "local_services",
+      "name": "Mobile & Laptop",
+      "sortOrder": 8,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "services.solar_cctv",
+      "treeId": "local_services",
+      "name": "Solar Panels & CCTV",
+      "sortOrder": 9,
+      "actionType": "service_request",
+      "parentId": null
+    },
+    {
+      "id": "health.hospitals",
+      "treeId": "health",
+      "sortOrder": 100,
+      "name": "Hospitals",
+      "actionType": "appointment",
+      "parentId": "health.doctors"
+    },
+    {
+      "id": "health.clinic",
+      "treeId": "health",
+      "sortOrder": 101,
+      "name": "Clinic"
+    },
+    {
+      "id": "health.scan",
+      "treeId": "health",
+      "sortOrder": 102,
+      "name": "Scan / CT / MRI",
+      "actionType": "appointment",
+      "parentId": "health.laboratory"
+    },
+    {
+      "id": "fitness.personal_trainer",
+      "treeId": "fitness",
+      "sortOrder": 103,
+      "name": "Personal Trainer / Online",
+      "actionType": "class_booking",
+      "parentId": "fitness.gym"
+    },
+    {
+      "id": "fitness.bodybuilding",
+      "treeId": "fitness",
+      "sortOrder": 104,
+      "name": "Bodybuilding"
+    },
+    {
+      "id": "fitness.crossfit",
+      "treeId": "fitness",
+      "sortOrder": 105,
+      "name": "CrossFit / Functional Exercise"
+    },
+    {
+      "id": "fitness.geriatric",
+      "treeId": "fitness",
+      "sortOrder": 106,
+      "name": "Geriatric / Old Age Fitness"
+    },
+    {
+      "id": "sports.athletics",
+      "treeId": "sports",
+      "sortOrder": 107,
+      "name": "Athletics",
+      "actionType": "class_booking",
+      "parentId": "fitness.sports_fitness"
+    },
+    {
+      "id": "sports.water",
+      "treeId": "sports",
+      "sortOrder": 108,
+      "name": "Water Sports",
+      "actionType": "event_booking",
+      "parentId": "sports.outdoor"
+    },
+    {
+      "id": "sports.table",
+      "treeId": "sports",
+      "sortOrder": 109,
+      "name": "Table Sports",
+      "actionType": "class_booking",
+      "parentId": "sports.indoor"
+    },
+    {
+      "id": "sports.archery",
+      "treeId": "sports",
+      "sortOrder": 110,
+      "name": "Archery / Shooting"
+    },
+    {
+      "id": "wellness.life_coach",
+      "treeId": "wellness",
+      "sortOrder": 111,
+      "name": "Life Coach"
+    },
+    {
+      "id": "wellness.motivation",
+      "treeId": "wellness",
+      "sortOrder": 112,
+      "name": "Motivation Coach"
+    },
+    {
+      "id": "tours.trekking",
+      "treeId": "tours_events",
+      "sortOrder": 113,
+      "name": "Trekking",
+      "actionType": "event_booking",
+      "parentId": "tours.adventure"
+    },
+    {
+      "id": "tours.cycling",
+      "treeId": "tours_events",
+      "sortOrder": 114,
+      "name": "Cycling",
+      "actionType": "event_booking",
+      "parentId": "tours.adventure"
+    },
+    {
+      "id": "tours.marathon",
+      "treeId": "tours_events",
+      "sortOrder": 115,
+      "name": "Marathon"
+    },
+    {
+      "id": "tours.abroad",
+      "treeId": "tours_events",
+      "sortOrder": 116,
+      "name": "Tours Outside India",
+      "actionType": "event_booking",
+      "parentId": "tours.india"
+    },
+    {
+      "id": "beauty.parlour_female",
+      "treeId": "fitness",
+      "sortOrder": 117,
+      "name": "Parlour Female",
+      "actionType": "appointment",
+      "parentId": "beauty.cosmetology"
+    },
+    {
+      "id": "beauty.fashion_show",
+      "treeId": "beauty_spa",
+      "sortOrder": 118,
+      "name": "Fashion Show"
+    },
+    {
+      "id": "beauty.reflexology",
+      "treeId": "wellness",
+      "sortOrder": 119,
+      "name": "Reflexology",
+      "actionType": "appointment",
+      "parentId": "wellness.acupuncture"
+    },
+    {
+      "id": "beauty.piercing",
+      "treeId": "fitness",
+      "sortOrder": 120,
+      "name": "Piercing",
+      "actionType": "appointment",
+      "parentId": "beauty.tattoo"
+    },
+    {
+      "id": "course.health_fitness",
+      "treeId": "course_training",
+      "sortOrder": 121,
+      "name": "Health & Fitness"
+    },
+    {
+      "id": "course.homemade",
+      "treeId": "course_training",
+      "sortOrder": 122,
+      "name": "Home Made Products"
+    },
+    {
+      "id": "course.ai",
+      "treeId": "course_training",
+      "sortOrder": 123,
+      "name": "AI Courses",
+      "actionType": "course_enrollment",
+      "parentId": "course.app_dev"
+    },
+    {
+      "id": "course.social",
+      "treeId": "course_training",
+      "sortOrder": 124,
+      "name": "Social Media"
+    },
+    {
+      "id": "home.carpenter",
+      "treeId": "home_services",
+      "sortOrder": 125,
+      "name": "Carpenter",
+      "actionType": "home_service",
+      "parentId": "home.plumber"
+    },
+    {
+      "id": "home.ac",
+      "treeId": "home_services",
+      "sortOrder": 126,
+      "name": "AC Mechanic",
+      "actionType": "home_service",
+      "parentId": "home.electrician"
+    },
+    {
+      "id": "home.civil",
+      "treeId": "home_services",
+      "sortOrder": 127,
+      "name": "Civil Work",
+      "actionType": "home_service",
+      "parentId": "home.interior"
+    },
+    {
+      "id": "ecom.sports",
+      "treeId": "ecommerce",
+      "sortOrder": 128,
+      "name": "Sports"
+    },
+    {
+      "id": "ecom.health",
+      "treeId": "ecommerce",
+      "sortOrder": 129,
+      "name": "Health"
+    },
+    {
+      "id": "ecom.fitness",
+      "treeId": "ecommerce",
+      "sortOrder": 130,
+      "name": "Fitness"
+    },
+    {
+      "id": "ecom.beauty",
+      "treeId": "ecommerce",
+      "sortOrder": 131,
+      "name": "Beauty & Spa"
+    },
+    {
+      "id": "ecom.garments",
+      "treeId": "ecommerce",
+      "sortOrder": 132,
+      "name": "Garments"
+    },
+    {
+      "id": "ecom.kitchen",
+      "treeId": "ecommerce",
+      "sortOrder": 133,
+      "name": "Kitchen Appliances"
+    },
+    {
+      "id": "ecom.games",
+      "treeId": "ecommerce",
+      "sortOrder": 134,
+      "name": "Games & Toys"
+    },
+    {
+      "id": "ecom.electronics",
+      "treeId": "ecommerce",
+      "sortOrder": 135,
+      "name": "Electronics and Gadgets"
     }
   ]
 }

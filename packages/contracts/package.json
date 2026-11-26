@@ -9,6 +9,18 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./play-edition": {
+      "types": "./dist/play-edition.d.ts",
+      "default": "./dist/play-edition.js"
+    },
+    "./username": {
+      "types": "./dist/username.d.ts",
+      "default": "./dist/username.js"
+    },
+    "./provider-registration": {
+      "types": "./dist/provider-registration.d.ts",
+      "default": "./dist/provider-registration.js"
     }
   },
   "scripts": {

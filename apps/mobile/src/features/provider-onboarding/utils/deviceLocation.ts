@@ -3,22 +3,20 @@ import { PermissionsAndroid, Platform } from 'react-native';
 import type { MapPoint } from '@/features/provider-onboarding/utils/placeSearch';
 
 async function ensureLocationPermission() {
+  if (Platform.OS === 'ios') return new Promise<boolean>(resolve => Geolocation.requestAuthorization(() => resolve(true), () => resolve(false)));
   if (Platform.OS !== 'android') return true;
   const fine = PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
-  if (await PermissionsAndroid.check(fine)) return true;
-  const result = await PermissionsAndroid.request(fine, {
-    title: 'Location access',
-    message: 'Knock uses your location to drop the map pin at your business.',
-    buttonPositive: 'Allow',
-    buttonNegative: 'Not now',
-  });
-  return result === PermissionsAndroid.RESULTS.GRANTED;
+  const coarse = PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION;
+  if (await PermissionsAndroid.check(fine) || await PermissionsAndroid.check(coarse)) return true;
+  // Android 12+ needs both in one request to offer precise or approximate access.
+  const result = await PermissionsAndroid.requestMultiple([fine, coarse]);
+  return result[fine] === PermissionsAndroid.RESULTS.GRANTED || result[coarse] === PermissionsAndroid.RESULTS.GRANTED;
 }
 
 export async function readCurrentPosition(): Promise<MapPoint> {
   const allowed = await ensureLocationPermission();
   if (!allowed) {
-    throw new Error('Allow location access to start from where you are.');
+    throw new Error('Location permission was denied. You can still search or place the pin manually.');
   }
   return new Promise((resolve, reject) => {
     Geolocation.getCurrentPosition(
@@ -29,7 +27,7 @@ export async function readCurrentPosition(): Promise<MapPoint> {
         });
       },
       () => {
-        reject(new Error('Could not read your current location.'));
+        reject(new Error('GPS is unavailable. You can still search or place the pin manually.'));
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
     );

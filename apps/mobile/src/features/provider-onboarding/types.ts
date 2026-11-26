@@ -200,12 +200,9 @@ export type UpdateProviderBusinessRequest = {
   closingTime?: string;
 };
 
-export type CreateProviderApplicationRequest = {
-  providerKind: ProviderKind;
-};
+export type CreateProviderApplicationRequest = Record<string, never>;
 
 export type UpdateProviderApplicationRequest = {
-  providerKind?: ProviderKind;
   commonPayload?: Record<string, unknown>;
   dynamicPayload?: Record<string, unknown>;
   aadhaarNumber?: string;

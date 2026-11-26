@@ -192,8 +192,8 @@ async function syncProfileConversation(a: PublisherRef, b: PublisherRef) {
     await service.createOrGetProfileChannel({
       viewerUserId: aPrivacy.ownerUserId,
       targetUserId: bPrivacy.ownerUserId,
-      viewerProfile: { id: a.id, type: a.type, name: aProfile.displayName, image: aProfile.avatarUrl },
-      targetProfile: { id: b.id, type: b.type, name: bProfile.displayName, image: bProfile.avatarUrl },
+      viewerProfile: { id: a.id, type: a.type, name: aProfile.displayName, handle: aProfile.handle, image: aProfile.avatarUrl },
+      targetProfile: { id: b.id, type: b.type, name: bProfile.displayName, handle: bProfile.handle, image: bProfile.avatarUrl },
     });
   } else {
     await service.suspendProfileChannel({

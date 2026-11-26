@@ -13,10 +13,11 @@ const mockChannel = {
     { user_id: 'viewer-stream', profile_id: 'viewer-personal', profile_type: 'personal', name: 'Viewer' },
     { user_id: 'peer-stream', profile_id: peerId, profile_type: mockPeerType, name: 'Peer profile' },
   ] }; },
+  state: { members: {} },
   watch: async () => {},
   on: () => ({ unsubscribe: jest.fn() }),
 };
-const mockClient = { userID: 'viewer-stream', channel: () => mockChannel };
+const mockClient = { on: () => ({ unsubscribe: jest.fn() }), userID: 'viewer-stream', channel: () => mockChannel };
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate, goBack: jest.fn() }),
   useRoute: () => ({ params: { conversationId: 'conversation-1' } }),

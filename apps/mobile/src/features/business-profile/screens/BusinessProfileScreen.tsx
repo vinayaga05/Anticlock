@@ -1512,6 +1512,7 @@ export function BusinessProfileScreen() {
             ) : null}
             <Text style={[styles.body, { color: colors.ink }]}>
               {[
+                business.location.addressDetails,
                 business.location.address,
                 business.location.area,
                 business.location.city,

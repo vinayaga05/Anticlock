@@ -9,6 +9,7 @@ type ChatProfile = {
   id: string;
   type: PublisherProfileType;
   name: string;
+  handle?: string | null;
   image: string | null;
 };
 
@@ -31,6 +32,7 @@ export class StreamChatService {
       .select({
         id: mobileUsers.id,
         displayName: mobileUsers.displayName,
+        handle: mobileUsers.handle,
         avatarUrl: mobileUsers.avatarUrl,
       })
       .from(mobileUsers)
@@ -45,6 +47,7 @@ export class StreamChatService {
     await this.client.upsertUser({
       id: user.id,
       name: user.displayName,
+      username: user.handle ?? undefined,
       image: user.avatarUrl || undefined,
     });
 
@@ -116,6 +119,7 @@ export class StreamChatService {
         profile_id: input.viewerProfile.id,
         profile_type: input.viewerProfile.type,
         name: input.viewerProfile.name,
+        handle: input.viewerProfile.handle ?? null,
         image: input.viewerProfile.image,
       },
       {
@@ -123,6 +127,7 @@ export class StreamChatService {
         profile_id: input.targetProfile.id,
         profile_type: input.targetProfile.type,
         name: input.targetProfile.name,
+        handle: input.targetProfile.handle ?? null,
         image: input.targetProfile.image,
       },
     ];

@@ -83,7 +83,6 @@ export function useResolvedFormSchemaQuery(
       if (!providerKind || !categoryIds.length) return null;
       ensureAuthToken();
       const qs = new URLSearchParams({
-        providerKind,
         categoryIds: categoryIds.join(','),
       });
       const res = await apiRequest<{ schema: ResolvedProviderFormSchema }>(

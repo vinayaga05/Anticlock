@@ -1,9 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import { closeFitnessAccount } from '@/features/fitness/api/fitnessAccount';
+import { useQueryClient } from '@tanstack/react-query';
+import { healthFeaturesEnabled } from '@/shared/config/releaseFeatures';
+import React, { useMemo, useRef, useState } from 'react';
 import { FitnessSettingsCard } from '../components/FitnessSettingsCard';
 import { navigateToProfile } from '@/shared/navigation/businessNavigation';
 import {
   Alert,
   Image,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -77,8 +81,32 @@ export function AccountSettingsScreen() {
   const { data: applications = [] } = useProviderApplicationsQuery();
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [closingAccount, setClosingAccount] = useState(false);
+  const accountClosing = useRef(false);
+  const client = useQueryClient();
 
   const isGuest = !user || user.id === 'temporary-guest';
+  const openLegalPage = (url: string) => {
+    void Linking.openURL(url).catch(() => Alert.alert('Could not open page', 'Please try again or contact anticlocksathish@gmail.com.'));
+  };
+  const closeAccount = () => Alert.alert(
+    'Close your Knock account?',
+    'This closes your account, signs you out and deletes private Fitness records from earlier versions. Booking, chat and legally required records may be retained. Contact anticlocksathish@gmail.com to request deletion of remaining personal information. Account closure cannot be undone.',
+    [
+      { text: 'Keep account', style: 'cancel' },
+      { text: 'Close account', style: 'destructive', onPress: async () => {
+        if (accountClosing.current) return;
+        accountClosing.current = true;
+        setClosingAccount(true);
+        try {
+          await closeFitnessAccount(user?.id, { logout, clearPrivateState: () => client.clear() });
+        } catch (error) {
+          Alert.alert('Could not close account', error instanceof Error ? error.message : 'Please try again.');
+        } finally { accountClosing.current = false; setClosingAccount(false); }
+      } },
+    ],
+  );
+
   const activeType = active ? identityProfileType(active) : 'personal';
   const activeRef = active ? { id: active.id, type: activeType } : null;
   const activeProfileQuery = useContentProfileQuery(activeRef?.type, activeRef?.id);
@@ -128,10 +156,7 @@ export function AccountSettingsScreen() {
     pending[0]?.status ??
     null;
 
-  const addBusiness = () =>
-    applications.length > 0
-      ? navigation.navigate('ProviderApplicationKind')
-      : navigation.navigate('ProviderApplicationIntro');
+  const addBusiness = () => navigation.navigate('ProviderApplicationStart');
 
   const selectProfile = (identity: PublishingIdentity) => setActive(identity);
 
@@ -212,7 +237,7 @@ export function AccountSettingsScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}>
         <ActiveProfileCard profile={card} onPress={() => setSwitcherOpen(true)} />
-        <FitnessSettingsCard onPress={() => navigation.navigate(isGuest ? 'Login' : 'FitnessHome')} />
+        {healthFeaturesEnabled ? <FitnessSettingsCard onPress={() => navigation.navigate(isGuest ? 'Login' : 'FitnessHome')} /> : null}
 
         <SettingsSection label="Profile" testID="section-profile">
           {!isBusiness && !isGuest ? (
@@ -389,6 +414,26 @@ export function AccountSettingsScreen() {
             label="Help"
             onPress={() => navigation.navigate('ComingSoon', { title: 'Help Center' })}
           />
+          <SettingsRow
+            testID="row-privacy-policy"
+            icon="shield-check"
+            label="Privacy Policy"
+            onPress={() => openLegalPage('https://knock.org.in/privacypolicy/')}
+          />
+          <SettingsRow
+            testID="row-terms"
+            icon="clipboard"
+            label="Terms and Conditions"
+            onPress={() => openLegalPage('https://knock.org.in/termsandcondition/')}
+          />
+          {!isGuest ? <SettingsRow
+            testID="row-close-account"
+            icon="user"
+            label={closingAccount ? 'Closing account…' : 'Close account'}
+            tone="danger"
+            navigates={false}
+            onPress={closeAccount}
+          /> : null}
           <SettingsRow
             testID="row-logout"
             icon="log-out"

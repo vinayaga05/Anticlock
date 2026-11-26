@@ -1051,7 +1051,7 @@ export async function getProfileSummary(
     loadViewerContext(viewerUserId),
     loadBlockedPublisherKeys(viewerUserId),
   ]);
-  if (!publisher || blocked.has(publisherKey(ref))) {
+  if (!publisher || blocked.has(publisherKey(ref)) || await profilesAreBlocked(viewerProfile, ref)) {
     throw appError("Profile not found", "not_found", 404);
   }
   if (ref.type === "business") {

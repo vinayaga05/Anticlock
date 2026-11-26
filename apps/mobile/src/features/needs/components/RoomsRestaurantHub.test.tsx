@@ -30,19 +30,19 @@ jest.mock('@/features/services/components/ServiceCategoryGrid', () => ({
     require('react').createElement('category-grid', props),
 }));
 const names = [
-  'Hotel',
-  'Lodge',
-  'Veg Restaurant',
-  'Non-Veg Restaurant',
-  'Fast Food',
-  'Cloud Kitchen',
+  'Hotels & Resorts',
+  'Mansions & Lodges',
+  'Veg Restaurants',
+  'Non-Veg Restaurants',
+  'Pizza, Burgers & Fast Food',
   'Food Truck',
+  'Cloud Kitchen',
   'Café & Juice Bar',
   'Cake & Sweet Stall',
 ];
 let tree: Renderer.ReactTestRenderer;
 afterEach(() => Renderer.act(() => tree?.unmount()));
-test('Rooms and Restaurant shows all nine requested services in order in the standard provider directory', () => {
+test('Hotels & Restaurants shows all nine requested services in order in the standard provider directory', () => {
   Renderer.act(() => {
     tree = Renderer.create(<RoomsRestaurantHub />);
   });
@@ -53,14 +53,14 @@ test('Rooms and Restaurant shows all nine requested services in order in the sta
     grid.props.categories.every((c: any) => c.actionType === 'service_request'),
   ).toBe(true);
 });
-test('Needs replaces My Activity with the Rooms and Restaurant entry and opens its tree', () => {
+test('Needs replaces My Activity with the Hotels & Restaurants entry and opens its tree', () => {
   expect(needsShowcaseCards.some(c => c.title === 'My Activity')).toBe(false);
   Renderer.act(() => {
     tree = Renderer.create(<NeedsShowcaseGrid />);
   });
   const entry = tree.root.findAll(
     n =>
-      n.props.accessibilityLabel === 'Rooms and Restaurant' &&
+      n.props.accessibilityLabel === 'Hotels & Restaurants' &&
       typeof n.props.onPress === 'function',
   )[0];
   expect(entry).toBeDefined();
@@ -69,7 +69,7 @@ test('Needs replaces My Activity with the Rooms and Restaurant entry and opens i
     treeId: 'rooms_restaurant',
   });
 });
-test('the backend seed and mobile catalog agree on every Rooms and Restaurant category', () => {
+test('the backend seed and mobile catalog agree on every Hotels & Restaurants category', () => {
   const catalog = require('../../../../../api/src/seed/catalog.json');
   const seeded = catalog.categories.filter(
     (c: any) => c.treeId === 'rooms_restaurant',
@@ -80,4 +80,44 @@ test('the backend seed and mobile catalog agree on every Rooms and Restaurant ca
   expect(
     catalog.trees.filter((t: any) => t.id === 'rooms_restaurant'),
   ).toHaveLength(1);
+});
+
+test('Needs displays the nine groups in order and their 81 tiles agree with the API catalog', () => {
+  const catalog = require('../../../../../api/src/seed/catalog.json');
+  expect(needsShowcaseCards.map(card => card.title)).toEqual([
+    'Health',
+    'Needs',
+    'Fitness, Beauty & Spa',
+    'Coaching & Training',
+    'Sports',
+    'Travel & Events',
+    'Indian Medicine & Wellness',
+    'Hotels & Restaurants',
+    'Services',
+  ]);
+  expect(catalog.trees.slice(0, 9).map((tree: any) => tree.id)).toEqual(
+    needsShowcaseCards.map(card => card.treeId),
+  );
+  for (const card of needsShowcaseCards) {
+    const mobile = getCategoriesByTree(card.treeId);
+    expect(mobile).toHaveLength(9);
+    const api = catalog.categories.filter(
+      (category: any) =>
+        category.treeId === card.treeId && category.sortOrder <= 9,
+    );
+    expect(
+      api.map((category: any) => [
+        category.id,
+        category.name,
+        category.actionType,
+      ]),
+    ).toEqual(
+      mobile.map(category => [category.id, category.name, category.actionType]),
+    );
+    expect(
+      card.items.every(item =>
+        mobile.some(category => category.id === item.categoryId),
+      ),
+    ).toBe(true);
+  }
 });

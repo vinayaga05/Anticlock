@@ -376,13 +376,18 @@ export function postVisibleToViewer(viewer: ViewerContext): SQL {
 export async function loadBlockedPublisherKeys(viewerUserId: string) {
   const rows = await db
     .select({
+      blockerMobileUserId: mobileUserBlocks.blockerMobileUserId,
       blockedMobileUserId: mobileUserBlocks.blockedMobileUserId,
       blockedProviderId: mobileUserBlocks.blockedProviderId,
     })
     .from(mobileUserBlocks)
-    .where(eq(mobileUserBlocks.blockerMobileUserId, viewerUserId));
+    .where(or(eq(mobileUserBlocks.blockerMobileUserId, viewerUserId), eq(mobileUserBlocks.blockedMobileUserId, viewerUserId)));
   const keys = new Set<string>();
   for (const row of rows) {
+    if (row.blockedMobileUserId === viewerUserId) {
+      keys.add(publisherKey({ type: "personal", id: row.blockerMobileUserId }));
+      continue;
+    }
     if (row.blockedMobileUserId)
       keys.add(publisherKey({ type: "personal", id: row.blockedMobileUserId }));
     if (row.blockedProviderId)

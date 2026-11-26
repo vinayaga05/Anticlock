@@ -3,7 +3,7 @@ import ReactTestRenderer from 'react-test-renderer';
 import { Alert, Image, KeyboardAvoidingView, Linking, StyleSheet, Text, TextInput } from 'react-native';
 import { EditProfileScreen } from './EditProfileScreen';
 let mockMode = 'light';
-jest.mock('@/shared/hooks/useTheme', () => ({ useTheme: () => ({ mode: mockMode }) }));
+jest.mock('@/shared/hooks/useTheme', () => ({ useTheme: () => ({ mode: mockMode, colors: { textPrimary: '#111', textSecondary: '#555', border: '#ddd' } }) }));
 jest.mock('@/shared/components/AppIcon', () => require('@/test/componentMocks').appIconModule);
 jest.mock('@/shared/components/PressableScale', () => ({ PressableScale: ({ children, ...props }: any) => { const { Pressable } = require('react-native'); return <Pressable {...props}>{children}</Pressable>; } }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 44, bottom: 34, left: 0, right: 0 }) }));
@@ -17,7 +17,7 @@ jest.mock('@/shared/api/client', () => ({ getApiToken: () => mockToken }));
 jest.mock('../utils/profilePhoto', () => ({ pickProfilePhoto: (...args: any[]) => mockPick(...args), uploadProfilePhoto: (...args: any[]) => mockUpload(...args) }));
 const oldPhoto = 'https://images.example.test/original.jpg'; const uploadedPhoto = 'https://api.example.test/v1/media/file/public-media/avatars/user-1/photo.jpg';
 const photo = { uri: 'file:///photo.jpg', filename: 'photo.jpg', contentType: 'image/jpeg', byteSize: 1234 };
-const user = (id = 'user-1') => ({ id, displayName: id === 'user-1' ? 'Arun Kumar' : 'Maya Das', phone: '+919000000001', avatarUrl: oldPhoto, bio: 'Runner', location: 'Chennai', website: '' });
+const user = (id = 'user-1') => ({ id, handle: id === 'user-1' ? 'arun.kumar' : 'maya.das', displayName: id === 'user-1' ? 'Arun Kumar' : 'Maya Das', phone: '+919000000001', avatarUrl: oldPhoto, bio: 'Runner', location: 'Chennai', website: '' });
 function deferred() { let resolve!: (value: any) => void; let reject!: (error: unknown) => void; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
 function render() { let renderer!: ReactTestRenderer.ReactTestRenderer; ReactTestRenderer.act(() => { renderer = ReactTestRenderer.create(<EditProfileScreen />); }); return renderer; }
 function action(renderer: ReactTestRenderer.ReactTestRenderer, label: string) { return renderer.root.findAll(node => node.props.accessibilityLabel === label && node.props.onPress)[0]; }

@@ -1,3 +1,4 @@
+import { isBusinessRegistrationField } from '@anticlock/contracts/provider-registration';
 import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import {
   allowedReviewActions,
@@ -69,14 +70,24 @@ function appError(message: string, code: string, status: 400 | 403 | 404 | 409, 
   return Object.assign(new Error(message), { code, status, ...(details ? { details } : {}) });
 }
 
+function normalizeBusinessDetails(value: Record<string, unknown>, prefix = ''): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (isBusinessRegistrationField(path) && (item === null || (typeof item === 'string' && !item.trim()))) return [key, null];
+    return [key, item && typeof item === 'object' && !Array.isArray(item) ? normalizeBusinessDetails(item as Record<string, unknown>, path) : item];
+  }));
+}
+function withoutPrivateBusinessDetails(value: Record<string, unknown>, prefix = ''): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !isBusinessRegistrationField(prefix ? `${prefix}.${key}` : key) && key !== 'identity')
+    .map(([key, item]) => [key, item && typeof item === 'object' && !Array.isArray(item) ? withoutPrivateBusinessDetails(item as Record<string, unknown>, prefix ? `${prefix}.${key}` : key) : item]));
+}
+
 function businessNameOf(row: ApplicationRow) {
   const commonPayload = (row.commonPayload ?? {}) as Record<string, unknown>;
   const basic = (commonPayload.basic ?? {}) as Record<string, unknown>;
   return typeof basic.providerName === 'string' && basic.providerName.trim()
     ? basic.providerName.trim()
-    : row.providerKind === 'business'
-      ? 'New business'
-      : 'New professional profile';
+    : 'New business';
 }
 
 function toSummary(
@@ -87,7 +98,7 @@ function toSummary(
   return {
     id: row.id,
     businessName: businessNameOf(row),
-    providerKind: row.providerKind as ProviderApplicationSummary['providerKind'],
+    providerKind: 'business',
     status: normalizeProviderApplicationStatus(row.status),
     categoryIds,
     ...(categories ? { categories } : {}),
@@ -191,7 +202,7 @@ async function buildReadiness(row: ApplicationRow, categoryIds: string[]) {
     });
   }
   const schema = await resolveFormSchema(
-    row.providerKind as 'business' | 'individual',
+    'business',
     categoryIds,
   );
   return computeApplicationReadiness({
@@ -346,7 +357,7 @@ export class ProviderApplicationService {
       .insert(providerApplications)
       .values({
         mobileUserId,
-        providerKind: body.providerKind,
+        providerKind: 'business',
         status: 'draft',
         commonPayload: {},
         dynamicPayload: {},
@@ -384,9 +395,9 @@ export class ProviderApplicationService {
     await db
       .update(providerApplications)
       .set({
-        ...(body.providerKind ? { providerKind: body.providerKind } : {}),
-        commonPayload,
-        dynamicPayload,
+        providerKind: 'business',
+        commonPayload: normalizeBusinessDetails(commonPayload ?? {}),
+        dynamicPayload: normalizeBusinessDetails(dynamicPayload ?? {}),
         updatedAt: new Date(),
       })
       .where(eq(providerApplications.id, applicationId));
@@ -452,8 +463,12 @@ export class ProviderApplicationService {
       throw appError('Application cannot be edited in current status', 'invalid_status', 409);
     }
 
+    const available = await db.select({ id: serviceCategories.id }).from(serviceCategories)
+      .where(and(inArray(serviceCategories.id, body.categoryIds), eq(serviceCategories.status, 'published')));
+    if (available.length !== new Set(body.categoryIds).size) throw appError('Choose a published service category', 'invalid_category', 400);
+
     for (const categoryId of body.categoryIds) {
-      if (!categoryAllowsProviderKind(categoryId, row.providerKind as 'business' | 'individual')) {
+      if (!categoryAllowsProviderKind(categoryId, 'business')) {
         throw appError(
           'This service does not match the profile type you chose',
           'invalid_category',
@@ -471,7 +486,7 @@ export class ProviderApplicationService {
       }
       await tx
         .update(providerApplications)
-        .set({ updatedAt: new Date() })
+        .set({ providerKind: 'business', updatedAt: new Date() })
         .where(eq(providerApplications.id, applicationId));
     });
 
@@ -533,6 +548,7 @@ export class ProviderApplicationService {
       // clearing it keeps stale banners off the admin page (audit log keeps it).
       .set({
         status: 'pending_review',
+        providerKind: 'business',
         submittedAt: new Date(),
         updatedAt: new Date(),
         infoRequestMessage: null,
@@ -559,7 +575,7 @@ export class ProviderApplicationService {
     await this.requireOwnedApplication(mobileUserId, applicationId);
     const updated = await db
       .update(providerApplications)
-      .set({ status: 'draft', updatedAt: new Date() })
+      .set({ status: 'draft', providerKind: 'business', updatedAt: new Date() })
       .where(
         and(
           eq(providerApplications.id, applicationId),
@@ -830,6 +846,7 @@ export class ProviderApplicationService {
         .update(providerApplications)
         .set({
           status: 'approved',
+          providerKind: 'business',
           providerId,
           reviewNotes: body.notes?.trim() || null,
           reviewedAt: now,
@@ -959,13 +976,13 @@ export class ProviderApplicationService {
         .insert(providers)
         .values({
           mobileUserId: row.mobileUserId,
-          providerKind: row.providerKind,
+          providerKind: 'business',
           name: providerName,
           status: 'active',
           sourceApplicationId: row.id,
           publicProfile: {
-            common,
-            dynamic: row.dynamicPayload ?? {},
+            common: withoutPrivateBusinessDetails(common),
+            dynamic: withoutPrivateBusinessDetails(row.dynamicPayload ?? {}),
             ...(avatarUrl ? { avatarUrl } : {}),
             ...(coverUrls.length ? { coverUrls } : {}),
           },

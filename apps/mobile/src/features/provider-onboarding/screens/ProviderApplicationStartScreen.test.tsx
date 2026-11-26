@@ -1,0 +1,31 @@
+import React from 'react';
+import Renderer from 'react-test-renderer';
+import { Platform } from 'react-native';
+import { ProviderApplicationStartScreen } from './ProviderApplicationStartScreen';
+const mockCreate = jest.fn(), mockReplace = jest.fn();
+const mockNavigation = { replace: mockReplace };
+let mockParams: { applicationId?: string } | undefined;
+jest.mock('@react-navigation/native', () => ({ useNavigation: () => mockNavigation, useRoute: () => ({ params: mockParams }) }));
+jest.mock('@/shared/api/providerHooks', () => ({ useCreateProviderApplicationMutation: () => ({ mutateAsync: mockCreate }) }));
+jest.mock('@/shared/hooks/useTheme', () => require('@/test/componentMocks').themeModule);
+jest.mock('@/shared/components/ScreenContainer', () => ({ ScreenContainer: ({ children }: any) => children }));
+jest.mock('@/shared/components/Button', () => ({ Button: () => null }));
+const descriptor = Object.getOwnPropertyDescriptor(Platform, 'OS')!;
+beforeEach(() => { jest.clearAllMocks(); mockParams = undefined; mockCreate.mockResolvedValue({ id: 'new-business' }); });
+afterEach(() => Object.defineProperty(Platform, 'OS', descriptor));
+test.each(['ios', 'android'])('%s goes directly to service selection without a type choice', async platform => {
+  Object.defineProperty(Platform, 'OS', { configurable: true, value: platform });
+  let tree!: Renderer.ReactTestRenderer;
+  await Renderer.act(async () => { tree = Renderer.create(<ProviderApplicationStartScreen />); });
+  expect(mockCreate).toHaveBeenCalledTimes(1); expect(mockCreate).toHaveBeenCalledWith({});
+  expect(mockReplace).toHaveBeenCalledWith('ProviderApplicationServices', { applicationId: 'new-business' });
+  Renderer.act(() => tree.unmount());
+});
+test('an old entry link resumes the same draft without creating another application', async () => {
+  mockParams = { applicationId: 'old-individual-draft' };
+  let tree!: Renderer.ReactTestRenderer;
+  await Renderer.act(async () => { tree = Renderer.create(<ProviderApplicationStartScreen />); });
+  expect(mockCreate).not.toHaveBeenCalled();
+  expect(mockReplace).toHaveBeenCalledWith('ProviderApplicationServices', { applicationId: 'old-individual-draft' });
+  Renderer.act(() => tree.unmount());
+});

@@ -1,3 +1,4 @@
+import { effectiveLocationFields } from '@anticlock/contracts/provider-registration';
 import type {
   FormFieldDefinition,
   ProviderApplicationDetail,
@@ -41,6 +42,7 @@ export function splitFormValues(
 }
 
 export const COMMON_SECTION_PREFIXES = [
+  'registration',
   'basic',
   'location',
   'profile',
@@ -143,7 +145,8 @@ export function hydrateFormValues(
       const lat = flat[`${section}.latitude`];
       const lng = flat[`${section}.longitude`];
       if (lat !== undefined && lng !== undefined) {
-        values[field.key] = { latitude: String(lat), longitude: String(lng) };
+        values[field.key] = { latitude: String(lat), longitude: String(lng), pinConfirmed: flat[`${section}.pinConfirmed`] === true };
+        delete values[`${section}.latitude`]; delete values[`${section}.longitude`]; delete values[`${section}.pinConfirmed`];
       }
     } else if (
       NUMERIC_TYPES.has(field.type) &&
@@ -229,6 +232,7 @@ export function buildApplicationPayload(
         if (keep) {
           setNestedValue(commonPayload, `${prefix}.latitude`, keep.latitude);
           setNestedValue(commonPayload, `${prefix}.longitude`, keep.longitude);
+          setNestedValue(commonPayload, `${prefix}.pinConfirmed`, Boolean((raw as { pinConfirmed?: boolean })?.pinConfirmed));
         }
         continue;
       }
@@ -300,7 +304,8 @@ export function validateField(
     return digits.length === 12 ? null : `${field.label} must be 12 digits`;
   }
   if (field.type === 'location') {
-    return parseLocationValue(value) ? null : 'Choose a point on the map';
+    if (isEmptyLocation(value)) return field.required ? 'Confirm a pin for the business entrance before submitting' : null;
+    return parseLocationValue(value) && (value as { pinConfirmed?: boolean })?.pinConfirmed === true ? null : 'Confirm a pin for the business entrance before submitting';
   }
   if (isEmptyValue(value)) {
     return field.required ? `${field.label} is required` : null;
@@ -318,6 +323,10 @@ export function validateField(
         return `${field.label} must be at most ${v.max}`;
       return null;
     }
+    case 'text':
+    case 'textarea':
+      if (typeof value !== 'string') return `${field.label} must be text`;
+      break;
     case 'email':
       return typeof value === 'string' &&
         /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
@@ -366,7 +375,8 @@ export function validateFormValues(
 ): Record<string, string> {
   const docs = new Set(opts.documentKeys ?? []);
   const errors: Record<string, string> = {};
-  for (const field of schema.fields) {
+  const services = { atLocation: values['services.atLocation'], online: values['services.online'], homeVisit: values['services.homeVisit'] };
+  for (const field of effectiveLocationFields(schema.fields, schema.categoryIds, services)) {
     const error = validateField(field, values[field.key], {
       hasDocument: docs.has(field.key),
       aadhaarSaved: opts.aadhaarSaved,
@@ -399,7 +409,7 @@ export function computeCompletion(
   opts: { documentKeys?: Iterable<string>; aadhaarSaved?: boolean } = {},
 ) {
   const errors = validateFormValues(schema, values, opts);
-  const required = schema.fields.filter(f => f.required);
+  const required = effectiveLocationFields(schema.fields, schema.categoryIds, { atLocation: values['services.atLocation'], online: values['services.online'], homeVisit: values['services.homeVisit'] }).filter(f => f.required);
   const done = required.filter(f => !errors[f.key]).length;
   return { required: required.length, done, errors };
 }

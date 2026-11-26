@@ -18,6 +18,7 @@ type ProfileMember = {
   user_id?: string;
   profile_id?: string;
   name?: string;
+  handle?: string | null;
   image?: string | null;
   profile_type?: 'personal' | 'business';
 };
@@ -35,6 +36,11 @@ export function ThreadScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
+  const [, refreshUser] = useState(0);
+  useEffect(() => {
+    const listener = client?.on('user.updated', () => refreshUser(value => value + 1));
+    return () => listener?.unsubscribe();
+  }, [client]);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +78,9 @@ export function ThreadScreen() {
   const profileMembers = membersOf(channel);
   const peerProfile = profileMembers.find(member => member.user_id !== client?.userID);
   const ownProfile = profileMembers.find(member => member.user_id === client?.userID);
-  const title = route.params.profile?.displayName ?? peerProfile?.name ?? 'Chat';
+  const peerUser = peerProfile?.user_id ? channel?.state.members[peerProfile.user_id]?.user : undefined;
+  const title = (peerProfile?.profile_type === 'personal' ? peerUser?.name : undefined) ?? peerProfile?.name ?? route.params.profile?.displayName ?? 'Chat';
+  const handle = peerProfile?.profile_type === 'personal' ? (peerUser as any)?.username ?? peerProfile?.handle : peerProfile?.handle;
   const avatarUrl = route.params.profile?.avatarUrl ?? peerProfile?.image ?? null;
   const profileType = route.params.profile?.type ?? peerProfile?.profile_type;
   const peerRef: PublisherRef | null = peerProfile?.profile_id && peerProfile.profile_type
@@ -185,7 +193,7 @@ export function ThreadScreen() {
           <View style={styles.profileText}>
             <Text numberOfLines={1} style={[theme.typography.section, { color: theme.colors.textPrimary }]}>{title}</Text>
             <Text numberOfLines={1} style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
-              {profileType === 'business' ? 'Business profile' : 'Direct message'}{ownProfile?.name ? ` · As ${ownProfile.name}` : ''}
+              {handle ? `@${handle}` : profileType === 'business' ? 'Business profile' : 'Direct message'}{ownProfile?.name ? ` · As ${ownProfile.name}` : ''}
             </Text>
           </View>
         </PressableScale>

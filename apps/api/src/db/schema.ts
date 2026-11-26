@@ -1,5 +1,6 @@
 import {
   pgTable,
+  check,
   uuid,
   text,
   timestamp,
@@ -148,7 +149,11 @@ export const mobileUsers = pgTable("mobile_users", {
   interestsCompletedAt: timestamp("interests_completed_at", {
     withTimezone: true,
   }),
-});
+}, table => [
+  uniqueIndex("mobile_users_username_canonical_unique").on(sql`lower(${table.handle})`),
+  check("mobile_users_username_policy", sql`${table.handle} IS NULL OR (${table.handle} = lower(${table.handle}) AND ${table.handle} ~ '^[a-z0-9._]{3,30}$' AND ${table.handle} ~ '[a-z0-9]' AND left(${table.handle}, 1) <> '.' AND right(${table.handle}, 1) <> '.' AND position('..' in ${table.handle}) = 0)`),
+]);
+
 
 export const complaints = pgTable(
   "complaints",
@@ -457,7 +462,7 @@ export const providers = pgTable("providers", {
   mobileUserId: uuid("mobile_user_id")
     .notNull()
     .references(() => mobileUsers.id, { onDelete: "cascade" }),
-  providerKind: text("provider_kind").notNull(),
+  providerKind: text("provider_kind").notNull().default("business"),
   name: text("name").notNull(),
   status: text("status").notNull().default("active"),
   publicProfile: jsonb("public_profile").$type<Record<string, unknown>>(),
@@ -474,7 +479,9 @@ export const providers = pgTable("providers", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, table => [
+  uniqueIndex("providers_source_application_uid").on(table.sourceApplicationId).where(sql`${table.sourceApplicationId} IS NOT NULL`),
+]);
 
 /**
  * A viewer-controlled safety boundary. A personal-account block and a
@@ -1087,7 +1094,7 @@ export const providerApplications = pgTable("provider_applications", {
   mobileUserId: uuid("mobile_user_id")
     .notNull()
     .references(() => mobileUsers.id, { onDelete: "cascade" }),
-  providerKind: text("provider_kind").notNull(),
+  providerKind: text("provider_kind").notNull().default("business"),
   status: text("status").notNull().default("draft"),
   commonPayload: jsonb("common_payload").$type<Record<string, unknown>>(),
   dynamicPayload: jsonb("dynamic_payload").$type<Record<string, unknown>>(),

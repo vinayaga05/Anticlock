@@ -305,6 +305,7 @@ export function mapApiContentClipToItem(
     // carry one; everything else keeps the honest "Original audio" fallback.
     title: contentMusicLabel(item.music),
     author: publisher.displayName,
+    authorHandle: publisher.handle,
     authorAvatarUrl: isRemoteMediaUrl(publisher.avatarUrl)
       ? publisher.avatarUrl
       : undefined,
@@ -433,6 +434,7 @@ export function mapApiProfileClipToItem(item: ApiContentPost): ReelItem | null {
     id: item.id,
     title: '',
     author: author.name,
+    authorHandle: publisher?.handle,
     authorAvatarUrl: author.avatarUrl ?? undefined,
     authorProfile: { type: author.type === 'provider' ? 'business' : author.type, id: author.id },
     reportTarget: { kind: 'content_post', id: item.id },
